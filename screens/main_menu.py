@@ -44,7 +44,7 @@ class MainMenu:
 
         # Click tracking
         self.fist_start_time = 0
-        self.CLICK_HOLD_TIME = 0.3  # 0.3 seconds
+        self.CLICK_HOLD_TIME = 0.9
         self.click_ready = False
 
         # Cursor smoothing - USING WRIST (landmark 0) for stability
@@ -276,7 +276,7 @@ class MainMenu:
                 target_y = np.interp(wrist.y, [0.1, 0.9], [0, self.h])
 
                 # Smooth cursor movement
-                smooth = 0.2
+                smooth = .50
                 self.cursor_x = self.cursor_x * (1 - smooth) + target_x * smooth
                 self.cursor_y = self.cursor_y * (1 - smooth) + target_y * smooth
                 self.cursor_pos = (int(self.cursor_x), int(self.cursor_y))
@@ -328,6 +328,14 @@ class MainMenu:
         pos = self.cursor_pos
         print(f"🖱️ Click at: {pos}")
 
+        # Route click to active screen if not in menu
+        if self.current_screen == "stage_select" and self.stage_select:
+            self.stage_select.trigger_click(pos)
+            return
+        elif self.current_screen == "student_select" and self.student_select:
+            self.student_select.trigger_click(pos)
+            return
+
         # Check dialogue box first
         if self.dialogue_active and self.dialogue_rect.collidepoint(pos):
             print("💬 Dialogue clicked!")
@@ -365,15 +373,18 @@ class MainMenu:
 
     def start_activity(self):
         print(f"🎮 START ACTIVITY clicked!")
-        if not self.selected_student:
-            self.show_no_student_message = True
-            self.no_student_timer = pygame.time.get_ticks() + 2000
-            return
+        # COMMENTED OUT: Student select requirement for testing
+        # if not self.selected_student:
+        #     self.show_no_student_message = True
+        #     self.no_student_timer = pygame.time.get_ticks() + 2000
+        #     return
         self.current_screen = "stage_select"
         self.stage_select = StageSelect(self.screen, self)
 
     def exit_game(self):
         print("🚪 EXIT clicked!")
+        if self.stage_select:
+            self.stage_select.cleanup()
         self.cap.release()
         cv2.destroyAllWindows()
         pygame.quit()
@@ -392,8 +403,24 @@ class MainMenu:
                 b.hovered = b.rect.collidepoint(self.cursor_pos)
 
         elif self.current_screen == "stage_select" and self.stage_select:
+            self.update_gesture()
+            self.stage_select.update_gesture(
+                self.cursor_pos,
+                self.fist_start_time,
+                self.CLICK_HOLD_TIME,
+                self.current_gesture
+
+            )
             self.stage_select.update()
+
         elif self.current_screen == "student_select" and self.student_select:
+            self.update_gesture()
+            self.student_select.update_gesture(
+                self.cursor_pos,
+                self.fist_start_time,
+                self.CLICK_HOLD_TIME,
+                self.current_gesture
+            )
             self.student_select.update()
 
     def handle_event(self, event):
@@ -545,7 +572,7 @@ class MainMenu:
                 student_text = self.small_font.render(f"✓ Selected: {student_name}", True, (255, 215, 0))
                 self.screen.blit(student_text, (self.w // 2 - student_text.get_width() // 2, self.student_info_y + 5))
 
-            # ERROR MESSAGE
+            # ERROR MESSAGE (commented out for testing)
             if self.show_no_student_message and pygame.time.get_ticks() < self.no_student_timer:
                 error_bg = pygame.Surface((380, 45))
                 error_bg.fill((231, 76, 60))
@@ -566,5 +593,24 @@ class MainMenu:
 
         elif self.current_screen == "stage_select" and self.stage_select:
             self.stage_select.draw()
+            self.draw_camera_feed()
+            # Draw cursor on top
+            if self.current_gesture != "NO HAND":
+                if self.fist_start_time > 0:
+                    color = (255, 200, 0)
+                else:
+                    color = (255, 255, 255)
+                pygame.draw.circle(self.screen, color, self.cursor_pos, 15, 2)
+                pygame.draw.circle(self.screen, (255, 100, 100), self.cursor_pos, 4)
+
         elif self.current_screen == "student_select" and self.student_select:
             self.student_select.draw()
+            self.draw_camera_feed()
+            # Draw cursor on top
+            if self.current_gesture != "NO HAND":
+                if self.fist_start_time > 0:
+                    color = (255, 200, 0)
+                else:
+                    color = (255, 255, 255)
+                pygame.draw.circle(self.screen, color, self.cursor_pos, 15, 2)
+                pygame.draw.circle(self.screen, (255, 100, 100), self.cursor_pos, 4)
