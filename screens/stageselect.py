@@ -40,7 +40,7 @@ class StageSelect:
         self.fist_start_time = 0
         self.CLICK_HOLD_TIME = 0.9
         self.click_ready = False
-        self.hand_detected = False  # Will be set from main_menu
+        self.hand_detected = False
         self.fist_closed = False
 
         # For tracking clicks to prevent multiple triggers
@@ -77,6 +77,46 @@ class StageSelect:
             "sprites",
             "objects",
             "portal"
+        )
+
+        self.NPC_PATH_BROMEN = os.path.join(
+            self.BASE_DIR,
+            "assets",
+            "images",
+            "sprites",
+            "objects",
+            "NPC",
+            "bromen"
+        )
+
+        self.NPC_PATH_OLDMAN = os.path.join(
+            self.BASE_DIR,
+            "assets",
+            "images",
+            "sprites",
+            "objects",
+            "NPC",
+            "oldman"
+        )
+
+        self.NPC_PATH_SKELETON = os.path.join(
+            self.BASE_DIR,
+            "assets",
+            "images",
+            "sprites",
+            "objects",
+            "NPC",
+            "skeleton"
+        )
+
+        self.NPC_PATH_KNIGHT = os.path.join(
+            self.BASE_DIR,
+            "assets",
+            "images",
+            "sprites",
+            "objects",
+            "NPC",
+            "knight"
         )
 
         self.MAP_PATH = os.path.join(self.BASE_DIR, "assets", "map", "map.txt")
@@ -141,19 +181,114 @@ class StageSelect:
         self.anim_timer = 0
 
         # ============================================================
-        # SPAWN PLAYER
+        # LOAD NPC SPRITES
+        # ============================================================
+        # Bromen NPC (animated)
+        self.npc_bromen_sprites = self.load_npc_sprites_animated(self.NPC_PATH_BROMEN, "bromen")
+        self.npc_bromen_anim_frame = 0
+        self.npc_bromen_anim_timer = 0
+        self.npc_bromen_x = 0
+        self.npc_bromen_y = 0
+        self.npc_bromen_tile_x = 0
+        self.npc_bromen_tile_y = 0
+        self.npc_bromen_found = False
+
+        # Oldman NPC (static)
+        self.npc_oldman_sprite = None
+        self.npc_oldman_x = 0
+        self.npc_oldman_y = 0
+        self.npc_oldman_tile_x = 0
+        self.npc_oldman_tile_y = 0
+        self.npc_oldman_found = False
+
+        # Skeleton NPC (static)
+        self.npc_skeleton_sprite = None
+        self.npc_skeleton_x = 0
+        self.npc_skeleton_y = 0
+        self.npc_skeleton_tile_x = 0
+        self.npc_skeleton_tile_y = 0
+        self.npc_skeleton_found = False
+
+        # Knight NPC (static with front and side)
+        self.npc_knight_front_sprite = None
+        self.npc_knight_side_sprite = None
+        self.npc_knight_current_sprite = None
+        self.npc_knight_x = 0
+        self.npc_knight_y = 0
+        self.npc_knight_tile_x = 0
+        self.npc_knight_tile_y = 0
+        self.npc_knight_found = False
+        self.npc_knight_facing = "front"  # 'front' or 'side'
+        self.npc_knight_side_timer = 0
+        self.npc_knight_side_duration = 60  # Frames to face side before switching
+
+        # ============================================================
+        # LOAD STATIC NPC SPRITES
+        # ============================================================
+        self.load_static_npc_sprites()
+
+        # ============================================================
+        # SPAWN PLAYER AND FIND NPCS
         # ============================================================
         self.player_x = 0
         self.player_y = 0
         self.player_dir = "down"
 
+        # First pass: find player and NPC positions
         for y, row in enumerate(self.game_map):
             for x, c in enumerate(row):
                 if c == "P":
                     self.player_x = x * TILE_SIZE
                     self.player_y = y * TILE_SIZE
                     print(f"Player spawned at: ({x}, {y})")
-                    break
+                elif c == "B":
+                    self.npc_bromen_tile_x = x
+                    self.npc_bromen_tile_y = y
+                    self.npc_bromen_x = x * TILE_SIZE
+                    self.npc_bromen_y = y * TILE_SIZE
+                    self.npc_bromen_found = True
+                    print(f"Bromen NPC found at: ({x}, {y})")
+                elif c == "O":
+                    self.npc_oldman_tile_x = x
+                    self.npc_oldman_tile_y = y
+                    self.npc_oldman_x = x * TILE_SIZE
+                    self.npc_oldman_y = y * TILE_SIZE
+                    self.npc_oldman_found = True
+                    print(f"Oldman NPC found at: ({x}, {y})")
+                elif c == "S":
+                    self.npc_skeleton_tile_x = x
+                    self.npc_skeleton_tile_y = y
+                    self.npc_skeleton_x = x * TILE_SIZE
+                    self.npc_skeleton_y = y * TILE_SIZE
+                    self.npc_skeleton_found = True
+                    print(f"Skeleton NPC found at: ({x}, {y})")
+                elif c == "K":
+                    self.npc_knight_tile_x = x
+                    self.npc_knight_tile_y = y
+                    self.npc_knight_x = x * TILE_SIZE
+                    self.npc_knight_y = y * TILE_SIZE
+                    self.npc_knight_found = True
+                    print(f"Knight NPC found at: ({x}, {y})")
+
+        # Second pass: replace NPC markers with walkable tiles
+        for y, row in enumerate(self.game_map):
+            row_list = list(row)
+            modified = False
+            for x, c in enumerate(row):
+                if c == 'B':
+                    row_list[x] = '7'  # Replace with walkable tile 7 (008.png)
+                    modified = True
+                elif c == 'O':
+                    row_list[x] = '6'  # Replace with walkable tile 6 (010.png)
+                    modified = True
+                elif c == 'S':
+                    row_list[x] = '6'  # Replace with walkable tile 6 (010.png)
+                    modified = True
+                elif c == 'K':
+                    row_list[x] = '7'  # Replace with walkable tile 7 (008.png)
+                    modified = True
+            if modified:
+                self.game_map[y] = ''.join(row_list)
 
         # ============================================================
         # LOAD PORTALS
@@ -180,6 +315,10 @@ class StageSelect:
         print(f"✅ StageSelect initialized with map: {self.ROWS}x{self.COLS}")
         print(f"   Walkable tiles: {self.WALKABLE_TILES}")
         print(f"   Portals loaded: {len(self.portals)}")
+        print(f"   Bromen NPC found: {self.npc_bromen_found}")
+        print(f"   Oldman NPC found: {self.npc_oldman_found}")
+        print(f"   Skeleton NPC found: {self.npc_skeleton_found}")
+        print(f"   Knight NPC found: {self.npc_knight_found}")
 
     # ============================================================
     # LOAD TILE IMAGES
@@ -236,6 +375,152 @@ class StageSelect:
             "right": [load_sprite("boy_right_1.png"), load_sprite("boy_right_2.png")],
             "up": [load_sprite("boy_up_1.png"), load_sprite("boy_up_2.png")]
         }
+
+    # ============================================================
+    # LOAD ANIMATED NPC SPRITES (Bromen)
+    # ============================================================
+    def load_npc_sprites_animated(self, npc_path, npc_name):
+        frames = []
+
+        if not os.path.exists(npc_path):
+            print(f"⚠️ NPC path does not exist: {npc_path}")
+            placeholder = pygame.Surface((TILE_SIZE, TILE_SIZE))
+            placeholder.fill((255, 200, 100))
+            pygame.draw.circle(placeholder, (0, 0, 0), (TILE_SIZE // 2, TILE_SIZE // 2), 12)
+            pygame.draw.circle(placeholder, (255, 255, 255), (TILE_SIZE // 2 - 4, TILE_SIZE // 2 - 4), 3)
+            pygame.draw.circle(placeholder, (255, 255, 255), (TILE_SIZE // 2 + 4, TILE_SIZE // 2 - 4), 3)
+            frames.append(placeholder)
+            return frames
+
+        for i in range(11):
+            filename = f"sprite_{npc_name}{i:02d}.png"
+            path = os.path.join(npc_path, filename)
+            try:
+                if os.path.exists(path):
+                    img = pygame.image.load(path).convert_alpha()
+                    img = pygame.transform.scale(img, (TILE_SIZE, TILE_SIZE))
+                    frames.append(img)
+                else:
+                    if frames:
+                        frames.append(frames[0].copy())
+                    else:
+                        placeholder = pygame.Surface((TILE_SIZE, TILE_SIZE))
+                        placeholder.fill((255, 200, 0))
+                        frames.append(placeholder)
+            except Exception as e:
+                if frames:
+                    frames.append(frames[0].copy())
+                else:
+                    placeholder = pygame.Surface((TILE_SIZE, TILE_SIZE))
+                    placeholder.fill((255, 200, 0))
+                    frames.append(placeholder)
+
+        print(f"✅ Loaded {len(frames)} frames for {npc_name}")
+        return frames
+
+    # ============================================================
+    # LOAD STATIC NPC SPRITES (Oldman, Skeleton, Knight)
+    # ============================================================
+    def load_static_npc_sprites(self):
+        # Load Oldman
+        oldman_path = os.path.join(self.NPC_PATH_OLDMAN, "oldman.png")
+        try:
+            if os.path.exists(oldman_path):
+                img = pygame.image.load(oldman_path).convert_alpha()
+                self.npc_oldman_sprite = pygame.transform.scale(img, (TILE_SIZE, TILE_SIZE))
+                print(f"✅ Loaded Oldman sprite")
+            else:
+                print(f"⚠️ Oldman sprite not found at: {oldman_path}")
+                placeholder = pygame.Surface((TILE_SIZE, TILE_SIZE))
+                placeholder.fill((200, 200, 200))
+                pygame.draw.circle(placeholder, (0, 0, 0), (TILE_SIZE // 2, TILE_SIZE // 2), 12)
+                pygame.draw.circle(placeholder, (255, 255, 255), (TILE_SIZE // 2 - 4, TILE_SIZE // 2 - 4), 3)
+                pygame.draw.circle(placeholder, (255, 255, 255), (TILE_SIZE // 2 + 4, TILE_SIZE // 2 - 4), 3)
+                font = pygame.font.SysFont(None, 10)
+                text = font.render("OLD", True, (0, 0, 0))
+                placeholder.blit(text, (4, TILE_SIZE - 12))
+                self.npc_oldman_sprite = placeholder
+        except Exception as e:
+            print(f"❌ Error loading Oldman: {e}")
+            placeholder = pygame.Surface((TILE_SIZE, TILE_SIZE))
+            placeholder.fill((200, 200, 200))
+            self.npc_oldman_sprite = placeholder
+
+        # Load Skeleton
+        skeleton_path = os.path.join(self.NPC_PATH_SKELETON, "skeleton.png")
+        try:
+            if os.path.exists(skeleton_path):
+                img = pygame.image.load(skeleton_path).convert_alpha()
+                self.npc_skeleton_sprite = pygame.transform.scale(img, (TILE_SIZE, TILE_SIZE))
+                print(f"✅ Loaded Skeleton sprite")
+            else:
+                print(f"⚠️ Skeleton sprite not found at: {skeleton_path}")
+                placeholder = pygame.Surface((TILE_SIZE, TILE_SIZE))
+                placeholder.fill((255, 255, 255))
+                pygame.draw.circle(placeholder, (0, 0, 0), (TILE_SIZE // 2, TILE_SIZE // 2), 12)
+                pygame.draw.circle(placeholder, (255, 200, 200), (TILE_SIZE // 2 - 4, TILE_SIZE // 2 - 4), 3)
+                pygame.draw.circle(placeholder, (255, 200, 200), (TILE_SIZE // 2 + 4, TILE_SIZE // 2 - 4), 3)
+                font = pygame.font.SysFont(None, 10)
+                text = font.render("SKEL", True, (0, 0, 0))
+                placeholder.blit(text, (2, TILE_SIZE - 12))
+                self.npc_skeleton_sprite = placeholder
+        except Exception as e:
+            print(f"❌ Error loading Skeleton: {e}")
+            placeholder = pygame.Surface((TILE_SIZE, TILE_SIZE))
+            placeholder.fill((255, 255, 255))
+            self.npc_skeleton_sprite = placeholder
+
+        # Load Knight (front and side)
+        knight_front_path = os.path.join(self.NPC_PATH_KNIGHT, "knight.png")
+        knight_side_path = os.path.join(self.NPC_PATH_KNIGHT, "knightside.png")
+
+        # Load front sprite
+        try:
+            if os.path.exists(knight_front_path):
+                img = pygame.image.load(knight_front_path).convert_alpha()
+                self.npc_knight_front_sprite = pygame.transform.scale(img, (TILE_SIZE, TILE_SIZE))
+                print(f"✅ Loaded Knight front sprite")
+            else:
+                print(f"⚠️ Knight front sprite not found at: {knight_front_path}")
+                placeholder = pygame.Surface((TILE_SIZE, TILE_SIZE))
+                placeholder.fill((192, 192, 192))  # Silver
+                pygame.draw.circle(placeholder, (0, 0, 0), (TILE_SIZE // 2, TILE_SIZE // 2), 12)
+                pygame.draw.rect(placeholder, (128, 128, 128), (TILE_SIZE // 2 - 8, TILE_SIZE // 2 - 12, 16, 8))
+                font = pygame.font.SysFont(None, 10)
+                text = font.render("KNT", True, (0, 0, 0))
+                placeholder.blit(text, (4, TILE_SIZE - 12))
+                self.npc_knight_front_sprite = placeholder
+        except Exception as e:
+            print(f"❌ Error loading Knight front: {e}")
+            placeholder = pygame.Surface((TILE_SIZE, TILE_SIZE))
+            placeholder.fill((192, 192, 192))
+            self.npc_knight_front_sprite = placeholder
+
+        # Load side sprite
+        try:
+            if os.path.exists(knight_side_path):
+                img = pygame.image.load(knight_side_path).convert_alpha()
+                self.npc_knight_side_sprite = pygame.transform.scale(img, (TILE_SIZE, TILE_SIZE))
+                print(f"✅ Loaded Knight side sprite")
+            else:
+                print(f"⚠️ Knight side sprite not found at: {knight_side_path}")
+                placeholder = pygame.Surface((TILE_SIZE, TILE_SIZE))
+                placeholder.fill((180, 180, 180))  # Darker silver
+                pygame.draw.circle(placeholder, (0, 0, 0), (TILE_SIZE // 2 + 2, TILE_SIZE // 2), 10)
+                pygame.draw.rect(placeholder, (128, 128, 128), (TILE_SIZE // 2 - 4, TILE_SIZE // 2 - 10, 8, 6))
+                font = pygame.font.SysFont(None, 10)
+                text = font.render("SIDE", True, (0, 0, 0))
+                placeholder.blit(text, (2, TILE_SIZE - 12))
+                self.npc_knight_side_sprite = placeholder
+        except Exception as e:
+            print(f"❌ Error loading Knight side: {e}")
+            placeholder = pygame.Surface((TILE_SIZE, TILE_SIZE))
+            placeholder.fill((180, 180, 180))
+            self.npc_knight_side_sprite = placeholder
+
+        # Set initial sprite to front
+        self.npc_knight_current_sprite = self.npc_knight_front_sprite
+        self.npc_knight_facing = "front"
 
     # ============================================================
     # PORTAL SPRITE ANIMATION CLASS
@@ -429,7 +714,7 @@ class StageSelect:
                 self.game_map[y] = ''.join(row_list)
 
     # ============================================================
-    # COLLISION
+    # COLLISION - All NPCs are obstacles
     # ============================================================
     def can_move(self, nx, ny):
         col = int(nx // TILE_SIZE)
@@ -439,7 +724,34 @@ class StageSelect:
         if row >= len(self.game_map) or col >= len(self.game_map[row]):
             return False
         tile = self.game_map[row][col]
-        return tile in self.WALKABLE_TILES
+
+        # Check if tile is walkable
+        if tile not in self.WALKABLE_TILES:
+            return False
+
+        # Check if any NPC is at this position (obstacle)
+        npc_positions = []
+
+        if self.npc_bromen_found:
+            npc_positions.append((self.npc_bromen_tile_x, self.npc_bromen_tile_y))
+        if self.npc_oldman_found:
+            npc_positions.append((self.npc_oldman_tile_x, self.npc_oldman_tile_y))
+        if self.npc_skeleton_found:
+            npc_positions.append((self.npc_skeleton_tile_x, self.npc_skeleton_tile_y))
+        if self.npc_knight_found:
+            npc_positions.append((self.npc_knight_tile_x, self.npc_knight_tile_y))
+
+        player_col = int(self.player_x // TILE_SIZE)
+        player_row = int(self.player_y // TILE_SIZE)
+
+        for npc_col, npc_row in npc_positions:
+            if col == npc_col and row == npc_row:
+                # Allow if player is already on this NPC tile (teleport case)
+                if player_col == npc_col and player_row == npc_row:
+                    return True
+                return False  # Block movement into NPC
+
+        return True
 
     # ============================================================
     # CHECK PORTAL TELEPORT
@@ -511,6 +823,25 @@ class StageSelect:
         # Update cooldowns
         if self.teleport_cooldown > 0:
             self.teleport_cooldown -= dt
+
+        # Update Bromen NPC animation only
+        if self.npc_bromen_sprites and self.npc_bromen_found:
+            self.npc_bromen_anim_timer += 1
+            if self.npc_bromen_anim_timer >= 5:
+                self.npc_bromen_anim_timer = 0
+                self.npc_bromen_anim_frame = (self.npc_bromen_anim_frame + 1) % len(self.npc_bromen_sprites)
+
+        # Update Knight NPC - switch between front and side
+        if self.npc_knight_found:
+            self.npc_knight_side_timer += 1
+            if self.npc_knight_side_timer >= self.npc_knight_side_duration:
+                self.npc_knight_side_timer = 0
+                if self.npc_knight_facing == "front":
+                    self.npc_knight_facing = "side"
+                    self.npc_knight_current_sprite = self.npc_knight_side_sprite
+                else:
+                    self.npc_knight_facing = "front"
+                    self.npc_knight_current_sprite = self.npc_knight_front_sprite
 
         # Update player movement using cursor from main menu
         self.update_player_movement()
@@ -586,6 +917,37 @@ class StageSelect:
             self.screen.blit(scaled_image, (screen_x, screen_y))
 
     # ============================================================
+    # DRAW NPC
+    # ============================================================
+    def draw_npc_animated(self, x, y, sprites, anim_frame):
+        if not sprites:
+            return
+
+        screen_x = (x - self.camera_x) * ZOOM
+        screen_y = (y - self.camera_y) * ZOOM
+
+        if (-TILE_SIZE * ZOOM <= screen_x <= self.width + TILE_SIZE * ZOOM and
+                -TILE_SIZE * ZOOM <= screen_y <= self.height + TILE_SIZE * ZOOM):
+            frame_index = min(anim_frame, len(sprites) - 1)
+            sprite = sprites[frame_index]
+            scaled_size = int(TILE_SIZE * ZOOM)
+            scaled_sprite = pygame.transform.scale(sprite, (scaled_size, scaled_size))
+            self.screen.blit(scaled_sprite, (screen_x, screen_y))
+
+    def draw_npc_static(self, x, y, sprite):
+        if sprite is None:
+            return
+
+        screen_x = (x - self.camera_x) * ZOOM
+        screen_y = (y - self.camera_y) * ZOOM
+
+        if (-TILE_SIZE * ZOOM <= screen_x <= self.width + TILE_SIZE * ZOOM and
+                -TILE_SIZE * ZOOM <= screen_y <= self.height + TILE_SIZE * ZOOM):
+            scaled_size = int(TILE_SIZE * ZOOM)
+            scaled_sprite = pygame.transform.scale(sprite, (scaled_size, scaled_size))
+            self.screen.blit(scaled_sprite, (screen_x, screen_y))
+
+    # ============================================================
     # DRAW PLAYER
     # ============================================================
     def draw_player(self):
@@ -621,6 +983,27 @@ class StageSelect:
         for portal in self.portals:
             portal.draw(self.screen, self.camera_x, self.camera_y, ZOOM, self.width, self.height)
 
+        # Draw NPCs (before player so player is on top)
+        # Bromen - Animated
+        if self.npc_bromen_found:
+            self.draw_npc_animated(self.npc_bromen_x, self.npc_bromen_y,
+                                   self.npc_bromen_sprites, self.npc_bromen_anim_frame)
+
+        # Oldman - Static
+        if self.npc_oldman_found:
+            self.draw_npc_static(self.npc_oldman_x, self.npc_oldman_y,
+                                 self.npc_oldman_sprite)
+
+        # Skeleton - Static
+        if self.npc_skeleton_found:
+            self.draw_npc_static(self.npc_skeleton_x, self.npc_skeleton_y,
+                                 self.npc_skeleton_sprite)
+
+        # Knight - Static (switches between front and side)
+        if self.npc_knight_found and self.npc_knight_current_sprite:
+            self.draw_npc_static(self.npc_knight_x, self.npc_knight_y,
+                                 self.npc_knight_current_sprite)
+
         # Draw player
         self.draw_player()
 
@@ -643,10 +1026,23 @@ class StageSelect:
 
         # Info panel
         if self.show_info:
+            npc_status = []
+            if self.npc_bromen_found:
+                npc_status.append("Bromen")
+            if self.npc_oldman_found:
+                npc_status.append("Oldman")
+            if self.npc_skeleton_found:
+                npc_status.append("Skeleton")
+            if self.npc_knight_found:
+                npc_status.append("Knight")
+
+            npc_text = ", ".join(npc_status) if npc_status else "None"
+
             info_lines = [
                 f"Zoom: {ZOOM}x (Permanent)",
                 f"Position: ({self.player_x // TILE_SIZE}, {self.player_y // TILE_SIZE})",
                 f"Portals: {len(self.portals)}",
+                f"NPCs: {npc_text}",
                 f"Hand: {'YES' if self.hand_detected else 'NO'}",
                 f"Gesture: {self.current_gesture}",
                 f"Move wrist to edges | Hold fist on portal → Teleport",
