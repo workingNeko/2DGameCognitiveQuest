@@ -1,650 +1,684 @@
-# screens/stageselect.py - UPDATED with image-based back button
+# screens/stageselect.py - Stage Selection Screen (Using Main Menu's Gesture System)
 
 import pygame
-import math
-import random
-import sys
 import os
+import sys
+import cv2
+import numpy as np
+import time
 
 # ============================================================
-# CONSTANTS
+# SETTINGS
 # ============================================================
+TILE_SIZE = 32
 FPS = 60
-DT = 1 / FPS  # Fixed delta time
+SPEED = 4
 
-# ============================================================
-# COLORS
-# ============================================================
-WHITE = (255, 255, 255)
-BLACK = (0, 0, 0)
+# Camera zoom settings - PERMANENT ZOOM
+ZOOM = 1.50  # Fixed zoom level
 
-BG_TOP = (50, 120, 255)
-BG_BOTTOM = (20, 40, 120)
-
-LOCKED = (120, 120, 120)
-
-PATH = (90, 90, 130)
-PATH_ACTIVE = (255, 220, 120)
-
-QUARTER_COLORS = [
-    (255, 140, 0),
-    (50, 205, 50),
-    (65, 105, 225),
-    (186, 85, 211),
-]
+# Portal settings
+PORTAL_SIZES = {
+    'right': (3, 3),  # 3 tiles wide, 3 tiles tall (square)
+    'left': (2, 3),  # 2 tile wide, 3 tiles tall (vertical strip)
+    'up': (3, 3),  # 3 tiles wide, 3 tiles tall (square)
+    'down': (3, 2)  # 3 tiles wide, 2 tile tall (horizontal strip)
+}
 
 
-# ============================================================
-# HELPERS
-# ============================================================
-def lerp(a, b, t):
-    return a + (b - a) * t
-
-
-def ease_out(t):
-    return 1 - (1 - t) * (1 - t)
-
-
-# ============================================================
-# PARTICLES
-# ============================================================
-class Particle:
-    def __init__(self, x, y):
-        self.x = x
-        self.y = y
-
-        angle = random.uniform(0, math.pi * 2)
-        speed = random.uniform(2, 6)
-
-        self.vx = math.cos(angle) * speed
-        self.vy = math.sin(angle) * speed
-
-        self.life = 1.0
-        self.size = random.randint(3, 7)
-
-        self.color = random.choice([
-            (255, 255, 255),
-            (255, 215, 0),
-            (255, 120, 120),
-            (120, 255, 255),
-            (255, 200, 100)
-        ])
-
-    def update(self):
-        self.x += self.vx
-        self.y += self.vy
-        self.vy += 0.1
-        self.life -= DT * 1.2
-
-    def draw(self, screen):
-        if self.life <= 0:
-            return
-
-        alpha = int(255 * self.life)
-        surf = pygame.Surface((20, 20), pygame.SRCALPHA)
-        pygame.draw.circle(
-            surf,
-            (*self.color, alpha),
-            (10, 10),
-            self.size
-        )
-        screen.blit(surf, (self.x - 10, self.y - 10))
-
-
-# ============================================================
-# PARTICLE SYSTEM
-# ============================================================
-class ParticleSystem:
-    def __init__(self):
-        self.particles = []
-
-    def burst(self, x, y, amount=40):
-        for _ in range(amount):
-            self.particles.append(Particle(x, y))
-
-    def update(self):
-        self.particles = [p for p in self.particles if p.life > 0]
-        for p in self.particles:
-            p.update()
-
-    def draw(self, screen):
-        for p in self.particles:
-            p.draw(screen)
-
-
-# ============================================================
-# QUARTER NODE
-# ============================================================
-class QuarterNode:
-    def __init__(self, parent, x, y, index, title, color):
-        self.parent = parent
-        self.x = x
-        self.y = y
-        self.index = index
-        self.title = title
-        self.color = color
-
-        self.unlocked = False
-        self.completed = False
-
-        self.scale = 1.0
-        self.hover = False
-
-        self.unlock_anim = 0.0
-        self.click_anim = 0.0
-
-    def unlock(self):
-        self.unlocked = True
-        self.unlock_anim = 1.0
-
-    def get_rect(self):
-        size = int(130 * self.scale)
-        return pygame.Rect(
-            self.x - size // 2,
-            self.y - size // 2,
-            size,
-            size
-        )
-
-    def update(self, mouse_pos):
-        # Hover effect
-        self.hover = self.get_rect().collidepoint(mouse_pos)
-        target_scale = 1.1 if self.hover else 1.0
-        self.scale += (target_scale - self.scale) * 8 * DT
-
-        # Decay animations
-        self.unlock_anim = max(0.0, self.unlock_anim - DT * 2)
-        self.click_anim = max(0.0, self.click_anim - DT * 3)
-
-    def on_click(self, particle_system):
-        if self.unlocked:
-            self.click_anim = 0.5
-            particle_system.burst(self.x, self.y, 80)
-            print(f"✨ Quarter {self.index} selected! ✨")
-            return True
-        else:
-            particle_system.burst(self.x, self.y, 20)
-            print(f"🔒 Quarter {self.index} is locked!")
-            return False
-
-    def draw(self, screen):
-        rect = self.get_rect()
-        color = self.color if self.unlocked else LOCKED
-
-        # UNLOCK GLOW EFFECT
-        if self.unlock_anim > 0:
-            glow_size = int(180 * self.unlock_anim)
-            glow = pygame.Surface((glow_size * 2, glow_size * 2), pygame.SRCALPHA)
-            pygame.draw.circle(
-                glow,
-                (255, 255, 180, 70),
-                (glow_size, glow_size),
-                glow_size
-            )
-            screen.blit(glow, (self.x - glow_size, self.y - glow_size))
-
-        # CLICK PULSE EFFECT
-        if self.click_anim > 0:
-            pulse_scale = 1 + (self.click_anim * 0.3)
-            pulse_size = int(130 * pulse_scale)
-            pulse_rect = pygame.Rect(
-                self.x - pulse_size // 2,
-                self.y - pulse_size // 2,
-                pulse_size,
-                pulse_size
-            )
-            pygame.draw.rect(
-                screen,
-                (255, 255, 255),
-                pulse_rect,
-                4,
-                border_radius=30
-            )
-
-        # SHADOW
-        shadow_rect = rect.move(0, 8)
-        pygame.draw.rect(screen, (0, 0, 0), shadow_rect, border_radius=30)
-
-        # MAIN BUTTON
-        pygame.draw.rect(screen, color, rect, border_radius=30)
-        pygame.draw.rect(screen, WHITE, rect, 5, border_radius=30)
-
-        # QUARTER NUMBER
-        num_text = self.parent.quarter_font.render(str(self.index), True, WHITE)
-        num_rect = num_text.get_rect(center=(self.x, self.y - 15))
-        screen.blit(num_text, num_rect)
-
-        # TITLE LABEL
-        label = self.parent.small_font.render(self.title, True, WHITE)
-        label_rect = label.get_rect(center=(self.x, self.y + 35))
-        screen.blit(label, label_rect)
-
-
-# ============================================================
-# PATH SYSTEM
-# ============================================================
-class PathSystem:
-    def __init__(self, stages):
-        self.stages = stages
-        self.progress = 0.0
-        self.target = 0
-        self.energy_particles = []
-
-    def unlock_next(self):
-        if self.target < len(self.stages) - 1:
-            self.target += 1
-            return True
-        return False
-
-    def update(self):
-        # Smooth progress interpolation
-        self.progress += (self.target - self.progress) * 5 * DT
-
-        # Add occasional energy particles
-        if random.random() < 0.25 and self.progress > 0:
-            x, y = self.get_pos()
-            self.energy_particles.append(Particle(x, y))
-
-        # Update energy particles
-        self.energy_particles = [p for p in self.energy_particles if p.life > 0]
-        for p in self.energy_particles:
-            p.update()
-
-    def get_pos(self):
-        i = int(self.progress)
-        t = self.progress - i
-
-        if i >= len(self.stages) - 1:
-            i = len(self.stages) - 2
-            t = 1.0
-
-        a = self.stages[i]
-        b = self.stages[i + 1]
-        t = ease_out(t)
-
-        x = lerp(a.x, b.x, t)
-        y = lerp(a.y, b.y, t)
-        return x, y
-
-    def draw(self, screen):
-        # BASE PATH
-        for i in range(len(self.stages) - 1):
-            a = self.stages[i]
-            b = self.stages[i + 1]
-            pygame.draw.line(screen, PATH, (a.x, a.y), (b.x, b.y), 14)
-
-        # ACTIVE PATH
-        for i in range(int(self.progress)):
-            if i < len(self.stages) - 1:
-                a = self.stages[i]
-                b = self.stages[i + 1]
-                pygame.draw.line(screen, PATH_ACTIVE, (a.x, a.y), (b.x, b.y), 10)
-
-        # Partial active path segment
-        if self.progress > 0 and self.progress < len(self.stages) - 1:
-            i = int(self.progress)
-            t = self.progress - i
-            a = self.stages[i]
-            b = self.stages[i + 1]
-            partial_x = lerp(a.x, b.x, t)
-            partial_y = lerp(a.y, b.y, t)
-            pygame.draw.line(screen, PATH_ACTIVE, (a.x, a.y), (partial_x, partial_y), 10)
-
-        # ENERGY BALL
-        if self.progress > 0:
-            x, y = self.get_pos()
-            pygame.draw.circle(screen, (255, 255, 200, 100), (int(x), int(y)), 18)
-            pygame.draw.circle(screen, (255, 255, 120), (int(x), int(y)), 12)
-            pygame.draw.circle(screen, WHITE, (int(x), int(y)), 6)
-
-        # ENERGY PARTICLES
-        for p in self.energy_particles:
-            p.draw(screen)
-
-
-# ============================================================
-# STAGE SELECT - WITH IMAGE BACK BUTTON
-# ============================================================
 class StageSelect:
-    def __init__(self, screen, main_menu=None):
+    def __init__(self, screen, main_menu):
         self.screen = screen
         self.main_menu = main_menu
-        self.w, self.h = screen.get_size()
+        self.width, self.height = screen.get_size()
 
-        # FONTS
-        self.title_font = pygame.font.SysFont("Comic Sans MS", 60, bold=True)
-        self.quarter_font = pygame.font.SysFont("Comic Sans MS", 34, bold=True)
-        self.small_font = pygame.font.SysFont("Comic Sans MS", 20)
-
-        # ====================================================
-        # LOAD BACK BUTTON IMAGE (same as main_menu)
-        # ====================================================
-        self.back_image = None
-        exit_btn_path = os.path.join("assets", "images", "exitbutton.png")
-
-        if os.path.exists(exit_btn_path):
-            try:
-                self.back_image = pygame.image.load(exit_btn_path).convert_alpha()
-                # Scale to reasonable size (matching main_menu)
-                self.back_image = pygame.transform.scale(self.back_image, (200, 70))
-                self.back_btn_rect = self.back_image.get_rect(topleft=(30, 30))
-                self.use_image_button = True
-                print("✅ Exit button image loaded for StageSelect")
-            except Exception as e:
-                print(f"Failed to load exit button image: {e}")
-                self.use_image_button = False
-                self.back_btn_rect = pygame.Rect(30, 30, 170, 55)
-        else:
-            print(f"Exit button image not found at: {exit_btn_path}")
-            self.use_image_button = False
-            self.back_btn_rect = pygame.Rect(30, 30, 200, 70)
-
-        # GESTURE SYSTEM
-        self.cursor_pos = (self.w // 2, self.h // 2)
+        # ============================================================
+        # GESTURE SYSTEM - USE MAIN MENU'S DATA
+        # ============================================================
+        self.cursor_pos = (self.width // 2, self.height // 2)
         self.current_gesture = "NO HAND"
-        self.fist_triggered = False
-        self.fist_hold_timer = 0.0
-        self.CLICK_HOLD_TIME = 0.9
         self.fist_start_time = 0
+        self.CLICK_HOLD_TIME = 0.9
+        self.click_ready = False
+        self.hand_detected = False  # Will be set from main_menu
+        self.fist_closed = False
 
-        # CURSOR SPEED BOOST
-        self.cursor_speed_multiplier = 2.2
-        self.last_cursor_pos = self.cursor_pos
+        # For tracking clicks to prevent multiple triggers
+        self.last_click_time = 0
+        self.click_cooldown = 0.5
 
-        # QUARTERS POSITIONS
-        center_x = self.w // 2
-        self.quarters = [
-            QuarterNode(self, center_x - 420, 420, 1, "1st Quarter", QUARTER_COLORS[0]),
-            QuarterNode(self, center_x - 140, 260, 2, "2nd Quarter", QUARTER_COLORS[1]),
-            QuarterNode(self, center_x + 140, 420, 3, "3rd Quarter", QUARTER_COLORS[2]),
-            QuarterNode(self, center_x + 420, 260, 4, "4th Quarter", QUARTER_COLORS[3]),
+        # ============================================================
+        # PATHS
+        # ============================================================
+        self.BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+        self.PLAYER_PATH = os.path.join(
+            self.BASE_DIR,
+            "assets",
+            "images",
+            "sprites",
+            "objects",
+            "player"
+        )
+
+        self.OBJECTS_PATH = os.path.join(
+            self.BASE_DIR,
+            "assets",
+            "images",
+            "sprites",
+            "objects",
+            "tiles"
+        )
+
+        self.PORTAL_PATH = os.path.join(
+            self.BASE_DIR,
+            "assets",
+            "images",
+            "sprites",
+            "objects",
+            "portal"
+        )
+
+        self.MAP_PATH = os.path.join(self.BASE_DIR, "assets", "map", "map.txt")
+
+        # ============================================================
+        # LOAD MAP
+        # ============================================================
+        self.game_map = []
+        try:
+            with open(self.MAP_PATH, "r", encoding="utf-8") as f:
+                for line in f:
+                    line = line.rstrip("\n\r")
+                    if line:
+                        self.game_map.append(line)
+        except FileNotFoundError:
+            print(f"Map not found at: {self.MAP_PATH}")
+            self.game_map = [
+                "GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG",
+                "G######################################G",
+                "G#     #                              #G",
+                "G#     #   GGGGGG   GGGGGG   GGGGGG   #G",
+                "G#     #   G    G   G    G   G    G   #G",
+                "G#     #   G    G   G    G   G    G   #G",
+                "G#     #   GGGGGG   GGGGGG   GGGGGG   #G",
+                "G#     #                              #G",
+                "G#     ################################G",
+                "G#                                    #G",
+                "G#                                    #G",
+                "G######################################G",
+                "GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG",
+            ]
+
+        self.ROWS = len(self.game_map)
+        self.COLS = max(len(r) for r in self.game_map) if self.game_map else 0
+        self.MAP_WIDTH = self.COLS * TILE_SIZE
+        self.MAP_HEIGHT = self.ROWS * TILE_SIZE
+
+        # ============================================================
+        # CAMERA
+        # ============================================================
+        self.camera_x = 0
+        self.camera_y = 0
+
+        # ============================================================
+        # LOAD TILE IMAGES
+        # ============================================================
+        self.tile_images = self.load_tile_images()
+        self.fallback_tile = pygame.Surface((TILE_SIZE, TILE_SIZE))
+        self.fallback_tile.fill((100, 100, 100))
+        pygame.draw.rect(self.fallback_tile, (255, 0, 0), self.fallback_tile.get_rect(), 2)
+
+        # ============================================================
+        # WALKABLE TILES
+        # ============================================================
+        self.WALKABLE_TILES = {"G", "#", "1", "2", "3", "4", "5", "6", "7", "8"}
+
+        # ============================================================
+        # LOAD PLAYER SPRITES
+        # ============================================================
+        self.player_sprites = self.load_player_sprites()
+        self.anim_frame = 0
+        self.anim_timer = 0
+
+        # ============================================================
+        # SPAWN PLAYER
+        # ============================================================
+        self.player_x = 0
+        self.player_y = 0
+        self.player_dir = "down"
+
+        for y, row in enumerate(self.game_map):
+            for x, c in enumerate(row):
+                if c == "P":
+                    self.player_x = x * TILE_SIZE
+                    self.player_y = y * TILE_SIZE
+                    print(f"Player spawned at: ({x}, {y})")
+                    break
+
+        # ============================================================
+        # LOAD PORTALS
+        # ============================================================
+        self.portals = []
+        self.portal_frames_cache = self.load_portal_frames()
+        self.load_static_portals()
+
+        # Teleport cooldown
+        self.teleport_cooldown = 0
+        self.TELEPORT_COOLDOWN_TIME = 1.0
+
+        # ============================================================
+        # UI
+        # ============================================================
+        self.show_info = True
+        self.font = pygame.font.SysFont("Comic Sans MS", 16)
+        self.small_font = pygame.font.SysFont("Comic Sans MS", 12)
+
+        # Clock for delta time
+        self.clock = pygame.time.Clock()
+        self.frame_counter = 0
+
+        print(f"✅ StageSelect initialized with map: {self.ROWS}x{self.COLS}")
+        print(f"   Walkable tiles: {self.WALKABLE_TILES}")
+        print(f"   Portals loaded: {len(self.portals)}")
+
+    # ============================================================
+    # LOAD TILE IMAGES
+    # ============================================================
+    def load_tile_images(self):
+        def load_tile(filename):
+            path = os.path.join(self.OBJECTS_PATH, filename)
+            try:
+                image = pygame.image.load(path).convert_alpha()
+                image = pygame.transform.scale(image, (TILE_SIZE, TILE_SIZE))
+                return image
+            except Exception:
+                placeholder = pygame.Surface((TILE_SIZE, TILE_SIZE))
+                placeholder.fill((100, 100, 100))
+                pygame.draw.rect(placeholder, (255, 255, 255), placeholder.get_rect(), 1)
+                return placeholder
+
+        tiles = {}
+        tile_files = [
+            ("#", "003.png"), ("G", "002.png"), ("1", "011.png"), ("2", "009.png"),
+            ("3", "006.png"), ("4", "004.png"), ("5", "005.png"), ("6", "010.png"),
+            ("7", "008.png"), ("8", "007.png"), ("+", "012.png"), ("-", "013.png"),
+            ("/", "014.png"), ("*", "015.png"), ("T", "016.png"), ("W", "019.png"),
+            ("!", "020.png"), ("@", "022.png"), (")", "021.png"), ("$", "026.png"),
+            ("%", "025.png"), ("^", "027.png"), ("&", "023.png"), ("(", "024.png"),
+            ("<", "028.png"), (">", "029.png"), (";", "030.png"), (":", "032.png"),
+            ("P", "034.png"), ("C", "032.png"), ("S", "036.png"), ("R", "037.png"),
+            ("E", "033.png"), ("|", "035.png"), ("D", "pyramid.png")
         ]
 
-        # First quarter unlocked by default
-        self.quarters[0].unlock()
+        for key, filename in tile_files:
+            tiles[key] = load_tile(filename)
 
-        # SYSTEMS
-        self.path_system = PathSystem(self.quarters)
-        self.particles = ParticleSystem()
+        return tiles
 
-        # Gesture unlock tracking
-        self.unlock_hold_timer = 0.0
-        self.UNLOCK_HOLD_TIME = 1.0
+    # ============================================================
+    # LOAD PLAYER SPRITES
+    # ============================================================
+    def load_player_sprites(self):
+        def load_sprite(name):
+            path = os.path.join(self.PLAYER_PATH, name)
+            try:
+                img = pygame.image.load(path).convert_alpha()
+                return pygame.transform.scale(img, (TILE_SIZE, TILE_SIZE))
+            except Exception:
+                placeholder = pygame.Surface((TILE_SIZE, TILE_SIZE))
+                placeholder.fill((100, 100, 255))
+                pygame.draw.circle(placeholder, (255, 255, 255), (TILE_SIZE // 2, TILE_SIZE // 2), TILE_SIZE // 3)
+                return placeholder
 
-        print("✅ StageSelect initialized successfully!")
+        return {
+            "down": [load_sprite("boy_down_1.png"), load_sprite("boy_down_2.png")],
+            "left": [load_sprite("boy_left_1.png"), load_sprite("boy_left_2.png")],
+            "right": [load_sprite("boy_right_1.png"), load_sprite("boy_right_2.png")],
+            "up": [load_sprite("boy_up_1.png"), load_sprite("boy_up_2.png")]
+        }
 
-    # ========================================================
-    # UPDATE GESTURE DATA - MATCHES main_menu.py CALL SIGNATURE
-    # ========================================================
-    def update_gesture(self, cursor_pos, fist_start_time, CLICK_HOLD_TIME, current_gesture):
-        """Update gesture data - matches the call from main_menu.py"""
-        # Store these values even if not used directly
-        self.fist_start_time = fist_start_time
-        self.CLICK_HOLD_TIME = CLICK_HOLD_TIME
+    # ============================================================
+    # PORTAL SPRITE ANIMATION CLASS
+    # ============================================================
+    class PortalSpriteAnimation:
+        def __init__(self, frames, x, y, direction, width_tiles, height_tiles):
+            self.frames = frames
+            self.current_frame = 0
+            self.animation_timer = 0
+            self.frame_delay = 3
+            self.x = x
+            self.y = y
+            self.direction = direction
+            self.width_tiles = width_tiles
+            self.height_tiles = height_tiles
+            self.width = TILE_SIZE * width_tiles
+            self.height = TILE_SIZE * height_tiles
 
-        # Apply speed multiplier for responsive cursor
-        if self.last_cursor_pos != cursor_pos:
-            dx = cursor_pos[0] - self.last_cursor_pos[0]
-            dy = cursor_pos[1] - self.last_cursor_pos[1]
-            boosted_x = self.last_cursor_pos[0] + dx * self.cursor_speed_multiplier
-            boosted_y = self.last_cursor_pos[1] + dy * self.cursor_speed_multiplier
-            boosted_x = max(10, min(self.w - 10, boosted_x))
-            boosted_y = max(10, min(self.h - 10, boosted_y))
-            self.cursor_pos = (boosted_x, boosted_y)
-            self.last_cursor_pos = cursor_pos
-        else:
-            self.cursor_pos = cursor_pos
-            self.last_cursor_pos = cursor_pos
+        def update(self):
+            if self.frames:
+                self.animation_timer += 1
+                if self.animation_timer >= self.frame_delay:
+                    self.animation_timer = 0
+                    self.current_frame = (self.current_frame + 1) % len(self.frames)
 
-        self.current_gesture = current_gesture
+        def get_current_image(self):
+            if self.frames and self.current_frame < len(self.frames):
+                return self.frames[self.current_frame]
+            return None
 
-    # ========================================================
-    # TRIGGER CLICK AT CURRENT CURSOR POSITION
-    # ========================================================
-    def trigger_click(self, pos):
-        """Trigger a click at the given position - called from main_menu"""
-        self.cursor_pos = pos
+        def draw(self, screen, camera_x, camera_y, zoom, screen_width, screen_height):
+            screen_x = (self.x - camera_x) * zoom
+            screen_y = (self.y - camera_y) * zoom
 
-        # Check BACK button (image button)
-        if self.back_btn_rect.collidepoint(self.cursor_pos):
-            print("⬅️ Back to menu")
-            if self.main_menu:
-                self.main_menu.current_screen = "menu"
-                self.main_menu.stage_select = None
-            return True
+            if (-self.width * zoom <= screen_x <= screen_width + self.width * zoom and
+                    -self.height * zoom <= screen_y <= screen_height + self.height * zoom):
+                portal_img = self.get_current_image()
+                if portal_img:
+                    scaled_width = int(self.width * zoom)
+                    scaled_height = int(self.height * zoom)
+                    scaled_img = pygame.transform.scale(portal_img, (scaled_width, scaled_height))
+                    screen.blit(scaled_img, (screen_x, screen_y))
 
-        # Check quarters
-        for q in self.quarters:
-            if q.get_rect().collidepoint(self.cursor_pos):
-                q.on_click(self.particles)
+    # ============================================================
+    # PORTAL CLASS
+    # ============================================================
+    class Portal:
+        def __init__(self, x, y, direction, is_static=False):
+            self.x = x
+            self.y = y
+            self.direction = direction
+            self.is_static = is_static
+            self.width_tiles, self.height_tiles = PORTAL_SIZES[direction]
+            self.animation = None
+
+        def get_world_x(self):
+            return self.x * TILE_SIZE
+
+        def get_world_y(self):
+            return self.y * TILE_SIZE
+
+        def get_width_pixels(self):
+            return self.width_tiles * TILE_SIZE
+
+        def get_height_pixels(self):
+            return self.height_tiles * TILE_SIZE
+
+        def get_center_x(self):
+            return self.x * TILE_SIZE + (self.width_tiles * TILE_SIZE) // 2
+
+        def get_center_y(self):
+            return self.y * TILE_SIZE + (self.height_tiles * TILE_SIZE) // 2
+
+        def set_animation(self, frames):
+            self.animation = StageSelect.PortalSpriteAnimation(
+                frames,
+                self.get_world_x(),
+                self.get_world_y(),
+                self.direction,
+                self.width_tiles,
+                self.height_tiles
+            )
+
+        def update_animation(self):
+            if self.animation:
+                self.animation.update()
+
+        def draw(self, screen, camera_x, camera_y, zoom, screen_width, screen_height):
+            if self.animation:
+                self.animation.draw(screen, camera_x, camera_y, zoom, screen_width, screen_height)
+            else:
+                screen_x = (self.get_world_x() - camera_x) * zoom
+                screen_y = (self.get_world_y() - camera_y) * zoom
+                scaled_width = int(self.get_width_pixels() * zoom)
+                scaled_height = int(self.get_height_pixels() * zoom)
+
+                if self.direction == 'right':
+                    color = (0, 255, 0)
+                elif self.direction == 'left':
+                    color = (255, 0, 0)
+                elif self.direction == 'up':
+                    color = (0, 0, 255)
+                else:
+                    color = (255, 255, 0)
+
+                pygame.draw.rect(screen, color, (screen_x, screen_y, scaled_width, scaled_height))
+                pygame.draw.rect(screen, (255, 255, 255), (screen_x, screen_y, scaled_width, scaled_height), 3)
+
+        def contains_position(self, world_x, world_y):
+            portal_left = self.get_world_x()
+            portal_right = portal_left + self.get_width_pixels()
+            portal_top = self.get_world_y()
+            portal_bottom = portal_top + self.get_height_pixels()
+            return (portal_left <= world_x < portal_right and
+                    portal_top <= world_y < portal_bottom)
+
+    # ============================================================
+    # LOAD PORTAL FRAMES
+    # ============================================================
+    def load_portal_frames(self):
+        def load_portal_frames(direction, width_tiles, height_tiles):
+            frames = []
+            for i in range(9):
+                filename = f"sprite_{direction}_portal{i}.png"
+                path = os.path.join(self.PORTAL_PATH, filename)
+                try:
+                    if os.path.exists(path):
+                        img = pygame.image.load(path).convert_alpha()
+                        scaled_width = TILE_SIZE * width_tiles
+                        scaled_height = TILE_SIZE * height_tiles
+                        img = pygame.transform.scale(img, (scaled_width, scaled_height))
+                        frames.append(img)
+                    else:
+                        surf = pygame.Surface((TILE_SIZE * width_tiles, TILE_SIZE * height_tiles))
+                        if direction == 'right':
+                            surf.fill((0, 255, 0))
+                        elif direction == 'left':
+                            surf.fill((255, 0, 0))
+                        elif direction == 'up':
+                            surf.fill((0, 0, 255))
+                        elif direction == 'down':
+                            surf.fill((255, 255, 0))
+                        pygame.draw.rect(surf, (255, 255, 255), surf.get_rect(), 3)
+                        frames.append(surf)
+                except Exception:
+                    surf = pygame.Surface((TILE_SIZE * width_tiles, TILE_SIZE * height_tiles))
+                    surf.fill((128, 128, 128))
+                    frames.append(surf)
+            return frames if frames else None
+
+        return {
+            'right': load_portal_frames('right', PORTAL_SIZES['right'][0], PORTAL_SIZES['right'][1]),
+            'left': load_portal_frames('left', PORTAL_SIZES['left'][0], PORTAL_SIZES['left'][1]),
+            'up': load_portal_frames('up', PORTAL_SIZES['up'][0], PORTAL_SIZES['up'][1]),
+            'down': load_portal_frames('down', PORTAL_SIZES['down'][0], PORTAL_SIZES['down'][1])
+        }
+
+    # ============================================================
+    # LOAD STATIC PORTALS
+    # ============================================================
+    def load_static_portals(self):
+        for y, row in enumerate(self.game_map):
+            row_list = list(row)
+            modified = False
+            for x, c in enumerate(row):
+                if c == 'r':
+                    portal = self.Portal(x, y, 'right', is_static=True)
+                    portal.set_animation(self.portal_frames_cache['right'])
+                    self.portals.append(portal)
+                    row_list[x] = '6'
+                    modified = True
+                elif c == 'l':
+                    portal = self.Portal(x, y, 'left', is_static=True)
+                    portal.set_animation(self.portal_frames_cache['left'])
+                    self.portals.append(portal)
+                    row_list[x] = '6'
+                    modified = True
+                elif c == 'u':
+                    portal = self.Portal(x, y, 'up', is_static=True)
+                    portal.set_animation(self.portal_frames_cache['up'])
+                    self.portals.append(portal)
+                    row_list[x] = '7'
+                    modified = True
+                elif c == 'd':
+                    portal = self.Portal(x, y, 'down', is_static=True)
+                    portal.set_animation(self.portal_frames_cache['down'])
+                    self.portals.append(portal)
+                    row_list[x] = '7'
+                    modified = True
+            if modified:
+                self.game_map[y] = ''.join(row_list)
+
+    # ============================================================
+    # COLLISION
+    # ============================================================
+    def can_move(self, nx, ny):
+        col = int(nx // TILE_SIZE)
+        row = int(ny // TILE_SIZE)
+        if row < 0 or row >= self.ROWS or col < 0 or col >= self.COLS:
+            return False
+        if row >= len(self.game_map) or col >= len(self.game_map[row]):
+            return False
+        tile = self.game_map[row][col]
+        return tile in self.WALKABLE_TILES
+
+    # ============================================================
+    # CHECK PORTAL TELEPORT
+    # ============================================================
+    def check_portal_teleport_on_hold(self):
+        current_portal = None
+        for portal in self.portals:
+            if portal.contains_position(self.player_x, self.player_y):
+                current_portal = portal
+                break
+
+        if current_portal and self.fist_closed and self.teleport_cooldown <= 0:
+            other_portals = [p for p in self.portals if p != current_portal]
+            if other_portals:
+                target_portal = other_portals[0]
+                self.player_x = target_portal.get_center_x() - TILE_SIZE // 2
+                self.player_y = target_portal.get_center_y() - TILE_SIZE // 2
+                self.teleport_cooldown = self.TELEPORT_COOLDOWN_TIME
                 return True
         return False
 
-    # ========================================================
-    # CHECK GESTURE UNLOCK
-    # ========================================================
-    def check_gesture_unlock(self):
-        hovered_quarter = None
-        for q in self.quarters:
-            if q.get_rect().collidepoint(self.cursor_pos):
-                hovered_quarter = q
-                break
+    # ============================================================
+    # UPDATE CAMERA
+    # ============================================================
+    def update_camera(self):
+        target_x = self.player_x + TILE_SIZE // 2 - (self.width // 2) / ZOOM
+        target_y = self.player_y + TILE_SIZE // 2 - (self.height // 2) / ZOOM
+        self.camera_x += (target_x - self.camera_x) * 0.1
+        self.camera_y += (target_y - self.camera_y) * 0.1
 
-        if self.current_gesture == "FIST" and hovered_quarter:
-            next_unlock_index = self.path_system.target + 1
+        min_cam_x = 0
+        max_cam_x = max(0, self.MAP_WIDTH - self.width / ZOOM)
+        min_cam_y = 0
+        max_cam_y = max(0, self.MAP_HEIGHT - self.height / ZOOM)
 
-            if not hovered_quarter.unlocked and hovered_quarter.index - 1 == next_unlock_index:
-                self.unlock_hold_timer += DT
+        self.camera_x = max(min_cam_x, min(self.camera_x, max_cam_x))
+        self.camera_y = max(min_cam_y, min(self.camera_y, max_cam_y))
 
-                # Visual feedback
-                if self.unlock_hold_timer > 0:
-                    progress = min(1.0, self.unlock_hold_timer / self.UNLOCK_HOLD_TIME)
-                    circle_radius = 20 + int(15 * progress)
-                    for radius in range(3):
-                        alpha = int(100 * (1 - radius / 3))
-                        # Create a temporary surface for the circle with alpha
-                        temp_surf = pygame.Surface((circle_radius * 2, circle_radius * 2), pygame.SRCALPHA)
-                        pygame.draw.circle(
-                            temp_surf,
-                            (100, 255, 100, alpha),
-                            (circle_radius, circle_radius),
-                            circle_radius - radius * 5,
-                            3
-                        )
-                        self.screen.blit(temp_surf,
-                                         (int(self.cursor_pos[0]) - circle_radius,
-                                          int(self.cursor_pos[1]) - circle_radius))
+    # ============================================================
+    # UPDATE GESTURE (called from main_menu)
+    # ============================================================
+    def update_gesture(self, cursor_pos, fist_start_time, CLICK_HOLD_TIME, current_gesture):
+        """Update gesture data from main menu"""
+        self.cursor_pos = cursor_pos
+        self.fist_start_time = fist_start_time
+        self.CLICK_HOLD_TIME = CLICK_HOLD_TIME
+        self.current_gesture = current_gesture
 
-                if self.unlock_hold_timer >= self.UNLOCK_HOLD_TIME:
-                    current = self.path_system.target
-                    if current < len(self.quarters) - 1:
-                        self.particles.burst(self.quarters[current].x, self.quarters[current].y, 60)
-                        self.path_system.unlock_next()
-                        if self.path_system.target < len(self.quarters):
-                            self.quarters[self.path_system.target].unlock()
-                            print(f"🔓 Quarter {self.path_system.target + 1} UNLOCKED via gesture!")
-                            self.particles.burst(self.quarters[self.path_system.target].x,
-                                                 self.quarters[self.path_system.target].y, 100)
-                            self.unlock_hold_timer = 0.0
-                    else:
-                        print("🏆 All quarters already unlocked!")
-                        self.unlock_hold_timer = 0.0
-            else:
-                self.unlock_hold_timer = 0.0
-        else:
-            self.unlock_hold_timer = 0.0
+        # Check if hand is detected (not NO HAND)
+        self.hand_detected = current_gesture != "NO HAND"
 
-    # ========================================================
-    # UPDATE - NO PARAMETERS NEEDED!
-    # ========================================================
-    def update(self):
-        # Update quarters
-        for q in self.quarters:
-            q.update(self.cursor_pos)
+        # Check if fist is closed (fist_start_time > 0 means fist is being held)
+        self.fist_closed = fist_start_time > 0
 
-        # Update path system
-        self.path_system.update()
-
-        # Update particle effects
-        self.particles.update()
-
-        # Gesture fist detection for clicking
-        # Use the fist_start_time from main_menu to determine if fist is being held
-        if self.current_gesture == "FIST":
-            if not self.fist_triggered:
-                self.fist_hold_timer += DT
-                if self.fist_hold_timer >= 0.1:  # Short hold for click
-                    self.fist_triggered = True
-                    # Use trigger_click with current cursor position
-                    self.trigger_click(self.cursor_pos)
-                    self.fist_hold_timer = 0.0
-        else:
-            self.fist_triggered = False
-            self.fist_hold_timer = 0.0
-
-        # Check for gesture-based unlocking
-        self.check_gesture_unlock()
-
-    # ========================================================
-    # CLEANUP
-    # ========================================================
-    def cleanup(self):
-        """Clean up resources if needed"""
+    # ============================================================
+    # TRIGGER CLICK (called from main_menu)
+    # ============================================================
+    def trigger_click(self, pos):
+        # No click functionality needed in stage select
         pass
 
-    # ========================================================
-    # EVENT HANDLER
-    # ========================================================
+    # ============================================================
+    # UPDATE
+    # ============================================================
+    def update(self):
+        dt = self.clock.tick(FPS) / 1000.0
+        self.frame_counter += 1
+
+        # Update cooldowns
+        if self.teleport_cooldown > 0:
+            self.teleport_cooldown -= dt
+
+        # Update player movement using cursor from main menu
+        self.update_player_movement()
+
+        # Check portal teleport
+        self.check_portal_teleport_on_hold()
+
+        # Update portal animations
+        for portal in self.portals:
+            portal.update_animation()
+
+        # Update camera
+        self.update_camera()
+
+    # ============================================================
+    # UPDATE PLAYER MOVEMENT
+    # ============================================================
+    def update_player_movement(self):
+        vx, vy = 0, 0
+
+        # Only move if hand is detected
+        if self.hand_detected:
+            center_x, center_y = self.width // 2, self.height // 2
+            cursor_x, cursor_y = self.cursor_pos
+            dx = cursor_x - center_x
+            dy = cursor_y - center_y
+
+            if abs(dx) > 60:
+                vx = SPEED if dx > 0 else -SPEED
+                if dx > 0:
+                    self.player_dir = "right"
+                elif dx < 0:
+                    self.player_dir = "left"
+
+            if abs(dy) > 60:
+                vy = SPEED if dy > 0 else -SPEED
+                if dy > 0:
+                    self.player_dir = "down"
+                elif dy < 0:
+                    self.player_dir = "up"
+
+        # Collision move
+        new_x = self.player_x + vx
+        new_y = self.player_y + vy
+
+        if self.can_move(new_x, self.player_y):
+            self.player_x = new_x
+        if self.can_move(self.player_x, new_y):
+            self.player_y = new_y
+
+        # Animation
+        if vx != 0 or vy != 0:
+            self.anim_timer += 1
+            if self.anim_timer >= 10:
+                self.anim_timer = 0
+                self.anim_frame = (self.anim_frame + 1) % 2
+        else:
+            self.anim_frame = 0
+
+    # ============================================================
+    # DRAW TILE
+    # ============================================================
+    def draw_tile(self, c, world_x, world_y):
+        screen_x = (world_x - self.camera_x) * ZOOM
+        screen_y = (world_y - self.camera_y) * ZOOM
+
+        margin = TILE_SIZE * ZOOM * 2
+        if (-margin <= screen_x <= self.width + margin and
+                -margin <= screen_y <= self.height + margin):
+            image = self.tile_images.get(c, self.fallback_tile)
+            scaled_size = int(TILE_SIZE * ZOOM)
+            scaled_image = pygame.transform.scale(image, (scaled_size, scaled_size))
+            self.screen.blit(scaled_image, (screen_x, screen_y))
+
+    # ============================================================
+    # DRAW PLAYER
+    # ============================================================
+    def draw_player(self):
+        screen_x = (self.player_x - self.camera_x) * ZOOM
+        screen_y = (self.player_y - self.camera_y) * ZOOM
+
+        if (-TILE_SIZE * ZOOM <= screen_x <= self.width + TILE_SIZE * ZOOM and
+                -TILE_SIZE * ZOOM <= screen_y <= self.height + TILE_SIZE * ZOOM):
+            sprite = self.player_sprites[self.player_dir][self.anim_frame]
+            scaled_size = int(TILE_SIZE * ZOOM)
+            scaled_sprite = pygame.transform.scale(sprite, (scaled_size, scaled_size))
+            self.screen.blit(scaled_sprite, (screen_x, screen_y))
+
+    # ============================================================
+    # DRAW
+    # ============================================================
+    def draw(self):
+        self.screen.fill((0, 0, 0))
+
+        # Draw visible tiles
+        start_col = max(0, int(self.camera_x / TILE_SIZE) - 2)
+        end_col = min(self.COLS, int((self.camera_x + self.width / ZOOM) / TILE_SIZE) + 3)
+        start_row = max(0, int(self.camera_y / TILE_SIZE) - 2)
+        end_row = min(self.ROWS, int((self.camera_y + self.height / ZOOM) / TILE_SIZE) + 3)
+
+        for row in range(start_row, end_row):
+            for col in range(start_col, end_col):
+                if row < len(self.game_map) and col < len(self.game_map[row]):
+                    tile_char = self.game_map[row][col]
+                    self.draw_tile(tile_char, col * TILE_SIZE, row * TILE_SIZE)
+
+        # Draw portals
+        for portal in self.portals:
+            portal.draw(self.screen, self.camera_x, self.camera_y, ZOOM, self.width, self.height)
+
+        # Draw player
+        self.draw_player()
+
+        # Draw UI
+        self.draw_ui()
+
+    # ============================================================
+    # DRAW UI
+    # ============================================================
+    def draw_ui(self):
+        # Draw cursor from main menu (same as main menu)
+        if self.hand_detected:
+            if self.fist_start_time > 0:
+                color = (255, 200, 0)  # Yellow when holding fist
+            else:
+                color = (255, 255, 255)  # White normally
+
+            pygame.draw.circle(self.screen, color, self.cursor_pos, 15, 2)
+            pygame.draw.circle(self.screen, (255, 100, 100), self.cursor_pos, 4)
+
+        # Info panel
+        if self.show_info:
+            info_lines = [
+                f"Zoom: {ZOOM}x (Permanent)",
+                f"Position: ({self.player_x // TILE_SIZE}, {self.player_y // TILE_SIZE})",
+                f"Portals: {len(self.portals)}",
+                f"Hand: {'YES' if self.hand_detected else 'NO'}",
+                f"Gesture: {self.current_gesture}",
+                f"Move wrist to edges | Hold fist on portal → Teleport",
+                f"Press ESC to return to menu"
+            ]
+
+            y_offset = 10
+            for line in info_lines:
+                text = self.small_font.render(line, True, (255, 255, 255))
+                text_bg = pygame.Surface((text.get_width() + 4, text.get_height() + 4))
+                text_bg.set_alpha(180)
+                text_bg.fill((0, 0, 0))
+                self.screen.blit(text_bg, (8, y_offset - 2))
+                self.screen.blit(text, (10, y_offset))
+                y_offset += 18
+
+    # ============================================================
+    # HANDLE EVENT
+    # ============================================================
     def handle_event(self, event):
         if event.type == pygame.KEYDOWN:
             if event.key == pygame.K_ESCAPE:
+                if self.main_menu:
+                    self.main_menu.current_screen = "menu"
+                    self.main_menu.stage_select = None
                 return "back"
+            elif event.key == pygame.K_i:
+                self.show_info = not self.show_info
         return None
 
-    # ========================================================
-    # DRAW
-    # ========================================================
-    def draw(self):
-        # GRADIENT BACKGROUND
-        for y in range(self.h):
-            ratio = y / self.h
-            r = int(lerp(BG_TOP[0], BG_BOTTOM[0], ratio))
-            g = int(lerp(BG_TOP[1], BG_BOTTOM[1], ratio))
-            b = int(lerp(BG_TOP[2], BG_BOTTOM[2], ratio))
-            pygame.draw.line(self.screen, (r, g, b), (0, y), (self.w, y))
-
-        # TITLE
-        title_shadow = self.title_font.render("SELECT QUARTER", True, BLACK)
-        title = self.title_font.render("SELECT QUARTER", True, WHITE)
-        self.screen.blit(title_shadow, (self.w // 2 - title.get_width() // 2 + 4, 54))
-        self.screen.blit(title, (self.w // 2 - title.get_width() // 2, 50))
-
-        # BACK BUTTON (using image like main_menu)
-        if self.use_image_button and self.back_image:
-            # Check if hovered for visual feedback
-            if self.back_btn_rect.collidepoint(self.cursor_pos):
-                # Draw highlight effect on hover
-                glow_surf = pygame.Surface((self.back_btn_rect.width + 10, self.back_btn_rect.height + 10),
-                                           pygame.SRCALPHA)
-                pygame.draw.rect(glow_surf, (255, 255, 255, 60),
-                                 (5, 5, self.back_btn_rect.width, self.back_btn_rect.height),
-                                 border_radius=12)
-                self.screen.blit(glow_surf, (self.back_btn_rect.x - 5, self.back_btn_rect.y - 5))
-
-            # Draw the button image
-            self.screen.blit(self.back_image, self.back_btn_rect.topleft)
-        else:
-            # Fallback to colored rectangle button
-            hover = self.back_btn_rect.collidepoint(self.cursor_pos)
-            btn_color = (100, 100, 140) if hover else (60, 60, 80)
-            pygame.draw.rect(self.screen, btn_color, self.back_btn_rect, border_radius=12)
-            pygame.draw.rect(self.screen, WHITE, self.back_btn_rect, 3, border_radius=12)
-            back_text = self.small_font.render("← BACK", True, WHITE)
-            self.screen.blit(back_text, back_text.get_rect(center=self.back_btn_rect.center))
-
-        # PATH
-        self.path_system.draw(self.screen)
-
-        # QUARTERS
-        for q in self.quarters:
-            q.draw(self.screen)
-
-        # PARTICLES
-        self.particles.draw(self.screen)
-
-        # GESTURE UI
-        gesture_display = "✊ FIST" if self.current_gesture == "FIST" else "🖐️ OPEN HAND"
-        if self.current_gesture == "NO HAND":
-            gesture_display = "👆 NO HAND"
-
-        if self.unlock_hold_timer > 0:
-            unlock_progress = int((self.unlock_hold_timer / self.UNLOCK_HOLD_TIME) * 100)
-            progress_text = self.small_font.render(f"HOLD TO UNLOCK: {unlock_progress}%", True, (100, 255, 100))
-            self.screen.blit(progress_text, (self.w // 2 - progress_text.get_width() // 2, self.h - 80))
-
-        hint_surface = self.small_font.render(
-            f"Gesture: {gesture_display}  |  FIST = Select  |  HOLD FIST on LOCKED = Unlock",
-            True,
-            (255, 240, 180)
-        )
-        self.screen.blit(hint_surface, (self.w // 2 - hint_surface.get_width() // 2, self.h - 45))
-
-        # CUSTOM CURSOR
-        cursor_glow_radius = 12
-        # Outer glow
-        glow_surf = pygame.Surface((cursor_glow_radius * 4, cursor_glow_radius * 4), pygame.SRCALPHA)
-        pygame.draw.circle(glow_surf, (255, 255, 200, 80),
-                           (cursor_glow_radius * 2, cursor_glow_radius * 2), cursor_glow_radius + 4)
-        self.screen.blit(glow_surf, (int(self.cursor_pos[0]) - cursor_glow_radius - 4,
-                                     int(self.cursor_pos[1]) - cursor_glow_radius - 4))
-        # Inner circle
-        pygame.draw.circle(self.screen, WHITE,
-                           (int(self.cursor_pos[0]), int(self.cursor_pos[1])), cursor_glow_radius - 2)
-        pygame.draw.circle(self.screen, (255, 220, 100),
-                           (int(self.cursor_pos[0]), int(self.cursor_pos[1])), cursor_glow_radius - 5)
-
-
-# ============================================================
-# MAIN GAME LOOP (Standalone Test)
-# ============================================================
-def main():
-    pygame.init()
-    screen_width = 1280
-    screen_height = 720
-    screen = pygame.display.set_mode((screen_width, screen_height))
-    pygame.display.set_caption("Cognitive Quest - Gesture Stage Select")
-    clock = pygame.time.Clock()
-
-    # Create stage select
-    stage_select = StageSelect(screen)
-    running = True
-
-    while running:
-        # Handle events
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                running = False
-            if event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_ESCAPE:
-                    running = False
-
-        # Simulate gesture input with mouse
-        mouse_buttons = pygame.mouse.get_pressed()
-        mouse_pos = pygame.mouse.get_pos()
-        gesture = "FIST" if mouse_buttons[0] else "OPEN HAND"
-
-        # Update stage select with matching signature
-        stage_select.update_gesture(mouse_pos, 0, 0.3, gesture)
-        stage_select.update()
-
-        # Draw
-        stage_select.draw()
-        pygame.display.flip()
-        clock.tick(FPS)
-
-    pygame.quit()
-    sys.exit()
-
-
-if __name__ == "__main__":
-    main()
+    # ============================================================
+    # CLEANUP
+    # ============================================================
+    def cleanup(self):
+        cv2.destroyAllWindows()
