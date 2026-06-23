@@ -6,6 +6,9 @@ import sys
 import cv2
 import numpy as np
 import time
+from screens.map_loader import MapLoader
+from screens.quarter1 import Quarter1
+from screens.quarter2 import Quarter2
 
 # ============================================================
 # SETTINGS
@@ -122,37 +125,27 @@ class StageSelect:
         self.MAP_PATH = os.path.join(self.BASE_DIR, "assets", "map", "map.txt")
 
         # ============================================================
-        # LOAD MAP
+        # MAP LOADER
         # ============================================================
-        self.game_map = []
-        try:
-            with open(self.MAP_PATH, "r", encoding="utf-8") as f:
-                for line in f:
-                    line = line.rstrip("\n\r")
-                    if line:
-                        self.game_map.append(line)
-        except FileNotFoundError:
-            print(f"Map not found at: {self.MAP_PATH}")
-            self.game_map = [
-                "GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG",
-                "G######################################G",
-                "G#     #                              #G",
-                "G#     #   GGGGGG   GGGGGG   GGGGGG   #G",
-                "G#     #   G    G   G    G   G    G   #G",
-                "G#     #   G    G   G    G   G    G   #G",
-                "G#     #   GGGGGG   GGGGGG   GGGGGG   #G",
-                "G#     #                              #G",
-                "G#     ################################G",
-                "G#                                    #G",
-                "G#                                    #G",
-                "G######################################G",
-                "GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG",
-            ]
+        self.map_loader = MapLoader(self.BASE_DIR)
 
-        self.ROWS = len(self.game_map)
-        self.COLS = max(len(r) for r in self.game_map) if self.game_map else 0
-        self.MAP_WIDTH = self.COLS * TILE_SIZE
-        self.MAP_HEIGHT = self.ROWS * TILE_SIZE
+        # Load initial map (map.txt)
+        if not self.map_loader.load_map("map.txt"):
+            # Fallback to default map if loading fails
+            self._create_default_map()
+        else:
+            # Use the loaded map data
+            self.game_map = self.map_loader.game_map
+            self.ROWS = self.map_loader.rows
+            self.COLS = self.map_loader.cols
+            self.MAP_WIDTH = self.COLS * TILE_SIZE
+            self.MAP_HEIGHT = self.ROWS * TILE_SIZE
+
+            # Get NPC positions from map loader
+            self.npc_positions_data = self.map_loader.npc_positions
+
+            # Replace NPC markers with walkable tiles for rendering
+            self.render_map = self.map_loader.replace_npc_markers_with_walkable_tiles()
 
         # ============================================================
         # CAMERA
@@ -234,61 +227,26 @@ class StageSelect:
         self.player_y = 0
         self.player_dir = "down"
 
-        # First pass: find player and NPC positions
-        for y, row in enumerate(self.game_map):
-            for x, c in enumerate(row):
-                if c == "P":
-                    self.player_x = x * TILE_SIZE
-                    self.player_y = y * TILE_SIZE
-                    print(f"Player spawned at: ({x}, {y})")
-                elif c == "B":
-                    self.npc_bromen_tile_x = x
-                    self.npc_bromen_tile_y = y
-                    self.npc_bromen_x = x * TILE_SIZE
-                    self.npc_bromen_y = y * TILE_SIZE
-                    self.npc_bromen_found = True
-                    print(f"Bromen NPC found at: ({x}, {y})")
-                elif c == "O":
-                    self.npc_oldman_tile_x = x
-                    self.npc_oldman_tile_y = y
-                    self.npc_oldman_x = x * TILE_SIZE
-                    self.npc_oldman_y = y * TILE_SIZE
-                    self.npc_oldman_found = True
-                    print(f"Oldman NPC found at: ({x}, {y})")
-                elif c == "S":
-                    self.npc_skeleton_tile_x = x
-                    self.npc_skeleton_tile_y = y
-                    self.npc_skeleton_x = x * TILE_SIZE
-                    self.npc_skeleton_y = y * TILE_SIZE
-                    self.npc_skeleton_found = True
-                    print(f"Skeleton NPC found at: ({x}, {y})")
-                elif c == "K":
-                    self.npc_knight_tile_x = x
-                    self.npc_knight_tile_y = y
-                    self.npc_knight_x = x * TILE_SIZE
-                    self.npc_knight_y = y * TILE_SIZE
-                    self.npc_knight_found = True
-                    print(f"Knight NPC found at: ({x}, {y})")
+        # Spawn player at 'P' position from map
+        if self.map_loader.player_start:
+            start_x, start_y = self.map_loader.player_start
+            self.player_x = start_x * TILE_SIZE
+            self.player_y = start_y * TILE_SIZE
+            print(f"Player spawned at: ({start_x}, {start_y})")
+        else:
+            # Fallback: find P in map
+            for y, row in enumerate(self.game_map):
+                for x, c in enumerate(row):
+                    if c == "P":
+                        self.player_x = x * TILE_SIZE
+                        self.player_y = y * TILE_SIZE
+                        print(f"Player spawned at: ({x}, {y})")
+                        break
+                if self.player_x != 0:
+                    break
 
-        # Second pass: replace NPC markers with walkable tiles
-        for y, row in enumerate(self.game_map):
-            row_list = list(row)
-            modified = False
-            for x, c in enumerate(row):
-                if c == 'B':
-                    row_list[x] = '7'  # Replace with walkable tile 7 (008.png)
-                    modified = True
-                elif c == 'O':
-                    row_list[x] = '6'  # Replace with walkable tile 6 (010.png)
-                    modified = True
-                elif c == 'S':
-                    row_list[x] = '6'  # Replace with walkable tile 6 (010.png)
-                    modified = True
-                elif c == 'K':
-                    row_list[x] = '7'  # Replace with walkable tile 7 (008.png)
-                    modified = True
-            if modified:
-                self.game_map[y] = ''.join(row_list)
+        # Initialize NPC positions from map data
+        self._init_npc_positions()
 
         # ============================================================
         # LOAD PORTALS
@@ -319,6 +277,76 @@ class StageSelect:
         print(f"   Oldman NPC found: {self.npc_oldman_found}")
         print(f"   Skeleton NPC found: {self.npc_skeleton_found}")
         print(f"   Knight NPC found: {self.npc_knight_found}")
+
+    # ============================================================
+    # NEW METHOD - Create default map
+    # ============================================================
+    def _create_default_map(self):
+        """Create a default map if loading fails"""
+        self.game_map = [
+            "GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG",
+            "G######################################G",
+            "G#     #                              #G",
+            "G#     #   GGGGGG   GGGGGG   GGGGGG   #G",
+            "G#     #   G    G   G    G   G    G   #G",
+            "G#     #   G    G   G    G   G    G   #G",
+            "G#     #   GGGGGG   GGGGGG   GGGGGG   #G",
+            "G#     #                              #G",
+            "G#     ################################G",
+            "G#                                    #G",
+            "G#                                    #G",
+            "G######################################G",
+            "GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG",
+        ]
+        self.ROWS = len(self.game_map)
+        self.COLS = max(len(r) for r in self.game_map) if self.game_map else 0
+        self.MAP_WIDTH = self.COLS * TILE_SIZE
+        self.MAP_HEIGHT = self.ROWS * TILE_SIZE
+        self.render_map = self.game_map.copy()
+        self.npc_positions_data = {}
+
+    # ============================================================
+    # NEW METHOD - Initialize NPC positions
+    # ============================================================
+    def _init_npc_positions(self):
+        """Initialize NPC positions from map data"""
+        # Reset NPC flags
+        self.npc_bromen_found = False
+        self.npc_oldman_found = False
+        self.npc_skeleton_found = False
+        self.npc_knight_found = False
+
+        # Set positions from map data
+        for marker, positions in self.npc_positions_data.items():
+            for x, y in positions:
+                if marker == 'B':
+                    self.npc_bromen_tile_x = x
+                    self.npc_bromen_tile_y = y
+                    self.npc_bromen_x = x * TILE_SIZE
+                    self.npc_bromen_y = y * TILE_SIZE
+                    self.npc_bromen_found = True
+                    print(f"Bromen NPC at: ({x}, {y})")
+                elif marker == 'O':
+                    self.npc_oldman_tile_x = x
+                    self.npc_oldman_tile_y = y
+                    self.npc_oldman_x = x * TILE_SIZE
+                    self.npc_oldman_y = y * TILE_SIZE
+                    self.npc_oldman_found = True
+                    print(f"Oldman NPC at: ({x}, {y})")
+                elif marker == 'S':
+                    self.npc_skeleton_tile_x = x
+                    self.npc_skeleton_tile_y = y
+                    self.npc_skeleton_x = x * TILE_SIZE
+                    self.npc_skeleton_y = y * TILE_SIZE
+                    self.npc_skeleton_found = True
+                    print(f"Skeleton NPC at: ({x}, {y})")
+                elif marker == 'K':
+                    self.npc_knight_tile_x = x
+                    self.npc_knight_tile_y = y
+                    self.npc_knight_x = x * TILE_SIZE
+                    self.npc_knight_y = y * TILE_SIZE
+                    self.npc_knight_found = True
+                    print(f"Knight NPC at: ({x}, {y})")
 
     # ============================================================
     # LOAD TILE IMAGES
@@ -679,10 +707,11 @@ class StageSelect:
         }
 
     # ============================================================
-    # LOAD STATIC PORTALS
+    # LOAD STATIC PORTALS - MODIFIED to use self.render_map
     # ============================================================
     def load_static_portals(self):
-        for y, row in enumerate(self.game_map):
+        # Use render_map for portal detection
+        for y, row in enumerate(self.render_map):
             row_list = list(row)
             modified = False
             for x, c in enumerate(row):
@@ -711,10 +740,10 @@ class StageSelect:
                     row_list[x] = '7'
                     modified = True
             if modified:
-                self.game_map[y] = ''.join(row_list)
+                self.render_map[y] = ''.join(row_list)
 
     # ============================================================
-    # COLLISION - All NPCs are obstacles
+    # COLLISION - MODIFIED to use npc_positions_data
     # ============================================================
     def can_move(self, nx, ny):
         col = int(nx // TILE_SIZE)
@@ -731,15 +760,8 @@ class StageSelect:
 
         # Check if any NPC is at this position (obstacle)
         npc_positions = []
-
-        if self.npc_bromen_found:
-            npc_positions.append((self.npc_bromen_tile_x, self.npc_bromen_tile_y))
-        if self.npc_oldman_found:
-            npc_positions.append((self.npc_oldman_tile_x, self.npc_oldman_tile_y))
-        if self.npc_skeleton_found:
-            npc_positions.append((self.npc_skeleton_tile_x, self.npc_skeleton_tile_y))
-        if self.npc_knight_found:
-            npc_positions.append((self.npc_knight_tile_x, self.npc_knight_tile_y))
+        for marker, positions in self.npc_positions_data.items():
+            npc_positions.extend(positions)
 
         player_col = int(self.player_x // TILE_SIZE)
         player_row = int(self.player_y // TILE_SIZE)
@@ -754,7 +776,7 @@ class StageSelect:
         return True
 
     # ============================================================
-    # CHECK PORTAL TELEPORT
+    # CHECK PORTAL TELEPORT - Load Quarter1 or Quarter2
     # ============================================================
     def check_portal_teleport_on_hold(self):
         current_portal = None
@@ -764,6 +786,22 @@ class StageSelect:
                 break
 
         if current_portal and self.fist_closed and self.teleport_cooldown <= 0:
+            # Check if it's a left portal (goes to Quarter1 - map1.txt)
+            if current_portal.direction == 'left':
+                print("🎮 Entering Quarter 1 - Map 1")
+                self.main_menu.current_screen = "quarter1"
+                self.main_menu.quarter1 = Quarter1(self.screen, self.main_menu, "map1.txt")
+                self.main_menu.stage_select = None
+                return True
+            # Check if it's an up portal (goes to Quarter2 - map2.txt)
+            elif current_portal.direction == 'up':
+                print("🎮 Entering Quarter 2 - Map 2")
+                self.main_menu.current_screen = "quarter2"
+                self.main_menu.quarter2 = Quarter2(self.screen, self.main_menu, "map2.txt")
+                self.main_menu.stage_select = None
+                return True
+
+            # Regular portal teleport (to another portal on same map)
             other_portals = [p for p in self.portals if p != current_portal]
             if other_portals:
                 target_portal = other_portals[0]
@@ -772,6 +810,52 @@ class StageSelect:
                 self.teleport_cooldown = self.TELEPORT_COOLDOWN_TIME
                 return True
         return False
+
+    # ============================================================
+    # NEW METHOD - Switch to new map (kept for compatibility)
+    # ============================================================
+    def _switch_to_new_map(self):
+        """Switch to a newly loaded map"""
+        # Update map data
+        self.game_map = self.map_loader.game_map
+        self.ROWS = self.map_loader.rows
+        self.COLS = self.map_loader.cols
+        self.MAP_WIDTH = self.COLS * TILE_SIZE
+        self.MAP_HEIGHT = self.ROWS * TILE_SIZE
+        self.render_map = self.map_loader.replace_npc_markers_with_walkable_tiles()
+        self.npc_positions_data = self.map_loader.npc_positions
+
+        # Spawn player at new start position
+        if self.map_loader.player_start:
+            start_x, start_y = self.map_loader.player_start
+            self.player_x = start_x * TILE_SIZE
+            self.player_y = start_y * TILE_SIZE
+            print(f"Player teleported to: ({start_x}, {start_y})")
+        else:
+            # Fallback: find P in map
+            for y, row in enumerate(self.game_map):
+                for x, c in enumerate(row):
+                    if c == "P":
+                        self.player_x = x * TILE_SIZE
+                        self.player_y = y * TILE_SIZE
+                        break
+                if self.player_x != 0:
+                    break
+
+        # Reset and reload portals
+        self.portals = []
+        self.load_static_portals()
+
+        # Re-initialize NPC positions
+        self._init_npc_positions()
+
+        # Reset teleport cooldown
+        self.teleport_cooldown = self.TELEPORT_COOLDOWN_TIME
+
+        # Update camera
+        self.update_camera()
+
+        print(f"✅ Switched to new map: {self.map_loader.current_map_name}")
 
     # ============================================================
     # UPDATE CAMERA
@@ -962,12 +1046,12 @@ class StageSelect:
             self.screen.blit(scaled_sprite, (screen_x, screen_y))
 
     # ============================================================
-    # DRAW
+    # DRAW - MODIFIED to use self.render_map
     # ============================================================
     def draw(self):
         self.screen.fill((0, 0, 0))
 
-        # Draw visible tiles
+        # Draw visible tiles using render_map
         start_col = max(0, int(self.camera_x / TILE_SIZE) - 2)
         end_col = min(self.COLS, int((self.camera_x + self.width / ZOOM) / TILE_SIZE) + 3)
         start_row = max(0, int(self.camera_y / TILE_SIZE) - 2)
@@ -975,8 +1059,8 @@ class StageSelect:
 
         for row in range(start_row, end_row):
             for col in range(start_col, end_col):
-                if row < len(self.game_map) and col < len(self.game_map[row]):
-                    tile_char = self.game_map[row][col]
+                if row < len(self.render_map) and col < len(self.render_map[row]):
+                    tile_char = self.render_map[row][col]
                     self.draw_tile(tile_char, col * TILE_SIZE, row * TILE_SIZE)
 
         # Draw portals
@@ -1045,7 +1129,7 @@ class StageSelect:
                 f"NPCs: {npc_text}",
                 f"Hand: {'YES' if self.hand_detected else 'NO'}",
                 f"Gesture: {self.current_gesture}",
-                f"Move wrist to edges | Hold fist on portal → Teleport",
+                f"Left Portal → Quarter 1 | Up Portal → Quarter 2",
                 f"Press ESC to return to menu"
             ]
 

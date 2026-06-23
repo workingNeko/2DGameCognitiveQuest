@@ -9,6 +9,8 @@ import time
 from ui.button import Button
 from screens.stageselect import StageSelect
 from screens.studentselect import StudentSelect
+from screens.quarter1 import Quarter1
+from screens.quarter2 import Quarter2
 
 
 class MainMenu:
@@ -218,6 +220,8 @@ class MainMenu:
         self.current_screen = "menu"
         self.stage_select = None
         self.student_select = None
+        self.quarter1 = None
+        self.quarter2 = None
 
         # ==========================================
         # MESSAGES
@@ -335,6 +339,12 @@ class MainMenu:
         elif self.current_screen == "student_select" and self.student_select:
             self.student_select.trigger_click(pos)
             return
+        elif self.current_screen == "quarter1" and self.quarter1:
+            self.quarter1.trigger_click(pos)
+            return
+        elif self.current_screen == "quarter2" and self.quarter2:
+            self.quarter2.trigger_click(pos)
+            return
 
         # Check dialogue box first
         if self.dialogue_active and self.dialogue_rect.collidepoint(pos):
@@ -385,6 +395,10 @@ class MainMenu:
         print("🚪 EXIT clicked!")
         if self.stage_select:
             self.stage_select.cleanup()
+        if self.quarter1:
+            self.quarter1.cleanup()
+        if self.quarter2:
+            self.quarter2.cleanup()
         self.cap.release()
         cv2.destroyAllWindows()
         pygame.quit()
@@ -423,6 +437,26 @@ class MainMenu:
             )
             self.student_select.update()
 
+        elif self.current_screen == "quarter1" and self.quarter1:
+            self.update_gesture()
+            self.quarter1.update_gesture(
+                self.cursor_pos,
+                self.fist_start_time,
+                self.CLICK_HOLD_TIME,
+                self.current_gesture
+            )
+            self.quarter1.update()
+
+        elif self.current_screen == "quarter2" and self.quarter2:
+            self.update_gesture()
+            self.quarter2.update_gesture(
+                self.cursor_pos,
+                self.fist_start_time,
+                self.CLICK_HOLD_TIME,
+                self.current_gesture
+            )
+            self.quarter2.update()
+
     def handle_event(self, event):
         if self.current_screen == "menu":
             pass
@@ -436,6 +470,16 @@ class MainMenu:
             if result == "back":
                 self.current_screen = "menu"
                 self.student_select = None
+        elif self.current_screen == "quarter1" and self.quarter1:
+            result = self.quarter1.handle_event(event)
+            if result == "back":
+                self.current_screen = "menu"
+                self.quarter1 = None
+        elif self.current_screen == "quarter2" and self.quarter2:
+            result = self.quarter2.handle_event(event)
+            if result == "back":
+                self.current_screen = "menu"
+                self.quarter2 = None
 
     # ==========================================
     # DRAW
@@ -605,6 +649,30 @@ class MainMenu:
 
         elif self.current_screen == "student_select" and self.student_select:
             self.student_select.draw()
+            self.draw_camera_feed()
+            # Draw cursor on top
+            if self.current_gesture != "NO HAND":
+                if self.fist_start_time > 0:
+                    color = (255, 200, 0)
+                else:
+                    color = (255, 255, 255)
+                pygame.draw.circle(self.screen, color, self.cursor_pos, 15, 2)
+                pygame.draw.circle(self.screen, (255, 100, 100), self.cursor_pos, 4)
+
+        elif self.current_screen == "quarter1" and self.quarter1:
+            self.quarter1.draw()
+            self.draw_camera_feed()
+            # Draw cursor on top
+            if self.current_gesture != "NO HAND":
+                if self.fist_start_time > 0:
+                    color = (255, 200, 0)
+                else:
+                    color = (255, 255, 255)
+                pygame.draw.circle(self.screen, color, self.cursor_pos, 15, 2)
+                pygame.draw.circle(self.screen, (255, 100, 100), self.cursor_pos, 4)
+
+        elif self.current_screen == "quarter2" and self.quarter2:
+            self.quarter2.draw()
             self.draw_camera_feed()
             # Draw cursor on top
             if self.current_gesture != "NO HAND":
