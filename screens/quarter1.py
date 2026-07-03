@@ -163,7 +163,7 @@ class Quarter1:
         # ============================================================
         # WALKABLE TILES
         # ============================================================
-        self.WALKABLE_TILES = {"G", "#", "1", "2", "3", "4", "5", "6", "7", "8"}
+        self.WALKABLE_TILES = {"G", "#", "1", "2", "3", "4", "5", "6", "7", "8","P"}
 
         # ============================================================
         # LOAD PLAYER SPRITES
@@ -243,7 +243,9 @@ class Quarter1:
                         break
                 if self.player_x != 0:
                     break
-
+        for y, row in enumerate(self.render_map):
+            if "P" in row:
+                self.render_map[y] = row.replace("P", "G")
         # Initialize NPC positions from map data
         self._init_npc_positions()
 

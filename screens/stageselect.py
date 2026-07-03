@@ -9,6 +9,8 @@ import time
 from screens.map_loader import MapLoader
 from screens.quarter1 import Quarter1
 from screens.quarter2 import Quarter2
+from screens.quarter3 import Quarter3
+from screens.quarter4 import Quarter4
 
 # ============================================================
 # SETTINGS
@@ -776,7 +778,7 @@ class StageSelect:
         return True
 
     # ============================================================
-    # CHECK PORTAL TELEPORT - Load Quarter1 or Quarter2
+    # CHECK PORTAL TELEPORT - Load Quarter1, Quarter2, Quarter3, or Quarter4
     # ============================================================
     def check_portal_teleport_on_hold(self):
         current_portal = None
@@ -793,14 +795,27 @@ class StageSelect:
                 self.main_menu.quarter1 = Quarter1(self.screen, self.main_menu, "map1.txt")
                 self.main_menu.stage_select = None
                 return True
-            # Check if it's an up portal (goes to Quarter2 - map2.txt)
+            # Check if it's an up portal (goes to Quarter4 - map4.txt)
             elif current_portal.direction == 'up':
+                print("🎮 Entering Quarter 4 - Map 4")
+                self.main_menu.current_screen = "quarter4"
+                self.main_menu.quarter4 = Quarter4(self.screen, self.main_menu, "map4.txt")
+                self.main_menu.stage_select = None
+                return True
+            # Check if it's a right portal (goes to Quarter3 - map3.txt)
+            elif current_portal.direction == 'right':
+                print("🎮 Entering Quarter 3 - Map 3")
+                self.main_menu.current_screen = "quarter3"
+                self.main_menu.quarter3 = Quarter3(self.screen, self.main_menu, "map3.txt")
+                self.main_menu.stage_select = None
+                return True
+            # Check if it's a down portal (goes to Quarter2 - map2.txt)
+            elif current_portal.direction == 'down':
                 print("🎮 Entering Quarter 2 - Map 2")
                 self.main_menu.current_screen = "quarter2"
                 self.main_menu.quarter2 = Quarter2(self.screen, self.main_menu, "map2.txt")
                 self.main_menu.stage_select = None
                 return True
-
             # Regular portal teleport (to another portal on same map)
             other_portals = [p for p in self.portals if p != current_portal]
             if other_portals:
@@ -1129,7 +1144,8 @@ class StageSelect:
                 f"NPCs: {npc_text}",
                 f"Hand: {'YES' if self.hand_detected else 'NO'}",
                 f"Gesture: {self.current_gesture}",
-                f"Left Portal → Quarter 1 | Up Portal → Quarter 2",
+                f"Left Portal → Quarter 1 | Up Portal → Quarter 4",
+                f"Right Portal → Quarter 3 | Down Portal → Quarter 2",
                 f"Press ESC to return to menu"
             ]
 
