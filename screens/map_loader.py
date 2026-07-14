@@ -76,6 +76,11 @@ class MapLoader:
             for x, char in enumerate(row):
                 if char == 'P':
                     self.player_start = (x, y)
+                elif char == 'N':
+                    # Treat N as O (Oldman NPC)
+                    if 'O' not in self.npc_positions:
+                        self.npc_positions['O'] = []
+                    self.npc_positions['O'].append((x, y))
                 elif char in npc_markers:
                     if char not in self.npc_positions:
                         self.npc_positions[char] = []
@@ -116,11 +121,11 @@ class MapLoader:
             row_list = list(row)
             modified = False
             for x, char in enumerate(row_list):
-                if char in self.npc_positions:
+                if char == 'N' or char in self.npc_positions:
                     # Replace with walkable tile (6 or 7)
                     if char in ['B', 'K']:
                         row_list[x] = '7'
-                    elif char in ['O', 'S']:
+                    elif char in ['O', 'S', 'N']:
                         row_list[x] = 'G'
                     modified = True
             modified_map.append(''.join(row_list))

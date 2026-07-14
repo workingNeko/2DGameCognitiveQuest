@@ -6,6 +6,7 @@ import sys
 import cv2
 import numpy as np
 import time
+import math
 from screens.map_loader import MapLoader
 from screens.quarter1 import Quarter1
 from screens.quarter2 import Quarter2
@@ -250,6 +251,16 @@ class StageSelect:
         # Initialize NPC positions from map data
         self._init_npc_positions()
 
+        # Center camera directly on player spawn without sliding
+        self.camera_x = self.player_x + TILE_SIZE // 2 - (self.width // 2) / ZOOM
+        self.camera_y = self.player_y + TILE_SIZE // 2 - (self.height // 2) / ZOOM
+        
+        # Apply camera boundaries
+        max_cam_x = max(0, self.MAP_WIDTH - self.width / ZOOM)
+        max_cam_y = max(0, self.MAP_HEIGHT - self.height / ZOOM)
+        self.camera_x = max(0, min(self.camera_x, max_cam_x))
+        self.camera_y = max(0, min(self.camera_y, max_cam_y))
+
         # ============================================================
         # LOAD PORTALS
         # ============================================================
@@ -279,6 +290,42 @@ class StageSelect:
         print(f"   Oldman NPC found: {self.npc_oldman_found}")
         print(f"   Skeleton NPC found: {self.npc_skeleton_found}")
         print(f"   Knight NPC found: {self.npc_knight_found}")
+
+        # ============================================================
+        # AREA TITLE ANIMATION (test.py logic)
+        # ============================================================
+        self.title_elapsed = 0.0
+        self.title_duration = 5.0
+        self.title_active = True
+
+        # Load Pixelfont
+        self.pixel_font_path = "assets/fonts/Pixelfont.otf"
+        self.pixel_font_size = 72
+        try:
+            self.title_font = pygame.font.Font(self.pixel_font_path, self.pixel_font_size)
+        except Exception:
+            self.title_font = pygame.font.SysFont("Consolas", self.pixel_font_size, bold=True)
+
+        self.title_text = "Spawn Plains"
+        self.title_spacing = 12
+
+        self.title_text_color = (255, 255, 255) # White
+        self.title_outline_color = (0, 0, 0) # Black outline
+        self.title_glow_color = (180, 180, 180) # Grey glow
+
+        # Pre-render letters
+        self.title_letters = []
+        for ch in self.title_text:
+            glow = self.title_font.render(ch, False, self.title_glow_color)
+            outline = self.title_font.render(ch, False, self.title_outline_color)
+            main = self.title_font.render(ch, False, self.title_text_color)
+            self.title_letters.append({
+                "glow": glow,
+                "outline": outline,
+                "main": main,
+                "width": main.get_width()
+            })
+        self.title_total_width = sum(l["width"] for l in self.title_letters) + self.title_spacing * (len(self.title_text) - 1)
 
     # ============================================================
     # NEW METHOD - Create default map
@@ -864,11 +911,15 @@ class StageSelect:
         # Re-initialize NPC positions
         self._init_npc_positions()
 
-        # Reset teleport cooldown
-        self.teleport_cooldown = self.TELEPORT_COOLDOWN_TIME
-
-        # Update camera
-        self.update_camera()
+        # Center camera directly on player without sliding
+        self.camera_x = self.player_x + TILE_SIZE // 2 - (self.width // 2) / ZOOM
+        self.camera_y = self.player_y + TILE_SIZE // 2 - (self.height // 2) / ZOOM
+        
+        # Apply camera boundaries
+        max_cam_x = max(0, self.MAP_WIDTH - self.width / ZOOM)
+        max_cam_y = max(0, self.MAP_HEIGHT - self.height / ZOOM)
+        self.camera_x = max(0, min(self.camera_x, max_cam_x))
+        self.camera_y = max(0, min(self.camera_y, max_cam_y))
 
         print(f"✅ Switched to new map: {self.map_loader.current_map_name}")
 
@@ -918,6 +969,12 @@ class StageSelect:
     def update(self):
         dt = self.clock.tick(FPS) / 1000.0
         self.frame_counter += 1
+
+        # Update Area Title animation elapsed time
+        if self.title_active:
+            self.title_elapsed += dt
+            if self.title_elapsed >= self.title_duration:
+                self.title_active = False
 
         # Update cooldowns
         if self.teleport_cooldown > 0:
@@ -1105,6 +1162,63 @@ class StageSelect:
 
         # Draw player
         self.draw_player()
+
+        # Draw Area Title Animation
+        if self.title_active:
+            timer = self.title_elapsed
+            
+            # Alpha fading
+            alpha = 255
+            FADE_START = 4.0
+            FADE_DURATION = 1.0
+            if timer >= FADE_START:
+                fade = (timer - FADE_START) / FADE_DURATION
+                fade = max(0, min(fade, 1))
+                alpha = int(255 * (1 - fade))
+                
+            # Slide animation
+            BASE_Y = self.height // 2 - self.pixel_font_size // 2
+            SLIDE_TIME = 0.35
+            if timer < SLIDE_TIME:
+                t = timer / SLIDE_TIME
+                ease = 1 - (1 - t) ** 3
+                y = BASE_Y - (1 - ease) * 40
+            else:
+                y = BASE_Y
+                
+            # Draw letters centered
+            x = self.width // 2 - self.title_total_width // 2
+            
+            for i, data in enumerate(self.title_letters):
+                phase = timer * 8 - i * 0.55
+                offset = 0
+                
+                # Single traveling wave
+                if -math.pi <= phase <= math.pi:
+                    offset = math.sin(phase) * 12
+                    
+                glow = data["glow"].copy()
+                outline = data["outline"].copy()
+                main = data["main"].copy()
+                
+                glow.set_alpha(alpha // 5)
+                outline.set_alpha(alpha)
+                main.set_alpha(alpha)
+                
+                # Glow
+                for gx in (-5, 0, 5):
+                    for gy in (-5, 0, 5):
+                        self.screen.blit(glow, (x + gx, y + gy + offset))
+                        
+                # Outline
+                for ox in (-2, -1, 1, 2):
+                    for oy in (-2, -1, 1, 2):
+                        self.screen.blit(outline, (x + ox, y + oy + offset))
+                        
+                # Main text
+                self.screen.blit(main, (x, y + offset))
+                
+                x += data["width"] + self.title_spacing
 
         # Draw UI
         self.draw_ui()
