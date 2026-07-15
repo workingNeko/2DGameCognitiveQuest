@@ -261,7 +261,7 @@ class Quarter2:
         self.TELEPORT_COOLDOWN_TIME = 1.0
 
         # Goal portal tracking - for map2.txt the goal is 'up' portal
-        self.goal_portal_direction = 'up'
+        self.goal_portal_direction = self.portals[0].direction if self.portals else 'up'
 
         # ============================================================
         # UI
@@ -995,11 +995,16 @@ class Quarter2:
         start_row = max(0, int(self.camera_y / TILE_SIZE) - 2)
         end_row = min(self.ROWS, int((self.camera_y + self.height / ZOOM) / TILE_SIZE) + 3)
 
+        # Draw visible tiles using render_map (First pass: Skip trees and draw grass under them)
         for row in range(start_row, end_row):
             for col in range(start_col, end_col):
                 if row < len(self.render_map) and col < len(self.render_map[row]):
                     tile_char = self.render_map[row][col]
-                    self.draw_tile(tile_char, col * TILE_SIZE, row * TILE_SIZE)
+                    if tile_char == 'T':
+                        # Draw grass under the tree so there is no black void under the player
+                        self.draw_tile('G', col * TILE_SIZE, row * TILE_SIZE)
+                    else:
+                        self.draw_tile(tile_char, col * TILE_SIZE, row * TILE_SIZE)
 
         for portal in self.portals:
             portal.draw(self.screen, self.camera_x, self.camera_y, ZOOM, self.width, self.height)
@@ -1021,6 +1026,14 @@ class Quarter2:
                                  self.npc_knight_current_sprite)
 
         self.draw_player()
+
+        # Draw visible tree tiles on top of everything (Second pass)
+        for row in range(start_row, end_row):
+            for col in range(start_col, end_col):
+                if row < len(self.render_map) and col < len(self.render_map[row]):
+                    tile_char = self.render_map[row][col]
+                    if tile_char == 'T':
+                        self.draw_tile(tile_char, col * TILE_SIZE, row * TILE_SIZE)
         self.draw_ui()
 
     # ============================================================

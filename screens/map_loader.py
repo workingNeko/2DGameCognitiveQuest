@@ -26,7 +26,10 @@ class MapLoader:
         # Try multiple paths
         possible_paths = [
             os.path.join(self.maps_dir, map_filename),
-            os.path.join(self.quarter_maps_dir, map_filename),
+            os.path.join(self.maps_dir, "Quarter1Maps", map_filename),
+            os.path.join(self.maps_dir, "Quarter2Maps", map_filename),
+            os.path.join(self.maps_dir, "Quarter3Maps", map_filename),
+            os.path.join(self.maps_dir, "Quarter4Maps", map_filename),
         ]
 
         map_path = None
@@ -125,7 +128,9 @@ class MapLoader:
                     # Replace with walkable tile (6 or 7)
                     if char in ['B', 'K']:
                         row_list[x] = '7'
-                    elif char in ['O', 'S', 'N']:
+                    elif char == 'O':
+                        row_list[x] = '6'
+                    elif char in ['S', 'N']:
                         row_list[x] = 'G'
                     modified = True
             modified_map.append(''.join(row_list))

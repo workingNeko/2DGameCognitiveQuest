@@ -1,6 +1,19 @@
 # main.py
 import pygame
 import sys
+
+# Reconfigure stdout and stderr to UTF-8 to support emojis and prevent crashes on Windows consoles
+if sys.stdout is not None:
+    try:
+        sys.stdout.reconfigure(encoding='utf-8')
+    except Exception:
+        pass
+if sys.stderr is not None:
+    try:
+        sys.stderr.reconfigure(encoding='utf-8')
+    except Exception:
+        pass
+
 from screens.main_menu import MainMenu
 
 

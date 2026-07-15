@@ -432,64 +432,69 @@ class MainMenu:
 
         elif self.current_screen == "stage_select" and self.stage_select:
             self.update_gesture()
-            self.stage_select.update_gesture(
-                self.cursor_pos,
-                self.fist_start_time,
-                self.CLICK_HOLD_TIME,
-                self.current_gesture
-
-            )
-            self.stage_select.update()
+            if self.stage_select:
+                self.stage_select.update_gesture(
+                    self.cursor_pos,
+                    self.fist_start_time,
+                    self.CLICK_HOLD_TIME,
+                    self.current_gesture
+                )
+                self.stage_select.update()
 
         elif self.current_screen == "student_select" and self.student_select:
             self.update_gesture()
-            self.student_select.update_gesture(
-                self.cursor_pos,
-                self.fist_start_time,
-                self.CLICK_HOLD_TIME,
-                self.current_gesture
-            )
-            self.student_select.update()
+            if self.student_select:
+                self.student_select.update_gesture(
+                    self.cursor_pos,
+                    self.fist_start_time,
+                    self.CLICK_HOLD_TIME,
+                    self.current_gesture
+                )
+                self.student_select.update()
 
         elif self.current_screen == "quarter1" and self.quarter1:
             self.update_gesture()
-            self.quarter1.update_gesture(
-                self.cursor_pos,
-                self.fist_start_time,
-                self.CLICK_HOLD_TIME,
-                self.current_gesture
-            )
-            self.quarter1.update()
+            if self.quarter1:
+                self.quarter1.update_gesture(
+                    self.cursor_pos,
+                    self.fist_start_time,
+                    self.CLICK_HOLD_TIME,
+                    self.current_gesture
+                )
+                self.quarter1.update()
 
         elif self.current_screen == "quarter2" and self.quarter2:
             self.update_gesture()
-            self.quarter2.update_gesture(
-                self.cursor_pos,
-                self.fist_start_time,
-                self.CLICK_HOLD_TIME,
-                self.current_gesture
-            )
-            self.quarter2.update()
+            if self.quarter2:
+                self.quarter2.update_gesture(
+                    self.cursor_pos,
+                    self.fist_start_time,
+                    self.CLICK_HOLD_TIME,
+                    self.current_gesture
+                )
+                self.quarter2.update()
 
         elif self.current_screen == "quarter3" and self.quarter3:
             self.update_gesture()
-            self.quarter3.update_gesture(
-                self.cursor_pos,
-                self.fist_start_time,
-                self.CLICK_HOLD_TIME,
-                self.current_gesture
-            )
-            self.quarter3.update()
+            if self.quarter3:
+                self.quarter3.update_gesture(
+                    self.cursor_pos,
+                    self.fist_start_time,
+                    self.CLICK_HOLD_TIME,
+                    self.current_gesture
+                )
+                self.quarter3.update()
 
         elif self.current_screen == "quarter4" and self.quarter4:
             self.update_gesture()
-            self.quarter4.update_gesture(
-                self.cursor_pos,
-                self.fist_start_time,
-                self.CLICK_HOLD_TIME,
-                self.current_gesture
-            )
-            self.quarter4.update()
+            if self.quarter4:
+                self.quarter4.update_gesture(
+                    self.cursor_pos,
+                    self.fist_start_time,
+                    self.CLICK_HOLD_TIME,
+                    self.current_gesture
+                )
+                self.quarter4.update()
 
     def handle_event(self, event):
         if self.current_screen == "menu":

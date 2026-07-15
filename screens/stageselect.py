@@ -7,6 +7,7 @@ import cv2
 import numpy as np
 import time
 import math
+import random
 from screens.map_loader import MapLoader
 from screens.quarter1 import Quarter1
 from screens.quarter2 import Quarter2
@@ -189,13 +190,28 @@ class StageSelect:
         self.npc_bromen_tile_y = 0
         self.npc_bromen_found = False
 
-        # Oldman NPC (static)
+        # Oldman NPC (static & interactive)
         self.npc_oldman_sprite = None
         self.npc_oldman_x = 0
         self.npc_oldman_y = 0
         self.npc_oldman_tile_x = 0
         self.npc_oldman_tile_y = 0
         self.npc_oldman_found = False
+        self.oldman_dialogue_state = 0  # 0: idle, 1: dialogue active, 2: walking, 3: disappeared
+        self.oldman_dialogue_index = 0
+        self.npc_oldman_left_sprites = []
+        self.npc_oldman_down_sprites = []
+        self.npc_oldman_anim_frame = 0
+        self.npc_oldman_anim_timer = 0
+        self.dialogue_lines = [
+            ("Old Man", "Ah, young adventurer! You look brave and clever."),
+            ("Old Man", "Deep inside the Geometry Forest, the magical Shapes have become lost. Only a true student adventurer can help them find their way."),
+            ("Old Man", "Do you want to explore the Geometry Forest?"),
+            ("Student", "Yes! I'll help!"),
+            ("Old Man", "Excellent! Along the way, you must answer my questions about shapes and angles. If you answer correctly, the forest will guide you safely to the next path."),
+            ("Old Man", "Stay sharp, observe carefully, and remember what you have learned."),
+            ("Old Man", "Now... Follow me!")
+        ]
 
         # Skeleton NPC (static)
         self.npc_skeleton_sprite = None
@@ -295,7 +311,7 @@ class StageSelect:
         # AREA TITLE ANIMATION (test.py logic)
         # ============================================================
         self.title_elapsed = 0.0
-        self.title_duration = 5.0
+        self.title_duration = 3.0
         self.title_active = True
 
         # Load Pixelfont
@@ -517,6 +533,30 @@ class StageSelect:
                 text = font.render("OLD", True, (0, 0, 0))
                 placeholder.blit(text, (4, TILE_SIZE - 12))
                 self.npc_oldman_sprite = placeholder
+            
+            # Load Old Man walking left sprites
+            self.npc_oldman_left_sprites = []
+            for name in ["oldmanleft.png", "oldmanleft1.png", "oldmanleft2.png"]:
+                path = os.path.join(self.NPC_PATH_OLDMAN, name)
+                if os.path.exists(path):
+                    img = pygame.image.load(path).convert_alpha()
+                    scaled = pygame.transform.scale(img, (TILE_SIZE, TILE_SIZE))
+                    self.npc_oldman_left_sprites.append(scaled)
+                    print(f"✅ Loaded Old Man walking frame: {name}")
+                else:
+                    print(f"⚠️ Walking frame not found at: {path}")
+
+            # Load Old Man walking down sprites
+            self.npc_oldman_down_sprites = []
+            for name in ["oldman.png", "oldman1.png", "oldman2.png"]:
+                path = os.path.join(self.NPC_PATH_OLDMAN, name)
+                if os.path.exists(path):
+                    img = pygame.image.load(path).convert_alpha()
+                    scaled = pygame.transform.scale(img, (TILE_SIZE, TILE_SIZE))
+                    self.npc_oldman_down_sprites.append(scaled)
+                    print(f"✅ Loaded Old Man down frame: {name}")
+                else:
+                    print(f"⚠️ Down frame not found at: {path}")
         except Exception as e:
             print(f"❌ Error loading Oldman: {e}")
             placeholder = pygame.Surface((TILE_SIZE, TILE_SIZE))
@@ -835,32 +875,36 @@ class StageSelect:
                 break
 
         if current_portal and self.fist_closed and self.teleport_cooldown <= 0:
-            # Check if it's a left portal (goes to Quarter1 - map1.txt)
+            # Check if it's a left portal (goes to Quarter1 - map1.txt only for debugging)
             if current_portal.direction == 'left':
-                print("🎮 Entering Quarter 1 - Map 1")
+                map_name = "map1.txt"
+                print(f"🎮 Entering Quarter 1 - {map_name}")
                 self.main_menu.current_screen = "quarter1"
-                self.main_menu.quarter1 = Quarter1(self.screen, self.main_menu, "map1.txt")
+                self.main_menu.quarter1 = Quarter1(self.screen, self.main_menu, map_name)
                 self.main_menu.stage_select = None
                 return True
-            # Check if it's an up portal (goes to Quarter4 - map4.txt)
+            # Check if it's an up portal (goes to Quarter4 - map10.txt to map12.txt)
             elif current_portal.direction == 'up':
-                print("🎮 Entering Quarter 4 - Map 4")
+                map_name = random.choice(["map10.txt", "map11.txt", "map12.txt"])
+                print(f"🎮 Entering Quarter 4 - {map_name}")
                 self.main_menu.current_screen = "quarter4"
-                self.main_menu.quarter4 = Quarter4(self.screen, self.main_menu, "map4.txt")
+                self.main_menu.quarter4 = Quarter4(self.screen, self.main_menu, map_name)
                 self.main_menu.stage_select = None
                 return True
-            # Check if it's a right portal (goes to Quarter3 - map3.txt)
+            # Check if it's a right portal (goes to Quarter3 - map7.txt to map9.txt)
             elif current_portal.direction == 'right':
-                print("🎮 Entering Quarter 3 - Map 3")
+                map_name = random.choice(["map7.txt", "map8.txt", "map9.txt"])
+                print(f"🎮 Entering Quarter 3 - {map_name}")
                 self.main_menu.current_screen = "quarter3"
-                self.main_menu.quarter3 = Quarter3(self.screen, self.main_menu, "map3.txt")
+                self.main_menu.quarter3 = Quarter3(self.screen, self.main_menu, map_name)
                 self.main_menu.stage_select = None
                 return True
-            # Check if it's a down portal (goes to Quarter2 - map2.txt)
+            # Check if it's a down portal (goes to Quarter2 - map4.txt to map6.txt)
             elif current_portal.direction == 'down':
-                print("🎮 Entering Quarter 2 - Map 2")
+                map_name = random.choice(["map4.txt", "map5.txt", "map6.txt"])
+                print(f"🎮 Entering Quarter 2 - {map_name}")
                 self.main_menu.current_screen = "quarter2"
-                self.main_menu.quarter2 = Quarter2(self.screen, self.main_menu, "map2.txt")
+                self.main_menu.quarter2 = Quarter2(self.screen, self.main_menu, map_name)
                 self.main_menu.stage_select = None
                 return True
             # Regular portal teleport (to another portal on same map)
@@ -960,8 +1004,47 @@ class StageSelect:
     # TRIGGER CLICK (called from main_menu)
     # ============================================================
     def trigger_click(self, pos):
-        # No click functionality needed in stage select
-        pass
+        if self.oldman_dialogue_state == 1:
+            self.oldman_dialogue_index += 1
+            if self.oldman_dialogue_index >= len(self.dialogue_lines):
+                self.oldman_dialogue_state = 2
+                print("🧙‍♂️ Dialog complete! Old Man starts moving left.")
+            return
+
+        # Trigger teleport on click/hold when standing on a portal
+        if self.oldman_dialogue_state == 3:
+            current_portal = None
+            for portal in self.portals:
+                if portal.contains_position(self.player_x, self.player_y):
+                    current_portal = portal
+                    break
+            
+            if current_portal and self.teleport_cooldown <= 0:
+                # Teleport to respective Quarter
+                if current_portal.direction == 'left':
+                    map_name = "map1.txt"
+                    print(f"🎮 Entering Quarter 1 - {map_name}")
+                    self.main_menu.current_screen = "quarter1"
+                    self.main_menu.quarter1 = Quarter1(self.screen, self.main_menu, map_name)
+                    self.main_menu.stage_select = None
+                elif current_portal.direction == 'up':
+                    map_name = random.choice(["map10.txt", "map11.txt", "map12.txt"])
+                    print(f"🎮 Entering Quarter 4 - {map_name}")
+                    self.main_menu.current_screen = "quarter4"
+                    self.main_menu.quarter4 = Quarter4(self.screen, self.main_menu, map_name)
+                    self.main_menu.stage_select = None
+                elif current_portal.direction == 'right':
+                    map_name = random.choice(["map7.txt", "map8.txt", "map9.txt"])
+                    print(f"🎮 Entering Quarter 3 - {map_name}")
+                    self.main_menu.current_screen = "quarter3"
+                    self.main_menu.quarter3 = Quarter3(self.screen, self.main_menu, map_name)
+                    self.main_menu.stage_select = None
+                elif current_portal.direction == 'down':
+                    map_name = random.choice(["map4.txt", "map5.txt", "map6.txt"])
+                    print(f"🎮 Entering Quarter 2 - {map_name}")
+                    self.main_menu.current_screen = "quarter2"
+                    self.main_menu.quarter2 = Quarter2(self.screen, self.main_menu, map_name)
+                    self.main_menu.stage_select = None
 
     # ============================================================
     # UPDATE
@@ -999,11 +1082,64 @@ class StageSelect:
                     self.npc_knight_facing = "front"
                     self.npc_knight_current_sprite = self.npc_knight_front_sprite
 
+        # Proximity interaction check for Old Man NPC
+        if self.oldman_dialogue_state == 0 and self.npc_oldman_found:
+            player_center_x = self.player_x + TILE_SIZE // 2
+            player_center_y = self.player_y + TILE_SIZE // 2
+            oldman_center_x = self.npc_oldman_x + TILE_SIZE // 2
+            oldman_center_y = self.npc_oldman_y + TILE_SIZE // 2
+            dist = math.hypot(player_center_x - oldman_center_x, player_center_y - oldman_center_y)
+            if dist < TILE_SIZE * 1.5:
+                self.oldman_dialogue_state = 1
+                self.oldman_dialogue_index = 0
+                
+                # Face the Old Man
+                dx = self.npc_oldman_x - self.player_x
+                dy = self.npc_oldman_y - self.player_y
+                if abs(dx) > abs(dy):
+                    self.player_dir = "left" if dx < 0 else "right"
+                else:
+                    self.player_dir = "up" if dy < 0 else "down"
+
+        # Update Old Man walking to left portal (x = 0)
+        if self.oldman_dialogue_state == 2:
+            target_y = (self.npc_oldman_tile_y + 1) * TILE_SIZE
+            if self.npc_oldman_y < target_y:
+                # Walk 1 tile down first
+                self.npc_oldman_y += 2
+                self.npc_oldman_anim_timer += 1
+                if self.npc_oldman_anim_timer >= 10:
+                    self.npc_oldman_anim_timer = 0
+                    if self.npc_oldman_down_sprites:
+                        self.npc_oldman_anim_frame = (self.npc_oldman_anim_frame + 1) % len(self.npc_oldman_down_sprites)
+            else:
+                # Face left and walk to the left portal
+                self.npc_oldman_x -= 2
+                self.npc_oldman_anim_timer += 1
+                if self.npc_oldman_anim_timer >= 10:
+                    self.npc_oldman_anim_timer = 0
+                    if self.npc_oldman_left_sprites:
+                        self.npc_oldman_anim_frame = (self.npc_oldman_anim_frame + 1) % len(self.npc_oldman_left_sprites)
+
+            if self.npc_oldman_x <= 0:
+                self.npc_oldman_x = 0
+                self.oldman_dialogue_state = 3
+                self.npc_oldman_found = False
+                
+                # Remove NPC collision obstacle so player can pass
+                if 'O' in self.npc_positions_data:
+                    self.npc_positions_data['O'] = []
+                
+                # Update self.game_map so the player can walk through
+                row_list = list(self.game_map[12])
+                if row_list[5] == 'O':
+                    row_list[5] = '6'
+                    self.game_map[12] = "".join(row_list)
+                    
+                print("🧙‍♂️ Old Man reached portal and disappeared from stage select!")
+
         # Update player movement using cursor from main menu
         self.update_player_movement()
-
-        # Check portal teleport
-        self.check_portal_teleport_on_hold()
 
         # Update portal animations
         for portal in self.portals:
@@ -1016,6 +1152,10 @@ class StageSelect:
     # UPDATE PLAYER MOVEMENT
     # ============================================================
     def update_player_movement(self):
+        # Block movement during active dialogue
+        if self.oldman_dialogue_state == 1:
+            return
+
         vx, vy = 0, 0
 
         # Only move if hand is detected
@@ -1129,11 +1269,16 @@ class StageSelect:
         start_row = max(0, int(self.camera_y / TILE_SIZE) - 2)
         end_row = min(self.ROWS, int((self.camera_y + self.height / ZOOM) / TILE_SIZE) + 3)
 
+        # Draw visible tiles using render_map (First pass: Skip trees and draw grass under them)
         for row in range(start_row, end_row):
             for col in range(start_col, end_col):
                 if row < len(self.render_map) and col < len(self.render_map[row]):
                     tile_char = self.render_map[row][col]
-                    self.draw_tile(tile_char, col * TILE_SIZE, row * TILE_SIZE)
+                    if tile_char == 'T':
+                        # Draw grass under the tree so there is no black void under the player
+                        self.draw_tile('G', col * TILE_SIZE, row * TILE_SIZE)
+                    else:
+                        self.draw_tile(tile_char, col * TILE_SIZE, row * TILE_SIZE)
 
         # Draw portals
         for portal in self.portals:
@@ -1145,10 +1290,50 @@ class StageSelect:
             self.draw_npc_animated(self.npc_bromen_x, self.npc_bromen_y,
                                    self.npc_bromen_sprites, self.npc_bromen_anim_frame)
 
-        # Oldman - Static
+        # Oldman - Static or Animated Walking
         if self.npc_oldman_found:
-            self.draw_npc_static(self.npc_oldman_x, self.npc_oldman_y,
-                                 self.npc_oldman_sprite)
+            if self.oldman_dialogue_state == 2:
+                target_y = (self.npc_oldman_tile_y + 1) * TILE_SIZE
+                if self.npc_oldman_y < target_y and self.npc_oldman_down_sprites:
+                    self.draw_npc_animated(self.npc_oldman_x, self.npc_oldman_y,
+                                           self.npc_oldman_down_sprites, self.npc_oldman_anim_frame)
+                elif self.npc_oldman_left_sprites:
+                    self.draw_npc_animated(self.npc_oldman_x, self.npc_oldman_y,
+                                           self.npc_oldman_left_sprites, self.npc_oldman_anim_frame)
+                else:
+                    self.draw_npc_static(self.npc_oldman_x, self.npc_oldman_y,
+                                         self.npc_oldman_sprite)
+            else:
+                self.draw_npc_static(self.npc_oldman_x, self.npc_oldman_y,
+                                     self.npc_oldman_sprite)
+                
+                # Draw quest exclamation mark above the Old Man's head if dialogue hasn't started and player is in proximity
+                if self.oldman_dialogue_state == 0:
+                    player_center_x = self.player_x + TILE_SIZE // 2
+                    player_center_y = self.player_y + TILE_SIZE // 2
+                    oldman_center_x = self.npc_oldman_x + TILE_SIZE // 2
+                    oldman_center_y = self.npc_oldman_y + TILE_SIZE // 2
+                    dist = math.hypot(player_center_x - oldman_center_x, player_center_y - oldman_center_y)
+                    
+                    if dist < TILE_SIZE * 3.0:
+                        screen_x = (self.npc_oldman_x - self.camera_x) * ZOOM
+                        screen_y = (self.npc_oldman_y - self.camera_y) * ZOOM
+                        
+                        # Create floating quest indicator font matching visual aesthetics
+                        excl_font = pygame.font.SysFont("Comic Sans MS", int(18 * ZOOM), bold=True)
+                        excl_surf = excl_font.render("!", True, (255, 0, 0))  # Red color
+                        
+                        # Bounce animation (floating micro-animation)
+                        bounce = math.sin(self.frame_counter * 0.1) * 4 * ZOOM
+                        
+                        excl_x = screen_x + (TILE_SIZE * ZOOM) // 2 - excl_surf.get_width() // 2
+                        excl_y = screen_y - excl_surf.get_height() - 4 * ZOOM + bounce
+                        
+                        # Blit drop shadow
+                        shadow_surf = excl_font.render("!", True, (0, 0, 0))
+                        self.screen.blit(shadow_surf, (excl_x + 1, excl_y + 1))
+                        # Blit main exclamation
+                        self.screen.blit(excl_surf, (excl_x, excl_y))
 
         # Skeleton - Static
         if self.npc_skeleton_found:
@@ -1162,6 +1347,14 @@ class StageSelect:
 
         # Draw player
         self.draw_player()
+
+        # Draw visible tree tiles on top of everything (Second pass)
+        for row in range(start_row, end_row):
+            for col in range(start_col, end_col):
+                if row < len(self.render_map) and col < len(self.render_map[row]):
+                    tile_char = self.render_map[row][col]
+                    if tile_char == 'T':
+                        self.draw_tile(tile_char, col * TILE_SIZE, row * TILE_SIZE)
 
         # Draw Area Title Animation
         if self.title_active:
@@ -1223,6 +1416,9 @@ class StageSelect:
         # Draw UI
         self.draw_ui()
 
+        # Draw Dialogue Box
+        self.draw_dialogue_box()
+
     # ============================================================
     # DRAW UI
     # ============================================================
@@ -1274,10 +1470,72 @@ class StageSelect:
                 y_offset += 18
 
     # ============================================================
+    # DRAW DIALOGUE BOX
+    # ============================================================
+    def draw_dialogue_box(self):
+        if self.oldman_dialogue_state != 1:
+            return
+
+        speaker, text = self.dialogue_lines[self.oldman_dialogue_index]
+
+        # Dialogue box layout
+        box_width = self.width - 80
+        box_height = 130
+        box_x = 40
+        box_y = self.height - box_height - 40
+
+        # Background (semi-transparent black)
+        dialogue_surface = pygame.Surface((box_width, box_height), pygame.SRCALPHA)
+        pygame.draw.rect(dialogue_surface, (20, 20, 20, 220), (0, 0, box_width, box_height), border_radius=10)
+        pygame.draw.rect(dialogue_surface, (255, 215, 0, 255), (0, 0, box_width, box_height), width=3, border_radius=10) # Gold border
+        self.screen.blit(dialogue_surface, (box_x, box_y))
+
+        # Render speaker name
+        name_color = (255, 215, 0) if speaker == "Old Man" else (100, 255, 100) # Gold vs Green
+        name_text = self.font.render(speaker, True, name_color)
+        self.screen.blit(name_text, (box_x + 20, box_y + 15))
+
+        # Wrap text and render
+        max_width = box_width - 40
+        words = text.split(" ")
+        lines = []
+        current_line = []
+        for word in words:
+            current_line.append(word)
+            test_str = " ".join(current_line)
+            if self.font.size(test_str)[0] > max_width:
+                current_line.pop()
+                lines.append(" ".join(current_line))
+                current_line = [word]
+        if current_line:
+            lines.append(" ".join(current_line))
+
+        # Render dialogue lines
+        y_offset = box_y + 45
+        for line in lines:
+            line_surface = self.font.render(line, True, (255, 255, 255))
+            self.screen.blit(line_surface, (box_x + 20, y_offset))
+            y_offset += 24
+
+        # Continue indicator (blinking)
+        if (self.frame_counter // 30) % 2 == 0:
+            prompt = "Hold Fist or Press Space to continue..."
+            prompt_surface = self.small_font.render(prompt, True, (180, 180, 180))
+            self.screen.blit(prompt_surface, (box_x + box_width - prompt_surface.get_width() - 20, box_y + box_height - 25))
+
+    # ============================================================
     # HANDLE EVENT
     # ============================================================
     def handle_event(self, event):
         if event.type == pygame.KEYDOWN:
+            if self.oldman_dialogue_state == 1:
+                if event.key in [pygame.K_SPACE, pygame.K_RETURN]:
+                    self.oldman_dialogue_index += 1
+                    if self.oldman_dialogue_index >= len(self.dialogue_lines):
+                        self.oldman_dialogue_state = 2
+                        print("🧙‍♂️ Dialog complete! Old Man starts moving left.")
+                    return "dialogue_advance"
+
             if event.key == pygame.K_ESCAPE:
                 if self.main_menu:
                     self.main_menu.current_screen = "menu"
