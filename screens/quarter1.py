@@ -201,6 +201,10 @@ class Quarter1:
         self.npc_oldman_tile_x = 0
         self.npc_oldman_tile_y = 0
         self.npc_oldman_found = False
+        self.npc_oldman_left_sprites = []
+        self.npc_oldman_right_sprites = []
+        self.npc_oldman_up_sprites = []
+        self.npc_oldman_down_sprites = []
 
         # Skeleton NPC (static)
         self.npc_skeleton_sprite = None
@@ -277,8 +281,8 @@ class Quarter1:
             1: "right",
             2: "left",
             3: "left",
-            4: "right",
-            5: "right"
+            4: "down",
+            5: "left"
         }
         self.npc_oldman_dir = self.station_directions.get(1, "right")
 
@@ -291,10 +295,6 @@ class Quarter1:
         ]
 
         # Old Man walking animations
-        self.npc_oldman_left_sprites = []
-        self.npc_oldman_right_sprites = []
-        self.npc_oldman_up_sprites = []
-        self.npc_oldman_down_sprites = []
         self.npc_oldman_anim_frame = 0
         self.npc_oldman_anim_timer = 0
         self.npc_oldman_path = []
@@ -302,29 +302,29 @@ class Quarter1:
         # Questions List
         self.quiz_questions = [
             {
-                "question": "Which shape has 4 equal sides and 4 corners?",
-                "choices": ["A. Circle", "B. Square", "C. Triangle"],
-                "correct": 1 # B
+                "question": "Which shape is half of a circle?",
+                "choices": ["A. Triangle", "B. Half circle", "C. Rectangle", "D. Square"],
+                "correct": 1  # B
             },
             {
-                "question": "Which shape has 3 sides and 3 corners?",
-                "choices": ["A. Rectangle", "B. Triangle", "C. Circle"],
-                "correct": 1 # B
+                "question": "A whole circle is cut into four equal parts. What is one part called?",
+                "choices": ["A. Half circle", "B. Quarter circle", "C. Triangle", "D. Rectangle"],
+                "correct": 1  # B
             },
             {
-                "question": "Which shape has no sides and no corners?",
-                "choices": ["A. Circle", "B. Square", "C. Rectangle"],
-                "correct": 0 # A
+                "question": "Which group of shapes can be combined to make a house?",
+                "choices": ["A. One square and one triangle", "B. Two circles", "C. Three rectangles only", "D. One quarter circle only"],
+                "correct": 0  # A
             },
             {
-                "question": "How many corners does a rectangle have?",
-                "choices": ["A. 2", "B. 3", "C. 4"],
-                "correct": 2 # C
+                "question": "A shape is moved one step to the right without turning or flipping it. What is this movement called?",
+                "choices": ["A. Rotation", "B. Reflection", "C. Slide (Translation)", "D. Fold"],
+                "correct": 2  # C
             },
             {
-                "question": "Which shape can be made by putting two triangles together?",
-                "choices": ["A. Square", "B. Circle", "C. Half Circle"],
-                "correct": 0 # A
+                "question": "Which figure is a composite figure?",
+                "choices": ["A. A single square", "B. A single circle", "C. A shape made by joining a rectangle and a triangle", "D. A single triangle"],
+                "correct": 2  # C
             }
         ]
 
@@ -560,14 +560,16 @@ class Quarter1:
                         img = pygame.image.load(path).convert_alpha()
                         scaled = pygame.transform.scale(img, (TILE_SIZE, TILE_SIZE))
                         frames.append(scaled)
+                        print(f"✅ Loaded Old Man frame: {name}")
                     else:
                         frames.append(self.npc_oldman_sprite.copy())
+                        print(f"⚠️ Frame NOT found, falling back to static: {name}")
                 return frames
 
             self.npc_oldman_left_sprites = load_oldman_sprites(["oldmanleft.png", "oldmanleft1.png", "oldmanleft2.png"])
             self.npc_oldman_right_sprites = load_oldman_sprites(["oldmanright.png", "oldmanright1.png", "oldmanright2.png"])
             self.npc_oldman_up_sprites = load_oldman_sprites(["oldmanup.png", "oldmanup1.png", "oldmanup2.png"])
-            self.npc_oldman_down_sprites = load_oldman_sprites(["oldman.png", "oldman1.png", "oldman2.png"])
+            self.npc_oldman_down_sprites = load_oldman_sprites(["oldman.png", "oldmandown1.png", "oldmandown2.png"])
             print("🧙‍♂️ Loaded Old Man walking sprites in 4 directions")
 
         except Exception as e:
@@ -935,6 +937,9 @@ class Quarter1:
         if current_portal and self.fist_closed and self.teleport_cooldown <= 0:
             # Check if this is the goal portal
             if current_portal.direction == self.goal_portal_direction:
+                if "map1" in self.map_name.lower() and self.quiz_state < 6:
+                    print("⚠️ Goal portal locked: Complete all 5 quiz stations first!")
+                    return False
                 print(f"🎯 Goal reached! Returning to stage select...")
                 self.return_to_stage_select()
                 return True
@@ -991,14 +996,14 @@ class Quarter1:
         
         # State 1: Dialog with choices
         if self.quiz_state == 1:
-            box_w, box_h = 550, 340
+            box_w, box_h = 580, 370
             box_x = (self.width - box_w) // 2
             box_y = (self.height - box_h) // 2
             
-            button_w, button_h = 480, 42
+            button_w, button_h = 500, 42
             button_x = box_x + (box_w - button_w) // 2
-            button_y_start = box_y + 140
-            spacing = 50
+            button_y_start = box_y + 125
+            spacing = 52
             
             q_data = self.quiz_questions[self.current_question_index]
             
@@ -1108,6 +1113,8 @@ class Quarter1:
                 
                 self.quiz_state = 1
                 self.selected_choice_index = -1
+            else:
+                self.npc_oldman_dir = self.station_directions.get(self.quiz_station_index, "right")
 
         # Old Man walking sequence along BFS path
         if self.quiz_state == 4:
@@ -1302,7 +1309,6 @@ class Quarter1:
                 sprites = self.npc_oldman_up_sprites
             else:
                 sprites = self.npc_oldman_down_sprites
-                
             if sprites:
                 if self.quiz_state == 4:  # walking
                     self.draw_npc_animated(self.npc_oldman_x, self.npc_oldman_y,
@@ -1370,7 +1376,7 @@ class Quarter1:
         overlay.set_alpha(150)
         self.screen.blit(overlay, (0, 0))
 
-        box_w, box_h = 550, 340
+        box_w, box_h = 580, 370
         box_x = (self.width - box_w) // 2
         box_y = (self.height - box_h) // 2
 
@@ -1393,22 +1399,25 @@ class Quarter1:
             self.screen.blit(txt_surf, (box_x + 25, y_text))
             y_text += 22
 
-        button_w, button_h = 480, 42
+        button_w, button_h = 500, 42
         button_x = box_x + (box_w - button_w) // 2
-        button_y_start = box_y + 140
-        spacing = 50
+        button_y_start = box_y + 125
+        spacing = 52
         
         for i, choice in enumerate(q_data["choices"]):
             b_y = button_y_start + i * spacing
             btn_rect = pygame.Rect(button_x, b_y, button_w, button_h)
             is_hovered = btn_rect.collidepoint(self.cursor_pos)
             
-            bg_color = (30, 41, 59) if not is_hovered else (51, 65, 85)
-            border_color = (100, 116, 139) if not is_hovered else (218, 165, 32)
-            text_color = (241, 245, 249) if not is_hovered else (255, 255, 255)
+            if is_hovered:
+                bg_color = (255, 215, 0)
+                text_color = (0, 0, 0)
+            else:
+                bg_color = (30, 41, 59)
+                text_color = (255, 255, 255)
             
-            pygame.draw.rect(self.screen, bg_color, btn_rect, border_radius=6)
-            pygame.draw.rect(self.screen, border_color, btn_rect, 2, border_radius=6)
+            pygame.draw.rect(self.screen, bg_color, btn_rect, border_radius=12)
+            pygame.draw.rect(self.screen, (0, 0, 0), btn_rect, 3, border_radius=12)
             
             c_surf = q_font.render(choice, True, text_color)
             c_rect = c_surf.get_rect(center=btn_rect.center)
@@ -1443,10 +1452,9 @@ class Quarter1:
 
         is_hovered = btn_rect.collidepoint(self.cursor_pos)
         bg_color = (30, 41, 59) if not is_hovered else (220, 38, 38)
-        border_color = (100, 116, 139) if not is_hovered else (255, 255, 255)
 
-        pygame.draw.rect(self.screen, bg_color, btn_rect, border_radius=6)
-        pygame.draw.rect(self.screen, border_color, btn_rect, 2, border_radius=6)
+        pygame.draw.rect(self.screen, bg_color, btn_rect, border_radius=12)
+        pygame.draw.rect(self.screen, (0, 0, 0), btn_rect, 3, border_radius=12)
 
         c_surf = speaker_font.render("Try Again", True, (255, 255, 255))
         c_rect = c_surf.get_rect(center=btn_rect.center)
@@ -1481,10 +1489,9 @@ class Quarter1:
 
         is_hovered = btn_rect.collidepoint(self.cursor_pos)
         bg_color = (30, 41, 59) if not is_hovered else (22, 163, 74)
-        border_color = (100, 116, 139) if not is_hovered else (255, 255, 255)
 
-        pygame.draw.rect(self.screen, bg_color, btn_rect, border_radius=6)
-        pygame.draw.rect(self.screen, border_color, btn_rect, 2, border_radius=6)
+        pygame.draw.rect(self.screen, bg_color, btn_rect, border_radius=12)
+        pygame.draw.rect(self.screen, (0, 0, 0), btn_rect, 3, border_radius=12)
 
         c_surf = speaker_font.render("Continue", True, (255, 255, 255))
         c_rect = c_surf.get_rect(center=btn_rect.center)
@@ -1529,13 +1536,17 @@ class Quarter1:
         btn_rect = pygame.Rect(button_x, button_y, button_w, button_h)
 
         is_hovered = btn_rect.collidepoint(self.cursor_pos)
-        bg_color = (30, 41, 59) if not is_hovered else (218, 165, 32)
-        border_color = (100, 116, 139) if not is_hovered else (255, 255, 255)
+        if is_hovered:
+            bg_color = (255, 215, 0)
+            text_color = (0, 0, 0)
+        else:
+            bg_color = (30, 41, 59)
+            text_color = (255, 255, 255)
 
-        pygame.draw.rect(self.screen, bg_color, btn_rect, border_radius=6)
-        pygame.draw.rect(self.screen, border_color, btn_rect, 2, border_radius=6)
+        pygame.draw.rect(self.screen, bg_color, btn_rect, border_radius=12)
+        pygame.draw.rect(self.screen, (0, 0, 0), btn_rect, 3, border_radius=12)
 
-        c_surf = speaker_font.render("Finish", True, (255, 255, 255))
+        c_surf = speaker_font.render("Finish", True, text_color)
         c_rect = c_surf.get_rect(center=btn_rect.center)
         self.screen.blit(c_surf, c_rect)
 

@@ -201,6 +201,9 @@ class StageSelect:
         self.oldman_dialogue_index = 0
         self.npc_oldman_left_sprites = []
         self.npc_oldman_down_sprites = []
+        self.npc_oldman_right_sprites = []
+        self.npc_oldman_up_sprites = []
+        self.npc_oldman_dir = "down"
         self.npc_oldman_anim_frame = 0
         self.npc_oldman_anim_timer = 0
         self.dialogue_lines = [
@@ -548,7 +551,7 @@ class StageSelect:
 
             # Load Old Man walking down sprites
             self.npc_oldman_down_sprites = []
-            for name in ["oldman.png", "oldman1.png", "oldman2.png"]:
+            for name in ["oldman.png", "oldmandown1.png", "oldmandown2.png"]:
                 path = os.path.join(self.NPC_PATH_OLDMAN, name)
                 if os.path.exists(path):
                     img = pygame.image.load(path).convert_alpha()
@@ -557,6 +560,30 @@ class StageSelect:
                     print(f"✅ Loaded Old Man down frame: {name}")
                 else:
                     print(f"⚠️ Down frame not found at: {path}")
+
+            # Load Old Man walking right sprites
+            self.npc_oldman_right_sprites = []
+            for name in ["oldmanright.png", "oldmanright1.png", "oldmanright2.png"]:
+                path = os.path.join(self.NPC_PATH_OLDMAN, name)
+                if os.path.exists(path):
+                    img = pygame.image.load(path).convert_alpha()
+                    scaled = pygame.transform.scale(img, (TILE_SIZE, TILE_SIZE))
+                    self.npc_oldman_right_sprites.append(scaled)
+                    print(f"✅ Loaded Old Man right frame: {name}")
+                else:
+                    print(f"⚠️ Right frame not found at: {path}")
+
+            # Load Old Man walking up sprites
+            self.npc_oldman_up_sprites = []
+            for name in ["oldmanup.png", "oldmanup1.png", "oldmanup2.png"]:
+                path = os.path.join(self.NPC_PATH_OLDMAN, name)
+                if os.path.exists(path):
+                    img = pygame.image.load(path).convert_alpha()
+                    scaled = pygame.transform.scale(img, (TILE_SIZE, TILE_SIZE))
+                    self.npc_oldman_up_sprites.append(scaled)
+                    print(f"✅ Loaded Old Man up frame: {name}")
+                else:
+                    print(f"⚠️ Up frame not found at: {path}")
         except Exception as e:
             print(f"❌ Error loading Oldman: {e}")
             placeholder = pygame.Surface((TILE_SIZE, TILE_SIZE))
@@ -1083,23 +1110,34 @@ class StageSelect:
                     self.npc_knight_current_sprite = self.npc_knight_front_sprite
 
         # Proximity interaction check for Old Man NPC
-        if self.oldman_dialogue_state == 0 and self.npc_oldman_found:
-            player_center_x = self.player_x + TILE_SIZE // 2
-            player_center_y = self.player_y + TILE_SIZE // 2
-            oldman_center_x = self.npc_oldman_x + TILE_SIZE // 2
-            oldman_center_y = self.npc_oldman_y + TILE_SIZE // 2
-            dist = math.hypot(player_center_x - oldman_center_x, player_center_y - oldman_center_y)
-            if dist < TILE_SIZE * 1.5:
-                self.oldman_dialogue_state = 1
-                self.oldman_dialogue_index = 0
-                
-                # Face the Old Man
-                dx = self.npc_oldman_x - self.player_x
-                dy = self.npc_oldman_y - self.player_y
-                if abs(dx) > abs(dy):
-                    self.player_dir = "left" if dx < 0 else "right"
+        if self.npc_oldman_found:
+            if self.oldman_dialogue_state == 0:
+                player_center_x = self.player_x + TILE_SIZE // 2
+                player_center_y = self.player_y + TILE_SIZE // 2
+                oldman_center_x = self.npc_oldman_x + TILE_SIZE // 2
+                oldman_center_y = self.npc_oldman_y + TILE_SIZE // 2
+                dist = math.hypot(player_center_x - oldman_center_x, player_center_y - oldman_center_y)
+                if dist < TILE_SIZE * 1.5:
+                    self.oldman_dialogue_state = 1
+                    self.oldman_dialogue_index = 0
+                    
+                    # Face the Old Man
+                    dx = self.npc_oldman_x - self.player_x
+                    dy = self.npc_oldman_y - self.player_y
+                    if abs(dx) > abs(dy):
+                        self.player_dir = "left" if dx < 0 else "right"
+                    else:
+                        self.player_dir = "up" if dy < 0 else "down"
+                        
+                    # Face the Player
+                    dx_om = self.player_x - self.npc_oldman_x
+                    dy_om = self.player_y - self.npc_oldman_y
+                    if abs(dx_om) > abs(dy_om):
+                        self.npc_oldman_dir = "right" if dx_om > 0 else "left"
+                    else:
+                        self.npc_oldman_dir = "down" if dy_om > 0 else "up"
                 else:
-                    self.player_dir = "up" if dy < 0 else "down"
+                    self.npc_oldman_dir = "down"
 
         # Update Old Man walking to left portal (x = 0)
         if self.oldman_dialogue_state == 2:
@@ -1107,6 +1145,7 @@ class StageSelect:
             if self.npc_oldman_y < target_y:
                 # Walk 1 tile down first
                 self.npc_oldman_y += 2
+                self.npc_oldman_dir = "down"
                 self.npc_oldman_anim_timer += 1
                 if self.npc_oldman_anim_timer >= 10:
                     self.npc_oldman_anim_timer = 0
@@ -1115,6 +1154,7 @@ class StageSelect:
             else:
                 # Face left and walk to the left portal
                 self.npc_oldman_x -= 2
+                self.npc_oldman_dir = "left"
                 self.npc_oldman_anim_timer += 1
                 if self.npc_oldman_anim_timer >= 10:
                     self.npc_oldman_anim_timer = 0
@@ -1304,8 +1344,22 @@ class StageSelect:
                     self.draw_npc_static(self.npc_oldman_x, self.npc_oldman_y,
                                          self.npc_oldman_sprite)
             else:
-                self.draw_npc_static(self.npc_oldman_x, self.npc_oldman_y,
-                                     self.npc_oldman_sprite)
+                sprites = None
+                if self.npc_oldman_dir == "left":
+                    sprites = self.npc_oldman_left_sprites
+                elif self.npc_oldman_dir == "right":
+                    sprites = self.npc_oldman_right_sprites
+                elif self.npc_oldman_dir == "up":
+                    sprites = self.npc_oldman_up_sprites
+                else:
+                    sprites = self.npc_oldman_down_sprites
+
+                if sprites:
+                    self.draw_npc_static(self.npc_oldman_x, self.npc_oldman_y,
+                                         sprites[0])
+                else:
+                    self.draw_npc_static(self.npc_oldman_x, self.npc_oldman_y,
+                                         self.npc_oldman_sprite)
                 
                 # Draw quest exclamation mark above the Old Man's head if dialogue hasn't started and player is in proximity
                 if self.oldman_dialogue_state == 0:
