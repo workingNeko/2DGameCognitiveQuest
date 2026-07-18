@@ -33,6 +33,7 @@ class Quarter1:
         self.main_menu = main_menu
         self.width, self.height = screen.get_size()
         self.map_name = map_name  # 'map1.txt' or 'map2.txt'
+        self.is_quiz_map = any(m in self.map_name.lower() for m in ["map1", "map2", "map3"])
 
         # ============================================================
         # GESTURE SYSTEM - USE MAIN MENU'S DATA
@@ -263,7 +264,7 @@ class Quarter1:
         self._init_npc_positions()
 
         # Overwrite Old Man position to Quiz Station 1 for map1.txt quiz sequence
-        if "map1" in self.map_name.lower() and hasattr(self, 'quiz_stations') and 1 in self.quiz_stations:
+        if self.is_quiz_map and hasattr(self, 'quiz_stations') and 1 in self.quiz_stations:
             self.npc_oldman_tile_x, self.npc_oldman_tile_y = self.quiz_stations[1]
             self.npc_oldman_x = self.npc_oldman_tile_x * TILE_SIZE
             self.npc_oldman_y = self.npc_oldman_tile_y * TILE_SIZE
@@ -277,14 +278,67 @@ class Quarter1:
         self.selected_choice_index = -1  # choice highlighted
 
         # Station Standby Directions
-        self.station_directions = {
-            1: "right",
-            2: "left",
-            3: "left",
-            4: "down",
-            5: "left"
-        }
+        if "map2" in self.map_name.lower():
+            self.station_directions = {
+                1: "left",
+                2: "up",
+                3: "left",
+                4: "left",
+                5: "right"
+            }
+        elif "map3" in self.map_name.lower():
+            self.station_directions = {
+                1: "right",
+                2: "right",
+                3: "right",
+                4: "left",
+                5: "left"
+            }
+        else:
+            self.station_directions = {
+                1: "right",
+                2: "left",
+                3: "left",
+                4: "down",
+                5: "left"
+            }
         self.npc_oldman_dir = self.station_directions.get(1, "right")
+
+        # ============================================================
+        # AREA TITLE ANIMATION
+        # ============================================================
+        self.title_elapsed = 0.0
+        self.title_duration = 5.0
+        self.title_active = True
+
+        # Load Pixelfont
+        self.pixel_font_path = "assets/fonts/Pixelfont.otf"
+        self.pixel_font_size = 72
+        try:
+            self.title_font = pygame.font.Font(self.pixel_font_path, self.pixel_font_size)
+        except Exception:
+            self.title_font = pygame.font.SysFont("Consolas", self.pixel_font_size, bold=True)
+
+        self.title_text = "Geometry Forest"
+        self.title_spacing = 12
+
+        self.title_text_color = (255, 255, 255) # White
+        self.title_outline_color = (0, 0, 0) # Black outline
+        self.title_glow_color = (180, 180, 180) # Grey glow
+
+        # Pre-render letters
+        self.title_letters = []
+        for ch in self.title_text:
+            glow = self.title_font.render(ch, False, self.title_glow_color)
+            outline = self.title_font.render(ch, False, self.title_outline_color)
+            main = self.title_font.render(ch, False, self.title_text_color)
+            self.title_letters.append({
+                "glow": glow,
+                "outline": outline,
+                "main": main,
+                "width": main.get_width()
+            })
+        self.title_total_width = sum(l["width"] for l in self.title_letters) + self.title_spacing * (len(self.title_text) - 1)
 
         # Correct answer random responses
         self.current_correct_phrase = ""
@@ -297,6 +351,7 @@ class Quarter1:
         # Old Man walking animations
         self.npc_oldman_anim_frame = 0
         self.npc_oldman_anim_timer = 0
+        self.player_block_timer = 0
         self.npc_oldman_path = []
 
         # Questions List
@@ -340,7 +395,7 @@ class Quarter1:
         self.TELEPORT_COOLDOWN_TIME = 1.0
 
         # Goal portal tracking - which portal completes the level
-        self.goal_portal_direction = self.portals[0].direction if self.portals else ('right' if 'map1' in map_name else 'up')
+        self.goal_portal_direction = self.portals[0].direction if self.portals else ('right' if self.is_quiz_map else 'up')
 
         # ============================================================
         # UI
@@ -409,7 +464,7 @@ class Quarter1:
                     self.npc_bromen_found = True
                     print(f"Bromen NPC at: ({x}, {y})")
                 elif marker == 'O':
-                    if "map1" not in self.map_name.lower():
+                    if not self.is_quiz_map:
                         self.npc_oldman_tile_x = x
                         self.npc_oldman_tile_y = y
                         self.npc_oldman_x = x * TILE_SIZE
@@ -449,8 +504,8 @@ class Quarter1:
 
         tiles = {}
         tile_files = [
-            ("#", "003.png"), ("G", "002.png"), ("1", "011.png"), ("2", "009.png"),
-            ("3", "006.png"), ("4", "004.png"), ("5", "005.png"), ("6", "010.png"),
+            ("#", "003.png"), ("G", "002.png"), ("1", "002.png"), ("2", "002.png"),
+            ("3", "002.png"), ("4", "002.png"), ("5", "002.png"), ("6", "010.png"),
             ("7", "008.png"), ("8", "007.png"), ("+", "012.png"), ("-", "013.png"),
             ("/", "014.png"), ("*", "015.png"), ("T", "016.png"), ("W", "019.png"),
             ("!", "020.png"), ("@", "022.png"), (")", "021.png"), ("$", "026.png"),
@@ -937,7 +992,7 @@ class Quarter1:
         if current_portal and self.fist_closed and self.teleport_cooldown <= 0:
             # Check if this is the goal portal
             if current_portal.direction == self.goal_portal_direction:
-                if "map1" in self.map_name.lower() and self.quiz_state < 6:
+                if self.is_quiz_map and self.quiz_state < 6:
                     print("⚠️ Goal portal locked: Complete all 5 quiz stations first!")
                     return False
                 print(f"🎯 Goal reached! Returning to stage select...")
@@ -989,7 +1044,7 @@ class Quarter1:
     # TRIGGER CLICK
     # ============================================================
     def trigger_click(self, pos):
-        if "map1" not in self.map_name.lower():
+        if not self.is_quiz_map:
             return
             
         import random
@@ -1045,6 +1100,7 @@ class Quarter1:
                     self.npc_oldman_path = self.find_path(start_coord, end_coord)
                     self.npc_oldman_path_index = 1
                     self.quiz_state = 4
+                    self.player_block_timer = 3.0
                     print(f"🧙‍♂️ Moving Old Man from {start_coord} to {end_coord}")
                 else:
                     self.quiz_state = 5
@@ -1066,9 +1122,19 @@ class Quarter1:
     def update(self):
         dt = self.clock.tick(FPS) / 1000.0
         self.frame_counter += 1
-
+        # Update cooldowns
         if self.teleport_cooldown > 0:
             self.teleport_cooldown -= dt
+
+        # Update block timer
+        if self.player_block_timer > 0:
+            self.player_block_timer = max(0.0, self.player_block_timer - dt)
+
+        # Update Area Title animation elapsed time
+        if self.title_active:
+            self.title_elapsed += dt
+            if self.title_elapsed >= self.title_duration:
+                self.title_active = False
 
         if self.npc_bromen_sprites and self.npc_bromen_found:
             self.npc_bromen_anim_timer += 1
@@ -1088,7 +1154,7 @@ class Quarter1:
                     self.npc_knight_current_sprite = self.npc_knight_front_sprite
 
         # Proximity interaction check for Old Man NPC
-        if self.quiz_state == 0 and "map1" in self.map_name.lower() and self.npc_oldman_found:
+        if self.quiz_state == 0 and self.is_quiz_map and self.npc_oldman_found:
             import math
             player_center_x = self.player_x + TILE_SIZE // 2
             player_center_y = self.player_y + TILE_SIZE // 2
@@ -1167,7 +1233,7 @@ class Quarter1:
     # UPDATE PLAYER MOVEMENT
     # ============================================================
     def update_player_movement(self):
-        if self.quiz_state in [1, 2, 3, 4, 5]:
+        if self.quiz_state in [1, 2, 3, 5] or self.player_block_timer > 0:
             self.anim_frame = 0
             return
 
@@ -1340,7 +1406,7 @@ class Quarter1:
         self.draw_ui()
 
         # Draw floating exclamation mark if active and player is in proximity
-        if self.quiz_state == 0 and "map1" in self.map_name.lower() and self.npc_oldman_found:
+        if self.quiz_state == 0 and self.is_quiz_map and self.npc_oldman_found:
             import math
             player_center_x = self.player_x + TILE_SIZE // 2
             player_center_y = self.player_y + TILE_SIZE // 2
@@ -1360,7 +1426,7 @@ class Quarter1:
                 self.screen.blit(excl_surf, (excl_x, excl_y))
 
         # Centered Dialog overlays for Shape Quiz
-        if "map1" in self.map_name.lower():
+        if self.is_quiz_map:
             if self.quiz_state == 1:
                 self.draw_quiz_dialog()
             elif self.quiz_state == 2:
@@ -1369,6 +1435,64 @@ class Quarter1:
                 self.draw_correct_dialog()
             elif self.quiz_state == 5:
                 self.draw_final_dialog()
+
+        # Draw Area Title Animation
+        if self.title_active:
+            import math
+            timer = self.title_elapsed
+            
+            # Alpha fading
+            alpha = 255
+            FADE_START = 4.0
+            FADE_DURATION = 1.0
+            if timer >= FADE_START:
+                fade = (timer - FADE_START) / FADE_DURATION
+                fade = max(0, min(fade, 1))
+                alpha = int(255 * (1 - fade))
+                
+            # Slide animation
+            BASE_Y = self.height // 2 - self.pixel_font_size // 2
+            SLIDE_TIME = 0.35
+            if timer < SLIDE_TIME:
+                t = timer / SLIDE_TIME
+                ease = 1 - (1 - t) ** 3
+                y = BASE_Y - (1 - ease) * 40
+            else:
+                y = BASE_Y
+                
+            # Draw letters centered
+            x = self.width // 2 - self.title_total_width // 2
+            
+            for i, data in enumerate(self.title_letters):
+                phase = timer * 8 - i * 0.55
+                offset = 0
+                
+                # Single traveling wave
+                if -math.pi <= phase <= math.pi:
+                    offset = math.sin(phase) * 12
+                    
+                glow = data["glow"].copy()
+                outline = data["outline"].copy()
+                main = data["main"].copy()
+                
+                glow.set_alpha(alpha // 5)
+                outline.set_alpha(alpha)
+                main.set_alpha(alpha)
+                
+                # Glow
+                for gx in (-5, 0, 5):
+                    for gy in (-5, 0, 5):
+                        self.screen.blit(glow, (x + gx, y + gy + offset))
+                        
+                # Outline
+                for ox in (-2, -1, 1, 2):
+                    for oy in (-2, -1, 1, 2):
+                        self.screen.blit(outline, (x + ox, y + oy + offset))
+                        
+                # Main text
+                self.screen.blit(main, (x, y + offset))
+                
+                x += data["width"] + self.title_spacing
 
     def draw_quiz_dialog(self):
         overlay = pygame.Surface((self.width, self.height))

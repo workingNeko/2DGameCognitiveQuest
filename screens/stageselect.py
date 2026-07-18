@@ -206,6 +206,7 @@ class StageSelect:
         self.npc_oldman_dir = "down"
         self.npc_oldman_anim_frame = 0
         self.npc_oldman_anim_timer = 0
+        self.player_block_timer = 0
         self.dialogue_lines = [
             ("Old Man", "Ah, young adventurer! You look brave and clever."),
             ("Old Man", "Deep inside the Geometry Forest, the magical Shapes have become lost. Only a true student adventurer can help them find their way."),
@@ -314,7 +315,7 @@ class StageSelect:
         # AREA TITLE ANIMATION (test.py logic)
         # ============================================================
         self.title_elapsed = 0.0
-        self.title_duration = 3.0
+        self.title_duration = 5.0
         self.title_active = True
 
         # Load Pixelfont
@@ -902,9 +903,9 @@ class StageSelect:
                 break
 
         if current_portal and self.fist_closed and self.teleport_cooldown <= 0:
-            # Check if it's a left portal (goes to Quarter1 - map1.txt only for debugging)
+            # Check if it's a left portal (goes to Quarter1 - map1/map2/map3 randomized)
             if current_portal.direction == 'left':
-                map_name = "map1.txt"
+                map_name = random.choice(["map1.txt", "map2.txt", "map3.txt"])
                 print(f"🎮 Entering Quarter 1 - {map_name}")
                 self.main_menu.current_screen = "quarter1"
                 self.main_menu.quarter1 = Quarter1(self.screen, self.main_menu, map_name)
@@ -1035,6 +1036,7 @@ class StageSelect:
             self.oldman_dialogue_index += 1
             if self.oldman_dialogue_index >= len(self.dialogue_lines):
                 self.oldman_dialogue_state = 2
+                self.player_block_timer = 3.0
                 print("🧙‍♂️ Dialog complete! Old Man starts moving left.")
             return
 
@@ -1049,7 +1051,7 @@ class StageSelect:
             if current_portal and self.teleport_cooldown <= 0:
                 # Teleport to respective Quarter
                 if current_portal.direction == 'left':
-                    map_name = "map1.txt"
+                    map_name = random.choice(["map1.txt", "map2.txt", "map3.txt"])
                     print(f"🎮 Entering Quarter 1 - {map_name}")
                     self.main_menu.current_screen = "quarter1"
                     self.main_menu.quarter1 = Quarter1(self.screen, self.main_menu, map_name)
@@ -1089,6 +1091,10 @@ class StageSelect:
         # Update cooldowns
         if self.teleport_cooldown > 0:
             self.teleport_cooldown -= dt
+
+        # Update block timer
+        if self.player_block_timer > 0:
+            self.player_block_timer = max(0.0, self.player_block_timer - dt)
 
         # Update Bromen NPC animation only
         if self.npc_bromen_sprites and self.npc_bromen_found:
@@ -1192,8 +1198,8 @@ class StageSelect:
     # UPDATE PLAYER MOVEMENT
     # ============================================================
     def update_player_movement(self):
-        # Block movement during active dialogue
-        if self.oldman_dialogue_state == 1:
+        # Block movement during active dialogue or if player block timer is active
+        if self.oldman_dialogue_state == 1 or self.player_block_timer > 0:
             return
 
         vx, vy = 0, 0
@@ -1587,6 +1593,7 @@ class StageSelect:
                     self.oldman_dialogue_index += 1
                     if self.oldman_dialogue_index >= len(self.dialogue_lines):
                         self.oldman_dialogue_state = 2
+                        self.player_block_timer = 3.0
                         print("🧙‍♂️ Dialog complete! Old Man starts moving left.")
                     return "dialogue_advance"
 
