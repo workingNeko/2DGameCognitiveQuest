@@ -168,7 +168,7 @@ class StageSelect:
         # ============================================================
         # WALKABLE TILES
         # ============================================================
-        self.WALKABLE_TILES = {"G", "#", "1", "2", "3", "4", "5", "6", "7", "8"}
+        self.WALKABLE_TILES = {"G", "#", "1", "2", "3", "4", "5", "6", "7", "8", "P"}
 
         # ============================================================
         # LOAD PLAYER SPRITES
@@ -180,8 +180,9 @@ class StageSelect:
         # ============================================================
         # LOAD NPC SPRITES
         # ============================================================
-        # Bromen NPC (animated)
+        # Bromen NPC (animated & interactive teleport)
         self.npc_bromen_sprites = self.load_npc_sprites_animated(self.NPC_PATH_BROMEN, "bromen")
+        self.npc_bromen_teleport_sprites = self.load_bromen_teleport_sprites()
         self.npc_bromen_anim_frame = 0
         self.npc_bromen_anim_timer = 0
         self.npc_bromen_x = 0
@@ -189,6 +190,16 @@ class StageSelect:
         self.npc_bromen_tile_x = 0
         self.npc_bromen_tile_y = 0
         self.npc_bromen_found = False
+        self.bromen_dialogue_state = 0  # 0: idle, 1: dialogue active, 2: teleporting, 3: disappeared
+        self.bromen_dialogue_index = 0
+        self.bromen_teleport_frame = 0
+        self.bromen_teleport_timer = 0
+        self.bromen_dialogue_lines = [
+            ("Bromen", "Greetings! I am Bromen, master of the final realm."),
+            ("Student", "Are you guarding the entrance to Quarter 4?"),
+            ("Bromen", "Indeed! Prove your mastery inside. I shall await you there!"),
+            ("Bromen", "*Teleports away*")
+        ]
 
         # Oldman NPC (static & interactive)
         self.npc_oldman_sprite = None
@@ -217,26 +228,48 @@ class StageSelect:
             ("Old Man", "Now... Follow me!")
         ]
 
-        # Skeleton NPC (static)
+        # Skeleton NPC (static & interactive)
         self.npc_skeleton_sprite = None
         self.npc_skeleton_x = 0
         self.npc_skeleton_y = 0
         self.npc_skeleton_tile_x = 0
         self.npc_skeleton_tile_y = 0
         self.npc_skeleton_found = False
+        self.skeleton_dialogue_state = 0  # 0: idle, 1: dialogue active, 2: walking, 3: disappeared
+        self.skeleton_dialogue_index = 0
+        self.npc_skeleton_left_sprites = []
+        self.npc_skeleton_down_sprites = []
+        self.npc_skeleton_right_sprites = []
+        self.npc_skeleton_up_sprites = []
+        self.npc_skeleton_dir = "down"
+        self.npc_skeleton_anim_frame = 0
+        self.npc_skeleton_anim_timer = 0
+        self.skeleton_dialogue_lines = [
+            ("Skeleton", "Hi"),
+            ("Student", "Hello")
+        ]
 
-        # Knight NPC (static with front and side)
-        self.npc_knight_front_sprite = None
-        self.npc_knight_side_sprite = None
-        self.npc_knight_current_sprite = None
+        # Knight NPC (static & interactive)
+        self.npc_knight_sprite = None
         self.npc_knight_x = 0
         self.npc_knight_y = 0
         self.npc_knight_tile_x = 0
         self.npc_knight_tile_y = 0
         self.npc_knight_found = False
-        self.npc_knight_facing = "front"  # 'front' or 'side'
-        self.npc_knight_side_timer = 0
-        self.npc_knight_side_duration = 60  # Frames to face side before switching
+        self.knight_dialogue_state = 0  # 0: idle, 1: dialogue active, 2: walking, 3: disappeared
+        self.knight_dialogue_index = 0
+        self.npc_knight_left_sprites = []
+        self.npc_knight_down_sprites = []
+        self.npc_knight_right_sprites = []
+        self.npc_knight_up_sprites = []
+        self.npc_knight_dir = "down"
+        self.npc_knight_anim_frame = 0
+        self.npc_knight_anim_timer = 0
+        self.knight_dialogue_lines = [
+            ("Knight", "Halt, student! Beyond this portal lies Quarter 2."),
+            ("Student", "I am ready for the challenge!"),
+            ("Knight", "Walk through the portal down below to proceed. Best of luck!")
+        ]
 
         # ============================================================
         # LOAD STATIC NPC SPRITES
@@ -515,6 +548,18 @@ class StageSelect:
         print(f"✅ Loaded {len(frames)} frames for {npc_name}")
         return frames
 
+    def load_bromen_teleport_sprites(self):
+        frames = []
+        for i in range(8):
+            filename = f"sprite_bromen_teleport{i:02d}.png"
+            path = os.path.join(self.NPC_PATH_BROMEN, filename)
+            if os.path.exists(path):
+                img = pygame.image.load(path).convert_alpha()
+                scaled = pygame.transform.scale(img, (TILE_SIZE, TILE_SIZE))
+                frames.append(scaled)
+                print(f"✅ Loaded Bromen teleport frame: {filename}")
+        return frames
+
     # ============================================================
     # LOAD STATIC NPC SPRITES (Oldman, Skeleton, Knight)
     # ============================================================
@@ -602,70 +647,110 @@ class StageSelect:
                 print(f"⚠️ Skeleton sprite not found at: {skeleton_path}")
                 placeholder = pygame.Surface((TILE_SIZE, TILE_SIZE))
                 placeholder.fill((255, 255, 255))
-                pygame.draw.circle(placeholder, (0, 0, 0), (TILE_SIZE // 2, TILE_SIZE // 2), 12)
-                pygame.draw.circle(placeholder, (255, 200, 200), (TILE_SIZE // 2 - 4, TILE_SIZE // 2 - 4), 3)
-                pygame.draw.circle(placeholder, (255, 200, 200), (TILE_SIZE // 2 + 4, TILE_SIZE // 2 - 4), 3)
-                font = pygame.font.SysFont(None, 10)
-                text = font.render("SKEL", True, (0, 0, 0))
-                placeholder.blit(text, (2, TILE_SIZE - 12))
                 self.npc_skeleton_sprite = placeholder
+
+            # Load Skeleton walking left sprites
+            self.npc_skeleton_left_sprites = []
+            for name in ["skeleton_left.png", "skeleton_left_1.png", "skeleton_left_2.png"]:
+                path = os.path.join(self.NPC_PATH_SKELETON, name)
+                if os.path.exists(path):
+                    img = pygame.image.load(path).convert_alpha()
+                    scaled = pygame.transform.scale(img, (TILE_SIZE, TILE_SIZE))
+                    self.npc_skeleton_left_sprites.append(scaled)
+                    print(f"✅ Loaded Skeleton left frame: {name}")
+
+            # Load Skeleton walking down sprites
+            self.npc_skeleton_down_sprites = []
+            for name in ["skeleton_down.png", "skeleton_down_1.png", "skeleton_down_2.png"]:
+                path = os.path.join(self.NPC_PATH_SKELETON, name)
+                if os.path.exists(path):
+                    img = pygame.image.load(path).convert_alpha()
+                    scaled = pygame.transform.scale(img, (TILE_SIZE, TILE_SIZE))
+                    self.npc_skeleton_down_sprites.append(scaled)
+                    print(f"✅ Loaded Skeleton down frame: {name}")
+
+            # Load Skeleton walking right sprites
+            self.npc_skeleton_right_sprites = []
+            for name in ["skeleton_right.png", "skeleton_right_1.png", "skeleton_right_2.png"]:
+                path = os.path.join(self.NPC_PATH_SKELETON, name)
+                if os.path.exists(path):
+                    img = pygame.image.load(path).convert_alpha()
+                    scaled = pygame.transform.scale(img, (TILE_SIZE, TILE_SIZE))
+                    self.npc_skeleton_right_sprites.append(scaled)
+                    print(f"✅ Loaded Skeleton right frame: {name}")
+
+            # Load Skeleton walking up sprites
+            self.npc_skeleton_up_sprites = []
+            for name in ["skeleton_up.png", "skeleton_up_1.png", "skeleton_up_2.png"]:
+                path = os.path.join(self.NPC_PATH_SKELETON, name)
+                if os.path.exists(path):
+                    img = pygame.image.load(path).convert_alpha()
+                    scaled = pygame.transform.scale(img, (TILE_SIZE, TILE_SIZE))
+                    self.npc_skeleton_up_sprites.append(scaled)
+                    print(f"✅ Loaded Skeleton up frame: {name}")
         except Exception as e:
             print(f"❌ Error loading Skeleton: {e}")
             placeholder = pygame.Surface((TILE_SIZE, TILE_SIZE))
             placeholder.fill((255, 255, 255))
             self.npc_skeleton_sprite = placeholder
 
-        # Load Knight (front and side)
-        knight_front_path = os.path.join(self.NPC_PATH_KNIGHT, "knight.png")
-        knight_side_path = os.path.join(self.NPC_PATH_KNIGHT, "knightside.png")
-
-        # Load front sprite
+        # Load Knight
+        knight_path = os.path.join(self.NPC_PATH_KNIGHT, "knight.png")
         try:
-            if os.path.exists(knight_front_path):
-                img = pygame.image.load(knight_front_path).convert_alpha()
-                self.npc_knight_front_sprite = pygame.transform.scale(img, (TILE_SIZE, TILE_SIZE))
-                print(f"✅ Loaded Knight front sprite")
+            if os.path.exists(knight_path):
+                img = pygame.image.load(knight_path).convert_alpha()
+                self.npc_knight_sprite = pygame.transform.scale(img, (TILE_SIZE, TILE_SIZE))
+                print(f"✅ Loaded Knight sprite")
             else:
-                print(f"⚠️ Knight front sprite not found at: {knight_front_path}")
+                print(f"⚠️ Knight sprite not found at: {knight_path}")
                 placeholder = pygame.Surface((TILE_SIZE, TILE_SIZE))
-                placeholder.fill((192, 192, 192))  # Silver
-                pygame.draw.circle(placeholder, (0, 0, 0), (TILE_SIZE // 2, TILE_SIZE // 2), 12)
-                pygame.draw.rect(placeholder, (128, 128, 128), (TILE_SIZE // 2 - 8, TILE_SIZE // 2 - 12, 16, 8))
-                font = pygame.font.SysFont(None, 10)
-                text = font.render("KNT", True, (0, 0, 0))
-                placeholder.blit(text, (4, TILE_SIZE - 12))
-                self.npc_knight_front_sprite = placeholder
+                placeholder.fill((192, 192, 192))
+                self.npc_knight_sprite = placeholder
+
+            # Load Knight walking left sprites
+            self.npc_knight_left_sprites = []
+            for name in ["knight_left.png", "knight_left_1.png", "knight_left_2.png"]:
+                path = os.path.join(self.NPC_PATH_KNIGHT, name)
+                if os.path.exists(path):
+                    img = pygame.image.load(path).convert_alpha()
+                    scaled = pygame.transform.scale(img, (TILE_SIZE, TILE_SIZE))
+                    self.npc_knight_left_sprites.append(scaled)
+                    print(f"✅ Loaded Knight left frame: {name}")
+
+            # Load Knight walking down sprites
+            self.npc_knight_down_sprites = []
+            for name in ["knight_down.png", "knight_down_1.png", "knight_down_2.png"]:
+                path = os.path.join(self.NPC_PATH_KNIGHT, name)
+                if os.path.exists(path):
+                    img = pygame.image.load(path).convert_alpha()
+                    scaled = pygame.transform.scale(img, (TILE_SIZE, TILE_SIZE))
+                    self.npc_knight_down_sprites.append(scaled)
+                    print(f"✅ Loaded Knight down frame: {name}")
+
+            # Load Knight walking right sprites
+            self.npc_knight_right_sprites = []
+            for name in ["knight_right.png", "knight_right_1.png", "knight_right_2.png"]:
+                path = os.path.join(self.NPC_PATH_KNIGHT, name)
+                if os.path.exists(path):
+                    img = pygame.image.load(path).convert_alpha()
+                    scaled = pygame.transform.scale(img, (TILE_SIZE, TILE_SIZE))
+                    self.npc_knight_right_sprites.append(scaled)
+                    print(f"✅ Loaded Knight right frame: {name}")
+
+            # Load Knight walking up sprites
+            self.npc_knight_up_sprites = []
+            for name in ["knight_up.png", "knight_up_1.png", "knight_up_2.png"]:
+                path = os.path.join(self.NPC_PATH_KNIGHT, name)
+                if os.path.exists(path):
+                    img = pygame.image.load(path).convert_alpha()
+                    scaled = pygame.transform.scale(img, (TILE_SIZE, TILE_SIZE))
+                    self.npc_knight_up_sprites.append(scaled)
+                    print(f"✅ Loaded Knight up frame: {name}")
         except Exception as e:
-            print(f"❌ Error loading Knight front: {e}")
+            print(f"❌ Error loading Knight: {e}")
             placeholder = pygame.Surface((TILE_SIZE, TILE_SIZE))
             placeholder.fill((192, 192, 192))
-            self.npc_knight_front_sprite = placeholder
-
-        # Load side sprite
-        try:
-            if os.path.exists(knight_side_path):
-                img = pygame.image.load(knight_side_path).convert_alpha()
-                self.npc_knight_side_sprite = pygame.transform.scale(img, (TILE_SIZE, TILE_SIZE))
-                print(f"✅ Loaded Knight side sprite")
-            else:
-                print(f"⚠️ Knight side sprite not found at: {knight_side_path}")
-                placeholder = pygame.Surface((TILE_SIZE, TILE_SIZE))
-                placeholder.fill((180, 180, 180))  # Darker silver
-                pygame.draw.circle(placeholder, (0, 0, 0), (TILE_SIZE // 2 + 2, TILE_SIZE // 2), 10)
-                pygame.draw.rect(placeholder, (128, 128, 128), (TILE_SIZE // 2 - 4, TILE_SIZE // 2 - 10, 8, 6))
-                font = pygame.font.SysFont(None, 10)
-                text = font.render("SIDE", True, (0, 0, 0))
-                placeholder.blit(text, (2, TILE_SIZE - 12))
-                self.npc_knight_side_sprite = placeholder
-        except Exception as e:
-            print(f"❌ Error loading Knight side: {e}")
-            placeholder = pygame.Surface((TILE_SIZE, TILE_SIZE))
-            placeholder.fill((180, 180, 180))
-            self.npc_knight_side_sprite = placeholder
-
-        # Set initial sprite to front
-        self.npc_knight_current_sprite = self.npc_knight_front_sprite
-        self.npc_knight_facing = "front"
+            self.npc_knight_sprite = placeholder
 
     # ============================================================
     # PORTAL SPRITE ANIMATION CLASS
@@ -1040,8 +1125,31 @@ class StageSelect:
                 print("🧙‍♂️ Dialog complete! Old Man starts moving left.")
             return
 
+        if self.skeleton_dialogue_state == 1:
+            self.skeleton_dialogue_index += 1
+            if self.skeleton_dialogue_index >= len(self.skeleton_dialogue_lines):
+                self.skeleton_dialogue_state = 2
+                print("☠️ Dialog complete! Skeleton starts moving right to portal.")
+            return
+
+        if self.knight_dialogue_state == 1:
+            self.knight_dialogue_index += 1
+            if self.knight_dialogue_index >= len(self.knight_dialogue_lines):
+                self.knight_dialogue_state = 2
+                print("⚔️ Dialog complete! Knight starts moving down to portal.")
+            return
+
+        if self.bromen_dialogue_state == 1:
+            self.bromen_dialogue_index += 1
+            if self.bromen_dialogue_index >= len(self.bromen_dialogue_lines):
+                self.bromen_dialogue_state = 2
+                self.bromen_teleport_frame = 0
+                self.bromen_teleport_timer = 0
+                print("✨ Dialogue complete! Bromen starts teleporting away.")
+            return
+
         # Trigger teleport on click/hold when standing on a portal
-        if self.oldman_dialogue_state == 3:
+        if (self.oldman_dialogue_state in (0, 3)) and (self.skeleton_dialogue_state in (0, 3)) and (self.knight_dialogue_state in (0, 3)) and (self.bromen_dialogue_state in (0, 3)):
             current_portal = None
             for portal in self.portals:
                 if portal.contains_position(self.player_x, self.player_y):
@@ -1096,24 +1204,55 @@ class StageSelect:
         if self.player_block_timer > 0:
             self.player_block_timer = max(0.0, self.player_block_timer - dt)
 
-        # Update Bromen NPC animation only
-        if self.npc_bromen_sprites and self.npc_bromen_found:
+        # Update Bromen NPC idle animation
+        if self.npc_bromen_sprites and self.npc_bromen_found and self.bromen_dialogue_state == 0:
             self.npc_bromen_anim_timer += 1
             if self.npc_bromen_anim_timer >= 5:
                 self.npc_bromen_anim_timer = 0
                 self.npc_bromen_anim_frame = (self.npc_bromen_anim_frame + 1) % len(self.npc_bromen_sprites)
 
-        # Update Knight NPC - switch between front and side
-        if self.npc_knight_found:
-            self.npc_knight_side_timer += 1
-            if self.npc_knight_side_timer >= self.npc_knight_side_duration:
-                self.npc_knight_side_timer = 0
-                if self.npc_knight_facing == "front":
-                    self.npc_knight_facing = "side"
-                    self.npc_knight_current_sprite = self.npc_knight_side_sprite
-                else:
-                    self.npc_knight_facing = "front"
-                    self.npc_knight_current_sprite = self.npc_knight_front_sprite
+        # Proximity interaction check for Bromen NPC
+        if self.npc_bromen_found:
+            if self.bromen_dialogue_state == 0:
+                player_center_x = self.player_x + TILE_SIZE // 2
+                player_center_y = self.player_y + TILE_SIZE // 2
+                bromen_center_x = self.npc_bromen_x + TILE_SIZE // 2
+                bromen_center_y = self.npc_bromen_y + TILE_SIZE // 2
+                dist = math.hypot(player_center_x - bromen_center_x, player_center_y - bromen_center_y)
+                if dist < TILE_SIZE * 1.5:
+                    self.bromen_dialogue_state = 1
+                    self.bromen_dialogue_index = 0
+                    
+                    # Face each other
+                    dx = self.npc_bromen_x - self.player_x
+                    dy = self.npc_bromen_y - self.player_y
+                    if abs(dx) > abs(dy):
+                        self.player_dir = "left" if dx < 0 else "right"
+                    else:
+                        self.player_dir = "up" if dy < 0 else "down"
+
+        # Update Bromen Teleport Animation
+        if self.bromen_dialogue_state == 2:
+            self.bromen_teleport_timer += 1
+            if self.bromen_teleport_timer >= 6:
+                self.bromen_teleport_timer = 0
+                self.bromen_teleport_frame += 1
+                if self.bromen_teleport_frame >= len(self.npc_bromen_teleport_sprites):
+                    # Teleport finished! Disappear
+                    self.bromen_dialogue_state = 3
+                    self.npc_bromen_found = False
+                    
+                    # Remove NPC collision obstacle so player can pass
+                    if 'B' in self.npc_positions_data:
+                        self.npc_positions_data['B'] = []
+                    
+                    # Update self.game_map so the player can walk through
+                    for r_idx, r_str in enumerate(self.game_map):
+                        if 'B' in r_str:
+                            self.game_map[r_idx] = r_str.replace('B', '8')
+                            
+                    print("✨ Bromen finished teleporting and disappeared from stage select!")
+
 
         # Proximity interaction check for Old Man NPC
         if self.npc_oldman_found:
@@ -1184,6 +1323,133 @@ class StageSelect:
                     
                 print("🧙‍♂️ Old Man reached portal and disappeared from stage select!")
 
+        # Proximity interaction check for Skeleton NPC
+        if self.npc_skeleton_found:
+            if self.skeleton_dialogue_state == 0:
+                player_center_x = self.player_x + TILE_SIZE // 2
+                player_center_y = self.player_y + TILE_SIZE // 2
+                skeleton_center_x = self.npc_skeleton_x + TILE_SIZE // 2
+                skeleton_center_y = self.npc_skeleton_y + TILE_SIZE // 2
+                dist = math.hypot(player_center_x - skeleton_center_x, player_center_y - skeleton_center_y)
+                if dist < TILE_SIZE * 1.5:
+                    self.skeleton_dialogue_state = 1
+                    self.skeleton_dialogue_index = 0
+                    
+                    # Face the Skeleton
+                    dx = self.npc_skeleton_x - self.player_x
+                    dy = self.npc_skeleton_y - self.player_y
+                    if abs(dx) > abs(dy):
+                        self.player_dir = "left" if dx < 0 else "right"
+                    else:
+                        self.player_dir = "up" if dy < 0 else "down"
+                        
+                    # Face the Player
+                    dx_sk = self.player_x - self.npc_skeleton_x
+                    dy_sk = self.player_y - self.npc_skeleton_y
+                    if abs(dx_sk) > abs(dy_sk):
+                        self.npc_skeleton_dir = "right" if dx_sk > 0 else "left"
+                    else:
+                        self.npc_skeleton_dir = "down" if dy_sk > 0 else "up"
+                else:
+                    self.npc_skeleton_dir = "down"
+
+        # Update Skeleton walking to right portal
+        if self.skeleton_dialogue_state == 2:
+            target_y = (self.npc_skeleton_tile_y + 1) * TILE_SIZE
+            target_x_max = (len(self.game_map[0]) - 1) * TILE_SIZE
+            if self.npc_skeleton_y < target_y:
+                # Walk 1 tile down first if needed
+                self.npc_skeleton_y += 2
+                self.npc_skeleton_dir = "down"
+                self.npc_skeleton_anim_timer += 1
+                if self.npc_skeleton_anim_timer >= 10:
+                    self.npc_skeleton_anim_timer = 0
+                    if self.npc_skeleton_down_sprites:
+                        self.npc_skeleton_anim_frame = (self.npc_skeleton_anim_frame + 1) % len(self.npc_skeleton_down_sprites)
+            else:
+                # Face right and walk to the right portal
+                self.npc_skeleton_x += 2
+                self.npc_skeleton_dir = "right"
+                self.npc_skeleton_anim_timer += 1
+                if self.npc_skeleton_anim_timer >= 10:
+                    self.npc_skeleton_anim_timer = 0
+                    if self.npc_skeleton_right_sprites:
+                        self.npc_skeleton_anim_frame = (self.npc_skeleton_anim_frame + 1) % len(self.npc_skeleton_right_sprites)
+
+            if self.npc_skeleton_x >= target_x_max:
+                self.npc_skeleton_x = target_x_max
+                self.skeleton_dialogue_state = 3
+                self.npc_skeleton_found = False
+                
+                # Remove NPC collision obstacle so player can pass
+                if 'S' in self.npc_positions_data:
+                    self.npc_positions_data['S'] = []
+                
+                # Update self.game_map so the player can walk through
+                for r_idx, r_str in enumerate(self.game_map):
+                    if 'S' in r_str:
+                        self.game_map[r_idx] = r_str.replace('S', '6')
+                        
+                print("☠️ Skeleton reached portal and disappeared from stage select!")
+
+        # Proximity interaction check for Knight NPC
+        if self.npc_knight_found:
+            if self.knight_dialogue_state == 0:
+                player_center_x = self.player_x + TILE_SIZE // 2
+                player_center_y = self.player_y + TILE_SIZE // 2
+                knight_center_x = self.npc_knight_x + TILE_SIZE // 2
+                knight_center_y = self.npc_knight_y + TILE_SIZE // 2
+                dist = math.hypot(player_center_x - knight_center_x, player_center_y - knight_center_y)
+                if dist < TILE_SIZE * 1.5:
+                    self.knight_dialogue_state = 1
+                    self.knight_dialogue_index = 0
+                    
+                    # Face the Knight
+                    dx = self.npc_knight_x - self.player_x
+                    dy = self.npc_knight_y - self.player_y
+                    if abs(dx) > abs(dy):
+                        self.player_dir = "left" if dx < 0 else "right"
+                    else:
+                        self.player_dir = "up" if dy < 0 else "down"
+                        
+                    # Face the Player
+                    dx_kn = self.player_x - self.npc_knight_x
+                    dy_kn = self.player_y - self.npc_knight_y
+                    if abs(dx_kn) > abs(dy_kn):
+                        self.npc_knight_dir = "right" if dx_kn > 0 else "left"
+                    else:
+                        self.npc_knight_dir = "down" if dy_kn > 0 else "up"
+                else:
+                    self.npc_knight_dir = "down"
+
+        # Update Knight walking to down portal
+        if self.knight_dialogue_state == 2:
+            target_y_max = (len(self.game_map) - 1) * TILE_SIZE
+            if self.npc_knight_y < target_y_max:
+                self.npc_knight_y += 2
+                self.npc_knight_dir = "down"
+                self.npc_knight_anim_timer += 1
+                if self.npc_knight_anim_timer >= 10:
+                    self.npc_knight_anim_timer = 0
+                    if self.npc_knight_down_sprites:
+                        self.npc_knight_anim_frame = (self.npc_knight_anim_frame + 1) % len(self.npc_knight_down_sprites)
+
+            if self.npc_knight_y >= target_y_max:
+                self.npc_knight_y = target_y_max
+                self.knight_dialogue_state = 3
+                self.npc_knight_found = False
+                
+                # Remove NPC collision obstacle so player can pass
+                if 'K' in self.npc_positions_data:
+                    self.npc_positions_data['K'] = []
+                
+                # Update self.game_map so the player can walk through
+                for r_idx, r_str in enumerate(self.game_map):
+                    if 'K' in r_str:
+                        self.game_map[r_idx] = r_str.replace('K', '7')
+                        
+                print("⚔️ Knight reached down portal and disappeared from stage select!")
+
         # Update player movement using cursor from main menu
         self.update_player_movement()
 
@@ -1198,8 +1464,8 @@ class StageSelect:
     # UPDATE PLAYER MOVEMENT
     # ============================================================
     def update_player_movement(self):
-        # Block movement during active dialogue or if player block timer is active
-        if self.oldman_dialogue_state == 1 or self.player_block_timer > 0:
+        # Block movement during active dialogue or while Old Man / Skeleton / Knight / Bromen is in sequence
+        if self.oldman_dialogue_state in (1, 2) or self.skeleton_dialogue_state in (1, 2) or self.knight_dialogue_state in (1, 2) or self.bromen_dialogue_state in (1, 2) or self.player_block_timer > 0:
             return
 
         vx, vy = 0, 0
@@ -1331,10 +1597,40 @@ class StageSelect:
             portal.draw(self.screen, self.camera_x, self.camera_y, ZOOM, self.width, self.height)
 
         # Draw NPCs (before player so player is on top)
-        # Bromen - Animated
+        # Bromen - Idle, Teleporting, or Quest Exclamation
         if self.npc_bromen_found:
-            self.draw_npc_animated(self.npc_bromen_x, self.npc_bromen_y,
-                                   self.npc_bromen_sprites, self.npc_bromen_anim_frame)
+            if self.bromen_dialogue_state == 2:
+                if self.npc_bromen_teleport_sprites and self.bromen_teleport_frame < len(self.npc_bromen_teleport_sprites):
+                    sprite = self.npc_bromen_teleport_sprites[self.bromen_teleport_frame]
+                    self.draw_npc_static(self.npc_bromen_x, self.npc_bromen_y, sprite)
+            else:
+                if self.npc_bromen_sprites:
+                    self.draw_npc_animated(self.npc_bromen_x, self.npc_bromen_y,
+                                           self.npc_bromen_sprites, self.npc_bromen_anim_frame)
+                
+                # Draw quest exclamation mark above Bromen's head if dialogue hasn't started and player is in proximity
+                if self.bromen_dialogue_state == 0:
+                    player_center_x = self.player_x + TILE_SIZE // 2
+                    player_center_y = self.player_y + TILE_SIZE // 2
+                    bro_center_x = self.npc_bromen_x + TILE_SIZE // 2
+                    bro_center_y = self.npc_bromen_y + TILE_SIZE // 2
+                    dist = math.hypot(player_center_x - bro_center_x, player_center_y - bro_center_y)
+                    
+                    if dist < TILE_SIZE * 3.0:
+                        screen_x = (self.npc_bromen_x - self.camera_x) * ZOOM
+                        screen_y = (self.npc_bromen_y - self.camera_y) * ZOOM
+                        
+                        excl_font = pygame.font.SysFont("Comic Sans MS", int(18 * ZOOM), bold=True)
+                        excl_surf = excl_font.render("!", True, (255, 0, 0))
+                        
+                        bounce = math.sin(self.frame_counter * 0.1) * 4 * ZOOM
+                        
+                        excl_x = screen_x + (TILE_SIZE * ZOOM) // 2 - excl_surf.get_width() // 2
+                        excl_y = screen_y - excl_surf.get_height() - 4 * ZOOM + bounce
+                        
+                        shadow_surf = excl_font.render("!", True, (0, 0, 0))
+                        self.screen.blit(shadow_surf, (excl_x + 1, excl_y + 1))
+                        self.screen.blit(excl_surf, (excl_x, excl_y))
 
         # Oldman - Static or Animated Walking
         if self.npc_oldman_found:
@@ -1395,15 +1691,111 @@ class StageSelect:
                         # Blit main exclamation
                         self.screen.blit(excl_surf, (excl_x, excl_y))
 
-        # Skeleton - Static
+        # Skeleton - Static or Animated Walking
         if self.npc_skeleton_found:
-            self.draw_npc_static(self.npc_skeleton_x, self.npc_skeleton_y,
-                                 self.npc_skeleton_sprite)
+            if self.skeleton_dialogue_state == 2:
+                target_y = (self.npc_skeleton_tile_y + 1) * TILE_SIZE
+                if self.npc_skeleton_y < target_y and self.npc_skeleton_down_sprites:
+                    self.draw_npc_animated(self.npc_skeleton_x, self.npc_skeleton_y,
+                                           self.npc_skeleton_down_sprites, self.npc_skeleton_anim_frame)
+                elif self.npc_skeleton_right_sprites:
+                    self.draw_npc_animated(self.npc_skeleton_x, self.npc_skeleton_y,
+                                           self.npc_skeleton_right_sprites, self.npc_skeleton_anim_frame)
+                else:
+                    self.draw_npc_static(self.npc_skeleton_x, self.npc_skeleton_y,
+                                         self.npc_skeleton_sprite)
+            else:
+                sprites = None
+                if self.npc_skeleton_dir == "left":
+                    sprites = self.npc_skeleton_left_sprites
+                elif self.npc_skeleton_dir == "right":
+                    sprites = self.npc_skeleton_right_sprites
+                elif self.npc_skeleton_dir == "up":
+                    sprites = self.npc_skeleton_up_sprites
+                else:
+                    sprites = self.npc_skeleton_down_sprites
 
-        # Knight - Static (switches between front and side)
-        if self.npc_knight_found and self.npc_knight_current_sprite:
-            self.draw_npc_static(self.npc_knight_x, self.npc_knight_y,
-                                 self.npc_knight_current_sprite)
+                if sprites:
+                    self.draw_npc_static(self.npc_skeleton_x, self.npc_skeleton_y,
+                                         sprites[0])
+                else:
+                    self.draw_npc_static(self.npc_skeleton_x, self.npc_skeleton_y,
+                                         self.npc_skeleton_sprite)
+                
+                # Draw quest exclamation mark above Skeleton's head if dialogue hasn't started and player is in proximity
+                if self.skeleton_dialogue_state == 0:
+                    player_center_x = self.player_x + TILE_SIZE // 2
+                    player_center_y = self.player_y + TILE_SIZE // 2
+                    skel_center_x = self.npc_skeleton_x + TILE_SIZE // 2
+                    skel_center_y = self.npc_skeleton_y + TILE_SIZE // 2
+                    dist = math.hypot(player_center_x - skel_center_x, player_center_y - skel_center_y)
+                    
+                    if dist < TILE_SIZE * 3.0:
+                        screen_x = (self.npc_skeleton_x - self.camera_x) * ZOOM
+                        screen_y = (self.npc_skeleton_y - self.camera_y) * ZOOM
+                        
+                        excl_font = pygame.font.SysFont("Comic Sans MS", int(18 * ZOOM), bold=True)
+                        excl_surf = excl_font.render("!", True, (255, 0, 0))
+                        
+                        bounce = math.sin(self.frame_counter * 0.1) * 4 * ZOOM
+                        
+                        excl_x = screen_x + (TILE_SIZE * ZOOM) // 2 - excl_surf.get_width() // 2
+                        excl_y = screen_y - excl_surf.get_height() - 4 * ZOOM + bounce
+                        
+                        shadow_surf = excl_font.render("!", True, (0, 0, 0))
+                        self.screen.blit(shadow_surf, (excl_x + 1, excl_y + 1))
+                        self.screen.blit(excl_surf, (excl_x, excl_y))
+
+        # Knight - Static or Animated Walking
+        if self.npc_knight_found:
+            if self.knight_dialogue_state == 2:
+                if self.npc_knight_down_sprites:
+                    self.draw_npc_animated(self.npc_knight_x, self.npc_knight_y,
+                                           self.npc_knight_down_sprites, self.npc_knight_anim_frame)
+                else:
+                    self.draw_npc_static(self.npc_knight_x, self.npc_knight_y,
+                                         self.npc_knight_sprite)
+            else:
+                sprites = None
+                if self.npc_knight_dir == "left":
+                    sprites = self.npc_knight_left_sprites
+                elif self.npc_knight_dir == "right":
+                    sprites = self.npc_knight_right_sprites
+                elif self.npc_knight_dir == "up":
+                    sprites = self.npc_knight_up_sprites
+                else:
+                    sprites = self.npc_knight_down_sprites
+
+                if sprites:
+                    self.draw_npc_static(self.npc_knight_x, self.npc_knight_y,
+                                         sprites[0])
+                else:
+                    self.draw_npc_static(self.npc_knight_x, self.npc_knight_y,
+                                         self.npc_knight_sprite)
+                
+                # Draw quest exclamation mark above Knight's head if dialogue hasn't started and player is in proximity
+                if self.knight_dialogue_state == 0:
+                    player_center_x = self.player_x + TILE_SIZE // 2
+                    player_center_y = self.player_y + TILE_SIZE // 2
+                    knt_center_x = self.npc_knight_x + TILE_SIZE // 2
+                    knt_center_y = self.npc_knight_y + TILE_SIZE // 2
+                    dist = math.hypot(player_center_x - knt_center_x, player_center_y - knt_center_y)
+                    
+                    if dist < TILE_SIZE * 3.0:
+                        screen_x = (self.npc_knight_x - self.camera_x) * ZOOM
+                        screen_y = (self.npc_knight_y - self.camera_y) * ZOOM
+                        
+                        excl_font = pygame.font.SysFont("Comic Sans MS", int(18 * ZOOM), bold=True)
+                        excl_surf = excl_font.render("!", True, (255, 0, 0))
+                        
+                        bounce = math.sin(self.frame_counter * 0.1) * 4 * ZOOM
+                        
+                        excl_x = screen_x + (TILE_SIZE * ZOOM) // 2 - excl_surf.get_width() // 2
+                        excl_y = screen_y - excl_surf.get_height() - 4 * ZOOM + bounce
+                        
+                        shadow_surf = excl_font.render("!", True, (0, 0, 0))
+                        self.screen.blit(shadow_surf, (excl_x + 1, excl_y + 1))
+                        self.screen.blit(excl_surf, (excl_x, excl_y))
 
         # Draw player
         self.draw_player()
@@ -1533,10 +1925,16 @@ class StageSelect:
     # DRAW DIALOGUE BOX
     # ============================================================
     def draw_dialogue_box(self):
-        if self.oldman_dialogue_state != 1:
+        if self.oldman_dialogue_state == 1:
+            speaker, text = self.dialogue_lines[self.oldman_dialogue_index]
+        elif self.skeleton_dialogue_state == 1:
+            speaker, text = self.skeleton_dialogue_lines[self.skeleton_dialogue_index]
+        elif self.knight_dialogue_state == 1:
+            speaker, text = self.knight_dialogue_lines[self.knight_dialogue_index]
+        elif self.bromen_dialogue_state == 1:
+            speaker, text = self.bromen_dialogue_lines[self.bromen_dialogue_index]
+        else:
             return
-
-        speaker, text = self.dialogue_lines[self.oldman_dialogue_index]
 
         # Dialogue box layout
         box_width = self.width - 80
@@ -1551,7 +1949,17 @@ class StageSelect:
         self.screen.blit(dialogue_surface, (box_x, box_y))
 
         # Render speaker name
-        name_color = (255, 215, 0) if speaker == "Old Man" else (100, 255, 100) # Gold vs Green
+        if speaker == "Old Man":
+            name_color = (255, 215, 0)
+        elif speaker == "Skeleton":
+            name_color = (200, 100, 255) # Cyan/Purple for Skeleton
+        elif speaker == "Knight":
+            name_color = (100, 200, 255) # Cyan/Blue for Knight
+        elif speaker == "Bromen":
+            name_color = (255, 180, 50) # Orange/Gold for Bromen
+        else:
+            name_color = (100, 255, 100) # Green for Student / Player
+
         name_text = self.font.render(speaker, True, name_color)
         self.screen.blit(name_text, (box_x + 20, box_y + 15))
 
@@ -1595,6 +2003,29 @@ class StageSelect:
                         self.oldman_dialogue_state = 2
                         self.player_block_timer = 3.0
                         print("🧙‍♂️ Dialog complete! Old Man starts moving left.")
+                    return "dialogue_advance"
+            elif self.skeleton_dialogue_state == 1:
+                if event.key in [pygame.K_SPACE, pygame.K_RETURN]:
+                    self.skeleton_dialogue_index += 1
+                    if self.skeleton_dialogue_index >= len(self.skeleton_dialogue_lines):
+                        self.skeleton_dialogue_state = 2
+                        print("☠️ Dialog complete! Skeleton starts moving right.")
+                    return "dialogue_advance"
+            elif self.knight_dialogue_state == 1:
+                if event.key in [pygame.K_SPACE, pygame.K_RETURN]:
+                    self.knight_dialogue_index += 1
+                    if self.knight_dialogue_index >= len(self.knight_dialogue_lines):
+                        self.knight_dialogue_state = 2
+                        print("⚔️ Dialog complete! Knight starts moving down.")
+                    return "dialogue_advance"
+            elif self.bromen_dialogue_state == 1:
+                if event.key in [pygame.K_SPACE, pygame.K_RETURN]:
+                    self.bromen_dialogue_index += 1
+                    if self.bromen_dialogue_index >= len(self.bromen_dialogue_lines):
+                        self.bromen_dialogue_state = 2
+                        self.bromen_teleport_frame = 0
+                        self.bromen_teleport_timer = 0
+                        print("✨ Dialogue complete! Bromen starts teleporting away.")
                     return "dialogue_advance"
 
             if event.key == pygame.K_ESCAPE:

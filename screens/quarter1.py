@@ -215,18 +215,20 @@ class Quarter1:
         self.npc_skeleton_tile_y = 0
         self.npc_skeleton_found = False
 
-        # Knight NPC (static with front and side)
-        self.npc_knight_front_sprite = None
-        self.npc_knight_side_sprite = None
-        self.npc_knight_current_sprite = None
+        # Knight NPC (static & interactive)
+        self.npc_knight_sprite = None
         self.npc_knight_x = 0
         self.npc_knight_y = 0
         self.npc_knight_tile_x = 0
         self.npc_knight_tile_y = 0
         self.npc_knight_found = False
-        self.npc_knight_facing = "front"
-        self.npc_knight_side_timer = 0
-        self.npc_knight_side_duration = 60
+        self.npc_knight_left_sprites = []
+        self.npc_knight_down_sprites = []
+        self.npc_knight_right_sprites = []
+        self.npc_knight_up_sprites = []
+        self.npc_knight_dir = "down"
+        self.npc_knight_anim_frame = 0
+        self.npc_knight_anim_timer = 0
 
         # ============================================================
         # LOAD STATIC NPC SPRITES
@@ -661,54 +663,63 @@ class Quarter1:
             placeholder.fill((255, 255, 255))
             self.npc_skeleton_sprite = placeholder
 
-        # Load Knight (front and side)
-        knight_front_path = os.path.join(self.NPC_PATH_KNIGHT, "knight.png")
-        knight_side_path = os.path.join(self.NPC_PATH_KNIGHT, "knightside.png")
-
+        # Load Knight
+        knight_path = os.path.join(self.NPC_PATH_KNIGHT, "knight.png")
         try:
-            if os.path.exists(knight_front_path):
-                img = pygame.image.load(knight_front_path).convert_alpha()
-                self.npc_knight_front_sprite = pygame.transform.scale(img, (TILE_SIZE, TILE_SIZE))
-                print(f"✅ Loaded Knight front sprite")
+            if os.path.exists(knight_path):
+                img = pygame.image.load(knight_path).convert_alpha()
+                self.npc_knight_sprite = pygame.transform.scale(img, (TILE_SIZE, TILE_SIZE))
+                print(f"✅ Loaded Knight sprite")
             else:
-                print(f"⚠️ Knight front sprite not found at: {knight_front_path}")
+                print(f"⚠️ Knight sprite not found at: {knight_path}")
                 placeholder = pygame.Surface((TILE_SIZE, TILE_SIZE))
                 placeholder.fill((192, 192, 192))
-                pygame.draw.circle(placeholder, (0, 0, 0), (TILE_SIZE // 2, TILE_SIZE // 2), 12)
-                pygame.draw.rect(placeholder, (128, 128, 128), (TILE_SIZE // 2 - 8, TILE_SIZE // 2 - 12, 16, 8))
-                font = pygame.font.SysFont(None, 10)
-                text = font.render("KNT", True, (0, 0, 0))
-                placeholder.blit(text, (4, TILE_SIZE - 12))
-                self.npc_knight_front_sprite = placeholder
+                self.npc_knight_sprite = placeholder
+
+            # Load Knight walking left sprites
+            self.npc_knight_left_sprites = []
+            for name in ["knight_left.png", "knight_left_1.png", "knight_left_2.png"]:
+                path = os.path.join(self.NPC_PATH_KNIGHT, name)
+                if os.path.exists(path):
+                    img = pygame.image.load(path).convert_alpha()
+                    scaled = pygame.transform.scale(img, (TILE_SIZE, TILE_SIZE))
+                    self.npc_knight_left_sprites.append(scaled)
+                    print(f"✅ Loaded Knight left frame: {name}")
+
+            # Load Knight walking down sprites
+            self.npc_knight_down_sprites = []
+            for name in ["knight_down.png", "knight_down_1.png", "knight_down_2.png"]:
+                path = os.path.join(self.NPC_PATH_KNIGHT, name)
+                if os.path.exists(path):
+                    img = pygame.image.load(path).convert_alpha()
+                    scaled = pygame.transform.scale(img, (TILE_SIZE, TILE_SIZE))
+                    self.npc_knight_down_sprites.append(scaled)
+                    print(f"✅ Loaded Knight down frame: {name}")
+
+            # Load Knight walking right sprites
+            self.npc_knight_right_sprites = []
+            for name in ["knight_right.png", "knight_right_1.png", "knight_right_2.png"]:
+                path = os.path.join(self.NPC_PATH_KNIGHT, name)
+                if os.path.exists(path):
+                    img = pygame.image.load(path).convert_alpha()
+                    scaled = pygame.transform.scale(img, (TILE_SIZE, TILE_SIZE))
+                    self.npc_knight_right_sprites.append(scaled)
+                    print(f"✅ Loaded Knight right frame: {name}")
+
+            # Load Knight walking up sprites
+            self.npc_knight_up_sprites = []
+            for name in ["knight_up.png", "knight_up_1.png", "knight_up_2.png"]:
+                path = os.path.join(self.NPC_PATH_KNIGHT, name)
+                if os.path.exists(path):
+                    img = pygame.image.load(path).convert_alpha()
+                    scaled = pygame.transform.scale(img, (TILE_SIZE, TILE_SIZE))
+                    self.npc_knight_up_sprites.append(scaled)
+                    print(f"✅ Loaded Knight up frame: {name}")
         except Exception as e:
-            print(f"❌ Error loading Knight front: {e}")
+            print(f"❌ Error loading Knight: {e}")
             placeholder = pygame.Surface((TILE_SIZE, TILE_SIZE))
             placeholder.fill((192, 192, 192))
-            self.npc_knight_front_sprite = placeholder
-
-        try:
-            if os.path.exists(knight_side_path):
-                img = pygame.image.load(knight_side_path).convert_alpha()
-                self.npc_knight_side_sprite = pygame.transform.scale(img, (TILE_SIZE, TILE_SIZE))
-                print(f"✅ Loaded Knight side sprite")
-            else:
-                print(f"⚠️ Knight side sprite not found at: {knight_side_path}")
-                placeholder = pygame.Surface((TILE_SIZE, TILE_SIZE))
-                placeholder.fill((180, 180, 180))
-                pygame.draw.circle(placeholder, (0, 0, 0), (TILE_SIZE // 2 + 2, TILE_SIZE // 2), 10)
-                pygame.draw.rect(placeholder, (128, 128, 128), (TILE_SIZE // 2 - 4, TILE_SIZE // 2 - 10, 8, 6))
-                font = pygame.font.SysFont(None, 10)
-                text = font.render("SIDE", True, (0, 0, 0))
-                placeholder.blit(text, (2, TILE_SIZE - 12))
-                self.npc_knight_side_sprite = placeholder
-        except Exception as e:
-            print(f"❌ Error loading Knight side: {e}")
-            placeholder = pygame.Surface((TILE_SIZE, TILE_SIZE))
-            placeholder.fill((180, 180, 180))
-            self.npc_knight_side_sprite = placeholder
-
-        self.npc_knight_current_sprite = self.npc_knight_front_sprite
-        self.npc_knight_facing = "front"
+            self.npc_knight_sprite = placeholder
 
     # ============================================================
     # PORTAL SPRITE ANIMATION CLASS
@@ -1390,9 +1401,23 @@ class Quarter1:
             self.draw_npc_static(self.npc_skeleton_x, self.npc_skeleton_y,
                                  self.npc_skeleton_sprite)
 
-        if self.npc_knight_found and self.npc_knight_current_sprite:
-            self.draw_npc_static(self.npc_knight_x, self.npc_knight_y,
-                                 self.npc_knight_current_sprite)
+        if self.npc_knight_found:
+            sprites = None
+            if self.npc_knight_dir == "left":
+                sprites = self.npc_knight_left_sprites
+            elif self.npc_knight_dir == "right":
+                sprites = self.npc_knight_right_sprites
+            elif self.npc_knight_dir == "up":
+                sprites = self.npc_knight_up_sprites
+            else:
+                sprites = self.npc_knight_down_sprites
+
+            if sprites:
+                self.draw_npc_static(self.npc_knight_x, self.npc_knight_y,
+                                     sprites[0])
+            elif self.npc_knight_sprite:
+                self.draw_npc_static(self.npc_knight_x, self.npc_knight_y,
+                                     self.npc_knight_sprite)
 
         self.draw_player()
 

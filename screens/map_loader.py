@@ -118,15 +118,20 @@ class MapLoader:
         return None
 
     def replace_npc_markers_with_walkable_tiles(self):
-        """Replace NPC markers with walkable tiles for rendering"""
+        """Replace NPC markers and player start 'P' with walkable tiles for rendering"""
         modified_map = []
         for y, row in enumerate(self.game_map):
             row_list = list(row)
             modified = False
             for x, char in enumerate(row_list):
-                if char == 'N' or char in self.npc_positions:
-                    # Replace with walkable tile (6 or 7)
-                    if char in ['B', 'K']:
+                if char in ['P', 'N'] or char in self.npc_positions:
+                    # Replace with walkable tile
+                    if char == 'P':
+                        if self.current_map_name == "map.txt":
+                            row_list[x] = '#'
+                        else:
+                            row_list[x] = 'G'
+                    elif char in ['B', 'K']:
                         row_list[x] = '7'
                     elif char == 'O':
                         row_list[x] = '6'
