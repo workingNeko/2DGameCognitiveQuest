@@ -996,12 +996,12 @@ class StageSelect:
                 self.main_menu.quarter1 = Quarter1(self.screen, self.main_menu, map_name)
                 self.main_menu.stage_select = None
                 return True
-            # Check if it's an up portal (goes to Quarter4 - map10.txt to map12.txt)
+            # Check if it's an up portal (facing up, at the bottom next to Knight, goes to Quarter2)
             elif current_portal.direction == 'up':
-                map_name = random.choice(["map10.txt", "map11.txt", "map12.txt"])
-                print(f"🎮 Entering Quarter 4 - {map_name}")
-                self.main_menu.current_screen = "quarter4"
-                self.main_menu.quarter4 = Quarter4(self.screen, self.main_menu, map_name)
+                map_name = "map4.txt"
+                print(f"🎮 Entering Quarter 2 - {map_name}")
+                self.main_menu.current_screen = "quarter2"
+                self.main_menu.quarter2 = Quarter2(self.screen, self.main_menu, map_name)
                 self.main_menu.stage_select = None
                 return True
             # Check if it's a right portal (goes to Quarter3 - map7.txt to map9.txt)
@@ -1012,12 +1012,12 @@ class StageSelect:
                 self.main_menu.quarter3 = Quarter3(self.screen, self.main_menu, map_name)
                 self.main_menu.stage_select = None
                 return True
-            # Check if it's a down portal (goes to Quarter2 - map4.txt to map6.txt)
+            # Check if it's a down portal (facing down, at the top next to Bromen, goes to Quarter4)
             elif current_portal.direction == 'down':
-                map_name = random.choice(["map4.txt", "map5.txt", "map6.txt"])
-                print(f"🎮 Entering Quarter 2 - {map_name}")
-                self.main_menu.current_screen = "quarter2"
-                self.main_menu.quarter2 = Quarter2(self.screen, self.main_menu, map_name)
+                map_name = random.choice(["map10.txt", "map11.txt", "map12.txt"])
+                print(f"🎮 Entering Quarter 4 - {map_name}")
+                self.main_menu.current_screen = "quarter4"
+                self.main_menu.quarter4 = Quarter4(self.screen, self.main_menu, map_name)
                 self.main_menu.stage_select = None
                 return True
             # Regular portal teleport (to another portal on same map)
@@ -1165,10 +1165,10 @@ class StageSelect:
                     self.main_menu.quarter1 = Quarter1(self.screen, self.main_menu, map_name)
                     self.main_menu.stage_select = None
                 elif current_portal.direction == 'up':
-                    map_name = random.choice(["map10.txt", "map11.txt", "map12.txt"])
-                    print(f"🎮 Entering Quarter 4 - {map_name}")
-                    self.main_menu.current_screen = "quarter4"
-                    self.main_menu.quarter4 = Quarter4(self.screen, self.main_menu, map_name)
+                    map_name = "map4.txt"
+                    print(f"🎮 Entering Quarter 2 - {map_name}")
+                    self.main_menu.current_screen = "quarter2"
+                    self.main_menu.quarter2 = Quarter2(self.screen, self.main_menu, map_name)
                     self.main_menu.stage_select = None
                 elif current_portal.direction == 'right':
                     map_name = random.choice(["map7.txt", "map8.txt", "map9.txt"])
@@ -1177,10 +1177,10 @@ class StageSelect:
                     self.main_menu.quarter3 = Quarter3(self.screen, self.main_menu, map_name)
                     self.main_menu.stage_select = None
                 elif current_portal.direction == 'down':
-                    map_name = random.choice(["map4.txt", "map5.txt", "map6.txt"])
-                    print(f"🎮 Entering Quarter 2 - {map_name}")
-                    self.main_menu.current_screen = "quarter2"
-                    self.main_menu.quarter2 = Quarter2(self.screen, self.main_menu, map_name)
+                    map_name = random.choice(["map10.txt", "map11.txt", "map12.txt"])
+                    print(f"🎮 Entering Quarter 4 - {map_name}")
+                    self.main_menu.current_screen = "quarter4"
+                    self.main_menu.quarter4 = Quarter4(self.screen, self.main_menu, map_name)
                     self.main_menu.stage_select = None
 
     # ============================================================

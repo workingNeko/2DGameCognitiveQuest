@@ -163,7 +163,7 @@ class Quarter2:
         # ============================================================
         # WALKABLE TILES
         # ============================================================
-        self.WALKABLE_TILES = {"G", "#", "1", "2", "3", "4", "5", "6", "7", "8","P"}
+        self.WALKABLE_TILES = {"G", "#", "1", "2", "3", "4", "5", "6", "7", "8", "P", "L", "H", "I"}
 
         # ============================================================
         # LOAD PLAYER SPRITES
@@ -279,6 +279,10 @@ class Quarter2:
         # Completion flag
         self.completed = False
 
+        # Tile animation variables
+        self.tile_anim_timer = 0
+        self.tile_anim_frame = 0
+
         print(f"✅ Quarter2 initialized with map: {self.map_name}")
         print(f"   Goal portal: {self.goal_portal_direction}")
         print(f"   Portals loaded: {len(self.portals)}")
@@ -357,13 +361,31 @@ class Quarter2:
     # LOAD TILE IMAGES
     # ============================================================
     def load_tile_images(self):
-        def load_tile(filename):
-            path = os.path.join(self.OBJECTS_PATH, filename)
+        def load_tile(filename, is_q2=False):
+            if is_q2:
+                path = os.path.join(self.OBJECTS_PATH, "quarter2tiles", filename)
+            else:
+                path = os.path.join(self.OBJECTS_PATH, filename)
             try:
                 image = pygame.image.load(path).convert_alpha()
-                image = pygame.transform.scale(image, (TILE_SIZE, TILE_SIZE))
+                w_orig, h_orig = image.get_size()
+                
+                # Custom scaling rules
+                if "tree" in filename:
+                    # Scale tree to fit 3 tiles high max (approx 100-110 pixels)
+                    target_h = 110
+                    target_w = max(1, int(w_orig * (target_h / h_orig)))
+                    image = pygame.transform.scale(image, (target_w, target_h))
+                elif "ruin" in filename or "rock" in filename:
+                    # Ruins/walls/stones: scale by 2.0
+                    image = pygame.transform.scale(image, (int(w_orig * 2), int(h_orig * 2)))
+                else:
+                    # Everything else: exactly 1 block tall (32x32)
+                    image = pygame.transform.scale(image, (TILE_SIZE, TILE_SIZE))
                 return image
             except Exception:
+                if is_q2:
+                    return load_tile(filename, is_q2=False)
                 placeholder = pygame.Surface((TILE_SIZE, TILE_SIZE))
                 placeholder.fill((100, 100, 100))
                 pygame.draw.rect(placeholder, (255, 255, 255), placeholder.get_rect(), 1)
@@ -384,6 +406,47 @@ class Quarter2:
 
         for key, filename in tile_files:
             tiles[key] = load_tile(filename)
+
+        # Overwrite G and T with Q2 tiles for Quarter 2 Maps
+        tiles["G"] = load_tile("grass.png", is_q2=True)
+        tiles["T"] = load_tile("tree_pine_very_tall_clean.png", is_q2=True)
+
+        # New Q2 tiles
+        q2_tiles = {
+            "a": "barrel_clean.png",
+            "b": "barrel_moss.png",
+            "c": "bush_large_flowers_1.png",
+            "F": "bush_large_flowers_2.png",
+            "e": "bush_medium_flowers.png",
+            "g": "crate_clean_crossed.png",
+            "h": "crate_clean_plain.png",
+            "i": "crate_moss_crossed.png",
+            "j": "fence_moss_horizontal_1.png",
+            "m": "flag_stand_wood.png",
+            "o": "tree_pine_medium_clean.png",
+            "p": "tree_pine_medium_moss.png",
+            "q": "tree_pine_very_tall_clean.png",
+            "x": "ruin_pillar_broken.png",
+            "y": "ruin_pillar_low.png",
+            "z": "ruin_stone_medium_1.png",
+            "v": "ruin_stone_medium_2.png",
+            "w": "ruin_stones_small.png",
+            "A": "ruin_arch_broken.png",
+            "D": "ruin_building_large.png",
+            "L": "ladder_clean_vertical.png",
+            "H": "ladder_moss_vertical_1.png",
+            "I": "ladder_broken_vertical.png",
+            "=": "wall_stone_horizontal.png",
+            "|": "wall_stone_vertical.png"
+        }
+
+        for key, filename in q2_tiles.items():
+            tiles[key] = load_tile(filename, is_q2=True)
+
+        # Animated Q2 tiles (chests and flags)
+        for i in range(4):
+            tiles[f"chest_green_{i}"] = load_tile(f"chest_green_{i}.png", is_q2=True)
+            tiles[f"flag_hanging_red_{i}"] = load_tile(f"flag_hanging_red_{i}.png", is_q2=True)
 
         return tiles
 
@@ -865,6 +928,12 @@ class Quarter2:
         dt = self.clock.tick(FPS) / 1000.0
         self.frame_counter += 1
 
+        # Update tile animation frame
+        self.tile_anim_timer += 1
+        if self.tile_anim_timer >= 12:
+            self.tile_anim_timer = 0
+            self.tile_anim_frame = (self.tile_anim_frame + 1) % 4
+
         if self.teleport_cooldown > 0:
             self.teleport_cooldown -= dt
 
@@ -930,15 +999,30 @@ class Quarter2:
     # DRAW TILE
     # ============================================================
     def draw_tile(self, c, world_x, world_y):
+        if c == 'f':
+            image = self.tile_images.get(f"chest_green_{self.tile_anim_frame}", self.fallback_tile)
+        elif c == 'k':
+            image = self.tile_images.get(f"flag_hanging_red_{self.tile_anim_frame}", self.fallback_tile)
+        else:
+            image = self.tile_images.get(c, self.fallback_tile)
+
+        w_img, h_img = image.get_size()
+        
+        # Calculate screen position based on camera and zoom
         screen_x = (world_x - self.camera_x) * ZOOM
         screen_y = (world_y - self.camera_y) * ZOOM
-
-        margin = TILE_SIZE * ZOOM * 2
+        
+        # Center horizontally and align bottom of sprite with bottom of tile
+        screen_x += (TILE_SIZE * ZOOM) / 2.0 - (w_img * ZOOM) / 2.0
+        screen_y += (TILE_SIZE * ZOOM) - (h_img * ZOOM)
+        
+        scaled_w = int(w_img * ZOOM)
+        scaled_h = int(h_img * ZOOM)
+        
+        margin = max(scaled_w, scaled_h) * 2
         if (-margin <= screen_x <= self.width + margin and
                 -margin <= screen_y <= self.height + margin):
-            image = self.tile_images.get(c, self.fallback_tile)
-            scaled_size = int(TILE_SIZE * ZOOM)
-            scaled_image = pygame.transform.scale(image, (scaled_size, scaled_size))
+            scaled_image = pygame.transform.scale(image, (scaled_w, scaled_h))
             self.screen.blit(scaled_image, (screen_x, screen_y))
 
     # ============================================================
@@ -997,15 +1081,20 @@ class Quarter2:
         start_row = max(0, int(self.camera_y / TILE_SIZE) - 2)
         end_row = min(self.ROWS, int((self.camera_y + self.height / ZOOM) / TILE_SIZE) + 3)
 
-        # Draw visible tiles using render_map (First pass: Skip trees and draw grass under them)
+        # Draw visible tiles using render_map (First pass: Skip trees/tall obstacles and draw grass under them)
         for row in range(start_row, end_row):
             for col in range(start_col, end_col):
                 if row < len(self.render_map) and col < len(self.render_map[row]):
                     tile_char = self.render_map[row][col]
-                    if tile_char == 'T':
-                        # Draw grass under the tree so there is no black void under the player
+                    if tile_char not in self.WALKABLE_TILES and tile_char not in ['r', 'l', 'u', 'd']:
+                        # First draw grass under obstacles
                         self.draw_tile('G', col * TILE_SIZE, row * TILE_SIZE)
+                        # If it's a low obstacle, draw it now (first pass)
+                        if tile_char not in {'T', 'o', 'p', 'q', 'k', 'm', 'x', 'y', 'A', 'D'}:
+                            self.draw_tile(tile_char, col * TILE_SIZE, row * TILE_SIZE)
                     else:
+                        if tile_char in {'L', 'H', 'I'}:
+                            self.draw_tile('G', col * TILE_SIZE, row * TILE_SIZE)
                         self.draw_tile(tile_char, col * TILE_SIZE, row * TILE_SIZE)
 
         for portal in self.portals:
@@ -1043,12 +1132,12 @@ class Quarter2:
 
         self.draw_player()
 
-        # Draw visible tree tiles on top of everything (Second pass)
+        # Draw visible tall tiles on top of everything (Second pass)
         for row in range(start_row, end_row):
             for col in range(start_col, end_col):
                 if row < len(self.render_map) and col < len(self.render_map[row]):
                     tile_char = self.render_map[row][col]
-                    if tile_char == 'T':
+                    if tile_char in {'T', 'o', 'p', 'q', 'k', 'm', 'x', 'y', 'A', 'D'}:
                         self.draw_tile(tile_char, col * TILE_SIZE, row * TILE_SIZE)
         self.draw_ui()
 
