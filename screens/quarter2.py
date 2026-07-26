@@ -163,7 +163,7 @@ class Quarter2:
         # ============================================================
         # WALKABLE TILES
         # ============================================================
-        self.WALKABLE_TILES = {"G", "#", "1", "2", "3", "4", "5", "6", "7", "8", "P", "L", "H", "I"}
+        self.WALKABLE_TILES = {"G", "#", "1", "2", "3", "4", "5", "6", "7", "8", "P"}
 
         # ============================================================
         # LOAD PLAYER SPRITES
@@ -283,6 +283,85 @@ class Quarter2:
         self.tile_anim_timer = 0
         self.tile_anim_frame = 0
 
+        # Scan map for quiz stations 1, 2, 3, 4, 5
+        self.quiz_stations = {}
+        for y, row in enumerate(self.game_map):
+            for x, c in enumerate(row):
+                if c in ['1', '2', '3', '4', '5']:
+                    num = int(c)
+                    self.quiz_stations[num] = (x, y)
+                    print(f"📍 Quiz Station {num} found at: ({x}, {y})")
+
+        # Station Standby Directions
+        if "map5" in self.map_name.lower():
+            self.station_directions = {
+                1: "left",
+                2: "right",
+                3: "right",
+                4: "right",
+                5: "left"
+            }
+        else:
+            self.station_directions = {
+                1: "right",
+                2: "right",
+                3: "right",
+                4: "right",
+                5: "right"
+            }
+
+        # Initialize Knight at station 1 if available
+        if 1 in self.quiz_stations:
+            self.npc_knight_tile_x, self.npc_knight_tile_y = self.quiz_stations[1]
+            self.npc_knight_x = self.npc_knight_tile_x * TILE_SIZE
+            self.npc_knight_y = self.npc_knight_tile_y * TILE_SIZE
+            self.npc_knight_found = True
+            print(f"⚔️ Knight spawned at Quiz Station 1: {self.quiz_stations[1]}")
+
+        # Quiz state variables
+        self.quiz_state = 0  # 0: waiting proximity, 1: dialog Q, 2: wrong try again, 3: correct phrase transition, 5: final speech, 6: quiz complete
+        self.quiz_station_index = 1  # current station (1-5)
+        self.current_question_index = 0
+        self.selected_choice_index = -1  # choice highlighted
+        self.npc_knight_dir = self.station_directions.get(1, "right")
+
+        # Correct answer random responses
+        self.current_correct_phrase = ""
+        self.correct_phrases = [
+            "Amazing! now let's go to the next one!",
+            "That's great! Now to the next one!",
+            "You're good at this, Now let's go to the next one!"
+        ]
+
+        # Questions List (dungeon-themed)
+        self.quiz_questions = [
+            {
+                "question": "What is the sum of angles in a triangle?",
+                "choices": ["A. 90 degrees", "B. 180 degrees", "C. 360 degrees", "D. 270 degrees"],
+                "correct": 1
+            },
+            {
+                "question": "Which polygon has 5 sides?",
+                "choices": ["A. Hexagon", "B. Pentagon", "C. Octagon", "D. Quadrilateral"],
+                "correct": 1
+            },
+            {
+                "question": "What is the formula for the area of a rectangle?",
+                "choices": ["A. length * width", "B. 2 * (length + width)", "C. base * height / 2", "D. side * side"],
+                "correct": 0
+            },
+            {
+                "question": "A slide (translation) changes a shape's position but not its size or orientation.",
+                "choices": ["A. False", "B. True"],
+                "correct": 1
+            },
+            {
+                "question": "Which of these is a composite figure?",
+                "choices": ["A. A single triangle", "B. A square combined with a semicircle", "C. A single circle", "D. A single line"],
+                "correct": 1
+            }
+        ]
+
         print(f"✅ Quarter2 initialized with map: {self.map_name}")
         print(f"   Goal portal: {self.goal_portal_direction}")
         print(f"   Portals loaded: {len(self.portals)}")
@@ -372,11 +451,17 @@ class Quarter2:
                 
                 # Custom scaling rules
                 if "tree" in filename:
-                    # Scale tree to fit 3 tiles high max (approx 100-110 pixels)
-                    target_h = 110
+                    if "very_tall" in filename:
+                        target_h = 160  # 5 tiles tall
+                    elif "medium_clean" in filename:
+                        target_h = 128  # 4 tiles tall
+                    elif "medium_moss" in filename or "medium_clean" not in filename:
+                        target_h = 96   # 3 tiles tall
+                    else:
+                        target_h = 110
                     target_w = max(1, int(w_orig * (target_h / h_orig)))
                     image = pygame.transform.scale(image, (target_w, target_h))
-                elif "ruin" in filename or "rock" in filename:
+                elif ("ruin" in filename or "rock" in filename) and not any(filename.startswith(f"ruin{i}") for i in range(1, 11)):
                     # Ruins/walls/stones: scale by 2.0
                     image = pygame.transform.scale(image, (int(w_orig * 2), int(h_orig * 2)))
                 else:
@@ -417,27 +502,23 @@ class Quarter2:
             "b": "barrel_moss.png",
             "c": "bush_large_flowers_1.png",
             "F": "bush_large_flowers_2.png",
-            "e": "bush_medium_flowers.png",
             "g": "crate_clean_crossed.png",
             "h": "crate_clean_plain.png",
             "i": "crate_moss_crossed.png",
             "j": "fence_moss_horizontal_1.png",
-            "m": "flag_stand_wood.png",
             "o": "tree_pine_medium_clean.png",
             "p": "tree_pine_medium_moss.png",
-            "q": "tree_pine_very_tall_clean.png",
-            "x": "ruin_pillar_broken.png",
-            "y": "ruin_pillar_low.png",
-            "z": "ruin_stone_medium_1.png",
-            "v": "ruin_stone_medium_2.png",
-            "w": "ruin_stones_small.png",
-            "A": "ruin_arch_broken.png",
-            "D": "ruin_building_large.png",
-            "L": "ladder_clean_vertical.png",
-            "H": "ladder_moss_vertical_1.png",
-            "I": "ladder_broken_vertical.png",
-            "=": "wall_stone_horizontal.png",
-            "|": "wall_stone_vertical.png"
+            "q": "crate_moss_question.png",
+            "Z": "ruin1.png",
+            "M": "ruin2.png",
+            "n": "ruin3.png",
+            "s": "ruin4.png",
+            "t": "ruin5.png",
+            "J": "ruin6.png",
+            "Q": "ruin7.png",
+            "V": "ruin8.png",
+            "X": "ruin9.png",
+            "Y": "ruin10.png"
         }
 
         for key, filename in q2_tiles.items():
@@ -819,29 +900,38 @@ class Quarter2:
     # COLLISION
     # ============================================================
     def can_move(self, nx, ny):
-        col = int(nx // TILE_SIZE)
-        row = int(ny // TILE_SIZE)
-        if row < 0 or row >= self.ROWS or col < 0 or col >= self.COLS:
-            return False
-        if row >= len(self.game_map) or col >= len(self.game_map[row]):
-            return False
-        tile = self.game_map[row][col]
+        # Check all 4 corners of the player's bounding box (with 4 pixels padding for smooth movement)
+        padding = 4
+        corners = [
+            (nx + padding, ny + padding),
+            (nx + TILE_SIZE - padding - 1, ny + padding),
+            (nx + padding, ny + TILE_SIZE - padding - 1),
+            (nx + TILE_SIZE - padding - 1, ny + TILE_SIZE - padding - 1)
+        ]
 
-        if tile not in self.WALKABLE_TILES:
-            return False
-
-        npc_positions = []
-        for marker, positions in self.npc_positions_data.items():
-            npc_positions.extend(positions)
-
-        player_col = int(self.player_x // TILE_SIZE)
-        player_row = int(self.player_y // TILE_SIZE)
-
-        for npc_col, npc_row in npc_positions:
-            if col == npc_col and row == npc_row:
-                if player_col == npc_col and player_row == npc_row:
-                    return True
+        for cx, cy in corners:
+            col = int(cx // TILE_SIZE)
+            row = int(cy // TILE_SIZE)
+            if row < 0 or row >= self.ROWS or col < 0 or col >= self.COLS:
                 return False
+            if row >= len(self.game_map) or col >= len(self.game_map[row]):
+                return False
+            tile = self.game_map[row][col]
+
+            if tile not in self.WALKABLE_TILES:
+                return False
+
+            npc_positions = []
+            for marker, positions in self.npc_positions_data.items():
+                npc_positions.extend(positions)
+
+            for npc_col, npc_row in npc_positions:
+                if col == npc_col and row == npc_row:
+                    player_col = int(self.player_x // TILE_SIZE)
+                    player_row = int(self.player_y // TILE_SIZE)
+                    if player_col == npc_col and player_row == npc_row:
+                        continue
+                    return False
 
         return True
 
@@ -871,6 +961,10 @@ class Quarter2:
                 break
 
         if current_portal and self.fist_closed and self.teleport_cooldown <= 0:
+            # Block if challenge is not completed
+            if self.quiz_station_index <= 5 and self.quiz_state != 6:
+                print("⚠️ You must complete the Knight's challenge first!")
+                return False
             # Check if this is the goal portal (up portal for map2.txt)
             if current_portal.direction == self.goal_portal_direction:
                 print(f"🎯 Goal reached! Returning to stage select...")
@@ -919,7 +1013,75 @@ class Quarter2:
     # TRIGGER CLICK
     # ============================================================
     def trigger_click(self, pos):
-        pass
+        import random
+        # State 1: Dialog with choices
+        if self.quiz_state == 1:
+            box_w, box_h = 580, 370
+            box_x = (self.width - box_w) // 2
+            box_y = (self.height - box_h) // 2
+            
+            button_w, button_h = 500, 42
+            button_x = box_x + (box_w - button_w) // 2
+            button_y_start = box_y + 125
+            spacing = 52
+            
+            q_data = self.quiz_questions[self.current_question_index]
+            
+            for i in range(len(q_data["choices"])):
+                b_y = button_y_start + i * spacing
+                btn_rect = pygame.Rect(button_x, b_y, button_w, button_h)
+                
+                if btn_rect.collidepoint(pos):
+                    if i == q_data["correct"]:
+                        self.current_correct_phrase = random.choice(self.correct_phrases)
+                        self.quiz_state = 3
+                        print(f"✅ Correct answer selected: {q_data['choices'][i]}")
+                    else:
+                        self.quiz_state = 2
+                        print(f"❌ Incorrect answer selected: {q_data['choices'][i]}")
+                    break
+                    
+        # State 2: Wrong answer retry screen click
+        elif self.quiz_state == 2:
+            box_w, box_h = 500, 240
+            box_x = (self.width - box_w) // 2
+            box_y = (self.height - box_h) // 2
+            btn_rect = pygame.Rect(box_x + (box_w - 200) // 2, box_y + 140, 200, 42)
+            if btn_rect.collidepoint(pos):
+                self.quiz_state = 1
+            
+        # State 3: Correct answer transition screen click
+        elif self.quiz_state == 3:
+            box_w, box_h = 500, 240
+            box_x = (self.width - box_w) // 2
+            box_y = (self.height - box_h) // 2
+            btn_rect = pygame.Rect(box_x + (box_w - 200) // 2, box_y + 140, 200, 42)
+            if btn_rect.collidepoint(pos):
+                if self.quiz_station_index < 5:
+                    self.quiz_station_index += 1
+                    self.current_question_index += 1
+                    # Teleport the Knight to the next station
+                    if self.quiz_station_index in self.quiz_stations:
+                        tx, ty = self.quiz_stations[self.quiz_station_index]
+                        self.npc_knight_tile_x, self.npc_knight_tile_y = tx, ty
+                        self.npc_knight_x = tx * TILE_SIZE
+                        self.npc_knight_y = ty * TILE_SIZE
+                        self.npc_knight_dir = self.station_directions.get(self.quiz_station_index, "right")
+                        print(f"⚔️ Teleported Knight to Quiz Station {self.quiz_station_index}: ({tx}, {ty}) facing {self.npc_knight_dir}")
+                    self.quiz_state = 0
+                else:
+                    self.quiz_state = 5
+                
+        # State 5: Final speech click
+        elif self.quiz_state == 5:
+            box_w, box_h = 550, 300
+            box_x = (self.width - box_w) // 2
+            box_y = (self.height - box_h) // 2
+            btn_rect = pygame.Rect(box_x + (box_w - 200) // 2, box_y + 210, 200, 42)
+            if btn_rect.collidepoint(pos):
+                self.quiz_state = 6
+                self.npc_knight_found = False
+                print("⚔️ Knight disappeared from Quarter 2")
 
     # ============================================================
     # UPDATE
@@ -943,7 +1105,19 @@ class Quarter2:
                 self.npc_bromen_anim_timer = 0
                 self.npc_bromen_anim_frame = (self.npc_bromen_anim_frame + 1) % len(self.npc_bromen_sprites)
 
-
+        # Proximity interaction check for Knight NPC
+        if self.quiz_state == 0 and self.npc_knight_found:
+            import math
+            player_center_x = self.player_x + TILE_SIZE // 2
+            player_center_y = self.player_y + TILE_SIZE // 2
+            knight_center_x = self.npc_knight_x + TILE_SIZE // 2
+            knight_center_y = self.npc_knight_y + TILE_SIZE // 2
+            dist = math.hypot(player_center_x - knight_center_x, player_center_y - knight_center_y)
+            if dist < TILE_SIZE * 1.5:
+                # Triggers the quiz dialog
+                self.quiz_state = 1
+                self.selected_choice_index = -1
+                self.npc_knight_dir = self.station_directions.get(self.quiz_station_index, "right")
 
         self.update_player_movement()
         self.check_portal_teleport_on_hold()
@@ -954,9 +1128,211 @@ class Quarter2:
         self.update_camera()
 
     # ============================================================
+    # QUIZ DIALOGUE DRAWING METHODS
+    # ============================================================
+    def draw_quiz_dialog(self):
+        overlay = pygame.Surface((self.width, self.height))
+        overlay.fill((0, 0, 0))
+        overlay.set_alpha(150)
+        self.screen.blit(overlay, (0, 0))
+
+        box_w, box_h = 580, 370
+        box_x = (self.width - box_w) // 2
+        box_y = (self.height - box_h) // 2
+
+        dialog_rect = pygame.Rect(box_x, box_y, box_w, box_h)
+        pygame.draw.rect(self.screen, (15, 23, 42), dialog_rect)
+        pygame.draw.rect(self.screen, (218, 165, 32), dialog_rect, 3, border_radius=8)
+
+        speaker_font = pygame.font.SysFont("Comic Sans MS", 18, bold=True)
+        speaker_surf = speaker_font.render("Knight", True, (218, 165, 32))
+        self.screen.blit(speaker_surf, (box_x + 25, box_y + 20))
+        pygame.draw.line(self.screen, (218, 165, 32), (box_x + 25, box_y + 48), (box_x + 120, box_y + 48), 2)
+
+        q_data = self.quiz_questions[self.current_question_index]
+        q_font = pygame.font.SysFont("Comic Sans MS", 16)
+        wrapped_q = self.wrap_text(q_data["question"], q_font, box_w - 50)
+        
+        y_text = box_y + 60
+        for line in wrapped_q:
+            txt_surf = q_font.render(line, True, (255, 255, 255))
+            self.screen.blit(txt_surf, (box_x + 25, y_text))
+            y_text += 22
+
+        button_w, button_h = 500, 42
+        button_x = box_x + (box_w - button_w) // 2
+        button_y_start = box_y + 125
+        spacing = 52
+        
+        for i, choice in enumerate(q_data["choices"]):
+            b_y = button_y_start + i * spacing
+            btn_rect = pygame.Rect(button_x, b_y, button_w, button_h)
+            is_hovered = btn_rect.collidepoint(self.cursor_pos)
+            
+            if is_hovered:
+                bg_color = (255, 215, 0)
+                text_color = (0, 0, 0)
+            else:
+                bg_color = (30, 41, 59)
+                text_color = (255, 255, 255)
+            
+            pygame.draw.rect(self.screen, bg_color, btn_rect, border_radius=12)
+            pygame.draw.rect(self.screen, (0, 0, 0), btn_rect, 3, border_radius=12)
+            
+            c_surf = q_font.render(choice, True, text_color)
+            c_rect = c_surf.get_rect(center=btn_rect.center)
+            self.screen.blit(c_surf, c_rect)
+
+    def draw_wrong_dialog(self):
+        overlay = pygame.Surface((self.width, self.height))
+        overlay.fill((0, 0, 0))
+        overlay.set_alpha(150)
+        self.screen.blit(overlay, (0, 0))
+
+        box_w, box_h = 500, 240
+        box_x = (self.width - box_w) // 2
+        box_y = (self.height - box_h) // 2
+
+        dialog_rect = pygame.Rect(box_x, box_y, box_w, box_h)
+        pygame.draw.rect(self.screen, (15, 23, 42), dialog_rect)
+        pygame.draw.rect(self.screen, (220, 38, 38), dialog_rect, 3, border_radius=8)
+
+        speaker_font = pygame.font.SysFont("Comic Sans MS", 18, bold=True)
+        speaker_surf = speaker_font.render("Knight", True, (220, 38, 38))
+        self.screen.blit(speaker_surf, (box_x + 25, box_y + 20))
+
+        q_font = pygame.font.SysFont("Comic Sans MS", 16)
+        msg_surf = q_font.render("Hmm, that is not correct. Try again, young adventurer!", True, (255, 255, 255))
+        self.screen.blit(msg_surf, (box_x + 25, box_y + 70))
+
+        button_w, button_h = 200, 42
+        button_x = box_x + (box_w - button_w) // 2
+        button_y = box_y + 140
+        btn_rect = pygame.Rect(button_x, button_y, button_w, button_h)
+
+        is_hovered = btn_rect.collidepoint(self.cursor_pos)
+        bg_color = (30, 41, 59) if not is_hovered else (220, 38, 38)
+
+        pygame.draw.rect(self.screen, bg_color, btn_rect, border_radius=12)
+        pygame.draw.rect(self.screen, (0, 0, 0), btn_rect, 3, border_radius=12)
+
+        c_surf = speaker_font.render("Try Again", True, (255, 255, 255))
+        c_rect = c_surf.get_rect(center=btn_rect.center)
+        self.screen.blit(c_surf, c_rect)
+
+    def draw_correct_dialog(self):
+        overlay = pygame.Surface((self.width, self.height))
+        overlay.fill((0, 0, 0))
+        overlay.set_alpha(150)
+        self.screen.blit(overlay, (0, 0))
+
+        box_w, box_h = 500, 240
+        box_x = (self.width - box_w) // 2
+        box_y = (self.height - box_h) // 2
+
+        dialog_rect = pygame.Rect(box_x, box_y, box_w, box_h)
+        pygame.draw.rect(self.screen, (15, 23, 42), dialog_rect)
+        pygame.draw.rect(self.screen, (22, 163, 74), dialog_rect, 3, border_radius=8)
+
+        speaker_font = pygame.font.SysFont("Comic Sans MS", 18, bold=True)
+        speaker_surf = speaker_font.render("Knight", True, (22, 163, 74))
+        self.screen.blit(speaker_surf, (box_x + 25, box_y + 20))
+
+        q_font = pygame.font.SysFont("Comic Sans MS", 16)
+        msg_surf = q_font.render(self.current_correct_phrase, True, (255, 255, 255))
+        self.screen.blit(msg_surf, (box_x + 25, box_y + 70))
+
+        button_w, button_h = 200, 42
+        button_x = box_x + (box_w - button_w) // 2
+        button_y = box_y + 140
+        btn_rect = pygame.Rect(button_x, button_y, button_w, button_h)
+
+        is_hovered = btn_rect.collidepoint(self.cursor_pos)
+        bg_color = (30, 41, 59) if not is_hovered else (22, 163, 74)
+
+        pygame.draw.rect(self.screen, bg_color, btn_rect, border_radius=12)
+        pygame.draw.rect(self.screen, (0, 0, 0), btn_rect, 3, border_radius=12)
+
+        c_surf = speaker_font.render("Continue", True, (255, 255, 255))
+        c_rect = c_surf.get_rect(center=btn_rect.center)
+        self.screen.blit(c_surf, c_rect)
+
+    def draw_final_dialog(self):
+        overlay = pygame.Surface((self.width, self.height))
+        overlay.fill((0, 0, 0))
+        overlay.set_alpha(150)
+        self.screen.blit(overlay, (0, 0))
+
+        box_w, box_h = 550, 300
+        box_x = (self.width - box_w) // 2
+        box_y = (self.height - box_h) // 2
+
+        dialog_rect = pygame.Rect(box_x, box_y, box_w, box_h)
+        pygame.draw.rect(self.screen, (15, 23, 42), dialog_rect)
+        pygame.draw.rect(self.screen, (218, 165, 32), dialog_rect, 3, border_radius=8)
+
+        speaker_font = pygame.font.SysFont("Comic Sans MS", 18, bold=True)
+        speaker_surf = speaker_font.render("Knight", True, (218, 165, 32))
+        self.screen.blit(speaker_surf, (box_x + 25, box_y + 20))
+        pygame.draw.line(self.screen, (218, 165, 32), (box_x + 25, box_y + 48), (box_x + 120, box_y + 48), 2)
+
+        q_font = pygame.font.SysFont("Comic Sans MS", 15)
+        speech_lines = [
+            "Outstanding, young adventurer! You have solved all my challenges.",
+            "You know your angles and shape formulas very well.",
+            "The way through the portal is now clear. Go forth,",
+            "and continue your quest!"
+        ]
+        
+        y_text = box_y + 65
+        for line in speech_lines:
+            txt_surf = q_font.render(line, True, (255, 255, 255))
+            self.screen.blit(txt_surf, (box_x + 25, y_text))
+            y_text += 24
+
+        button_w, button_h = 200, 42
+        button_x = box_x + (box_w - button_w) // 2
+        button_y = box_y + 210
+        btn_rect = pygame.Rect(button_x, button_y, button_w, button_h)
+
+        is_hovered = btn_rect.collidepoint(self.cursor_pos)
+        if is_hovered:
+            bg_color = (255, 215, 0)
+            text_color = (0, 0, 0)
+        else:
+            bg_color = (30, 41, 59)
+            text_color = (255, 255, 255)
+
+        pygame.draw.rect(self.screen, bg_color, btn_rect, border_radius=12)
+        pygame.draw.rect(self.screen, (0, 0, 0), btn_rect, 3, border_radius=12)
+
+        c_surf = speaker_font.render("Finish", True, text_color)
+        c_rect = c_surf.get_rect(center=btn_rect.center)
+        self.screen.blit(c_surf, c_rect)
+
+    def wrap_text(self, text, font, max_width):
+        words = text.split(' ')
+        lines = []
+        current_line = []
+        for word in words:
+            test_line = ' '.join(current_line + [word])
+            if font.size(test_line)[0] <= max_width:
+                current_line.append(word)
+            else:
+                lines.append(' '.join(current_line))
+                current_line = [word]
+        if current_line:
+            lines.append(' '.join(current_line))
+        return lines
+
+    # ============================================================
     # UPDATE PLAYER MOVEMENT
     # ============================================================
     def update_player_movement(self):
+        if self.quiz_state in [1, 2, 3, 5]:
+            self.anim_frame = 0
+            return
+
         vx, vy = 0, 0
 
         if self.hand_detected:
@@ -1090,12 +1466,14 @@ class Quarter2:
                         # First draw grass under obstacles
                         self.draw_tile('G', col * TILE_SIZE, row * TILE_SIZE)
                         # If it's a low obstacle, draw it now (first pass)
-                        if tile_char not in {'T', 'o', 'p', 'q', 'k', 'm', 'x', 'y', 'A', 'D'}:
+                        if tile_char not in {'T', 'o', 'p', 'k', 'Z', 'M', 'n', 's', 't', 'J', 'Q', 'V', 'X', 'Y'}:
                             self.draw_tile(tile_char, col * TILE_SIZE, row * TILE_SIZE)
                     else:
-                        if tile_char in {'L', 'H', 'I'}:
+                        # Draw grass under ladders, portals, and stations 1-5
+                        if tile_char in {'L', 'H', 'I', 'r', 'l', 'u', 'd', '1', '2', '3', '4', '5'}:
                             self.draw_tile('G', col * TILE_SIZE, row * TILE_SIZE)
-                        self.draw_tile(tile_char, col * TILE_SIZE, row * TILE_SIZE)
+                        if tile_char not in {'1', '2', '3', '4', '5'}:
+                            self.draw_tile(tile_char, col * TILE_SIZE, row * TILE_SIZE)
 
         for portal in self.portals:
             portal.draw(self.screen, self.camera_x, self.camera_y, ZOOM, self.width, self.height)
@@ -1137,8 +1515,39 @@ class Quarter2:
             for col in range(start_col, end_col):
                 if row < len(self.render_map) and col < len(self.render_map[row]):
                     tile_char = self.render_map[row][col]
-                    if tile_char in {'T', 'o', 'p', 'q', 'k', 'm', 'x', 'y', 'A', 'D'}:
+                    if tile_char in {'T', 'o', 'p', 'k', 'Z', 'M', 'n', 's', 't', 'J', 'Q', 'V', 'X', 'Y'}:
                         self.draw_tile(tile_char, col * TILE_SIZE, row * TILE_SIZE)
+
+        # Draw floating exclamation mark if active and player is in proximity of the Knight
+        if self.quiz_state == 0 and self.npc_knight_found:
+            import math
+            player_center_x = self.player_x + TILE_SIZE // 2
+            player_center_y = self.player_y + TILE_SIZE // 2
+            knight_center_x = self.npc_knight_x + TILE_SIZE // 2
+            knight_center_y = self.npc_knight_y + TILE_SIZE // 2
+            dist = math.hypot(player_center_x - knight_center_x, player_center_y - knight_center_y)
+            if dist < TILE_SIZE * 3.0:
+                screen_x = (self.npc_knight_x - self.camera_x) * ZOOM
+                screen_y = (self.npc_knight_y - self.camera_y) * ZOOM
+                excl_font = pygame.font.SysFont("Comic Sans MS", int(18 * ZOOM), bold=True)
+                excl_surf = excl_font.render("!", True, (255, 0, 0))  # Red indicator
+                bounce = math.sin(self.frame_counter * 0.1) * 4 * ZOOM
+                excl_x = screen_x + (TILE_SIZE * ZOOM) // 2 - excl_surf.get_width() // 2
+                excl_y = screen_y - excl_surf.get_height() - 4 * ZOOM + bounce
+                shadow_surf = excl_font.render("!", True, (0, 0, 0))
+                self.screen.blit(shadow_surf, (excl_x + 1, excl_y + 1))
+                self.screen.blit(excl_surf, (excl_x, excl_y))
+
+        # Centered Dialog overlays for Shape Quiz
+        if self.quiz_state == 1:
+            self.draw_quiz_dialog()
+        elif self.quiz_state == 2:
+            self.draw_wrong_dialog()
+        elif self.quiz_state == 3:
+            self.draw_correct_dialog()
+        elif self.quiz_state == 5:
+            self.draw_final_dialog()
+
         self.draw_ui()
 
     # ============================================================
