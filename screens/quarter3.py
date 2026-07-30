@@ -357,13 +357,37 @@ class Quarter3:
     # LOAD TILE IMAGES
     # ============================================================
     def load_tile_images(self):
-        def load_tile(filename):
-            path = os.path.join(self.OBJECTS_PATH, filename)
+        def load_tile(filename, is_q3=False):
+            if is_q3:
+                path = os.path.join(self.OBJECTS_PATH, "quarter3tiles", filename)
+            else:
+                path = os.path.join(self.OBJECTS_PATH, filename)
             try:
                 image = pygame.image.load(path).convert_alpha()
-                image = pygame.transform.scale(image, (TILE_SIZE, TILE_SIZE))
+                w_orig, h_orig = image.get_size()
+                
+                # Custom scaling rules
+                if "tree" in filename:
+                    if "very_tall" in filename:
+                        target_h = 160  # 5 tiles tall
+                    elif "medium_clean" in filename:
+                        target_h = 128  # 4 tiles tall
+                    elif "medium_moss" in filename or "medium_clean" not in filename:
+                        target_h = 96   # 3 tiles tall
+                    else:
+                        target_h = 110
+                    target_w = max(1, int(w_orig * (target_h / h_orig)))
+                    image = pygame.transform.scale(image, (target_w, target_h))
+                elif ("ruin" in filename or "rock" in filename) and not any(filename.startswith(f"ruin{i}") for i in range(1, 11)):
+                    # Ruins/walls/stones: scale by 2.0
+                    image = pygame.transform.scale(image, (int(w_orig * 2), int(h_orig * 2)))
+                else:
+                    # Everything else: exactly 1 block tall (32x32)
+                    image = pygame.transform.scale(image, (TILE_SIZE, TILE_SIZE))
                 return image
             except Exception:
+                if is_q3:
+                    return load_tile(filename, is_q3=False)
                 placeholder = pygame.Surface((TILE_SIZE, TILE_SIZE))
                 placeholder.fill((100, 100, 100))
                 pygame.draw.rect(placeholder, (255, 255, 255), placeholder.get_rect(), 1)
@@ -384,6 +408,28 @@ class Quarter3:
 
         for key, filename in tile_files:
             tiles[key] = load_tile(filename)
+
+        # Overwrite G and T with Q3 tiles for Quarter 3 Maps
+        tiles["G"] = load_tile("sand.png", is_q3=True)
+        tiles["T"] = load_tile("dead_tree.png", is_q3=True)
+
+        # New Q3 tiles
+        q3_tiles = {
+            "w": "tumbleweed.png",
+            "Z": "brick1.png",
+            "M": "brick2.png",
+            "n": "brick3.png",
+            "s": "brick4.png",
+            "t": "brick5.png",
+            "J": "brick6.png",
+            "Q": "brick7.png",
+            "V": "brick8.png",
+            "X": "brick9.png",
+            "Y": "brick10.png"
+        }
+
+        for key, filename in q3_tiles.items():
+            tiles[key] = load_tile(filename, is_q3=True)
 
         return tiles
 
