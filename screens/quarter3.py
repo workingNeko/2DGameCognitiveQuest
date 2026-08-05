@@ -193,13 +193,20 @@ class Quarter3:
         self.npc_oldman_tile_y = 0
         self.npc_oldman_found = False
 
-        # Skeleton NPC (static)
+        # Skeleton NPC (interactive)
         self.npc_skeleton_sprite = None
         self.npc_skeleton_x = 0
         self.npc_skeleton_y = 0
         self.npc_skeleton_tile_x = 0
         self.npc_skeleton_tile_y = 0
         self.npc_skeleton_found = False
+        self.npc_skeleton_left_sprites = []
+        self.npc_skeleton_down_sprites = []
+        self.npc_skeleton_right_sprites = []
+        self.npc_skeleton_up_sprites = []
+        self.npc_skeleton_dir = "right"
+        self.npc_skeleton_anim_frame = 0
+        self.npc_skeleton_anim_timer = 0
 
         # Knight NPC (static & interactive)
         self.npc_knight_sprite = None
@@ -279,6 +286,97 @@ class Quarter3:
         # Completion flag
         self.completed = False
 
+        self.is_quiz_map = True
+        self.quiz_state = 0  # 0: waiting proximity, 1: dialog Q, 2: wrong try again, 3: correct phrase transition, 4: walking along path, 5: final speech, 6: quiz complete
+        self.quiz_station_index = 1  # current station (1-5)
+        self.current_question_index = 0
+        self.selected_choice_index = -1  # choice highlighted
+
+        # Station Standby Directions based on Map Name
+        if self.map_name == "map8.txt":
+            self.station_directions = {
+                1: "right",
+                2: "right",
+                3: "right",
+                4: "right",
+                5: "right"
+            }
+        elif self.map_name == "map9.txt":
+            self.station_directions = {
+                1: "left",
+                2: "left",
+                3: "left",
+                4: "left",
+                5: "left"
+            }
+        else: # Default for map7.txt
+            self.station_directions = {
+                1: "right",
+                2: "right",
+                3: "right",
+                4: "left",
+                5: "left"
+            }
+
+        # Scan map for quiz stations 1, 2, 3, 4, 5
+        self.quiz_stations = {}
+        for y, row in enumerate(self.game_map):
+            for x, c in enumerate(row):
+                if c in ['1', '2', '3', '4', '5']:
+                    num = int(c)
+                    self.quiz_stations[num] = (x, y)
+                    print(f"📍 Quiz Station {num} found at: ({x}, {y})")
+
+        # Initialize Skeleton at station 1 if available
+        if 1 in self.quiz_stations:
+            self.npc_skeleton_tile_x, self.npc_skeleton_tile_y = self.quiz_stations[1]
+            self.npc_skeleton_x = self.npc_skeleton_tile_x * TILE_SIZE
+            self.npc_skeleton_y = self.npc_skeleton_tile_y * TILE_SIZE
+            self.npc_skeleton_found = True
+            self.npc_skeleton_dir = self.station_directions.get(1, "right")
+            print(f"💀 Skeleton spawned at Quiz Station 1: {self.quiz_stations[1]} facing {self.npc_skeleton_dir}")
+
+        # Correct answer random responses
+        self.current_correct_phrase = ""
+        self.correct_phrases = [
+            "Splendid! Your knowledge shines bright in this desert sun!",
+            "Excellent! That's correct, onto the next one!",
+            "Superb! You are standard-setting, adventurer!"
+        ]
+
+        self.npc_skeleton_path = []
+        self.npc_skeleton_path_index = 0
+        self.player_block_timer = 0.0
+
+        # Desert/Skeleton-themed Quiz Questions
+        self.quiz_questions = [
+            {
+                "question": "Which plant is famous for storing water and surviving in dry deserts?",
+                "choices": ["A. Pine Tree", "B. Oak Tree", "C. Cactus", "D. Rose"],
+                "correct": 2  # C
+            },
+            {
+                "question": "How many bones are in an adult human skeleton?",
+                "choices": ["A. 106", "B. 206", "C. 306", "D. 406"],
+                "correct": 1  # B
+            },
+            {
+                "question": "What is the main substance that desert sand is made of?",
+                "choices": ["A. Quartz (Silica)", "B. Limestone", "C. Granite", "D. Salt"],
+                "correct": 0  # A
+            },
+            {
+                "question": "Which animal is known as the 'Ship of the Desert'?",
+                "choices": ["A. Horse", "B. Camel", "C. Lion", "D. Elephant"],
+                "correct": 1  # B
+            },
+            {
+                "question": "What is the primary function of the human skeletal system?",
+                "choices": ["A. Digesting food", "B. Pumping blood", "C. Support, protection, and movement", "D. Thinking"],
+                "correct": 2  # C
+            }
+        ]
+
         print(f"✅ Quarter3 initialized with map: {self.map_name}")
         print(f"   Goal portal: {self.goal_portal_direction}")
         print(f"   Portals loaded: {len(self.portals)}")
@@ -332,12 +430,7 @@ class Quarter3:
                     self.npc_bromen_found = True
                     print(f"Bromen NPC at: ({x}, {y})")
                 elif marker == 'O':
-                    self.npc_oldman_tile_x = x
-                    self.npc_oldman_tile_y = y
-                    self.npc_oldman_x = x * TILE_SIZE
-                    self.npc_oldman_y = y * TILE_SIZE
-                    self.npc_oldman_found = True
-                    print(f"Oldman NPC at: ({x}, {y})")
+                    pass
                 elif marker == 'S':
                     self.npc_skeleton_tile_x = x
                     self.npc_skeleton_tile_y = y
@@ -412,6 +505,8 @@ class Quarter3:
         # Overwrite G and T with Q3 tiles for Quarter 3 Maps
         tiles["G"] = load_tile("sand.png", is_q3=True)
         tiles["T"] = load_tile("dead_tree.png", is_q3=True)
+        for k in ["1", "2", "3", "4", "5", "P"]:
+            tiles[k] = tiles["G"]
 
         # New Q3 tiles
         q3_tiles = {
@@ -536,13 +631,47 @@ class Quarter3:
                 print(f"⚠️ Skeleton sprite not found at: {skeleton_path}")
                 placeholder = pygame.Surface((TILE_SIZE, TILE_SIZE))
                 placeholder.fill((255, 255, 255))
-                pygame.draw.circle(placeholder, (0, 0, 0), (TILE_SIZE // 2, TILE_SIZE // 2), 12)
-                pygame.draw.circle(placeholder, (255, 200, 200), (TILE_SIZE // 2 - 4, TILE_SIZE // 2 - 4), 3)
-                pygame.draw.circle(placeholder, (255, 200, 200), (TILE_SIZE // 2 + 4, TILE_SIZE // 2 - 4), 3)
-                font = pygame.font.SysFont(None, 10)
-                text = font.render("SKEL", True, (0, 0, 0))
-                placeholder.blit(text, (2, TILE_SIZE - 12))
                 self.npc_skeleton_sprite = placeholder
+
+            # Load Skeleton walking left sprites
+            self.npc_skeleton_left_sprites = []
+            for name in ["skeleton_left.png", "skeleton_left_1.png", "skeleton_left_2.png"]:
+                path = os.path.join(self.NPC_PATH_SKELETON, name)
+                if os.path.exists(path):
+                    img = pygame.image.load(path).convert_alpha()
+                    scaled = pygame.transform.scale(img, (TILE_SIZE, TILE_SIZE))
+                    self.npc_skeleton_left_sprites.append(scaled)
+                    print(f"✅ Loaded Skeleton left frame: {name}")
+
+            # Load Skeleton walking down sprites
+            self.npc_skeleton_down_sprites = []
+            for name in ["skeleton_down.png", "skeleton_down_1.png", "skeleton_down_2.png"]:
+                path = os.path.join(self.NPC_PATH_SKELETON, name)
+                if os.path.exists(path):
+                    img = pygame.image.load(path).convert_alpha()
+                    scaled = pygame.transform.scale(img, (TILE_SIZE, TILE_SIZE))
+                    self.npc_skeleton_down_sprites.append(scaled)
+                    print(f"✅ Loaded Skeleton down frame: {name}")
+
+            # Load Skeleton walking right sprites
+            self.npc_skeleton_right_sprites = []
+            for name in ["skeleton_right.png", "skeleton_right_1.png", "skeleton_right_2.png"]:
+                path = os.path.join(self.NPC_PATH_SKELETON, name)
+                if os.path.exists(path):
+                    img = pygame.image.load(path).convert_alpha()
+                    scaled = pygame.transform.scale(img, (TILE_SIZE, TILE_SIZE))
+                    self.npc_skeleton_right_sprites.append(scaled)
+                    print(f"✅ Loaded Skeleton right frame: {name}")
+
+            # Load Skeleton walking up sprites
+            self.npc_skeleton_up_sprites = []
+            for name in ["skeleton_up.png", "skeleton_up_1.png", "skeleton_up_2.png"]:
+                path = os.path.join(self.NPC_PATH_SKELETON, name)
+                if os.path.exists(path):
+                    img = pygame.image.load(path).convert_alpha()
+                    scaled = pygame.transform.scale(img, (TILE_SIZE, TILE_SIZE))
+                    self.npc_skeleton_up_sprites.append(scaled)
+                    print(f"✅ Loaded Skeleton up frame: {name}")
         except Exception as e:
             print(f"❌ Error loading Skeleton: {e}")
             placeholder = pygame.Surface((TILE_SIZE, TILE_SIZE))
@@ -775,56 +904,95 @@ class Quarter3:
                     portal = self.Portal(x, y, 'right', is_static=True)
                     portal.set_animation(self.portal_frames_cache['right'])
                     self.portals.append(portal)
-                    row_list[x] = '6'
+                    row_list[x] = 'G'
                     modified = True
                 elif c == 'l':
                     portal = self.Portal(x, y, 'left', is_static=True)
                     portal.set_animation(self.portal_frames_cache['left'])
                     self.portals.append(portal)
-                    row_list[x] = '6'
+                    row_list[x] = 'G'
                     modified = True
                 elif c == 'u':
                     portal = self.Portal(x, y, 'up', is_static=True)
                     portal.set_animation(self.portal_frames_cache['up'])
                     self.portals.append(portal)
-                    row_list[x] = '7'
+                    row_list[x] = 'G'
                     modified = True
                 elif c == 'd':
                     portal = self.Portal(x, y, 'down', is_static=True)
                     portal.set_animation(self.portal_frames_cache['down'])
                     self.portals.append(portal)
-                    row_list[x] = '7'
+                    row_list[x] = 'G'
                     modified = True
             if modified:
                 self.render_map[y] = ''.join(row_list)
+
+    def find_path(self, start, end):
+        """BFS pathfinder from start (col, row) to end (col, row) on the grid"""
+        import collections
+        if start == end:
+            return [start]
+        queue = collections.deque([[start]])
+        seen = {start}
+
+        # Directions: Right, Left, Down, Up
+        directions = [(1, 0), (-1, 0), (0, 1), (0, -1)]
+
+        while queue:
+            path = queue.popleft()
+            curr = path[-1]
+            if curr == end:
+                return path
+
+            curr_x, curr_y = curr
+            for dx, dy in directions:
+                nxt = (curr_x + dx, curr_y + dy)
+                nx, ny = nxt
+                if 0 <= ny < self.ROWS and 0 <= nx < self.COLS:
+                    if ny < len(self.game_map) and nx < len(self.game_map[ny]):
+                        tile = self.game_map[ny][nx]
+                        # Walkable tiles are walkable. We ignore other temporary collision overlays
+                        if tile in self.WALKABLE_TILES and nxt not in seen:
+                            seen.add(nxt)
+                            queue.append(path + [nxt])
+        return []
 
     # ============================================================
     # COLLISION
     # ============================================================
     def can_move(self, nx, ny):
-        col = int(nx // TILE_SIZE)
-        row = int(ny // TILE_SIZE)
-        if row < 0 or row >= self.ROWS or col < 0 or col >= self.COLS:
-            return False
-        if row >= len(self.game_map) or col >= len(self.game_map[row]):
-            return False
-        tile = self.game_map[row][col]
-
-        if tile not in self.WALKABLE_TILES:
-            return False
+        # Check all 4 corners of the player's bounding box (with 4 pixels padding for smooth movement)
+        padding = 4
+        corners = [
+            (nx + padding, ny + padding),
+            (nx + TILE_SIZE - padding - 1, ny + padding),
+            (nx + padding, ny + TILE_SIZE - padding - 1),
+            (nx + TILE_SIZE - padding - 1, ny + TILE_SIZE - padding - 1)
+        ]
 
         npc_positions = []
         for marker, positions in self.npc_positions_data.items():
             npc_positions.extend(positions)
 
-        player_col = int(self.player_x // TILE_SIZE)
-        player_row = int(self.player_y // TILE_SIZE)
-
-        for npc_col, npc_row in npc_positions:
-            if col == npc_col and row == npc_row:
-                if player_col == npc_col and player_row == npc_row:
-                    return True
+        for cx, cy in corners:
+            col = int(cx // TILE_SIZE)
+            row = int(cy // TILE_SIZE)
+            if row < 0 or row >= self.ROWS or col < 0 or col >= self.COLS:
                 return False
+            if row >= len(self.game_map) or col >= len(self.game_map[row]):
+                return False
+            tile = self.game_map[row][col]
+
+            if tile not in self.WALKABLE_TILES:
+                return False
+
+            for npc_col, npc_row in npc_positions:
+                if col == npc_col and row == npc_row:
+                    player_col = int(self.player_x // TILE_SIZE)
+                    player_row = int(self.player_y // TILE_SIZE)
+                    if player_col == npc_col and player_row == npc_row:
+                        continue
+                    return False
 
         return True
 
@@ -856,6 +1024,8 @@ class Quarter3:
         if current_portal and self.fist_closed and self.teleport_cooldown <= 0:
             # Check if this is the goal portal (left portal for map3.txt)
             if current_portal.direction == self.goal_portal_direction:
+                if self.quiz_state < 6:
+                    return False
                 print(f"🎯 Goal reached! Returning to stage select...")
                 self.return_to_stage_select()
                 return True
@@ -902,7 +1072,75 @@ class Quarter3:
     # TRIGGER CLICK
     # ============================================================
     def trigger_click(self, pos):
-        pass
+        import random
+        # State 1: Dialog with choices
+        if self.quiz_state == 1:
+            box_w, box_h = 580, 370
+            box_x = (self.width - box_w) // 2
+            box_y = (self.height - box_h) // 2
+            
+            button_w, button_h = 500, 42
+            button_x = box_x + (box_w - button_w) // 2
+            button_y_start = box_y + 125
+            spacing = 52
+            
+            q_data = self.quiz_questions[self.current_question_index]
+            
+            for i in range(len(q_data["choices"])):
+                b_y = button_y_start + i * spacing
+                btn_rect = pygame.Rect(button_x, b_y, button_w, button_h)
+                
+                if btn_rect.collidepoint(pos):
+                    if i == q_data["correct"]:
+                        self.current_correct_phrase = random.choice(self.correct_phrases)
+                        self.quiz_state = 3
+                        print(f"✅ Correct answer selected: {q_data['choices'][i]}")
+                    else:
+                        self.quiz_state = 2
+                        print(f"❌ Incorrect answer selected: {q_data['choices'][i]}")
+                    break
+                    
+        # State 2: Wrong answer retry screen click
+        elif self.quiz_state == 2:
+            box_w, box_h = 500, 240
+            box_x = (self.width - box_w) // 2
+            box_y = (self.height - box_h) // 2
+            btn_rect = pygame.Rect(box_x + (box_w - 200) // 2, box_y + 140, 200, 42)
+            if btn_rect.collidepoint(pos):
+                self.quiz_state = 1
+            
+        # State 3: Correct answer transition screen click
+        elif self.quiz_state == 3:
+            box_w, box_h = 500, 240
+            box_x = (self.width - box_w) // 2
+            box_y = (self.height - box_h) // 2
+            btn_rect = pygame.Rect(box_x + (box_w - 200) // 2, box_y + 140, 200, 42)
+            if btn_rect.collidepoint(pos):
+                if self.quiz_station_index < 5:
+                    start_coord = (self.npc_skeleton_tile_x, self.npc_skeleton_tile_y)
+                    self.quiz_station_index += 1
+                    self.current_question_index += 1
+                    if self.quiz_station_index in self.quiz_stations:
+                        end_coord = self.quiz_stations[self.quiz_station_index]
+                        self.npc_skeleton_path = self.find_path(start_coord, end_coord)
+                        self.npc_skeleton_path_index = 1
+                        self.quiz_state = 4
+                        self.player_block_timer = 3.0
+                        print(f"💀 Moving Skeleton from {start_coord} to {end_coord}")
+                else:
+                    self.current_question_index += 1
+                    self.quiz_state = 5
+                
+        # State 5: Final speech click
+        elif self.quiz_state == 5:
+            box_w, box_h = 550, 300
+            box_x = (self.width - box_w) // 2
+            box_y = (self.height - box_h) // 2
+            btn_rect = pygame.Rect(box_x + (box_w - 200) // 2, box_y + 210, 200, 42)
+            if btn_rect.collidepoint(pos):
+                self.quiz_state = 6
+                self.npc_skeleton_found = False
+                print("💀 Skeleton disappeared from Quarter 3")
 
     # ============================================================
     # UPDATE
@@ -911,14 +1149,67 @@ class Quarter3:
         dt = self.clock.tick(FPS) / 1000.0
         self.frame_counter += 1
 
-        if self.teleport_cooldown > 0:
-            self.teleport_cooldown -= dt
+        if hasattr(self, 'player_block_timer') and self.player_block_timer > 0:
+            self.player_block_timer -= dt
 
         if self.npc_bromen_sprites and self.npc_bromen_found:
             self.npc_bromen_anim_timer += 1
             if self.npc_bromen_anim_timer >= 5:
                 self.npc_bromen_anim_timer = 0
                 self.npc_bromen_anim_frame = (self.npc_bromen_anim_frame + 1) % len(self.npc_bromen_sprites)
+
+        # Proximity interaction check for Skeleton NPC
+        if self.quiz_state == 0 and self.npc_skeleton_found:
+            import math
+            player_center_x = self.player_x + TILE_SIZE // 2
+            player_center_y = self.player_y + TILE_SIZE // 2
+            skeleton_center_x = self.npc_skeleton_x + TILE_SIZE // 2
+            skeleton_center_y = self.npc_skeleton_y + TILE_SIZE // 2
+            dist = math.hypot(player_center_x - skeleton_center_x, player_center_y - skeleton_center_y)
+            if dist < TILE_SIZE * 1.5:
+                # Triggers the quiz dialog
+                self.quiz_state = 1
+                self.selected_choice_index = -1
+                self.npc_skeleton_dir = self.station_directions.get(self.quiz_station_index, "right")
+
+        # Skeleton walking sequence along BFS path
+        if self.quiz_state == 4:
+            if hasattr(self, 'npc_skeleton_path') and self.npc_skeleton_path_index < len(self.npc_skeleton_path):
+                t_col, t_row = self.npc_skeleton_path[self.npc_skeleton_path_index]
+                target_x = t_col * TILE_SIZE
+                target_y = t_row * TILE_SIZE
+                
+                dx = target_x - self.npc_skeleton_x
+                dy = target_y - self.npc_skeleton_y
+                
+                move_speed = 2  # Walk speed: 2 pixels per frame
+                
+                if abs(dx) > abs(dy):
+                    self.npc_skeleton_dir = "right" if dx > 0 else "left"
+                else:
+                    self.npc_skeleton_dir = "down" if dy > 0 else "up"
+                
+                if abs(dx) <= move_speed and abs(dy) <= move_speed:
+                    self.npc_skeleton_x = target_x
+                    self.npc_skeleton_y = target_y
+                    self.npc_skeleton_tile_x = t_col
+                    self.npc_skeleton_tile_y = t_row
+                    self.npc_skeleton_path_index += 1
+                else:
+                    if dx != 0:
+                        self.npc_skeleton_x += move_speed if dx > 0 else -move_speed
+                    if dy != 0:
+                        self.npc_skeleton_y += move_speed if dy > 0 else -move_speed
+                
+                self.npc_skeleton_anim_timer += 1
+                if self.npc_skeleton_anim_timer >= 10:
+                    self.npc_skeleton_anim_timer = 0
+                    self.npc_skeleton_anim_frame = (self.npc_skeleton_anim_frame + 1) % 3
+            else:
+                self.quiz_state = 0
+                self.npc_skeleton_anim_frame = 0
+                self.npc_skeleton_anim_timer = 0
+                self.npc_skeleton_dir = self.station_directions.get(self.quiz_station_index, "right")
 
 
 
@@ -934,6 +1225,10 @@ class Quarter3:
     # UPDATE PLAYER MOVEMENT
     # ============================================================
     def update_player_movement(self):
+        if self.quiz_state in [1, 2, 3, 5] or (hasattr(self, 'player_block_timer') and self.player_block_timer > 0):
+            self.anim_frame = 0
+            return
+
         vx, vy = 0, 0
 
         if self.hand_detected:
@@ -1043,19 +1338,22 @@ class Quarter3:
         start_row = max(0, int(self.camera_y / TILE_SIZE) - 2)
         end_row = min(self.ROWS, int((self.camera_y + self.height / ZOOM) / TILE_SIZE) + 3)
 
-        # Draw visible tiles using render_map (First pass: Skip trees and draw grass under them)
+        # Draw visible tiles using render_map (First pass: Skip trees/tumbleweeds and draw sand under them)
         for row in range(start_row, end_row):
             for col in range(start_col, end_col):
                 if row < len(self.render_map) and col < len(self.render_map[row]):
                     tile_char = self.render_map[row][col]
-                    if tile_char == 'T':
-                        # Draw grass under the tree so there is no black void under the player
+                    # If it's a tree, tumbleweed, or one of the brick tiles, draw sand under it first
+                    if tile_char in ['T', 'w', 'Z', 'M', 'n', 's', 't', 'J', 'Q', 'V', 'X', 'Y']:
                         self.draw_tile('G', col * TILE_SIZE, row * TILE_SIZE)
-                    else:
+                    
+                    # Now draw the actual tile (unless it is tree/tumbleweed, which are drawn in second pass)
+                    if tile_char != 'T' and tile_char != 'w':
                         self.draw_tile(tile_char, col * TILE_SIZE, row * TILE_SIZE)
 
-        for portal in self.portals:
-            portal.draw(self.screen, self.camera_x, self.camera_y, ZOOM, self.width, self.height)
+        if self.quiz_state == 6:
+            for portal in self.portals:
+                portal.draw(self.screen, self.camera_x, self.camera_y, ZOOM, self.width, self.height)
 
         if self.npc_bromen_found:
             self.draw_npc_animated(self.npc_bromen_x, self.npc_bromen_y,
@@ -1066,8 +1364,25 @@ class Quarter3:
                                  self.npc_oldman_sprite)
 
         if self.npc_skeleton_found:
-            self.draw_npc_static(self.npc_skeleton_x, self.npc_skeleton_y,
-                                 self.npc_skeleton_sprite)
+            sprites = None
+            if self.npc_skeleton_dir == "left":
+                sprites = self.npc_skeleton_left_sprites
+            elif self.npc_skeleton_dir == "right":
+                sprites = self.npc_skeleton_right_sprites
+            elif self.npc_skeleton_dir == "up":
+                sprites = self.npc_skeleton_up_sprites
+            else:
+                sprites = self.npc_skeleton_down_sprites
+
+            if sprites and self.quiz_state == 4:
+                self.draw_npc_animated(self.npc_skeleton_x, self.npc_skeleton_y,
+                                       sprites, self.npc_skeleton_anim_frame)
+            elif sprites:
+                self.draw_npc_static(self.npc_skeleton_x, self.npc_skeleton_y,
+                                     sprites[0])
+            elif self.npc_skeleton_sprite:
+                self.draw_npc_static(self.npc_skeleton_x, self.npc_skeleton_y,
+                                     self.npc_skeleton_sprite)
 
         if self.npc_knight_found:
             sprites = None
@@ -1089,13 +1404,24 @@ class Quarter3:
 
         self.draw_player()
 
-        # Draw visible tree tiles on top of everything (Second pass)
+        # Draw visible tree and tumbleweed tiles on top of everything (Second pass)
         for row in range(start_row, end_row):
             for col in range(start_col, end_col):
                 if row < len(self.render_map) and col < len(self.render_map[row]):
                     tile_char = self.render_map[row][col]
-                    if tile_char == 'T':
+                    if tile_char == 'T' or tile_char == 'w':
                         self.draw_tile(tile_char, col * TILE_SIZE, row * TILE_SIZE)
+
+        # Draw quiz dialog overlays
+        if self.quiz_state == 1:
+            self.draw_quiz_dialog()
+        elif self.quiz_state == 2:
+            self.draw_wrong_dialog()
+        elif self.quiz_state == 3:
+            self.draw_correct_dialog()
+        elif self.quiz_state == 5:
+            self.draw_final_dialog()
+
         self.draw_ui()
 
     # ============================================================
@@ -1110,6 +1436,46 @@ class Quarter3:
 
             pygame.draw.circle(self.screen, color, self.cursor_pos, 15, 2)
             pygame.draw.circle(self.screen, (255, 100, 100), self.cursor_pos, 4)
+
+        # Draw Objectives HUD Box at the bottom center of the screen
+        if self.is_quiz_map:
+            box_w, box_h = 340, 80
+            box_x = (self.width - box_w) // 2
+            box_y = self.height - box_h - 20
+            
+            # Translucent slate blue background (alpha = 190)
+            bg_surf = pygame.Surface((box_w, box_h), pygame.SRCALPHA)
+            bg_surf.fill((15, 23, 42, 190))
+            self.screen.blit(bg_surf, (box_x, box_y))
+            
+            # Border: Gold when locked, Green when complete
+            border_color = (218, 165, 32) if self.quiz_state < 6 else (34, 197, 94)
+            pygame.draw.rect(self.screen, border_color, (box_x, box_y, box_w, box_h), 2, border_radius=8)
+            
+            # Header title in Gold
+            title_font = pygame.font.SysFont("Comic Sans MS", 12, bold=True)
+            title_surf = title_font.render("CURRENT OBJECTIVES", True, (255, 215, 0))
+            self.screen.blit(title_surf, (box_x + 15, box_y + 8))
+            
+            # Details font
+            item_font = pygame.font.SysFont("Comic Sans MS", 12)
+            
+            # Quiz completion progress item
+            q_count = min(self.current_question_index, 5)
+            obj1 = f"• Quiz Progress: {q_count}/5 questions answered"
+            obj1_color = (255, 255, 255) if q_count < 5 else (34, 197, 94)
+            obj1_surf = item_font.render(obj1, True, obj1_color)
+            self.screen.blit(obj1_surf, (box_x + 15, box_y + 28))
+            
+            # Goal portal state item
+            if self.quiz_state < 6:
+                obj2 = "• Portal Status: LOCKED"
+                obj2_color = (244, 63, 94)  # Rose
+            else:
+                obj2 = "• Portal Status: OPEN (Enter the portal to exit!)"
+                obj2_color = (34, 197, 94)  # Green
+            obj2_surf = item_font.render(obj2, True, obj2_color)
+            self.screen.blit(obj2_surf, (box_x + 15, box_y + 48))
 
         if self.show_info:
             npc_status = []
@@ -1158,6 +1524,198 @@ class Quarter3:
             elif event.key == pygame.K_i:
                 self.show_info = not self.show_info
         return None
+
+    # ============================================================
+    # QUIZ DIALOGUE DRAWING METHODS
+    # ============================================================
+    def draw_quiz_dialog(self):
+        overlay = pygame.Surface((self.width, self.height))
+        overlay.fill((0, 0, 0))
+        overlay.set_alpha(150)
+        self.screen.blit(overlay, (0, 0))
+
+        box_w, box_h = 580, 370
+        box_x = (self.width - box_w) // 2
+        box_y = (self.height - box_h) // 2
+
+        dialog_rect = pygame.Rect(box_x, box_y, box_w, box_h)
+        pygame.draw.rect(self.screen, (15, 23, 42), dialog_rect)
+        pygame.draw.rect(self.screen, (218, 165, 32), dialog_rect, 3, border_radius=8)
+
+        speaker_font = pygame.font.SysFont("Comic Sans MS", 18, bold=True)
+        speaker_surf = speaker_font.render("Skeleton", True, (218, 165, 32))
+        self.screen.blit(speaker_surf, (box_x + 25, box_y + 20))
+        pygame.draw.line(self.screen, (218, 165, 32), (box_x + 25, box_y + 48), (box_x + 120, box_y + 48), 2)
+
+        q_data = self.quiz_questions[self.current_question_index]
+        q_font = pygame.font.SysFont("Comic Sans MS", 16)
+        wrapped_q = self.wrap_text(q_data["question"], q_font, box_w - 50)
+        
+        y_text = box_y + 60
+        for line in wrapped_q:
+            txt_surf = q_font.render(line, True, (255, 255, 255))
+            self.screen.blit(txt_surf, (box_x + 25, y_text))
+            y_text += 22
+
+        button_w, button_h = 500, 42
+        button_x = box_x + (box_w - button_w) // 2
+        button_y_start = box_y + 125
+        spacing = 52
+        
+        for i, choice in enumerate(q_data["choices"]):
+            b_y = button_y_start + i * spacing
+            btn_rect = pygame.Rect(button_x, b_y, button_w, button_h)
+            is_hovered = btn_rect.collidepoint(self.cursor_pos)
+            
+            if is_hovered:
+                bg_color = (255, 215, 0)
+                text_color = (0, 0, 0)
+            else:
+                bg_color = (30, 41, 59)
+                text_color = (255, 255, 255)
+            
+            pygame.draw.rect(self.screen, bg_color, btn_rect, border_radius=12)
+            pygame.draw.rect(self.screen, (0, 0, 0), btn_rect, 3, border_radius=12)
+            
+            c_surf = q_font.render(choice, True, text_color)
+            c_rect = c_surf.get_rect(center=btn_rect.center)
+            self.screen.blit(c_surf, c_rect)
+
+    def draw_wrong_dialog(self):
+        overlay = pygame.Surface((self.width, self.height))
+        overlay.fill((0, 0, 0))
+        overlay.set_alpha(150)
+        self.screen.blit(overlay, (0, 0))
+
+        box_w, box_h = 500, 240
+        box_x = (self.width - box_w) // 2
+        box_y = (self.height - box_h) // 2
+
+        dialog_rect = pygame.Rect(box_x, box_y, box_w, box_h)
+        pygame.draw.rect(self.screen, (15, 23, 42), dialog_rect)
+        pygame.draw.rect(self.screen, (220, 38, 38), dialog_rect, 3, border_radius=8)
+
+        speaker_font = pygame.font.SysFont("Comic Sans MS", 18, bold=True)
+        speaker_surf = speaker_font.render("Skeleton", True, (220, 38, 38))
+        self.screen.blit(speaker_surf, (box_x + 25, box_y + 20))
+
+        q_font = pygame.font.SysFont("Comic Sans MS", 16)
+        msg_surf = q_font.render("Hmm, that is not correct. Try again, young adventurer!", True, (255, 255, 255))
+        self.screen.blit(msg_surf, (box_x + 25, box_y + 70))
+
+        button_w, button_h = 200, 42
+        button_x = box_x + (box_w - button_w) // 2
+        button_y = box_y + 140
+        btn_rect = pygame.Rect(button_x, button_y, button_w, button_h)
+
+        is_hovered = btn_rect.collidepoint(self.cursor_pos)
+        bg_color = (30, 41, 59) if not is_hovered else (220, 38, 38)
+
+        pygame.draw.rect(self.screen, bg_color, btn_rect, border_radius=12)
+        pygame.draw.rect(self.screen, (0, 0, 0), btn_rect, 3, border_radius=12)
+
+        c_surf = speaker_font.render("Try Again", True, (255, 255, 255))
+        c_rect = c_surf.get_rect(center=btn_rect.center)
+        self.screen.blit(c_surf, c_rect)
+
+    def draw_correct_dialog(self):
+        overlay = pygame.Surface((self.width, self.height))
+        overlay.fill((0, 0, 0))
+        overlay.set_alpha(150)
+        self.screen.blit(overlay, (0, 0))
+
+        box_w, box_h = 500, 240
+        box_x = (self.width - box_w) // 2
+        box_y = (self.height - box_h) // 2
+
+        dialog_rect = pygame.Rect(box_x, box_y, box_w, box_h)
+        pygame.draw.rect(self.screen, (15, 23, 42), dialog_rect)
+        pygame.draw.rect(self.screen, (22, 163, 74), dialog_rect, 3, border_radius=8)
+
+        speaker_font = pygame.font.SysFont("Comic Sans MS", 18, bold=True)
+        speaker_surf = speaker_font.render("Skeleton", True, (22, 163, 74))
+        self.screen.blit(speaker_surf, (box_x + 25, box_y + 20))
+
+        q_font = pygame.font.SysFont("Comic Sans MS", 16)
+        msg_surf = q_font.render(self.current_correct_phrase, True, (255, 255, 255))
+        self.screen.blit(msg_surf, (box_x + 25, box_y + 70))
+
+        button_w, button_h = 200, 42
+        button_x = box_x + (box_w - button_w) // 2
+        button_y = box_y + 140
+        btn_rect = pygame.Rect(button_x, button_y, button_w, button_h)
+
+        is_hovered = btn_rect.collidepoint(self.cursor_pos)
+        bg_color = (30, 41, 59) if not is_hovered else (22, 163, 74)
+
+        pygame.draw.rect(self.screen, bg_color, btn_rect, border_radius=12)
+        pygame.draw.rect(self.screen, (0, 0, 0), btn_rect, 3, border_radius=12)
+
+        c_surf = speaker_font.render("Continue", True, (255, 255, 255))
+        c_rect = c_surf.get_rect(center=btn_rect.center)
+        self.screen.blit(c_surf, c_rect)
+
+    def draw_final_dialog(self):
+        overlay = pygame.Surface((self.width, self.height))
+        overlay.fill((0, 0, 0))
+        overlay.set_alpha(150)
+        self.screen.blit(overlay, (0, 0))
+
+        box_w, box_h = 550, 300
+        box_x = (self.width - box_w) // 2
+        box_y = (self.height - box_h) // 2
+
+        dialog_rect = pygame.Rect(box_x, box_y, box_w, box_h)
+        pygame.draw.rect(self.screen, (15, 23, 42), dialog_rect)
+        pygame.draw.rect(self.screen, (218, 165, 32), dialog_rect, 3, border_radius=8)
+
+        speaker_font = pygame.font.SysFont("Comic Sans MS", 18, bold=True)
+        speaker_surf = speaker_font.render("Skeleton", True, (218, 165, 32))
+        self.screen.blit(speaker_surf, (box_x + 25, box_y + 20))
+        pygame.draw.line(self.screen, (218, 165, 32), (box_x + 25, box_y + 48), (box_x + 120, box_y + 48), 2)
+
+        q_font = pygame.font.SysFont("Comic Sans MS", 15)
+        speech_lines = [
+            "Outstanding, young adventurer! You have solved all my challenges.",
+            "You know your biology and desert science very well.",
+            "I will now activate the portal. Step through to return to safety!"
+        ]
+        
+        y_text = box_y + 65
+        for line in speech_lines:
+            txt_surf = q_font.render(line, True, (255, 255, 255))
+            self.screen.blit(txt_surf, (box_x + 25, y_text))
+            y_text += 24
+
+        button_w, button_h = 200, 42
+        button_x = box_x + (box_w - button_w) // 2
+        button_y = box_y + 210
+        btn_rect = pygame.Rect(button_x, button_y, button_w, button_h)
+
+        is_hovered = btn_rect.collidepoint(self.cursor_pos)
+        bg_color = (30, 41, 59) if not is_hovered else (218, 165, 32)
+
+        pygame.draw.rect(self.screen, bg_color, btn_rect, border_radius=12)
+        pygame.draw.rect(self.screen, (0, 0, 0), btn_rect, 3, border_radius=12)
+
+        c_surf = speaker_font.render("Activate Portal", True, (255, 255, 255) if not is_hovered else (0, 0, 0))
+        c_rect = c_surf.get_rect(center=btn_rect.center)
+        self.screen.blit(c_surf, c_rect)
+
+    def wrap_text(self, text, font, max_width):
+        words = text.split(' ')
+        lines = []
+        current_line = []
+        for word in words:
+            test_line = ' '.join(current_line + [word])
+            if font.size(test_line)[0] <= max_width:
+                current_line.append(word)
+            else:
+                lines.append(' '.join(current_line))
+                current_line = [word]
+        if current_line:
+            lines.append(' '.join(current_line))
+        return lines
 
     # ============================================================
     # CLEANUP

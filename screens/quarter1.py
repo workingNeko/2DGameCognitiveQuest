@@ -889,25 +889,25 @@ class Quarter1:
                     portal = self.Portal(x, y, 'right', is_static=True)
                     portal.set_animation(self.portal_frames_cache['right'])
                     self.portals.append(portal)
-                    row_list[x] = '6'
+                    row_list[x] = 'G'
                     modified = True
                 elif c == 'l':
                     portal = self.Portal(x, y, 'left', is_static=True)
                     portal.set_animation(self.portal_frames_cache['left'])
                     self.portals.append(portal)
-                    row_list[x] = '6'
+                    row_list[x] = 'G'
                     modified = True
                 elif c == 'u':
                     portal = self.Portal(x, y, 'up', is_static=True)
                     portal.set_animation(self.portal_frames_cache['up'])
                     self.portals.append(portal)
-                    row_list[x] = '7'
+                    row_list[x] = 'G'
                     modified = True
                 elif c == 'd':
                     portal = self.Portal(x, y, 'down', is_static=True)
                     portal.set_animation(self.portal_frames_cache['down'])
                     self.portals.append(portal)
-                    row_list[x] = '7'
+                    row_list[x] = 'G'
                     modified = True
             if modified:
                 self.render_map[y] = ''.join(row_list)
@@ -1004,7 +1004,6 @@ class Quarter1:
             # Check if this is the goal portal
             if current_portal.direction == self.goal_portal_direction:
                 if self.is_quiz_map and self.quiz_state < 6:
-                    print("⚠️ Goal portal locked: Complete all 5 quiz stations first!")
                     return False
                 print(f"🎯 Goal reached! Returning to stage select...")
                 self.return_to_stage_select()
@@ -1368,8 +1367,9 @@ class Quarter1:
                     else:
                         self.draw_tile(tile_char, col * TILE_SIZE, row * TILE_SIZE)
 
-        for portal in self.portals:
-            portal.draw(self.screen, self.camera_x, self.camera_y, ZOOM, self.width, self.height)
+        if not self.is_quiz_map or self.quiz_state == 6:
+            for portal in self.portals:
+                portal.draw(self.screen, self.camera_x, self.camera_y, ZOOM, self.width, self.height)
 
         if self.npc_bromen_found:
             self.draw_npc_animated(self.npc_bromen_x, self.npc_bromen_y,
@@ -1726,6 +1726,46 @@ class Quarter1:
 
             pygame.draw.circle(self.screen, color, self.cursor_pos, 15, 2)
             pygame.draw.circle(self.screen, (255, 100, 100), self.cursor_pos, 4)
+
+        # Draw Objectives HUD Box at the bottom center of the screen
+        if self.is_quiz_map:
+            box_w, box_h = 340, 80
+            box_x = (self.width - box_w) // 2
+            box_y = self.height - box_h - 20
+            
+            # Translucent slate blue background (alpha = 190)
+            bg_surf = pygame.Surface((box_w, box_h), pygame.SRCALPHA)
+            bg_surf.fill((15, 23, 42, 190))
+            self.screen.blit(bg_surf, (box_x, box_y))
+            
+            # Border: Gold when locked, Green when complete
+            border_color = (218, 165, 32) if self.quiz_state < 6 else (34, 197, 94)
+            pygame.draw.rect(self.screen, border_color, (box_x, box_y, box_w, box_h), 2, border_radius=8)
+            
+            # Header title in Gold
+            title_font = pygame.font.SysFont("Comic Sans MS", 12, bold=True)
+            title_surf = title_font.render("CURRENT OBJECTIVES", True, (255, 215, 0))
+            self.screen.blit(title_surf, (box_x + 15, box_y + 8))
+            
+            # Details font
+            item_font = pygame.font.SysFont("Comic Sans MS", 12)
+            
+            # Quiz completion progress item
+            q_count = min(self.current_question_index, 5)
+            obj1 = f"• Quiz Progress: {q_count}/5 questions answered"
+            obj1_color = (255, 255, 255) if q_count < 5 else (34, 197, 94)
+            obj1_surf = item_font.render(obj1, True, obj1_color)
+            self.screen.blit(obj1_surf, (box_x + 15, box_y + 28))
+            
+            # Goal portal state item
+            if self.quiz_state < 6:
+                obj2 = "• Portal Status: LOCKED"
+                obj2_color = (244, 63, 94)  # Rose
+            else:
+                obj2 = "• Portal Status: OPEN (Enter the portal to exit!)"
+                obj2_color = (34, 197, 94)  # Green
+            obj2_surf = item_font.render(obj2, True, obj2_color)
+            self.screen.blit(obj2_surf, (box_x + 15, box_y + 48))
 
         if self.show_info:
             npc_status = []

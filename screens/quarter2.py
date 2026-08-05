@@ -33,6 +33,7 @@ class Quarter2:
         self.main_menu = main_menu
         self.width, self.height = screen.get_size()
         self.map_name = map_name  # 'map2.txt'
+        self.is_quiz_map = True
 
         # ============================================================
         # GESTURE SYSTEM - USE MAIN MENU'S DATA
@@ -293,22 +294,16 @@ class Quarter2:
                     print(f"📍 Quiz Station {num} found at: ({x}, {y})")
 
         # Station Standby Directions
-        if "map5" in self.map_name.lower():
-            self.station_directions = {
-                1: "left",
-                2: "right",
-                3: "right",
-                4: "right",
-                5: "left"
-            }
-        else:
-            self.station_directions = {
-                1: "right",
-                2: "right",
-                3: "right",
-                4: "right",
-                5: "right"
-            }
+        self.station_directions = {
+            1: "right",
+            2: "right",
+            3: "right",
+            4: "right",
+            5: "right"
+        }
+        self.npc_knight_path = []
+        self.npc_knight_path_index = 0
+        self.player_block_timer = 0.0
 
         # Initialize Knight at station 1 if available
         if 1 in self.quiz_stations:
@@ -873,28 +868,58 @@ class Quarter2:
                     portal = self.Portal(x, y, 'right', is_static=True)
                     portal.set_animation(self.portal_frames_cache['right'])
                     self.portals.append(portal)
-                    row_list[x] = '6'
+                    row_list[x] = 'G'
                     modified = True
                 elif c == 'l':
                     portal = self.Portal(x, y, 'left', is_static=True)
                     portal.set_animation(self.portal_frames_cache['left'])
                     self.portals.append(portal)
-                    row_list[x] = '6'
+                    row_list[x] = 'G'
                     modified = True
                 elif c == 'u':
                     portal = self.Portal(x, y, 'up', is_static=True)
                     portal.set_animation(self.portal_frames_cache['up'])
                     self.portals.append(portal)
-                    row_list[x] = '7'
+                    row_list[x] = 'G'
                     modified = True
                 elif c == 'd':
                     portal = self.Portal(x, y, 'down', is_static=True)
                     portal.set_animation(self.portal_frames_cache['down'])
                     self.portals.append(portal)
-                    row_list[x] = '7'
+                    row_list[x] = 'G'
                     modified = True
             if modified:
                 self.render_map[y] = ''.join(row_list)
+
+    def find_path(self, start, end):
+        """BFS pathfinder from start (col, row) to end (col, row) on the grid"""
+        import collections
+        if start == end:
+            return [start]
+        queue = collections.deque([[start]])
+        seen = {start}
+
+        # Directions: Right, Left, Down, Up
+        directions = [(1, 0), (-1, 0), (0, 1), (0, -1)]
+
+        while queue:
+            path = queue.popleft()
+            curr = path[-1]
+            if curr == end:
+                return path
+
+            curr_x, curr_y = curr
+            for dx, dy in directions:
+                nxt = (curr_x + dx, curr_y + dy)
+                nx, ny = nxt
+                if 0 <= ny < self.ROWS and 0 <= nx < self.COLS:
+                    if ny < len(self.game_map) and nx < len(self.game_map[ny]):
+                        tile = self.game_map[ny][nx]
+                        # Walkable tiles are walkable. We ignore other temporary collision overlays
+                        if tile in self.WALKABLE_TILES and nxt not in seen:
+                            seen.add(nxt)
+                            queue.append(path + [nxt])
+        return []
 
     # ============================================================
     # COLLISION
@@ -967,6 +992,8 @@ class Quarter2:
                 return False
             # Check if this is the goal portal (up portal for map2.txt)
             if current_portal.direction == self.goal_portal_direction:
+                if self.quiz_state < 6:
+                    return False
                 print(f"🎯 Goal reached! Returning to stage select...")
                 self.return_to_stage_select()
                 return True
@@ -1058,18 +1085,18 @@ class Quarter2:
             btn_rect = pygame.Rect(box_x + (box_w - 200) // 2, box_y + 140, 200, 42)
             if btn_rect.collidepoint(pos):
                 if self.quiz_station_index < 5:
+                    start_coord = (self.npc_knight_tile_x, self.npc_knight_tile_y)
                     self.quiz_station_index += 1
                     self.current_question_index += 1
-                    # Teleport the Knight to the next station
                     if self.quiz_station_index in self.quiz_stations:
-                        tx, ty = self.quiz_stations[self.quiz_station_index]
-                        self.npc_knight_tile_x, self.npc_knight_tile_y = tx, ty
-                        self.npc_knight_x = tx * TILE_SIZE
-                        self.npc_knight_y = ty * TILE_SIZE
-                        self.npc_knight_dir = self.station_directions.get(self.quiz_station_index, "right")
-                        print(f"⚔️ Teleported Knight to Quiz Station {self.quiz_station_index}: ({tx}, {ty}) facing {self.npc_knight_dir}")
-                    self.quiz_state = 0
+                        end_coord = self.quiz_stations[self.quiz_station_index]
+                        self.npc_knight_path = self.find_path(start_coord, end_coord)
+                        self.npc_knight_path_index = 1
+                        self.quiz_state = 4
+                        self.player_block_timer = 3.0
+                        print(f"⚔️ Moving Knight from {start_coord} to {end_coord}")
                 else:
+                    self.current_question_index += 1
                     self.quiz_state = 5
                 
         # State 5: Final speech click
@@ -1099,6 +1126,9 @@ class Quarter2:
         if self.teleport_cooldown > 0:
             self.teleport_cooldown -= dt
 
+        if hasattr(self, 'player_block_timer') and self.player_block_timer > 0:
+            self.player_block_timer -= dt
+
         if self.npc_bromen_sprites and self.npc_bromen_found:
             self.npc_bromen_anim_timer += 1
             if self.npc_bromen_anim_timer >= 5:
@@ -1117,6 +1147,45 @@ class Quarter2:
                 # Triggers the quiz dialog
                 self.quiz_state = 1
                 self.selected_choice_index = -1
+                self.npc_knight_dir = self.station_directions.get(self.quiz_station_index, "right")
+
+        # Knight walking sequence along BFS path
+        if self.quiz_state == 4:
+            if hasattr(self, 'npc_knight_path') and self.npc_knight_path_index < len(self.npc_knight_path):
+                t_col, t_row = self.npc_knight_path[self.npc_knight_path_index]
+                target_x = t_col * TILE_SIZE
+                target_y = t_row * TILE_SIZE
+                
+                dx = target_x - self.npc_knight_x
+                dy = target_y - self.npc_knight_y
+                
+                move_speed = 2  # Walk speed: 2 pixels per frame
+                
+                if abs(dx) > abs(dy):
+                    self.npc_knight_dir = "right" if dx > 0 else "left"
+                else:
+                    self.npc_knight_dir = "down" if dy > 0 else "up"
+                
+                if abs(dx) <= move_speed and abs(dy) <= move_speed:
+                    self.npc_knight_x = target_x
+                    self.npc_knight_y = target_y
+                    self.npc_knight_tile_x = t_col
+                    self.npc_knight_tile_y = t_row
+                    self.npc_knight_path_index += 1
+                else:
+                    if dx != 0:
+                        self.npc_knight_x += move_speed if dx > 0 else -move_speed
+                    if dy != 0:
+                        self.npc_knight_y += move_speed if dy > 0 else -move_speed
+                
+                self.npc_knight_anim_timer += 1
+                if self.npc_knight_anim_timer >= 10:
+                    self.npc_knight_anim_timer = 0
+                    self.npc_knight_anim_frame = (self.npc_knight_anim_frame + 1) % 3
+            else:
+                self.quiz_state = 0
+                self.npc_knight_anim_frame = 0
+                self.npc_knight_anim_timer = 0
                 self.npc_knight_dir = self.station_directions.get(self.quiz_station_index, "right")
 
         self.update_player_movement()
@@ -1329,7 +1398,7 @@ class Quarter2:
     # UPDATE PLAYER MOVEMENT
     # ============================================================
     def update_player_movement(self):
-        if self.quiz_state in [1, 2, 3, 5]:
+        if self.quiz_state in [1, 2, 3, 5] or (hasattr(self, 'player_block_timer') and self.player_block_timer > 0):
             self.anim_frame = 0
             return
 
@@ -1475,8 +1544,9 @@ class Quarter2:
                         if tile_char not in {'1', '2', '3', '4', '5'}:
                             self.draw_tile(tile_char, col * TILE_SIZE, row * TILE_SIZE)
 
-        for portal in self.portals:
-            portal.draw(self.screen, self.camera_x, self.camera_y, ZOOM, self.width, self.height)
+        if self.quiz_state == 6:
+            for portal in self.portals:
+                portal.draw(self.screen, self.camera_x, self.camera_y, ZOOM, self.width, self.height)
 
         if self.npc_bromen_found:
             self.draw_npc_animated(self.npc_bromen_x, self.npc_bromen_y,
@@ -1501,7 +1571,10 @@ class Quarter2:
             else:
                 sprites = self.npc_knight_down_sprites
 
-            if sprites:
+            if sprites and self.quiz_state == 4:
+                self.draw_npc_animated(self.npc_knight_x, self.npc_knight_y,
+                                       sprites, self.npc_knight_anim_frame)
+            elif sprites:
                 self.draw_npc_static(self.npc_knight_x, self.npc_knight_y,
                                      sprites[0])
             elif self.npc_knight_sprite:
@@ -1562,6 +1635,46 @@ class Quarter2:
 
             pygame.draw.circle(self.screen, color, self.cursor_pos, 15, 2)
             pygame.draw.circle(self.screen, (255, 100, 100), self.cursor_pos, 4)
+
+        # Draw Objectives HUD Box at the bottom center of the screen
+        if self.is_quiz_map:
+            box_w, box_h = 340, 80
+            box_x = (self.width - box_w) // 2
+            box_y = self.height - box_h - 20
+            
+            # Translucent slate blue background (alpha = 190)
+            bg_surf = pygame.Surface((box_w, box_h), pygame.SRCALPHA)
+            bg_surf.fill((15, 23, 42, 190))
+            self.screen.blit(bg_surf, (box_x, box_y))
+            
+            # Border: Gold when locked, Green when complete
+            border_color = (218, 165, 32) if self.quiz_state < 6 else (34, 197, 94)
+            pygame.draw.rect(self.screen, border_color, (box_x, box_y, box_w, box_h), 2, border_radius=8)
+            
+            # Header title in Gold
+            title_font = pygame.font.SysFont("Comic Sans MS", 12, bold=True)
+            title_surf = title_font.render("CURRENT OBJECTIVES", True, (255, 215, 0))
+            self.screen.blit(title_surf, (box_x + 15, box_y + 8))
+            
+            # Details font
+            item_font = pygame.font.SysFont("Comic Sans MS", 12)
+            
+            # Quiz completion progress item
+            q_count = min(self.current_question_index, 5)
+            obj1 = f"• Quiz Progress: {q_count}/5 questions answered"
+            obj1_color = (255, 255, 255) if q_count < 5 else (34, 197, 94)
+            obj1_surf = item_font.render(obj1, True, obj1_color)
+            self.screen.blit(obj1_surf, (box_x + 15, box_y + 28))
+            
+            # Goal portal state item
+            if self.quiz_state < 6:
+                obj2 = "• Portal Status: LOCKED"
+                obj2_color = (244, 63, 94)  # Rose
+            else:
+                obj2 = "• Portal Status: OPEN (Enter the portal to exit!)"
+                obj2_color = (34, 197, 94)  # Green
+            obj2_surf = item_font.render(obj2, True, obj2_color)
+            self.screen.blit(obj2_surf, (box_x + 15, box_y + 48))
 
         if self.show_info:
             npc_status = []
