@@ -1,4 +1,4 @@
-# screens/quarter4.py - Quarter 4 Map Handler (map4.txt)
+# screens/quarter4.py - Quarter 4 Map Handler (map10.txt)
 
 import pygame
 import os
@@ -6,6 +6,7 @@ import sys
 import cv2
 import numpy as np
 import time
+import random
 from .map_loader import MapLoader
 
 # ============================================================
@@ -32,7 +33,7 @@ class Quarter4:
         self.screen = screen
         self.main_menu = main_menu
         self.width, self.height = screen.get_size()
-        self.map_name = map_name  # 'map4.txt'
+        self.map_name = map_name  # 'map10.txt'
 
         # ============================================================
         # GESTURE SYSTEM - USE MAIN MENU'S DATA
@@ -264,11 +265,11 @@ class Quarter4:
         self.teleport_cooldown = 0
         self.TELEPORT_COOLDOWN_TIME = 1.0
 
-        # Goal portal tracking - for map4.txt the goal is 'right' portal
+        # Goal portal tracking
         self.goal_portal_direction = self.portals[0].direction if self.portals else 'right'
 
         # ============================================================
-        # UI
+        # UI & QUIZ STATE SYSTEM
         # ============================================================
         self.show_info = True
         self.font = pygame.font.SysFont("Comic Sans MS", 16)
@@ -280,6 +281,105 @@ class Quarter4:
 
         # Completion flag
         self.completed = False
+
+        self.is_quiz_map = True
+        self.quiz_state = 0  # 0: waiting proximity, 1: dialog Q, 2: wrong try again, 3: correct phrase transition, 4: walking along path, 5: final speech, 6: quiz complete
+        self.quiz_station_index = 1  # current station (1-5)
+        self.current_question_index = 0
+        self.selected_choice_index = -1  # choice highlighted
+
+        # Station Standby Directions based on Map Name and User Requests
+        if self.map_name == "map10.txt":
+            self.station_directions = {
+                1: "left",
+                2: "left",
+                3: "left",
+                4: "right",
+                5: "right"
+            }
+        elif self.map_name == "map11.txt":
+            self.station_directions = {
+                1: "left",
+                2: "left",
+                3: "left",
+                4: "left",
+                5: "left"
+            }
+        elif self.map_name == "map12.txt":
+            self.station_directions = {
+                1: "right",
+                2: "right",
+                3: "right",
+                4: "right",
+                5: "right"
+            }
+        else: # Default values
+            self.station_directions = {
+                1: "left",
+                2: "left",
+                3: "left",
+                4: "right",
+                5: "right"
+            }
+
+        # Scan map for quiz stations 1, 2, 3, 4, 5
+        self.quiz_stations = {}
+        for y, row in enumerate(self.game_map):
+            for x, c in enumerate(row):
+                if c in ['1', '2', '3', '4', '5']:
+                    num = int(c)
+                    self.quiz_stations[num] = (x, y)
+                    print(f"📍 Quiz Station {num} found at: ({x}, {y})")
+
+        # Initialize Bromen at station 1 if available
+        if 1 in self.quiz_stations:
+            self.npc_bromen_tile_x, self.npc_bromen_tile_y = self.quiz_stations[1]
+            self.npc_bromen_x = self.npc_bromen_tile_x * TILE_SIZE
+            self.npc_bromen_y = self.npc_bromen_tile_y * TILE_SIZE
+            self.npc_bromen_found = True
+            self.npc_bromen_dir = self.station_directions.get(1, "left")
+            print(f"🧙‍♂️ Bromen spawned at Quiz Station 1: {self.quiz_stations[1]} facing {self.npc_bromen_dir}")
+
+        # Correct answer random responses
+        self.current_correct_phrase = ""
+        self.correct_phrases = [
+            "Splendid! Your mathematical intellect is top-tier!",
+            "Excellent! That's correct, onto the next challenge!",
+            "Superb! Your logic is unbreakable, adventurer!"
+        ]
+
+        self.npc_bromen_path = []
+        self.npc_bromen_path_index = 0
+        self.player_block_timer = 0.0
+
+        # Mathematics/Logic-themed Quiz Questions
+        self.quiz_questions = [
+            {
+                "question": "What is the next number in the Fibonacci sequence: 1, 1, 2, 3, 5, 8, 13, ...?",
+                "choices": ["A. 15", "B. 21", "C. 34", "D. 55"],
+                "correct": 1  # B
+            },
+            {
+                "question": "What is the value of 2^10 (2 to the power of 10)?",
+                "choices": ["A. 512", "B. 1024", "C. 2048", "D. 4096"],
+                "correct": 1  # B
+            },
+            {
+                "question": "Solve for x: 3x - 7 = 14.",
+                "choices": ["A. x = 5", "B. x = 6", "C. x = 7", "D. x = 8"],
+                "correct": 2  # C
+            },
+            {
+                "question": "What is the area of a circle with a radius of 7? (Use pi ≈ 22/7)",
+                "choices": ["A. 44", "B. 154", "C. 308", "D. 616"],
+                "correct": 1  # B
+            },
+            {
+                "question": "What is the sum of angles in a regular hexagon?",
+                "choices": ["A. 180 degrees", "B. 360 degrees", "C. 540 degrees", "D. 720 degrees"],
+                "correct": 3  # D
+            }
+        ]
 
         print(f"✅ Quarter4 initialized with map: {self.map_name}")
         print(f"   Goal portal: {self.goal_portal_direction}")
@@ -334,12 +434,7 @@ class Quarter4:
                     self.npc_bromen_found = True
                     print(f"Bromen NPC at: ({x}, {y})")
                 elif marker == 'O':
-                    self.npc_oldman_tile_x = x
-                    self.npc_oldman_tile_y = y
-                    self.npc_oldman_x = x * TILE_SIZE
-                    self.npc_oldman_y = y * TILE_SIZE
-                    self.npc_oldman_found = True
-                    print(f"Oldman NPC at: ({x}, {y})")
+                    pass
                 elif marker == 'S':
                     self.npc_skeleton_tile_x = x
                     self.npc_skeleton_tile_y = y
@@ -366,30 +461,8 @@ class Quarter4:
                 path = os.path.join(self.OBJECTS_PATH, filename)
             try:
                 image = pygame.image.load(path).convert_alpha()
-                w_orig, h_orig = image.get_size()
-                
-                # Custom scaling rules
-                if "tree" in filename:
-                    if "very_tall" in filename:
-                        target_h = 160  # 5 tiles tall
-                    elif "medium_clean" in filename:
-                        target_h = 128  # 4 tiles tall
-                    elif "medium_moss" in filename or "medium_clean" not in filename:
-                        target_h = 96   # 3 tiles tall
-                    else:
-                        target_h = 110
-                    target_w = max(1, int(w_orig * (target_h / h_orig)))
-                    image = pygame.transform.scale(image, (target_w, target_h))
-                elif ("ruin" in filename or "rock" in filename) and not any(filename.startswith(f"ruin{i}") for i in range(1, 11)):
-                    # Ruins/walls/stones: scale by 2.0
-                    image = pygame.transform.scale(image, (int(w_orig * 2), int(h_orig * 2)))
-                else:
-                    # Everything else: exactly 1 block tall (32x32)
-                    image = pygame.transform.scale(image, (TILE_SIZE, TILE_SIZE))
                 return image
             except Exception:
-                if is_q4:
-                    return load_tile(filename, is_q4=False)
                 placeholder = pygame.Surface((TILE_SIZE, TILE_SIZE))
                 placeholder.fill((100, 100, 100))
                 pygame.draw.rect(placeholder, (255, 255, 255), placeholder.get_rect(), 1)
@@ -414,8 +487,12 @@ class Quarter4:
         # Overwrite T and G with Q4 tiles for Quarter 4 Maps
         tiles["T"] = load_tile("dungeon1.png", is_q4=True)
         tiles["G"] = load_tile("floor.png", is_q4=True)
+        
+        # Map quiz stations and player spawn tiles to render on the smooth slate floor texture
+        for k in ["1", "2", "3", "4", "5", "P"]:
+            tiles[k] = tiles["G"]
 
-        # New Q4 tiles
+        # New Q4 tiles (Dungeon boundaries)
         q4_tiles = {
             "Z": "dungeon1.png",
             "M": "dungeon2.png",
@@ -466,9 +543,6 @@ class Quarter4:
             print(f"⚠️ NPC path does not exist: {npc_path}")
             placeholder = pygame.Surface((TILE_SIZE, TILE_SIZE))
             placeholder.fill((255, 200, 100))
-            pygame.draw.circle(placeholder, (0, 0, 0), (TILE_SIZE // 2, TILE_SIZE // 2), 12)
-            pygame.draw.circle(placeholder, (255, 255, 255), (TILE_SIZE // 2 - 4, TILE_SIZE // 2 - 4), 3)
-            pygame.draw.circle(placeholder, (255, 255, 255), (TILE_SIZE // 2 + 4, TILE_SIZE // 2 - 4), 3)
             frames.append(placeholder)
             return frames
 
@@ -487,7 +561,7 @@ class Quarter4:
                         placeholder = pygame.Surface((TILE_SIZE, TILE_SIZE))
                         placeholder.fill((255, 200, 0))
                         frames.append(placeholder)
-            except Exception as e:
+            except Exception:
                 if frames:
                     frames.append(frames[0].copy())
                 else:
@@ -502,171 +576,67 @@ class Quarter4:
     # LOAD STATIC NPC SPRITES (Oldman, Skeleton, Knight)
     # ============================================================
     def load_static_npc_sprites(self):
-        # Load Oldman
-        oldman_path = os.path.join(self.NPC_PATH_OLDMAN, "oldman.png")
-        try:
-            if os.path.exists(oldman_path):
-                img = pygame.image.load(oldman_path).convert_alpha()
-                self.npc_oldman_sprite = pygame.transform.scale(img, (TILE_SIZE, TILE_SIZE))
-                print(f"✅ Loaded Oldman sprite")
-            else:
-                print(f"⚠️ Oldman sprite not found at: {oldman_path}")
-                placeholder = pygame.Surface((TILE_SIZE, TILE_SIZE))
-                placeholder.fill((200, 200, 200))
-                pygame.draw.circle(placeholder, (0, 0, 0), (TILE_SIZE // 2, TILE_SIZE // 2), 12)
-                pygame.draw.circle(placeholder, (255, 255, 255), (TILE_SIZE // 2 - 4, TILE_SIZE // 2 - 4), 3)
-                pygame.draw.circle(placeholder, (255, 255, 255), (TILE_SIZE // 2 + 4, TILE_SIZE // 2 - 4), 3)
-                font = pygame.font.SysFont(None, 10)
-                text = font.render("OLD", True, (0, 0, 0))
-                placeholder.blit(text, (4, TILE_SIZE - 12))
-                self.npc_oldman_sprite = placeholder
-        except Exception as e:
-            print(f"❌ Error loading Oldman: {e}")
-            placeholder = pygame.Surface((TILE_SIZE, TILE_SIZE))
-            placeholder.fill((200, 200, 200))
-            self.npc_oldman_sprite = placeholder
+        # Load Bromen walking left sprites
+        self.npc_bromen_left_sprites = []
+        for name in ["bromenleft.png", "bromen_left_1.png", "bromen_left_2.png"]:
+            path = os.path.join(self.NPC_PATH_BROMEN, name)
+            if os.path.exists(path):
+                img = pygame.image.load(path).convert_alpha()
+                scaled = pygame.transform.scale(img, (TILE_SIZE, TILE_SIZE))
+                self.npc_bromen_left_sprites.append(scaled)
+                print(f"✅ Loaded Bromen left frame: {name}")
 
-        # Load Skeleton
-        skeleton_path = os.path.join(self.NPC_PATH_SKELETON, "skeleton.png")
-        try:
-            if os.path.exists(skeleton_path):
-                img = pygame.image.load(skeleton_path).convert_alpha()
-                self.npc_skeleton_sprite = pygame.transform.scale(img, (TILE_SIZE, TILE_SIZE))
-                print(f"✅ Loaded Skeleton sprite")
-            else:
-                print(f"⚠️ Skeleton sprite not found at: {skeleton_path}")
-                placeholder = pygame.Surface((TILE_SIZE, TILE_SIZE))
-                placeholder.fill((255, 255, 255))
-                pygame.draw.circle(placeholder, (0, 0, 0), (TILE_SIZE // 2, TILE_SIZE // 2), 12)
-                pygame.draw.circle(placeholder, (255, 200, 200), (TILE_SIZE // 2 - 4, TILE_SIZE // 2 - 4), 3)
-                pygame.draw.circle(placeholder, (255, 200, 200), (TILE_SIZE // 2 + 4, TILE_SIZE // 2 - 4), 3)
-                font = pygame.font.SysFont(None, 10)
-                text = font.render("SKEL", True, (0, 0, 0))
-                placeholder.blit(text, (2, TILE_SIZE - 12))
-                self.npc_skeleton_sprite = placeholder
-        except Exception as e:
-            print(f"❌ Error loading Skeleton: {e}")
-            placeholder = pygame.Surface((TILE_SIZE, TILE_SIZE))
-            placeholder.fill((255, 255, 255))
-            self.npc_skeleton_sprite = placeholder
+        # Load Bromen walking down sprites
+        self.npc_bromen_down_sprites = []
+        for name in ["bromen.png", "bromen_down_1.png", "bromen_down_2.png"]:
+            path = os.path.join(self.NPC_PATH_BROMEN, name)
+            if os.path.exists(path):
+                img = pygame.image.load(path).convert_alpha()
+                scaled = pygame.transform.scale(img, (TILE_SIZE, TILE_SIZE))
+                self.npc_bromen_down_sprites.append(scaled)
+                print(f"✅ Loaded Bromen down frame: {name}")
 
-        # Load Knight
-        knight_path = os.path.join(self.NPC_PATH_KNIGHT, "knight.png")
-        try:
-            if os.path.exists(knight_path):
-                img = pygame.image.load(knight_path).convert_alpha()
-                self.npc_knight_sprite = pygame.transform.scale(img, (TILE_SIZE, TILE_SIZE))
-                print(f"✅ Loaded Knight sprite")
-            else:
-                print(f"⚠️ Knight sprite not found at: {knight_path}")
-                placeholder = pygame.Surface((TILE_SIZE, TILE_SIZE))
-                placeholder.fill((192, 192, 192))
-                self.npc_knight_sprite = placeholder
+        # Load Bromen walking right sprites
+        self.npc_bromen_right_sprites = []
+        for name in ["bromenright.png", "bromen_right_1.png", "bromen_right_2.png"]:
+            path = os.path.join(self.NPC_PATH_BROMEN, name)
+            if os.path.exists(path):
+                img = pygame.image.load(path).convert_alpha()
+                scaled = pygame.transform.scale(img, (TILE_SIZE, TILE_SIZE))
+                self.npc_bromen_right_sprites.append(scaled)
+                print(f"✅ Loaded Bromen right frame: {name}")
 
-            # Load Knight walking left sprites
-            self.npc_knight_left_sprites = []
-            for name in ["knight_left.png", "knight_left_1.png", "knight_left_2.png"]:
-                path = os.path.join(self.NPC_PATH_KNIGHT, name)
-                if os.path.exists(path):
-                    img = pygame.image.load(path).convert_alpha()
-                    scaled = pygame.transform.scale(img, (TILE_SIZE, TILE_SIZE))
-                    self.npc_knight_left_sprites.append(scaled)
-                    print(f"✅ Loaded Knight left frame: {name}")
-
-            # Load Knight walking down sprites
-            self.npc_knight_down_sprites = []
-            for name in ["knight_down.png", "knight_down_1.png", "knight_down_2.png"]:
-                path = os.path.join(self.NPC_PATH_KNIGHT, name)
-                if os.path.exists(path):
-                    img = pygame.image.load(path).convert_alpha()
-                    scaled = pygame.transform.scale(img, (TILE_SIZE, TILE_SIZE))
-                    self.npc_knight_down_sprites.append(scaled)
-                    print(f"✅ Loaded Knight down frame: {name}")
-
-            # Load Knight walking right sprites
-            self.npc_knight_right_sprites = []
-            for name in ["knight_right.png", "knight_right_1.png", "knight_right_2.png"]:
-                path = os.path.join(self.NPC_PATH_KNIGHT, name)
-                if os.path.exists(path):
-                    img = pygame.image.load(path).convert_alpha()
-                    scaled = pygame.transform.scale(img, (TILE_SIZE, TILE_SIZE))
-                    self.npc_knight_right_sprites.append(scaled)
-                    print(f"✅ Loaded Knight right frame: {name}")
-
-            # Load Knight walking up sprites
-            self.npc_knight_up_sprites = []
-            for name in ["knight_up.png", "knight_up_1.png", "knight_up_2.png"]:
-                path = os.path.join(self.NPC_PATH_KNIGHT, name)
-                if os.path.exists(path):
-                    img = pygame.image.load(path).convert_alpha()
-                    scaled = pygame.transform.scale(img, (TILE_SIZE, TILE_SIZE))
-                    self.npc_knight_up_sprites.append(scaled)
-                    print(f"✅ Loaded Knight up frame: {name}")
-        except Exception as e:
-            print(f"❌ Error loading Knight: {e}")
-            placeholder = pygame.Surface((TILE_SIZE, TILE_SIZE))
-            placeholder.fill((192, 192, 192))
-            self.npc_knight_sprite = placeholder
-
-    # ============================================================
-    # PORTAL SPRITE ANIMATION CLASS
-    # ============================================================
-    class PortalSpriteAnimation:
-        def __init__(self, frames, x, y, direction, width_tiles, height_tiles):
-            self.frames = frames
-            self.current_frame = 0
-            self.animation_timer = 0
-            self.frame_delay = 3
-            self.x = x
-            self.y = y
-            self.direction = direction
-            self.width_tiles = width_tiles
-            self.height_tiles = height_tiles
-            self.width = TILE_SIZE * width_tiles
-            self.height = TILE_SIZE * height_tiles
-
-        def update(self):
-            if self.frames:
-                self.animation_timer += 1
-                if self.animation_timer >= self.frame_delay:
-                    self.animation_timer = 0
-                    self.current_frame = (self.current_frame + 1) % len(self.frames)
-
-        def get_current_image(self):
-            if self.frames and self.current_frame < len(self.frames):
-                return self.frames[self.current_frame]
-            return None
-
-        def draw(self, screen, camera_x, camera_y, zoom, screen_width, screen_height):
-            screen_x = (self.x - camera_x) * zoom
-            screen_y = (self.y - camera_y) * zoom
-
-            if (-self.width * zoom <= screen_x <= screen_width + self.width * zoom and
-                    -self.height * zoom <= screen_y <= screen_height + self.height * zoom):
-                portal_img = self.get_current_image()
-                if portal_img:
-                    scaled_width = int(self.width * zoom)
-                    scaled_height = int(self.height * zoom)
-                    scaled_img = pygame.transform.scale(portal_img, (scaled_width, scaled_height))
-                    screen.blit(scaled_img, (screen_x, screen_y))
+        # Load Bromen walking up sprites
+        self.npc_bromen_up_sprites = []
+        for name in ["bromenup.png", "bromen_up_1.png", "bromen_up_2.png"]:
+            path = os.path.join(self.NPC_PATH_BROMEN, name)
+            if os.path.exists(path):
+                img = pygame.image.load(path).convert_alpha()
+                scaled = pygame.transform.scale(img, (TILE_SIZE, TILE_SIZE))
+                self.npc_bromen_up_sprites.append(scaled)
+                print(f"✅ Loaded Bromen up frame: {name}")
 
     # ============================================================
     # PORTAL CLASS
     # ============================================================
     class Portal:
         def __init__(self, x, y, direction, is_static=False):
-            self.x = x
-            self.y = y
+            self.tile_x = x
+            self.tile_y = y
             self.direction = direction
             self.is_static = is_static
-            self.width_tiles, self.height_tiles = PORTAL_SIZES[direction]
             self.animation = None
 
+            # Get width/height tile count
+            size = PORTAL_SIZES.get(direction, (3, 3))
+            self.width_tiles = size[0]
+            self.height_tiles = size[1]
+
         def get_world_x(self):
-            return self.x * TILE_SIZE
+            return self.tile_x * TILE_SIZE
 
         def get_world_y(self):
-            return self.y * TILE_SIZE
+            return self.tile_y * TILE_SIZE
 
         def get_width_pixels(self):
             return self.width_tiles * TILE_SIZE
@@ -675,20 +645,21 @@ class Quarter4:
             return self.height_tiles * TILE_SIZE
 
         def get_center_x(self):
-            return self.x * TILE_SIZE + (self.width_tiles * TILE_SIZE) // 2
+            return self.get_world_x() + self.get_width_pixels() // 2
 
         def get_center_y(self):
-            return self.y * TILE_SIZE + (self.height_tiles * TILE_SIZE) // 2
+            return self.get_world_y() + self.get_height_pixels() // 2
 
         def set_animation(self, frames):
-            self.animation = Quarter4.PortalSpriteAnimation(
-                frames,
-                self.get_world_x(),
-                self.get_world_y(),
-                self.direction,
-                self.width_tiles,
-                self.height_tiles
-            )
+            if frames:
+                self.animation = self.PortalAnimation(
+                    frames,
+                    self.get_world_x(),
+                    self.get_world_y(),
+                    self.direction,
+                    self.width_tiles,
+                    self.height_tiles
+                )
 
         def update_animation(self):
             if self.animation:
@@ -722,6 +693,41 @@ class Quarter4:
             portal_bottom = portal_top + self.get_height_pixels()
             return (portal_left <= world_x < portal_right and
                     portal_top <= world_y < portal_bottom)
+
+        # ============================================================
+        # PORTAL ANIMATION INNER CLASS
+        # ============================================================
+        class PortalAnimation:
+            def __init__(self, frames, x, y, direction, width_tiles, height_tiles):
+                self.frames = frames
+                self.x = x
+                self.y = y
+                self.direction = direction
+                self.width_tiles = width_tiles
+                self.height_tiles = height_tiles
+                self.current_frame = 0
+                self.timer = 0
+                self.frame_delay = 5  # Speed: update frame every 5 updates
+
+            def update(self):
+                self.timer += 1
+                if self.timer >= self.frame_delay:
+                    self.timer = 0
+                    self.current_frame = (self.current_frame + 1) % len(self.frames)
+
+            def draw(self, screen, camera_x, camera_y, zoom, screen_width, screen_height):
+                screen_x = (self.x - camera_x) * zoom
+                screen_y = (self.y - camera_y) * zoom
+
+                # Draw check within screen boundary
+                w_pixels = self.width_tiles * TILE_SIZE * zoom
+                h_pixels = self.height_tiles * TILE_SIZE * zoom
+
+                if (-w_pixels <= screen_x <= screen_width + w_pixels and
+                        -h_pixels <= screen_y <= screen_height + h_pixels):
+                    frame_img = self.frames[self.current_frame]
+                    scaled_img = pygame.transform.scale(frame_img, (int(w_pixels), int(h_pixels)))
+                    screen.blit(scaled_img, (screen_x, screen_y))
 
     # ============================================================
     # LOAD PORTAL FRAMES
@@ -757,12 +763,10 @@ class Quarter4:
                     frames.append(surf)
             return frames if frames else None
 
-        return {
-            'right': load_portal_frames('right', PORTAL_SIZES['right'][0], PORTAL_SIZES['right'][1]),
-            'left': load_portal_frames('left', PORTAL_SIZES['left'][0], PORTAL_SIZES['left'][1]),
-            'up': load_portal_frames('up', PORTAL_SIZES['up'][0], PORTAL_SIZES['up'][1]),
-            'down': load_portal_frames('down', PORTAL_SIZES['down'][0], PORTAL_SIZES['down'][1])
-        }
+        cache = {}
+        for d, size in PORTAL_SIZES.items():
+            cache[d] = load_portal_frames(d, size[0], size[1])
+        return cache
 
     # ============================================================
     # LOAD STATIC PORTALS
@@ -776,25 +780,25 @@ class Quarter4:
                     portal = self.Portal(x, y, 'right', is_static=True)
                     portal.set_animation(self.portal_frames_cache['right'])
                     self.portals.append(portal)
-                    row_list[x] = '6'
+                    row_list[x] = 'G'
                     modified = True
                 elif c == 'l':
                     portal = self.Portal(x, y, 'left', is_static=True)
                     portal.set_animation(self.portal_frames_cache['left'])
                     self.portals.append(portal)
-                    row_list[x] = '6'
+                    row_list[x] = 'G'
                     modified = True
                 elif c == 'u':
                     portal = self.Portal(x, y, 'up', is_static=True)
                     portal.set_animation(self.portal_frames_cache['up'])
                     self.portals.append(portal)
-                    row_list[x] = '7'
+                    row_list[x] = 'G'
                     modified = True
                 elif c == 'd':
                     portal = self.Portal(x, y, 'down', is_static=True)
                     portal.set_animation(self.portal_frames_cache['down'])
                     self.portals.append(portal)
-                    row_list[x] = '7'
+                    row_list[x] = 'G'
                     modified = True
             if modified:
                 self.render_map[y] = ''.join(row_list)
@@ -803,31 +807,73 @@ class Quarter4:
     # COLLISION
     # ============================================================
     def can_move(self, nx, ny):
-        col = int(nx // TILE_SIZE)
-        row = int(ny // TILE_SIZE)
-        if row < 0 or row >= self.ROWS or col < 0 or col >= self.COLS:
-            return False
-        if row >= len(self.game_map) or col >= len(self.game_map[row]):
-            return False
-        tile = self.game_map[row][col]
-
-        if tile not in self.WALKABLE_TILES:
-            return False
+        # Check all 4 corners of the player's bounding box (with 4 pixels padding for smooth movement)
+        padding = 4
+        corners = [
+            (nx + padding, ny + padding),
+            (nx + TILE_SIZE - padding - 1, ny + padding),
+            (nx + padding, ny + TILE_SIZE - padding - 1),
+            (nx + TILE_SIZE - padding - 1, ny + TILE_SIZE - padding - 1)
+        ]
 
         npc_positions = []
         for marker, positions in self.npc_positions_data.items():
             npc_positions.extend(positions)
 
-        player_col = int(self.player_x // TILE_SIZE)
-        player_row = int(self.player_y // TILE_SIZE)
+        for cx, cy in corners:
+            col = int(cx // TILE_SIZE)
+            row = int(cy // TILE_SIZE)
+            if row < 0 or row >= self.ROWS or col < 0 or col >= self.COLS:
+                return False
+            if row >= len(self.game_map) or col >= len(self.game_map[row]):
+                return False
+            tile = self.game_map[row][col]
 
-        for npc_col, npc_row in npc_positions:
-            if col == npc_col and row == npc_row:
-                if player_col == npc_col and player_row == npc_row:
-                    return True
+            if tile not in self.WALKABLE_TILES:
                 return False
 
+            for npc_col, npc_row in npc_positions:
+                if col == npc_col and row == npc_row:
+                    player_col = int(self.player_x // TILE_SIZE)
+                    player_row = int(self.player_y // TILE_SIZE)
+                    if player_col == npc_col and player_row == npc_row:
+                        continue
+                    return False
+
         return True
+
+    # ============================================================
+    # BFS PATHFINDER
+    # ============================================================
+    def find_path(self, start, end):
+        """BFS pathfinder from start (col, row) to end (col, row) on the grid"""
+        import collections
+        if start == end:
+            return [start]
+        queue = collections.deque([[start]])
+        seen = {start}
+
+        # Directions: Right, Left, Down, Up
+        directions = [(1, 0), (-1, 0), (0, 1), (0, -1)]
+
+        while queue:
+            path = queue.popleft()
+            curr = path[-1]
+            if curr == end:
+                return path
+
+            curr_x, curr_y = curr
+            for dx, dy in directions:
+                nxt = (curr_x + dx, curr_y + dy)
+                nx, ny = nxt
+                if 0 <= ny < self.ROWS and 0 <= nx < self.COLS:
+                    if ny < len(self.game_map) and nx < len(self.game_map[ny]):
+                        tile = self.game_map[ny][nx]
+                        # Walkable tiles are walkable. Skeletons/Bromen respect map obstacles.
+                        if tile in self.WALKABLE_TILES and nxt not in seen:
+                            seen.add(nxt)
+                            queue.append(path + [nxt])
+        return []
 
     # ============================================================
     # RETURN TO STAGE SELECT
@@ -855,8 +901,10 @@ class Quarter4:
                 break
 
         if current_portal and self.fist_closed and self.teleport_cooldown <= 0:
-            # Check if this is the goal portal (right portal for map4.txt)
             if current_portal.direction == self.goal_portal_direction:
+                # Portal is locked until the quiz is completed
+                if self.quiz_state < 6:
+                    return False
                 print(f"🎯 Goal reached! Returning to stage select...")
                 self.return_to_stage_select()
                 return True
@@ -903,7 +951,72 @@ class Quarter4:
     # TRIGGER CLICK
     # ============================================================
     def trigger_click(self, pos):
-        pass
+        # State 1: Quiz Question dialogue click
+        if self.quiz_state == 1:
+            box_w, box_h = 580, 370
+            box_x = (self.width - box_w) // 2
+            box_y = (self.height - box_h) // 2
+            
+            button_w, button_h = 500, 42
+            button_x = box_x + (box_w - button_w) // 2
+            button_y_start = box_y + 125
+            spacing = 52
+            
+            q_data = self.quiz_questions[self.current_question_index]
+            for i in range(len(q_data["choices"])):
+                b_y = button_y_start + i * spacing
+                btn_rect = pygame.Rect(button_x, b_y, button_w, button_h)
+                if btn_rect.collidepoint(pos):
+                    if i == q_data["correct"]:
+                        self.current_correct_phrase = random.choice(self.correct_phrases)
+                        self.quiz_state = 3
+                        print("✨ Correct answer selected!")
+                    else:
+                        self.quiz_state = 2
+                        print("❌ Incorrect answer selected!")
+                    break
+
+        # State 2: Incorrect answer feedback click
+        elif self.quiz_state == 2:
+            box_w, box_h = 500, 240
+            box_x = (self.width - box_w) // 2
+            box_y = (self.height - box_h) // 2
+            btn_rect = pygame.Rect(box_x + (box_w - 200) // 2, box_y + 140, 200, 42)
+            if btn_rect.collidepoint(pos):
+                self.quiz_state = 1
+            
+        # State 3: Correct answer transition screen click
+        elif self.quiz_state == 3:
+            box_w, box_h = 500, 240
+            box_x = (self.width - box_w) // 2
+            box_y = (self.height - box_h) // 2
+            btn_rect = pygame.Rect(box_x + (box_w - 200) // 2, box_y + 140, 200, 42)
+            if btn_rect.collidepoint(pos):
+                if self.quiz_station_index < 5:
+                    start_coord = (self.npc_bromen_tile_x, self.npc_bromen_tile_y)
+                    self.quiz_station_index += 1
+                    self.current_question_index += 1
+                    if self.quiz_station_index in self.quiz_stations:
+                        end_coord = self.quiz_stations[self.quiz_station_index]
+                        self.npc_bromen_path = self.find_path(start_coord, end_coord)
+                        self.npc_bromen_path_index = 1
+                        self.quiz_state = 4
+                        self.player_block_timer = 3.0
+                        print(f"🧙‍♂️ Moving Bromen from {start_coord} to {end_coord}")
+                else:
+                    self.current_question_index += 1
+                    self.quiz_state = 5
+                
+        # State 5: Final speech click
+        elif self.quiz_state == 5:
+            box_w, box_h = 550, 300
+            box_x = (self.width - box_w) // 2
+            box_y = (self.height - box_h) // 2
+            btn_rect = pygame.Rect(box_x + (box_w - 200) // 2, box_y + 210, 200, 42)
+            if btn_rect.collidepoint(pos):
+                self.quiz_state = 6
+                self.npc_bromen_found = False
+                print("🧙‍♂️ Bromen disappeared from Quarter 4")
 
     # ============================================================
     # UPDATE
@@ -915,13 +1028,56 @@ class Quarter4:
         if self.teleport_cooldown > 0:
             self.teleport_cooldown -= dt
 
-        if self.npc_bromen_sprites and self.npc_bromen_found:
-            self.npc_bromen_anim_timer += 1
-            if self.npc_bromen_anim_timer >= 5:
+        if hasattr(self, 'player_block_timer') and self.player_block_timer > 0:
+            self.player_block_timer -= dt
+
+        # Proximity interaction check for Bromen NPC
+        if self.quiz_state == 0 and self.npc_bromen_found:
+            px, py = self.player_x // TILE_SIZE, self.player_y // TILE_SIZE
+            nx, ny = self.npc_bromen_tile_x, self.npc_bromen_tile_y
+            if abs(px - nx) <= 1 and abs(py - ny) <= 1:
+                self.quiz_state = 1
+                self.selected_choice_index = -1
+                print("🧙‍♂️ Interacting with Bromen! Quiz dialog popped up.")
+
+        # Bromen walking sequence along BFS path
+        if self.quiz_state == 4:
+            if hasattr(self, 'npc_bromen_path') and self.npc_bromen_path_index < len(self.npc_bromen_path):
+                t_col, t_row = self.npc_bromen_path[self.npc_bromen_path_index]
+                target_x = t_col * TILE_SIZE
+                target_y = t_row * TILE_SIZE
+                
+                dx = target_x - self.npc_bromen_x
+                dy = target_y - self.npc_bromen_y
+                
+                move_speed = 2  # Walk speed: 2 pixels per frame
+                
+                if abs(dx) > abs(dy):
+                    self.npc_bromen_dir = "right" if dx > 0 else "left"
+                else:
+                    self.npc_bromen_dir = "down" if dy > 0 else "up"
+                
+                if abs(dx) <= move_speed and abs(dy) <= move_speed:
+                    self.npc_bromen_x = target_x
+                    self.npc_bromen_y = target_y
+                    self.npc_bromen_tile_x = t_col
+                    self.npc_bromen_tile_y = t_row
+                    self.npc_bromen_path_index += 1
+                else:
+                    if dx != 0:
+                        self.npc_bromen_x += move_speed if dx > 0 else -move_speed
+                    if dy != 0:
+                        self.npc_bromen_y += move_speed if dy > 0 else -move_speed
+                
+                self.npc_bromen_anim_timer += 1
+                if self.npc_bromen_anim_timer >= 10:
+                    self.npc_bromen_anim_timer = 0
+                    self.npc_bromen_anim_frame = (self.npc_bromen_anim_frame + 1) % 3
+            else:
+                self.quiz_state = 0
+                self.npc_bromen_anim_frame = 0
                 self.npc_bromen_anim_timer = 0
-                self.npc_bromen_anim_frame = (self.npc_bromen_anim_frame + 1) % len(self.npc_bromen_sprites)
-
-
+                self.npc_bromen_dir = self.station_directions.get(self.quiz_station_index, "left")
 
         self.update_player_movement()
         self.check_portal_teleport_on_hold()
@@ -935,6 +1091,10 @@ class Quarter4:
     # UPDATE PLAYER MOVEMENT
     # ============================================================
     def update_player_movement(self):
+        if self.quiz_state in [1, 2, 3, 5] or (hasattr(self, 'player_block_timer') and self.player_block_timer > 0):
+            self.anim_frame = 0
+            return
+
         vx, vy = 0, 0
 
         if self.hand_detected:
@@ -1044,49 +1204,45 @@ class Quarter4:
         start_row = max(0, int(self.camera_y / TILE_SIZE) - 2)
         end_row = min(self.ROWS, int((self.camera_y + self.height / ZOOM) / TILE_SIZE) + 3)
 
-        # Draw visible tiles using render_map (First pass: Skip trees and draw grass under them)
+        # Draw visible tiles using render_map (First pass: Skip trees)
         for row in range(start_row, end_row):
             for col in range(start_col, end_col):
                 if row < len(self.render_map) and col < len(self.render_map[row]):
                     tile_char = self.render_map[row][col]
-                    if tile_char == 'T':
-                        # Draw grass under the tree so there is no black void under the player
-                        self.draw_tile('G', col * TILE_SIZE, row * TILE_SIZE)
-                    else:
+                    if tile_char != 'T':
                         self.draw_tile(tile_char, col * TILE_SIZE, row * TILE_SIZE)
 
-        for portal in self.portals:
-            portal.draw(self.screen, self.camera_x, self.camera_y, ZOOM, self.width, self.height)
+        # Only draw portals when quiz is complete
+        if self.quiz_state == 6:
+            for portal in self.portals:
+                portal.draw(self.screen, self.camera_x, self.camera_y, ZOOM, self.width, self.height)
 
+        # Draw Bromen NPC
         if self.npc_bromen_found:
-            self.draw_npc_animated(self.npc_bromen_x, self.npc_bromen_y,
-                                   self.npc_bromen_sprites, self.npc_bromen_anim_frame)
-
-        if self.npc_oldman_found:
-            self.draw_npc_static(self.npc_oldman_x, self.npc_oldman_y,
-                                 self.npc_oldman_sprite)
-
-        if self.npc_skeleton_found:
-            self.draw_npc_static(self.npc_skeleton_x, self.npc_skeleton_y,
-                                 self.npc_skeleton_sprite)
-
-        if self.npc_knight_found:
-            sprites = None
-            if self.npc_knight_dir == "left":
-                sprites = self.npc_knight_left_sprites
-            elif self.npc_knight_dir == "right":
-                sprites = self.npc_knight_right_sprites
-            elif self.npc_knight_dir == "up":
-                sprites = self.npc_knight_up_sprites
+            if self.quiz_state == 4:
+                # Walk animation
+                if self.npc_bromen_dir == "left":
+                    sprites = self.npc_bromen_left_sprites
+                elif self.npc_bromen_dir == "right":
+                    sprites = self.npc_bromen_right_sprites
+                elif self.npc_bromen_dir == "up":
+                    sprites = self.npc_bromen_up_sprites
+                else:
+                    sprites = self.npc_bromen_down_sprites
+                
+                self.draw_npc_animated(self.npc_bromen_x, self.npc_bromen_y,
+                                      sprites, self.npc_bromen_anim_frame)
             else:
-                sprites = self.npc_knight_down_sprites
-
-            if sprites:
-                self.draw_npc_static(self.npc_knight_x, self.npc_knight_y,
-                                     sprites[0])
-            elif self.npc_knight_sprite:
-                self.draw_npc_static(self.npc_knight_x, self.npc_knight_y,
-                                     self.npc_knight_sprite)
+                # Standby frame: index 0 of directional sprites
+                if self.npc_bromen_dir == "left":
+                    sprite = self.npc_bromen_left_sprites[0] if self.npc_bromen_left_sprites else self.npc_bromen_sprites[0]
+                elif self.npc_bromen_dir == "right":
+                    sprite = self.npc_bromen_right_sprites[0] if self.npc_bromen_right_sprites else self.npc_bromen_sprites[0]
+                elif self.npc_bromen_dir == "up":
+                    sprite = self.npc_bromen_up_sprites[0] if self.npc_bromen_up_sprites else self.npc_bromen_sprites[0]
+                else:
+                    sprite = self.npc_bromen_down_sprites[0] if self.npc_bromen_down_sprites else self.npc_bromen_sprites[0]
+                self.draw_npc_static(self.npc_bromen_x, self.npc_bromen_y, sprite)
 
         self.draw_player()
 
@@ -1097,6 +1253,17 @@ class Quarter4:
                     tile_char = self.render_map[row][col]
                     if tile_char == 'T':
                         self.draw_tile(tile_char, col * TILE_SIZE, row * TILE_SIZE)
+
+        # Draw quiz dialog overlays
+        if self.quiz_state == 1:
+            self.draw_quiz_dialog()
+        elif self.quiz_state == 2:
+            self.draw_wrong_dialog()
+        elif self.quiz_state == 3:
+            self.draw_correct_dialog()
+        elif self.quiz_state == 5:
+            self.draw_final_dialog()
+
         self.draw_ui()
 
     # ============================================================
@@ -1111,6 +1278,46 @@ class Quarter4:
 
             pygame.draw.circle(self.screen, color, self.cursor_pos, 15, 2)
             pygame.draw.circle(self.screen, (255, 100, 100), self.cursor_pos, 4)
+
+        # Draw Objectives HUD Box at the bottom center of the screen
+        if self.is_quiz_map:
+            box_w, box_h = 340, 80
+            box_x = (self.width - box_w) // 2
+            box_y = self.height - box_h - 20
+            
+            # Translucent slate blue background (alpha = 190)
+            bg_surf = pygame.Surface((box_w, box_h), pygame.SRCALPHA)
+            bg_surf.fill((15, 23, 42, 190))
+            self.screen.blit(bg_surf, (box_x, box_y))
+            
+            # Border: Gold when locked, Green when complete
+            border_color = (218, 165, 32) if self.quiz_state < 6 else (34, 197, 94)
+            pygame.draw.rect(self.screen, border_color, (box_x, box_y, box_w, box_h), 2, border_radius=8)
+            
+            # Header title in Gold
+            title_font = pygame.font.SysFont("Comic Sans MS", 12, bold=True)
+            title_surf = title_font.render("CURRENT OBJECTIVES", True, (255, 215, 0))
+            self.screen.blit(title_surf, (box_x + 15, box_y + 8))
+            
+            # Details font
+            item_font = pygame.font.SysFont("Comic Sans MS", 12)
+            
+            # Quiz completion progress item
+            q_count = min(self.current_question_index, 5)
+            obj1 = f"• Quiz Progress: {q_count}/5 questions answered"
+            obj1_color = (255, 255, 255) if q_count < 5 else (34, 197, 94)
+            obj1_surf = item_font.render(obj1, True, obj1_color)
+            self.screen.blit(obj1_surf, (box_x + 15, box_y + 28))
+            
+            # Goal portal state item
+            if self.quiz_state < 6:
+                obj2 = "• Portal Status: LOCKED"
+                obj2_color = (244, 63, 94)  # Rose
+            else:
+                obj2 = "• Portal Status: OPEN (Enter the portal to exit!)"
+                obj2_color = (34, 197, 94)  # Green
+            obj2_surf = item_font.render(obj2, True, obj2_color)
+            self.screen.blit(obj2_surf, (box_x + 15, box_y + 48))
 
         if self.show_info:
             npc_status = []
@@ -1159,6 +1366,198 @@ class Quarter4:
             elif event.key == pygame.K_i:
                 self.show_info = not self.show_info
         return None
+
+    # ============================================================
+    # QUIZ DIALOGUE DRAWING METHODS
+    # ============================================================
+    def draw_quiz_dialog(self):
+        overlay = pygame.Surface((self.width, self.height))
+        overlay.fill((0, 0, 0))
+        overlay.set_alpha(150)
+        self.screen.blit(overlay, (0, 0))
+
+        box_w, box_h = 580, 370
+        box_x = (self.width - box_w) // 2
+        box_y = (self.height - box_h) // 2
+
+        dialog_rect = pygame.Rect(box_x, box_y, box_w, box_h)
+        pygame.draw.rect(self.screen, (15, 23, 42), dialog_rect)
+        pygame.draw.rect(self.screen, (218, 165, 32), dialog_rect, 3, border_radius=8)
+
+        speaker_font = pygame.font.SysFont("Comic Sans MS", 18, bold=True)
+        speaker_surf = speaker_font.render("Bromen", True, (218, 165, 32))
+        self.screen.blit(speaker_surf, (box_x + 25, box_y + 20))
+        pygame.draw.line(self.screen, (218, 165, 32), (box_x + 25, box_y + 48), (box_x + 120, box_y + 48), 2)
+
+        q_data = self.quiz_questions[self.current_question_index]
+        q_font = pygame.font.SysFont("Comic Sans MS", 16)
+        wrapped_q = self.wrap_text(q_data["question"], q_font, box_w - 50)
+        
+        y_text = box_y + 60
+        for line in wrapped_q:
+            txt_surf = q_font.render(line, True, (255, 255, 255))
+            self.screen.blit(txt_surf, (box_x + 25, y_text))
+            y_text += 22
+
+        button_w, button_h = 500, 42
+        button_x = box_x + (box_w - button_w) // 2
+        button_y_start = box_y + 125
+        spacing = 52
+        
+        for i, choice in enumerate(q_data["choices"]):
+            b_y = button_y_start + i * spacing
+            btn_rect = pygame.Rect(button_x, b_y, button_w, button_h)
+            is_hovered = btn_rect.collidepoint(self.cursor_pos)
+            
+            if is_hovered:
+                bg_color = (255, 215, 0)
+                text_color = (0, 0, 0)
+            else:
+                bg_color = (30, 41, 59)
+                text_color = (255, 255, 255)
+            
+            pygame.draw.rect(self.screen, bg_color, btn_rect, border_radius=12)
+            pygame.draw.rect(self.screen, (0, 0, 0), btn_rect, 3, border_radius=12)
+            
+            c_surf = q_font.render(choice, True, text_color)
+            c_rect = c_surf.get_rect(center=btn_rect.center)
+            self.screen.blit(c_surf, c_rect)
+
+    def draw_wrong_dialog(self):
+        overlay = pygame.Surface((self.width, self.height))
+        overlay.fill((0, 0, 0))
+        overlay.set_alpha(150)
+        self.screen.blit(overlay, (0, 0))
+
+        box_w, box_h = 500, 240
+        box_x = (self.width - box_w) // 2
+        box_y = (self.height - box_h) // 2
+
+        dialog_rect = pygame.Rect(box_x, box_y, box_w, box_h)
+        pygame.draw.rect(self.screen, (15, 23, 42), dialog_rect)
+        pygame.draw.rect(self.screen, (220, 38, 38), dialog_rect, 3, border_radius=8)
+
+        speaker_font = pygame.font.SysFont("Comic Sans MS", 18, bold=True)
+        speaker_surf = speaker_font.render("Bromen", True, (220, 38, 38))
+        self.screen.blit(speaker_surf, (box_x + 25, box_y + 20))
+
+        q_font = pygame.font.SysFont("Comic Sans MS", 16)
+        msg_surf = q_font.render("Hmm, that is not correct. Try again, young adventurer!", True, (255, 255, 255))
+        self.screen.blit(msg_surf, (box_x + 25, box_y + 70))
+
+        button_w, button_h = 200, 42
+        button_x = box_x + (box_w - button_w) // 2
+        button_y = box_y + 140
+        btn_rect = pygame.Rect(button_x, button_y, button_w, button_h)
+
+        is_hovered = btn_rect.collidepoint(self.cursor_pos)
+        bg_color = (30, 41, 59) if not is_hovered else (220, 38, 38)
+
+        pygame.draw.rect(self.screen, bg_color, btn_rect, border_radius=12)
+        pygame.draw.rect(self.screen, (0, 0, 0), btn_rect, 3, border_radius=12)
+
+        c_surf = speaker_font.render("Try Again", True, (255, 255, 255))
+        c_rect = c_surf.get_rect(center=btn_rect.center)
+        self.screen.blit(c_surf, c_rect)
+
+    def draw_correct_dialog(self):
+        overlay = pygame.Surface((self.width, self.height))
+        overlay.fill((0, 0, 0))
+        overlay.set_alpha(150)
+        self.screen.blit(overlay, (0, 0))
+
+        box_w, box_h = 500, 240
+        box_x = (self.width - box_w) // 2
+        box_y = (self.height - box_h) // 2
+
+        dialog_rect = pygame.Rect(box_x, box_y, box_w, box_h)
+        pygame.draw.rect(self.screen, (15, 23, 42), dialog_rect)
+        pygame.draw.rect(self.screen, (22, 163, 74), dialog_rect, 3, border_radius=8)
+
+        speaker_font = pygame.font.SysFont("Comic Sans MS", 18, bold=True)
+        speaker_surf = speaker_font.render("Bromen", True, (22, 163, 74))
+        self.screen.blit(speaker_surf, (box_x + 25, box_y + 20))
+
+        q_font = pygame.font.SysFont("Comic Sans MS", 16)
+        msg_surf = q_font.render(self.current_correct_phrase, True, (255, 255, 255))
+        self.screen.blit(msg_surf, (box_x + 25, box_y + 70))
+
+        button_w, button_h = 200, 42
+        button_x = box_x + (box_w - button_w) // 2
+        button_y = box_y + 140
+        btn_rect = pygame.Rect(button_x, button_y, button_w, button_h)
+
+        is_hovered = btn_rect.collidepoint(self.cursor_pos)
+        bg_color = (30, 41, 59) if not is_hovered else (22, 163, 74)
+
+        pygame.draw.rect(self.screen, bg_color, btn_rect, border_radius=12)
+        pygame.draw.rect(self.screen, (0, 0, 0), btn_rect, 3, border_radius=12)
+
+        c_surf = speaker_font.render("Continue", True, (255, 255, 255))
+        c_rect = c_surf.get_rect(center=btn_rect.center)
+        self.screen.blit(c_surf, c_rect)
+
+    def draw_final_dialog(self):
+        overlay = pygame.Surface((self.width, self.height))
+        overlay.fill((0, 0, 0))
+        overlay.set_alpha(150)
+        self.screen.blit(overlay, (0, 0))
+
+        box_w, box_h = 550, 300
+        box_x = (self.width - box_w) // 2
+        box_y = (self.height - box_h) // 2
+
+        dialog_rect = pygame.Rect(box_x, box_y, box_w, box_h)
+        pygame.draw.rect(self.screen, (15, 23, 42), dialog_rect)
+        pygame.draw.rect(self.screen, (218, 165, 32), dialog_rect, 3, border_radius=8)
+
+        speaker_font = pygame.font.SysFont("Comic Sans MS", 18, bold=True)
+        speaker_surf = speaker_font.render("Bromen", True, (218, 165, 32))
+        self.screen.blit(speaker_surf, (box_x + 25, box_y + 20))
+        pygame.draw.line(self.screen, (218, 165, 32), (box_x + 25, box_y + 48), (box_x + 120, box_y + 48), 2)
+
+        q_font = pygame.font.SysFont("Comic Sans MS", 15)
+        speech_lines = [
+            "Outstanding, young adventurer! You have solved all my challenges.",
+            "You know your mathematics and logical reasoning very well.",
+            "I will now activate the portal. Step through to return to safety!"
+        ]
+        
+        y_text = box_y + 65
+        for line in speech_lines:
+            txt_surf = q_font.render(line, True, (255, 255, 255))
+            self.screen.blit(txt_surf, (box_x + 25, y_text))
+            y_text += 24
+
+        button_w, button_h = 200, 42
+        button_x = box_x + (box_w - button_w) // 2
+        button_y = box_y + 210
+        btn_rect = pygame.Rect(button_x, button_y, button_w, button_h)
+
+        is_hovered = btn_rect.collidepoint(self.cursor_pos)
+        bg_color = (30, 41, 59) if not is_hovered else (218, 165, 32)
+
+        pygame.draw.rect(self.screen, bg_color, btn_rect, border_radius=12)
+        pygame.draw.rect(self.screen, (0, 0, 0), btn_rect, 3, border_radius=12)
+
+        c_surf = speaker_font.render("Activate Portal", True, (255, 255, 255) if not is_hovered else (0, 0, 0))
+        c_rect = c_surf.get_rect(center=btn_rect.center)
+        self.screen.blit(c_surf, c_rect)
+
+    def wrap_text(self, text, font, max_width):
+        words = text.split(' ')
+        lines = []
+        current_line = []
+        for word in words:
+            test_line = ' '.join(current_line + [word])
+            if font.size(test_line)[0] <= max_width:
+                current_line.append(word)
+            else:
+                lines.append(' '.join(current_line))
+                current_line = [word]
+        if current_line:
+            lines.append(' '.join(current_line))
+        return lines
 
     # ============================================================
     # CLEANUP
