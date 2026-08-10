@@ -102,6 +102,16 @@ class Quarter1:
             "oldman"
         )
 
+        self.NPC_PATH_BALL = os.path.join(
+            self.BASE_DIR,
+            "assets",
+            "images",
+            "sprites",
+            "objects",
+            "NPC",
+            "Ball"
+        )
+
         self.NPC_PATH_SKELETON = os.path.join(
             self.BASE_DIR,
             "assets",
@@ -266,18 +276,43 @@ class Quarter1:
         self._init_npc_positions()
 
         # Overwrite Old Man position to Quiz Station 1 for map1.txt quiz sequence
-        if self.is_quiz_map and hasattr(self, 'quiz_stations') and 1 in self.quiz_stations:
-            self.npc_oldman_tile_x, self.npc_oldman_tile_y = self.quiz_stations[1]
-            self.npc_oldman_x = self.npc_oldman_tile_x * TILE_SIZE
-            self.npc_oldman_y = self.npc_oldman_tile_y * TILE_SIZE
-            self.npc_oldman_found = True
-            print(f"🧙‍♂️ Overrode Old Man spawn position to Quiz Station 1: {self.quiz_stations[1]}")
+        self.locked_portals = []
+        self.shape_npcs = {}
+        self.active_shape_id = None
+
+        if self.is_quiz_map and hasattr(self, 'quiz_stations'):
+            self.npc_oldman_found = False  # Disable single ball NPC
+            shape_names = {
+                1: "circle",
+                2: "heart",
+                3: "square",
+                4: "star",
+                5: "diamond"
+            }
+            for num, pos in self.quiz_stations.items():
+                if num in shape_names:
+                    self.shape_npcs[num] = {
+                        "id": num,
+                        "name": shape_names[num],
+                        "tile_x": pos[0],
+                        "tile_y": pos[1],
+                        "x": pos[0] * TILE_SIZE,
+                        "y": pos[1] * TILE_SIZE,
+                        "answered": False
+                    }
+                    print(f"🏀 Spawned Shape NPC {num}: {shape_names[num]} at ({pos[0]}, {pos[1]})")
+        else:
+            self.npc_oldman_found = False
 
         # Shape Quiz state variables
         self.quiz_state = 0  # 0: waiting proximity, 1: dialog Q, 2: wrong try again, 3: correct phrase transition, 4: pathfinding walking, 5: final speech, 6: quiz complete
         self.quiz_station_index = 1  # current station (1-5)
         self.current_question_index = 0
         self.selected_choice_index = -1  # choice highlighted
+
+        # Shape NPC animations
+        self.shape_npc_anim_frame = 0
+        self.shape_npc_anim_timer = 0
 
         # Station Standby Directions
         if "map2" in self.map_name.lower():
@@ -501,15 +536,31 @@ class Quarter1:
             except Exception:
                 placeholder = pygame.Surface((TILE_SIZE, TILE_SIZE))
                 placeholder.fill((100, 100, 100))
-                pygame.draw.rect(placeholder, (255, 255, 255), placeholder.get_rect(), 1)
+                pygame.draw.rect(placeholder, (255, 0, 0), placeholder.get_rect(), 2)
                 return placeholder
 
+        def load_large_tile(name, w_pixels, h_pixels):
+            path = os.path.join(self.BASE_DIR, "assets", "images", "sprites", "objects", "tiles", "quarter1tiles", name)
+            if os.path.exists(path):
+                try:
+                    img = pygame.image.load(path).convert_alpha()
+                    return pygame.transform.scale(img, (w_pixels, h_pixels))
+                except Exception as e:
+                    print(f"Error loading large tile {name}: {e}")
+            placeholder = pygame.Surface((w_pixels, h_pixels))
+            placeholder.fill((150, 100, 100))
+            return placeholder
+
         tiles = {}
+        tiles["X"] = load_large_tile("obstacle1.png", 64, 96)
+        tiles["Y"] = load_large_tile("obstacle2.png", 64, 96)
+        tiles["Z"] = load_large_tile("obstacle3.png", 64, 96)
+
         tile_files = [
             ("#", "003.png"), ("G", "002.png"), ("1", "002.png"), ("2", "002.png"),
             ("3", "002.png"), ("4", "002.png"), ("5", "002.png"), ("6", "010.png"),
             ("7", "008.png"), ("8", "007.png"), ("+", "012.png"), ("-", "013.png"),
-            ("/", "014.png"), ("*", "015.png"), ("T", "016.png"), ("W", "019.png"),
+            ("/", "014.png"), ("*", "015.png"), ("T", "quarter1tiles/100.png"), ("W", "019.png"),
             ("!", "020.png"), ("@", "022.png"), (")", "021.png"), ("$", "026.png"),
             ("%", "025.png"), ("^", "027.png"), ("&", "023.png"), ("(", "024.png"),
             ("<", "028.png"), (">", "029.png"), (";", "030.png"), (":", "032.png"),
@@ -520,7 +571,55 @@ class Quarter1:
         for key, filename in tile_files:
             tiles[key] = load_tile(filename)
 
+        # Load 16 autotile images for walls ('T')
+        self.autotile_images = {}
+        autotile_dir = os.path.join(self.OBJECTS_PATH, "quarter1tiles")
+        for idx in range(16):
+            tile_path = os.path.join(autotile_dir, f"{idx}.png")
+            if os.path.exists(tile_path):
+                try:
+                    img = pygame.image.load(tile_path).convert_alpha()
+                    img = pygame.transform.scale(img, (TILE_SIZE, TILE_SIZE))
+                    self.autotile_images[idx] = img
+                except Exception as e:
+                    print(f"Error loading autotile {idx}: {e}")
+
         return tiles
+
+    def get_autotile_index(self, row, col):
+        def is_wall(r, c):
+            if r < 0 or r >= self.ROWS or c < 0 or c >= self.COLS:
+                return True
+            if r < len(self.render_map) and c < len(self.render_map[r]):
+                return self.render_map[r][c] == 'T'
+            return False
+
+        n = 1 if is_wall(row - 1, col) else 0
+        e = 1 if is_wall(row, col + 1) else 0
+        s = 1 if is_wall(row + 1, col) else 0
+        w = 1 if is_wall(row, col - 1) else 0
+
+        val = n * 8 + e * 4 + s * 2 + w
+
+        val_map = {
+            0: 0,   # 0000 -> layout 0
+            1: 1,   # 0001 -> layout 1
+            2: 2,   # 0010 -> layout 2
+            3: 3,   # 0011 -> layout 3
+            4: 1,   # 0100 -> layout 1
+            5: 1,   # 0101 -> layout 1
+            6: 4,   # 0110 -> layout 4
+            7: 6,   # 0111 -> layout 6
+            8: 2,   # 1000 -> layout 2
+            9: 5,   # 1001 -> layout 5
+            10: 2,  # 1010 -> layout 2
+            11: 13, # 1011 -> layout 13
+            12: 14, # 1100 -> layout 14
+            13: 7,  # 1101 -> layout 7
+            14: 12, # 1110 -> layout 12
+            15: 8   # 1111 -> layout 8
+        }
+        return val_map.get(val, 0)
 
     # ============================================================
     # LOAD PLAYER SPRITES
@@ -590,54 +689,67 @@ class Quarter1:
     # LOAD STATIC NPC SPRITES (Oldman, Skeleton, Knight)
     # ============================================================
     def load_static_npc_sprites(self):
-        # Load Oldman
-        oldman_path = os.path.join(self.NPC_PATH_OLDMAN, "oldman.png")
-        try:
-            if os.path.exists(oldman_path):
-                img = pygame.image.load(oldman_path).convert_alpha()
-                self.npc_oldman_sprite = pygame.transform.scale(img, (TILE_SIZE, TILE_SIZE))
-                print(f"✅ Loaded Oldman sprite")
-            else:
-                print(f"⚠️ Oldman sprite not found at: {oldman_path}")
-                placeholder = pygame.Surface((TILE_SIZE, TILE_SIZE))
-                placeholder.fill((200, 200, 200))
-                pygame.draw.circle(placeholder, (0, 0, 0), (TILE_SIZE // 2, TILE_SIZE // 2), 12)
-                pygame.draw.circle(placeholder, (255, 255, 255), (TILE_SIZE // 2 - 4, TILE_SIZE // 2 - 4), 3)
-                pygame.draw.circle(placeholder, (255, 255, 255), (TILE_SIZE // 2 + 4, TILE_SIZE // 2 - 4), 3)
-                font = pygame.font.SysFont(None, 10)
-                text = font.render("OLD", True, (0, 0, 0))
-                placeholder.blit(text, (4, TILE_SIZE - 12))
-                self.npc_oldman_sprite = placeholder
-
-            def load_oldman_sprites(filenames):
+        # Load Shape NPC sprites if it's a quiz map
+        self.shape_sprites = {}
+        if self.is_quiz_map:
+            shape_info = {
+                1: ("CircleNPC", "sprite_circlenpc"),
+                2: ("HeartNPC", "sprite_heartnpc"),
+                3: ("SquareNPC", "sprite_squarenpc"),
+                4: ("StarNPC", "sprite_starnpc"),
+                5: ("DiamondNPC", "sprite_diamondnpc")
+            }
+            for num, (folder, prefix) in shape_info.items():
                 frames = []
-                for name in filenames:
-                    path = os.path.join(self.NPC_PATH_OLDMAN, name)
+                for idx in range(8):
+                    filename = f"{prefix}{idx:02d}.png"
+                    path = os.path.join(self.BASE_DIR, "assets", "images", "sprites", "objects", "NPC", folder, filename)
                     if os.path.exists(path):
-                        img = pygame.image.load(path).convert_alpha()
-                        scaled = pygame.transform.scale(img, (TILE_SIZE, TILE_SIZE))
-                        frames.append(scaled)
-                        print(f"✅ Loaded Old Man frame: {name}")
-                    else:
-                        frames.append(self.npc_oldman_sprite.copy())
-                        print(f"⚠️ Frame NOT found, falling back to static: {name}")
-                return frames
+                        try:
+                            img = pygame.image.load(path).convert_alpha()
+                            scaled = pygame.transform.scale(img, (TILE_SIZE, TILE_SIZE))
+                            frames.append(scaled)
+                        except Exception as e:
+                            print(f"❌ Error loading shape frame {num} ({idx}): {e}")
+                if len(frames) == 8:
+                    self.shape_sprites[num] = frames
+                    print(f"🏀 Loaded 8 animation frames for shape {num} ({folder})")
+                else:
+                    print(f"⚠️ Failed to load 8 frames for shape {num} ({folder})")
 
-            self.npc_oldman_left_sprites = load_oldman_sprites(["oldmanleft.png", "oldmanleft1.png", "oldmanleft2.png"])
-            self.npc_oldman_right_sprites = load_oldman_sprites(["oldmanright.png", "oldmanright1.png", "oldmanright2.png"])
-            self.npc_oldman_up_sprites = load_oldman_sprites(["oldmanup.png", "oldmanup1.png", "oldmanup2.png"])
-            self.npc_oldman_down_sprites = load_oldman_sprites(["oldman.png", "oldmandown1.png", "oldmandown2.png"])
-            print("🧙‍♂️ Loaded Old Man walking sprites in 4 directions")
+        # Load Ball instead of Oldman
+        ball_frames = []
+        try:
+            for idx in range(16):
+                filename = f"sprite_ball{idx:02d}.png"
+                path = os.path.join(self.NPC_PATH_BALL, filename)
+                if os.path.exists(path):
+                    img = pygame.image.load(path).convert_alpha()
+                    scaled = pygame.transform.scale(img, (TILE_SIZE, TILE_SIZE))
+                    ball_frames.append(scaled)
+                    print(f"✅ Loaded Ball frame: {filename}")
+                else:
+                    print(f"⚠️ Ball frame not found at: {path}")
+
+            if ball_frames:
+                self.npc_oldman_sprite = ball_frames[0]
+                self.npc_oldman_left_sprites = ball_frames
+                self.npc_oldman_right_sprites = ball_frames
+                self.npc_oldman_up_sprites = ball_frames
+                self.npc_oldman_down_sprites = ball_frames
+                print("🏀 Loaded Ball sprites to replace Old Man")
+            else:
+                raise FileNotFoundError("No ball frames found")
 
         except Exception as e:
-            print(f"❌ Error loading Oldman: {e}")
+            print(f"❌ Error loading Ball: {e}")
             placeholder = pygame.Surface((TILE_SIZE, TILE_SIZE))
-            placeholder.fill((200, 200, 200))
+            placeholder.fill((200, 100, 100))
             self.npc_oldman_sprite = placeholder
-            self.npc_oldman_left_sprites = [placeholder.copy()] * 3
-            self.npc_oldman_right_sprites = [placeholder.copy()] * 3
-            self.npc_oldman_up_sprites = [placeholder.copy()] * 3
-            self.npc_oldman_down_sprites = [placeholder.copy()] * 3
+            self.npc_oldman_left_sprites = [placeholder.copy()]
+            self.npc_oldman_right_sprites = [placeholder.copy()]
+            self.npc_oldman_up_sprites = [placeholder.copy()]
+            self.npc_oldman_down_sprites = [placeholder.copy()]
 
         # Load Skeleton
         skeleton_path = os.path.join(self.NPC_PATH_SKELETON, "skeleton.png")
@@ -888,58 +1000,107 @@ class Quarter1:
                 if c == 'r':
                     portal = self.Portal(x, y, 'right', is_static=True)
                     portal.set_animation(self.portal_frames_cache['right'])
-                    self.portals.append(portal)
+                    if self.is_quiz_map:
+                        self.locked_portals.append(portal)
+                    else:
+                        self.portals.append(portal)
                     row_list[x] = 'G'
                     modified = True
                 elif c == 'l':
                     portal = self.Portal(x, y, 'left', is_static=True)
                     portal.set_animation(self.portal_frames_cache['left'])
-                    self.portals.append(portal)
+                    if self.is_quiz_map:
+                        self.locked_portals.append(portal)
+                    else:
+                        self.portals.append(portal)
                     row_list[x] = 'G'
                     modified = True
                 elif c == 'u':
                     portal = self.Portal(x, y, 'up', is_static=True)
                     portal.set_animation(self.portal_frames_cache['up'])
-                    self.portals.append(portal)
+                    if self.is_quiz_map:
+                        self.locked_portals.append(portal)
+                    else:
+                        self.portals.append(portal)
                     row_list[x] = 'G'
                     modified = True
                 elif c == 'd':
                     portal = self.Portal(x, y, 'down', is_static=True)
                     portal.set_animation(self.portal_frames_cache['down'])
-                    self.portals.append(portal)
+                    if self.is_quiz_map:
+                        self.locked_portals.append(portal)
+                    else:
+                        self.portals.append(portal)
                     row_list[x] = 'G'
                     modified = True
             if modified:
                 self.render_map[y] = ''.join(row_list)
 
+    def spawn_portals(self):
+        for portal in self.locked_portals:
+            self.portals.append(portal)
+        self.locked_portals = []
+        print(f"🏀 Spawned and unlocked portals: {len(self.portals)}")
+
     # ============================================================
     # COLLISION
     # ============================================================
     def can_move(self, nx, ny):
-        col = int(nx // TILE_SIZE)
-        row = int(ny // TILE_SIZE)
-        if row < 0 or row >= self.ROWS or col < 0 or col >= self.COLS:
-            return False
-        if row >= len(self.game_map) or col >= len(self.game_map[row]):
-            return False
-        tile = self.game_map[row][col]
+        padding = 4
+        corners = [
+            (nx + padding, ny + padding),
+            (nx + TILE_SIZE - padding - 1, ny + padding),
+            (nx + padding, ny + TILE_SIZE - padding - 1),
+            (nx + TILE_SIZE - padding - 1, ny + TILE_SIZE - padding - 1)
+        ]
 
-        if tile not in self.WALKABLE_TILES:
-            return False
+        for cx, cy in corners:
+            col = int(cx // TILE_SIZE)
+            row = int(cy // TILE_SIZE)
+            if row < 0 or row >= self.ROWS or col < 0 or col >= self.COLS:
+                return False
+            if row >= len(self.game_map) or col >= len(self.game_map[row]):
+                return False
+            tile = self.game_map[row][col]
 
-        npc_positions = []
-        for marker, positions in self.npc_positions_data.items():
-            npc_positions.extend(positions)
-
-        player_col = int(self.player_x // TILE_SIZE)
-        player_row = int(self.player_y // TILE_SIZE)
-
-        for npc_col, npc_row in npc_positions:
-            if col == npc_col and row == npc_row:
-                if player_col == npc_col and player_row == npc_row:
-                    return True
+            if tile not in self.WALKABLE_TILES:
                 return False
 
+            # Check XYZ obstacles in the immediate neighborhood of the corner (col, row)
+            # An XYZ obstacle at (c, r) occupies columns c, c+1 and its vertical collision line is at c*TILE_SIZE + 32.
+            # So we check rows r near the player corner row, and columns c near the player corner col.
+            for r in range(row - 1, row + 3):
+                for c in range(col - 1, col + 2):
+                    if 0 <= r < len(self.game_map) and 0 <= c < len(self.game_map[r]):
+                        if self.game_map[r][c] in ['X', 'Y', 'Z']:
+                            # Obstacle base is at (c, r)
+                            line_x = c * TILE_SIZE + 32
+                            y_start = (r - 2) * TILE_SIZE
+                            y_end = (r + 1) * TILE_SIZE
+                            
+                            # Player bounding box corners
+                            p_left = nx + padding
+                            p_right = nx + TILE_SIZE - padding
+                            p_top = ny + padding
+                            p_bottom = ny + TILE_SIZE - padding
+                            
+                            # Check if player overlaps the vertical line horizontally and vertically
+                            if p_left <= line_x <= p_right:
+                                if p_bottom > y_start and p_top < y_end:
+                                    return False
+
+            npc_positions = []
+            for marker, positions in self.npc_positions_data.items():
+                npc_positions.extend(positions)
+
+            player_col = int(self.player_x // TILE_SIZE)
+            player_row = int(self.player_y // TILE_SIZE)
+
+            for npc_col, npc_row in npc_positions:
+                if col == npc_col and row == npc_row:
+                    if player_col == npc_col and player_row == npc_row:
+                        continue
+                    return False
         return True
 
     # ============================================================
@@ -1102,18 +1263,20 @@ class Quarter1:
             box_y = (self.height - box_h) // 2
             btn_rect = pygame.Rect(box_x + (box_w - 200) // 2, box_y + 140, 200, 42)
             if btn_rect.collidepoint(pos):
-                self.current_question_index += 1
-                if self.current_question_index < 5:
-                    self.quiz_station_index += 1
-                    start_coord = (self.npc_oldman_tile_x, self.npc_oldman_tile_y)
-                    end_coord = self.quiz_stations[self.quiz_station_index]
-                    self.npc_oldman_path = self.find_path(start_coord, end_coord)
-                    self.npc_oldman_path_index = 1
-                    self.quiz_state = 4
-                    self.player_block_timer = 3.0
-                    print(f"🧙‍♂️ Moving Old Man from {start_coord} to {end_coord}")
+                if self.is_quiz_map:
+                    self.shape_npcs[self.active_shape_id]['answered'] = True
+                    answered_count = sum(1 for s in self.shape_npcs.values() if s['answered'])
+                    if answered_count == 5:
+                        self.spawn_portals()
+                        self.quiz_state = 5
+                    else:
+                        self.quiz_state = 0
                 else:
-                    self.quiz_state = 5
+                    self.current_question_index += 1
+                    if self.current_question_index < 5:
+                        self.quiz_state = 0
+                    else:
+                        self.quiz_state = 5
                 
         # State 5: Final speech click
         elif self.quiz_state == 5:
@@ -1152,84 +1315,38 @@ class Quarter1:
                 self.npc_bromen_anim_timer = 0
                 self.npc_bromen_anim_frame = (self.npc_bromen_anim_frame + 1) % len(self.npc_bromen_sprites)
 
-        if self.npc_knight_found:
-            self.npc_knight_side_timer += 1
-            if self.npc_knight_side_timer >= self.npc_knight_side_duration:
-                self.npc_knight_side_timer = 0
-                if self.npc_knight_facing == "front":
-                    self.npc_knight_facing = "side"
-                    self.npc_knight_current_sprite = self.npc_knight_side_sprite
-                else:
-                    self.npc_knight_facing = "front"
-                    self.npc_knight_current_sprite = self.npc_knight_front_sprite
+        # Update Shape NPC animation frame
+        if self.is_quiz_map:
+            self.shape_npc_anim_timer += 1
+            if self.shape_npc_anim_timer >= 5:
+                self.shape_npc_anim_timer = 0
+                self.shape_npc_anim_frame = (self.shape_npc_anim_frame + 1) % 8
 
-        # Proximity interaction check for Old Man NPC
-        if self.quiz_state == 0 and self.is_quiz_map and self.npc_oldman_found:
+        # Proximity interaction check for Shape NPCs
+        if self.quiz_state == 0 and self.is_quiz_map:
             import math
             player_center_x = self.player_x + TILE_SIZE // 2
             player_center_y = self.player_y + TILE_SIZE // 2
-            oldman_center_x = self.npc_oldman_x + TILE_SIZE // 2
-            oldman_center_y = self.npc_oldman_y + TILE_SIZE // 2
-            dist = math.hypot(player_center_x - oldman_center_x, player_center_y - oldman_center_y)
-            if dist < TILE_SIZE * 1.5:
-                # Face each other
-                dx = self.player_x - self.npc_oldman_x
-                dy = self.player_y - self.npc_oldman_y
-                if abs(dx) > abs(dy):
-                    self.npc_oldman_dir = "right" if dx > 0 else "left"
-                else:
-                    self.npc_oldman_dir = "down" if dy > 0 else "up"
-                
-                p_dx = self.npc_oldman_x - self.player_x
-                p_dy = self.npc_oldman_y - self.player_y
-                if abs(p_dx) > abs(p_dy):
-                    self.player_dir = "right" if p_dx > 0 else "left"
-                else:
-                    self.player_dir = "down" if p_dy > 0 else "up"
-                
-                self.quiz_state = 1
-                self.selected_choice_index = -1
-            else:
-                self.npc_oldman_dir = self.station_directions.get(self.quiz_station_index, "right")
-
-        # Old Man walking sequence along BFS path
-        if self.quiz_state == 4:
-            if hasattr(self, 'npc_oldman_path') and self.npc_oldman_path_index < len(self.npc_oldman_path):
-                t_col, t_row = self.npc_oldman_path[self.npc_oldman_path_index]
-                target_x = t_col * TILE_SIZE
-                target_y = t_row * TILE_SIZE
-                
-                dx = target_x - self.npc_oldman_x
-                dy = target_y - self.npc_oldman_y
-                
-                move_speed = 2  # Walk speed: 2 pixels per frame
-                
-                if abs(dx) > abs(dy):
-                    self.npc_oldman_dir = "right" if dx > 0 else "left"
-                else:
-                    self.npc_oldman_dir = "down" if dy > 0 else "up"
-                
-                if abs(dx) <= move_speed and abs(dy) <= move_speed:
-                    self.npc_oldman_x = target_x
-                    self.npc_oldman_y = target_y
-                    self.npc_oldman_tile_x = t_col
-                    self.npc_oldman_tile_y = t_row
-                    self.npc_oldman_path_index += 1
-                else:
-                    if dx != 0:
-                        self.npc_oldman_x += move_speed if dx > 0 else -move_speed
-                    if dy != 0:
-                        self.npc_oldman_y += move_speed if dy > 0 else -move_speed
-                
-                self.npc_oldman_anim_timer += 1
-                if self.npc_oldman_anim_timer >= 10:
-                    self.npc_oldman_anim_timer = 0
-                    self.npc_oldman_anim_frame = (self.npc_oldman_anim_frame + 1) % 3
-            else:
-                self.quiz_state = 0
-                self.npc_oldman_anim_frame = 0
-                self.npc_oldman_anim_timer = 0
-                self.npc_oldman_dir = self.station_directions.get(self.quiz_station_index, "right")
+            
+            for num, npc in self.shape_npcs.items():
+                if not npc["answered"]:
+                    npc_center_x = npc["x"] + TILE_SIZE // 2
+                    npc_center_y = npc["y"] + TILE_SIZE // 2
+                    dist = math.hypot(player_center_x - npc_center_x, player_center_y - npc_center_y)
+                    if dist < TILE_SIZE * 1.5:
+                        p_dx = npc["x"] - self.player_x
+                        p_dy = npc["y"] - self.player_y
+                        if abs(p_dx) > abs(p_dy):
+                            self.player_dir = "right" if p_dx > 0 else "left"
+                        else:
+                            self.player_dir = "down" if p_dy > 0 else "up"
+                        
+                        self.active_shape_id = num
+                        self.current_question_index = num - 1
+                        self.quiz_state = 1
+                        self.selected_choice_index = -1
+                        print(f"🏀 Interacted with Shape NPC {num}: {npc['name']} (Q{num-1})")
+                        break
 
         self.update_player_movement()
         self.check_portal_teleport_on_hold()
@@ -1295,10 +1412,23 @@ class Quarter1:
         margin = TILE_SIZE * ZOOM * 2
         if (-margin <= screen_x <= self.width + margin and
                 -margin <= screen_y <= self.height + margin):
-            image = self.tile_images.get(c, self.fallback_tile)
-            scaled_size = int(TILE_SIZE * ZOOM)
-            scaled_image = pygame.transform.scale(image, (scaled_size, scaled_size))
-            self.screen.blit(scaled_image, (screen_x, screen_y))
+            if False:  # Disabled autotiling to use solid 100.png directly
+                col = int(world_x / TILE_SIZE)
+                row = int(world_y / TILE_SIZE)
+                idx = self.get_autotile_index(row, col)
+                image = self.autotile_images.get(idx, self.tile_images.get('T', self.fallback_tile))
+            else:
+                image = self.tile_images.get(c, self.fallback_tile)
+                if c in ['X', 'Y', 'Z']:
+                    w = int(64 * ZOOM)
+                    h = int(96 * ZOOM)
+                    scaled_image = pygame.transform.scale(image, (w, h))
+                    screen_y_shifted = screen_y - int(64 * ZOOM)
+                    self.screen.blit(scaled_image, (screen_x, screen_y_shifted))
+                else:
+                    scaled_size = int(TILE_SIZE * ZOOM)
+                    scaled_image = pygame.transform.scale(image, (scaled_size, scaled_size))
+                    self.screen.blit(scaled_image, (screen_x, screen_y))
 
     # ============================================================
     # DRAW NPC
@@ -1331,6 +1461,18 @@ class Quarter1:
             scaled_sprite = pygame.transform.scale(sprite, (scaled_size, scaled_size))
             self.screen.blit(scaled_sprite, (screen_x, screen_y))
 
+    def draw_answered_checkmark(self, x, y):
+        screen_x = (x - self.camera_x) * ZOOM
+        screen_y = (y - self.camera_y) * ZOOM
+        if (-TILE_SIZE * ZOOM <= screen_x <= self.width + TILE_SIZE * ZOOM and
+                -TILE_SIZE * ZOOM <= screen_y <= self.height + TILE_SIZE * ZOOM):
+            center_x = screen_x + (TILE_SIZE * ZOOM) // 2
+            tip_y = screen_y - int(10 * ZOOM)
+            p1 = (center_x - int(6 * ZOOM), tip_y - int(2 * ZOOM))
+            p2 = (center_x - int(1 * ZOOM), tip_y + int(4 * ZOOM))
+            p3 = (center_x + int(6 * ZOOM), tip_y - int(5 * ZOOM))
+            pygame.draw.lines(self.screen, (34, 197, 94), False, [p1, p2, p3], int(3 * ZOOM))
+
     # ============================================================
     # DRAW PLAYER
     # ============================================================
@@ -1356,15 +1498,16 @@ class Quarter1:
         start_row = max(0, int(self.camera_y / TILE_SIZE) - 2)
         end_row = min(self.ROWS, int((self.camera_y + self.height / ZOOM) / TILE_SIZE) + 3)
 
-        # Draw visible tiles using render_map (First pass: Skip trees and draw grass under them)
+        # Pass 1: Base Grass/Ground Layer (Grass first everywhere, then paths/non-obstacles)
         for row in range(start_row, end_row):
             for col in range(start_col, end_col):
                 if row < len(self.render_map) and col < len(self.render_map[row]):
+                    # Always draw grass first as base
+                    self.draw_tile('G', col * TILE_SIZE, row * TILE_SIZE)
+                    
+                    # Draw path / floor / interactive tiles on top of grass (skip T and XYZ obstacles)
                     tile_char = self.render_map[row][col]
-                    if tile_char == 'T':
-                        # Draw grass under the tree so there is no black void under the player
-                        self.draw_tile('G', col * TILE_SIZE, row * TILE_SIZE)
-                    else:
+                    if tile_char not in ['T', 'X', 'Y', 'Z', 'G']:
                         self.draw_tile(tile_char, col * TILE_SIZE, row * TILE_SIZE)
 
         if not self.is_quiz_map or self.quiz_state == 6:
@@ -1375,27 +1518,20 @@ class Quarter1:
             self.draw_npc_animated(self.npc_bromen_x, self.npc_bromen_y,
                                    self.npc_bromen_sprites, self.npc_bromen_anim_frame)
 
-        if self.npc_oldman_found:
-            # Select correct oldman sprite directory based on direction
-            sprites = None
-            if self.npc_oldman_dir == "left":
-                sprites = self.npc_oldman_left_sprites
-            elif self.npc_oldman_dir == "right":
-                sprites = self.npc_oldman_right_sprites
-            elif self.npc_oldman_dir == "up":
-                sprites = self.npc_oldman_up_sprites
-            else:
-                sprites = self.npc_oldman_down_sprites
-            if sprites:
-                if self.quiz_state == 4:  # walking
-                    self.draw_npc_animated(self.npc_oldman_x, self.npc_oldman_y,
-                                           sprites, self.npc_oldman_anim_frame)
-                else:  # standing still
-                    self.draw_npc_static(self.npc_oldman_x, self.npc_oldman_y,
-                                         sprites[0])
-            else:
-                self.draw_npc_static(self.npc_oldman_x, self.npc_oldman_y,
-                                     self.npc_oldman_sprite)
+        # Draw Shape NPCs
+        if self.is_quiz_map:
+            for num, npc in self.shape_npcs.items():
+                sprite_data = self.shape_sprites.get(num)
+                if sprite_data:
+                    if isinstance(sprite_data, list) and len(sprite_data) > 0:
+                        current_frame = sprite_data[self.shape_npc_anim_frame]
+                        self.draw_npc_static(npc["x"], npc["y"], current_frame)
+                    else:
+                        self.draw_npc_static(npc["x"], npc["y"], sprite_data)
+                
+                # Draw checkmark above NPC if answered
+                if npc["answered"]:
+                    self.draw_answered_checkmark(npc["x"], npc["y"])
 
         if self.npc_skeleton_found:
             self.draw_npc_static(self.npc_skeleton_x, self.npc_skeleton_y,
@@ -1421,12 +1557,20 @@ class Quarter1:
 
         self.draw_player()
 
-        # Draw visible tree tiles on top of everything (Second pass)
+        # Pass 3: T Obstacles
         for row in range(start_row, end_row):
             for col in range(start_col, end_col):
                 if row < len(self.render_map) and col < len(self.render_map[row]):
                     tile_char = self.render_map[row][col]
                     if tile_char == 'T':
+                        self.draw_tile(tile_char, col * TILE_SIZE, row * TILE_SIZE)
+
+        # Pass 4: XYZ Obstacles
+        for row in range(start_row, end_row):
+            for col in range(start_col, end_col):
+                if row < len(self.render_map) and col < len(self.render_map[row]):
+                    tile_char = self.render_map[row][col]
+                    if tile_char in ['X', 'Y', 'Z']:
                         self.draw_tile(tile_char, col * TILE_SIZE, row * TILE_SIZE)
         self.draw_ui()
 
@@ -1534,9 +1678,15 @@ class Quarter1:
         pygame.draw.rect(self.screen, (218, 165, 32), dialog_rect, 3, border_radius=8)
 
         speaker_font = pygame.font.SysFont("Comic Sans MS", 18, bold=True)
-        speaker_surf = speaker_font.render("Old Man", True, (218, 165, 32))
+        speaker_name = "Old Man"
+        if self.is_quiz_map and self.active_shape_id is not None:
+            npc_data = self.shape_npcs.get(self.active_shape_id)
+            if npc_data:
+                speaker_name = f"{npc_data['name'].capitalize()} NPC"
+        
+        speaker_surf = speaker_font.render(speaker_name, True, (218, 165, 32))
         self.screen.blit(speaker_surf, (box_x + 25, box_y + 20))
-        pygame.draw.line(self.screen, (218, 165, 32), (box_x + 25, box_y + 48), (box_x + 120, box_y + 48), 2)
+        pygame.draw.line(self.screen, (218, 165, 32), (box_x + 25, box_y + 48), (box_x + 25 + speaker_surf.get_width(), box_y + 48), 2)
 
         q_data = self.quiz_questions[self.current_question_index]
         q_font = pygame.font.SysFont("Comic Sans MS", 16)
@@ -1587,7 +1737,13 @@ class Quarter1:
         pygame.draw.rect(self.screen, (220, 38, 38), dialog_rect, 3, border_radius=8)
 
         speaker_font = pygame.font.SysFont("Comic Sans MS", 18, bold=True)
-        speaker_surf = speaker_font.render("Old Man", True, (220, 38, 38))
+        speaker_name = "Old Man"
+        if self.is_quiz_map and self.active_shape_id is not None:
+            npc_data = self.shape_npcs.get(self.active_shape_id)
+            if npc_data:
+                speaker_name = f"{npc_data['name'].capitalize()} NPC"
+        
+        speaker_surf = speaker_font.render(speaker_name, True, (220, 38, 38))
         self.screen.blit(speaker_surf, (box_x + 25, box_y + 20))
 
         q_font = pygame.font.SysFont("Comic Sans MS", 16)
@@ -1624,7 +1780,13 @@ class Quarter1:
         pygame.draw.rect(self.screen, (22, 163, 74), dialog_rect, 3, border_radius=8)
 
         speaker_font = pygame.font.SysFont("Comic Sans MS", 18, bold=True)
-        speaker_surf = speaker_font.render("Old Man", True, (22, 163, 74))
+        speaker_name = "Old Man"
+        if self.is_quiz_map and self.active_shape_id is not None:
+            npc_data = self.shape_npcs.get(self.active_shape_id)
+            if npc_data:
+                speaker_name = f"{npc_data['name'].capitalize()} NPC"
+        
+        speaker_surf = speaker_font.render(speaker_name, True, (22, 163, 74))
         self.screen.blit(speaker_surf, (box_x + 25, box_y + 20))
 
         q_font = pygame.font.SysFont("Comic Sans MS", 16)
@@ -1751,7 +1913,10 @@ class Quarter1:
             item_font = pygame.font.SysFont("Comic Sans MS", 12)
             
             # Quiz completion progress item
-            q_count = min(self.current_question_index, 5)
+            if self.is_quiz_map:
+                q_count = sum(1 for s in self.shape_npcs.values() if s['answered'])
+            else:
+                q_count = min(self.current_question_index, 5)
             obj1 = f"• Quiz Progress: {q_count}/5 questions answered"
             obj1_color = (255, 255, 255) if q_count < 5 else (34, 197, 94)
             obj1_surf = item_font.render(obj1, True, obj1_color)

@@ -990,7 +990,7 @@ class StageSelect:
         if current_portal and self.fist_closed and self.teleport_cooldown <= 0:
             # Check if it's a left portal (goes to Quarter1 - map1/map2/map3 randomized)
             if current_portal.direction == 'left':
-                map_name = random.choice(["map1.txt", "map2.txt", "map3.txt"])
+                map_name = "map3.txt"
                 print(f"🎮 Entering Quarter 1 - {map_name}")
                 self.main_menu.current_screen = "quarter1"
                 self.main_menu.quarter1 = Quarter1(self.screen, self.main_menu, map_name)
@@ -1159,7 +1159,7 @@ class StageSelect:
             if current_portal and self.teleport_cooldown <= 0:
                 # Teleport to respective Quarter
                 if current_portal.direction == 'left':
-                    map_name = random.choice(["map1.txt", "map2.txt", "map3.txt"])
+                    map_name = "map3.txt"
                     print(f"🎮 Entering Quarter 1 - {map_name}")
                     self.main_menu.current_screen = "quarter1"
                     self.main_menu.quarter1 = Quarter1(self.screen, self.main_menu, map_name)
