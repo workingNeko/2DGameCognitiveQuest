@@ -53,6 +53,8 @@ class StageSelect:
         # For tracking clicks to prevent multiple triggers
         self.last_click_time = 0
         self.click_cooldown = 0.5
+        self.locked_portal_banner_msg = ""
+        self.locked_portal_banner_timer = 0.0
 
         # ============================================================
         # PATHS
@@ -180,9 +182,11 @@ class StageSelect:
         # ============================================================
         # LOAD NPC SPRITES
         # ============================================================
-        # Bromen NPC (animated & interactive teleport)
+        # Bromen NPC (animated & interactive)
         self.npc_bromen_sprites = self.load_npc_sprites_animated(self.NPC_PATH_BROMEN, "bromen")
         self.npc_bromen_teleport_sprites = self.load_bromen_teleport_sprites()
+        self.npc_bromen_up_sprites = []
+        self.npc_bromen_dir = "down"
         self.npc_bromen_anim_frame = 0
         self.npc_bromen_anim_timer = 0
         self.npc_bromen_x = 0
@@ -190,15 +194,16 @@ class StageSelect:
         self.npc_bromen_tile_x = 0
         self.npc_bromen_tile_y = 0
         self.npc_bromen_found = False
-        self.bromen_dialogue_state = 0  # 0: idle, 1: dialogue active, 2: teleporting, 3: disappeared
+        self.bromen_dialogue_state = 0  # 0: idle, 1: dialogue active, 2: walking to portal, 3: disappeared
         self.bromen_dialogue_index = 0
         self.bromen_teleport_frame = 0
         self.bromen_teleport_timer = 0
+        self.player_following_target = None  # 'oldman', 'skeleton', 'knight', 'bromen', or None
         self.bromen_dialogue_lines = [
             ("Bromen", "Greetings! I am Bromen, master of the final realm."),
             ("Student", "Are you guarding the entrance to Quarter 4?"),
-            ("Bromen", "Indeed! Prove your mastery inside. I shall await you there!"),
-            ("Bromen", "*Teleports away*")
+            ("Bromen", "Indeed! Follow me to the north portal to enter Quarter 4."),
+            ("Bromen", "Let us go!")
         ]
 
         # Oldman NPC (static & interactive)
@@ -564,6 +569,16 @@ class StageSelect:
     # LOAD STATIC NPC SPRITES (Oldman, Skeleton, Knight)
     # ============================================================
     def load_static_npc_sprites(self):
+        # Load Bromen walking up sprites
+        self.npc_bromen_up_sprites = []
+        for name in ["bromen_up_1.png", "bromen_up_2.png"]:
+            path = os.path.join(self.NPC_PATH_BROMEN, name)
+            if os.path.exists(path):
+                img = pygame.image.load(path).convert_alpha()
+                scaled = pygame.transform.scale(img, (TILE_SIZE, TILE_SIZE))
+                self.npc_bromen_up_sprites.append(scaled)
+                print(f"✅ Loaded Bromen up frame: {name}")
+
         # Load Oldman
         oldman_path = os.path.join(self.NPC_PATH_OLDMAN, "oldman.png")
         try:
@@ -988,32 +1003,52 @@ class StageSelect:
                 break
 
         if current_portal and self.fist_closed and self.teleport_cooldown <= 0:
-            # Check if it's a left portal (goes to Quarter1 - map1/map2/map3 randomized)
+            # Check if it's a left portal (goes to Quarter1)
             if current_portal.direction == 'left':
-                map_name = "map3.txt"
+                if self.oldman_dialogue_state == 0:
+                    print("🔒 Quarter 1 Portal Locked! Talk to the Old Man first.")
+                    self.locked_portal_banner_msg = "🔒 Talk to the Old Man first to unlock Quarter 1!"
+                    self.locked_portal_banner_timer = 2.5
+                    return False
+                map_name = "map1.txt"
                 print(f"🎮 Entering Quarter 1 - {map_name}")
                 self.main_menu.current_screen = "quarter1"
                 self.main_menu.quarter1 = Quarter1(self.screen, self.main_menu, map_name)
                 self.main_menu.stage_select = None
                 return True
-            # Check if it's an up portal (facing up, at the bottom next to Knight, goes to Quarter2)
+            # Check if it's an up portal (goes to Quarter2)
             elif current_portal.direction == 'up':
+                if self.knight_dialogue_state == 0:
+                    print("🔒 Quarter 2 Portal Locked! Talk to the Knight first.")
+                    self.locked_portal_banner_msg = "🔒 Talk to the Knight first to unlock Quarter 2!"
+                    self.locked_portal_banner_timer = 2.5
+                    return False
                 map_name = random.choice(["map4.txt", "map5.txt", "map6.txt"])
                 print(f"🎮 Entering Quarter 2 - {map_name}")
                 self.main_menu.current_screen = "quarter2"
                 self.main_menu.quarter2 = Quarter2(self.screen, self.main_menu, map_name)
                 self.main_menu.stage_select = None
                 return True
-            # Check if it's a right portal (goes to Quarter3 - map7.txt to map9.txt)
+            # Check if it's a right portal (goes to Quarter3)
             elif current_portal.direction == 'right':
+                if self.skeleton_dialogue_state == 0:
+                    print("🔒 Quarter 3 Portal Locked! Talk to the Skeleton first.")
+                    self.locked_portal_banner_msg = "🔒 Talk to the Skeleton first to unlock Quarter 3!"
+                    self.locked_portal_banner_timer = 2.5
+                    return False
                 map_name = random.choice(["map7.txt", "map8.txt", "map9.txt"])
                 print(f"🎮 Entering Quarter 3 - {map_name}")
                 self.main_menu.current_screen = "quarter3"
                 self.main_menu.quarter3 = Quarter3(self.screen, self.main_menu, map_name)
                 self.main_menu.stage_select = None
                 return True
-            # Check if it's a down portal (facing down, at the top next to Bromen, goes to Quarter4)
+            # Check if it's a down portal (goes to Quarter4)
             elif current_portal.direction == 'down':
+                if self.bromen_dialogue_state == 0:
+                    print("🔒 Quarter 4 Portal Locked! Talk to Bromen first.")
+                    self.locked_portal_banner_msg = "🔒 Talk to Bromen first to unlock Quarter 4!"
+                    self.locked_portal_banner_timer = 2.5
+                    return False
                 map_name = random.choice(["map10.txt", "map11.txt", "map12.txt"])
                 print(f"🎮 Entering Quarter 4 - {map_name}")
                 self.main_menu.current_screen = "quarter4"
@@ -1121,62 +1156,81 @@ class StageSelect:
             self.oldman_dialogue_index += 1
             if self.oldman_dialogue_index >= len(self.dialogue_lines):
                 self.oldman_dialogue_state = 2
-                self.player_block_timer = 3.0
-                print("🧙‍♂️ Dialog complete! Old Man starts moving left.")
+                self.player_following_target = 'oldman'
+                self.player_block_timer = 0
+                print("🧙‍♂️ Dialog complete! Old Man starts moving left and player follows.")
             return
 
         if self.skeleton_dialogue_state == 1:
             self.skeleton_dialogue_index += 1
             if self.skeleton_dialogue_index >= len(self.skeleton_dialogue_lines):
                 self.skeleton_dialogue_state = 2
-                print("☠️ Dialog complete! Skeleton starts moving right to portal.")
+                self.player_following_target = 'skeleton'
+                self.player_block_timer = 0
+                print("☠️ Dialog complete! Skeleton starts moving right to portal and player follows.")
             return
 
         if self.knight_dialogue_state == 1:
             self.knight_dialogue_index += 1
             if self.knight_dialogue_index >= len(self.knight_dialogue_lines):
                 self.knight_dialogue_state = 2
-                print("⚔️ Dialog complete! Knight starts moving down to portal.")
+                self.player_following_target = 'knight'
+                self.player_block_timer = 0
+                print("⚔️ Dialog complete! Knight starts moving down to portal and player follows.")
             return
 
         if self.bromen_dialogue_state == 1:
             self.bromen_dialogue_index += 1
             if self.bromen_dialogue_index >= len(self.bromen_dialogue_lines):
                 self.bromen_dialogue_state = 2
-                self.bromen_teleport_frame = 0
-                self.bromen_teleport_timer = 0
-                print("✨ Dialogue complete! Bromen starts teleporting away.")
+                self.player_following_target = 'bromen'
+                self.player_block_timer = 0
+                print("✨ Dialogue complete! Bromen starts moving north to portal and player follows.")
             return
 
-        # Trigger teleport on click/hold when standing on a portal
-        if (self.oldman_dialogue_state in (0, 3)) and (self.skeleton_dialogue_state in (0, 3)) and (self.knight_dialogue_state in (0, 3)) and (self.bromen_dialogue_state in (0, 3)):
-            current_portal = None
-            for portal in self.portals:
-                if portal.contains_position(self.player_x, self.player_y):
-                    current_portal = portal
-                    break
-            
-            if current_portal and self.teleport_cooldown <= 0:
-                # Teleport to respective Quarter
-                if current_portal.direction == 'left':
-                    map_name = "map3.txt"
+        # Trigger teleport on click/hold when standing on a portal (Only if NPC has been spoken to)
+        current_portal = None
+        for portal in self.portals:
+            if portal.contains_position(self.player_x, self.player_y):
+                current_portal = portal
+                break
+        
+        if current_portal and self.teleport_cooldown <= 0:
+            if current_portal.direction == 'left':
+                if self.oldman_dialogue_state == 0:
+                    self.locked_portal_banner_msg = "🔒 Talk to the Old Man first to unlock Quarter 1!"
+                    self.locked_portal_banner_timer = 1.0
+                else:
+                    map_name = "map1.txt"
                     print(f"🎮 Entering Quarter 1 - {map_name}")
                     self.main_menu.current_screen = "quarter1"
                     self.main_menu.quarter1 = Quarter1(self.screen, self.main_menu, map_name)
                     self.main_menu.stage_select = None
-                elif current_portal.direction == 'up':
+            elif current_portal.direction == 'up':
+                if self.knight_dialogue_state == 0:
+                    self.locked_portal_banner_msg = "🔒 Talk to the Knight first to unlock Quarter 2!"
+                    self.locked_portal_banner_timer = 1.0
+                else:
                     map_name = random.choice(["map4.txt", "map5.txt", "map6.txt"])
                     print(f"🎮 Entering Quarter 2 - {map_name}")
                     self.main_menu.current_screen = "quarter2"
                     self.main_menu.quarter2 = Quarter2(self.screen, self.main_menu, map_name)
                     self.main_menu.stage_select = None
-                elif current_portal.direction == 'right':
+            elif current_portal.direction == 'right':
+                if self.skeleton_dialogue_state == 0:
+                    self.locked_portal_banner_msg = "🔒 Talk to the Skeleton first to unlock Quarter 3!"
+                    self.locked_portal_banner_timer = 1.0
+                else:
                     map_name = random.choice(["map7.txt", "map8.txt", "map9.txt"])
                     print(f"🎮 Entering Quarter 3 - {map_name}")
                     self.main_menu.current_screen = "quarter3"
                     self.main_menu.quarter3 = Quarter3(self.screen, self.main_menu, map_name)
                     self.main_menu.stage_select = None
-                elif current_portal.direction == 'down':
+            elif current_portal.direction == 'down':
+                if self.bromen_dialogue_state == 0:
+                    self.locked_portal_banner_msg = "🔒 Talk to Bromen first to unlock Quarter 4!"
+                    self.locked_portal_banner_timer = 1.0
+                else:
                     map_name = random.choice(["map10.txt", "map11.txt", "map12.txt"])
                     print(f"🎮 Entering Quarter 4 - {map_name}")
                     self.main_menu.current_screen = "quarter4"
@@ -1204,6 +1258,10 @@ class StageSelect:
         if self.player_block_timer > 0:
             self.player_block_timer = max(0.0, self.player_block_timer - dt)
 
+        # Update locked portal banner timer
+        if self.locked_portal_banner_timer > 0:
+            self.locked_portal_banner_timer = max(0.0, self.locked_portal_banner_timer - dt)
+
         # Update Bromen NPC idle animation
         if self.npc_bromen_sprites and self.npc_bromen_found and self.bromen_dialogue_state == 0:
             self.npc_bromen_anim_timer += 1
@@ -1219,7 +1277,7 @@ class StageSelect:
                 bromen_center_x = self.npc_bromen_x + TILE_SIZE // 2
                 bromen_center_y = self.npc_bromen_y + TILE_SIZE // 2
                 dist = math.hypot(player_center_x - bromen_center_x, player_center_y - bromen_center_y)
-                if dist < TILE_SIZE * 1.5:
+                if dist < TILE_SIZE * 2.5:
                     self.bromen_dialogue_state = 1
                     self.bromen_dialogue_index = 0
                     
@@ -1231,27 +1289,31 @@ class StageSelect:
                     else:
                         self.player_dir = "up" if dy < 0 else "down"
 
-        # Update Bromen Teleport Animation
+        # Update Bromen walking to north portal (y <= 0)
         if self.bromen_dialogue_state == 2:
-            self.bromen_teleport_timer += 1
-            if self.bromen_teleport_timer >= 6:
-                self.bromen_teleport_timer = 0
-                self.bromen_teleport_frame += 1
-                if self.bromen_teleport_frame >= len(self.npc_bromen_teleport_sprites):
-                    # Teleport finished! Disappear
-                    self.bromen_dialogue_state = 3
-                    self.npc_bromen_found = False
-                    
-                    # Remove NPC collision obstacle so player can pass
-                    if 'B' in self.npc_positions_data:
-                        self.npc_positions_data['B'] = []
-                    
-                    # Update self.game_map so the player can walk through
-                    for r_idx, r_str in enumerate(self.game_map):
-                        if 'B' in r_str:
-                            self.game_map[r_idx] = r_str.replace('B', '8')
-                            
-                    print("✨ Bromen finished teleporting and disappeared from stage select!")
+            if self.npc_bromen_y > 0:
+                self.npc_bromen_y -= 2
+                self.npc_bromen_dir = "up"
+                self.npc_bromen_anim_timer += 1
+                if self.npc_bromen_anim_timer >= 10:
+                    self.npc_bromen_anim_timer = 0
+                    if self.npc_bromen_up_sprites:
+                        self.npc_bromen_anim_frame = (self.npc_bromen_anim_frame + 1) % len(self.npc_bromen_up_sprites)
+            else:
+                self.npc_bromen_y = 0
+                self.bromen_dialogue_state = 3
+                self.npc_bromen_found = False
+                
+                # Remove NPC collision obstacle so player can pass
+                if 'B' in self.npc_positions_data:
+                    self.npc_positions_data['B'] = []
+                
+                # Update self.game_map so the player can walk through
+                for r_idx, r_str in enumerate(self.game_map):
+                    if 'B' in r_str:
+                        self.game_map[r_idx] = r_str.replace('B', '8')
+                        
+                print("✨ Bromen reached north portal and disappeared from stage select!")
 
 
         # Proximity interaction check for Old Man NPC
@@ -1262,7 +1324,7 @@ class StageSelect:
                 oldman_center_x = self.npc_oldman_x + TILE_SIZE // 2
                 oldman_center_y = self.npc_oldman_y + TILE_SIZE // 2
                 dist = math.hypot(player_center_x - oldman_center_x, player_center_y - oldman_center_y)
-                if dist < TILE_SIZE * 1.5:
+                if dist < TILE_SIZE * 2.5:
                     self.oldman_dialogue_state = 1
                     self.oldman_dialogue_index = 0
                     
@@ -1331,7 +1393,7 @@ class StageSelect:
                 skeleton_center_x = self.npc_skeleton_x + TILE_SIZE // 2
                 skeleton_center_y = self.npc_skeleton_y + TILE_SIZE // 2
                 dist = math.hypot(player_center_x - skeleton_center_x, player_center_y - skeleton_center_y)
-                if dist < TILE_SIZE * 1.5:
+                if dist < TILE_SIZE * 2.5:
                     self.skeleton_dialogue_state = 1
                     self.skeleton_dialogue_index = 0
                     
@@ -1400,7 +1462,7 @@ class StageSelect:
                 knight_center_x = self.npc_knight_x + TILE_SIZE // 2
                 knight_center_y = self.npc_knight_y + TILE_SIZE // 2
                 dist = math.hypot(player_center_x - knight_center_x, player_center_y - knight_center_y)
-                if dist < TILE_SIZE * 1.5:
+                if dist < TILE_SIZE * 2.5:
                     self.knight_dialogue_state = 1
                     self.knight_dialogue_index = 0
                     
@@ -1450,8 +1512,63 @@ class StageSelect:
                         
                 print("⚔️ Knight reached down portal and disappeared from stage select!")
 
-        # Update player movement using cursor from main menu
-        self.update_player_movement()
+        # Update player following NPC
+        if self.player_following_target:
+            self.update_player_following()
+        else:
+            # Update player movement using cursor from main menu
+            self.update_player_movement()
+
+        # Check automatic portal teleport when touching a portal
+        if self.teleport_cooldown <= 0:
+            for portal in self.portals:
+                p_rect = pygame.Rect(self.player_x + 4, self.player_y + 4, TILE_SIZE - 8, TILE_SIZE - 8)
+                port_rect = pygame.Rect(portal.get_world_x(), portal.get_world_y(), portal.get_width_pixels(), portal.get_height_pixels())
+                if port_rect.colliderect(p_rect) or portal.contains_position(self.player_x + TILE_SIZE // 2, self.player_y + TILE_SIZE // 2):
+                    if portal.direction == 'left':
+                        if self.oldman_dialogue_state >= 2 or self.player_following_target == 'oldman':
+                            map_name = "map1.txt"
+                            print(f"🎮 Auto-entering Quarter 1 - {map_name}")
+                            self.main_menu.current_screen = "quarter1"
+                            self.main_menu.quarter1 = Quarter1(self.screen, self.main_menu, map_name)
+                            self.main_menu.stage_select = None
+                            return
+                        elif self.oldman_dialogue_state == 0 and self.locked_portal_banner_timer <= 0:
+                            self.locked_portal_banner_msg = "🔒 Talk to the Old Man first to unlock Quarter 1!"
+                            self.locked_portal_banner_timer = 2.0
+                    elif portal.direction == 'right':
+                        if self.skeleton_dialogue_state >= 2 or self.player_following_target == 'skeleton':
+                            map_name = random.choice(["map7.txt", "map8.txt", "map9.txt"])
+                            print(f"🎮 Auto-entering Quarter 3 - {map_name}")
+                            self.main_menu.current_screen = "quarter3"
+                            self.main_menu.quarter3 = Quarter3(self.screen, self.main_menu, map_name)
+                            self.main_menu.stage_select = None
+                            return
+                        elif self.skeleton_dialogue_state == 0 and self.locked_portal_banner_timer <= 0:
+                            self.locked_portal_banner_msg = "🔒 Talk to the Skeleton first to unlock Quarter 3!"
+                            self.locked_portal_banner_timer = 2.0
+                    elif portal.direction == 'up':
+                        if self.knight_dialogue_state >= 2 or self.player_following_target == 'knight':
+                            map_name = random.choice(["map4.txt", "map5.txt", "map6.txt"])
+                            print(f"🎮 Auto-entering Quarter 2 - {map_name}")
+                            self.main_menu.current_screen = "quarter2"
+                            self.main_menu.quarter2 = Quarter2(self.screen, self.main_menu, map_name)
+                            self.main_menu.stage_select = None
+                            return
+                        elif self.knight_dialogue_state == 0 and self.locked_portal_banner_timer <= 0:
+                            self.locked_portal_banner_msg = "🔒 Talk to the Knight first to unlock Quarter 2!"
+                            self.locked_portal_banner_timer = 2.0
+                    elif portal.direction == 'down':
+                        if self.bromen_dialogue_state >= 2 or self.player_following_target == 'bromen':
+                            map_name = random.choice(["map10.txt", "map11.txt", "map12.txt"])
+                            print(f"🎮 Auto-entering Quarter 4 - {map_name}")
+                            self.main_menu.current_screen = "quarter4"
+                            self.main_menu.quarter4 = Quarter4(self.screen, self.main_menu, map_name)
+                            self.main_menu.stage_select = None
+                            return
+                        elif self.bromen_dialogue_state == 0 and self.locked_portal_banner_timer <= 0:
+                            self.locked_portal_banner_msg = "🔒 Talk to Bromen first to unlock Quarter 4!"
+                            self.locked_portal_banner_timer = 2.0
 
         # Update portal animations
         for portal in self.portals:
@@ -1461,11 +1578,122 @@ class StageSelect:
         self.update_camera()
 
     # ============================================================
+    # UPDATE PLAYER FOLLOWING (Auto-follow NPC towards portal)
+    # ============================================================
+    def update_player_following(self):
+        if not self.player_following_target:
+            return
+
+        follow_speed = 2.0
+        moved = False
+
+        if self.player_following_target == 'oldman':
+            # Follow Old Man leftwards towards Left Portal (x=0, y=13*TILE_SIZE)
+            hallway_y = 13 * TILE_SIZE
+            if abs(self.player_y - hallway_y) > 2:
+                if self.player_y < hallway_y:
+                    self.player_y += follow_speed
+                    self.player_dir = "down"
+                else:
+                    self.player_y -= follow_speed
+                    self.player_dir = "up"
+                moved = True
+            else:
+                self.player_y = hallway_y
+                if self.npc_oldman_found and self.oldman_dialogue_state == 2:
+                    target_x = self.npc_oldman_x + 36
+                else:
+                    target_x = 0
+                
+                if self.player_x > target_x:
+                    self.player_x -= follow_speed
+                    self.player_dir = "left"
+                    moved = True
+
+        elif self.player_following_target == 'skeleton':
+            # Follow Skeleton rightwards towards Right Portal (x=52*TILE_SIZE, y=13*TILE_SIZE)
+            hallway_y = 13 * TILE_SIZE
+            if abs(self.player_y - hallway_y) > 2:
+                if self.player_y < hallway_y:
+                    self.player_y += follow_speed
+                    self.player_dir = "down"
+                else:
+                    self.player_y -= follow_speed
+                    self.player_dir = "up"
+                moved = True
+            else:
+                self.player_y = hallway_y
+                if self.npc_skeleton_found and self.skeleton_dialogue_state == 2:
+                    target_x = self.npc_skeleton_x - 36
+                else:
+                    target_x = (self.COLS - 1) * TILE_SIZE
+                
+                if self.player_x < target_x:
+                    self.player_x += follow_speed
+                    self.player_dir = "right"
+                    moved = True
+
+        elif self.player_following_target == 'knight':
+            # Follow Knight downwards towards Down Portal (x=25*TILE_SIZE, y=25*TILE_SIZE)
+            corridor_x = 25 * TILE_SIZE
+            if abs(self.player_x - corridor_x) > 2:
+                if self.player_x < corridor_x:
+                    self.player_x += follow_speed
+                    self.player_dir = "right"
+                else:
+                    self.player_x -= follow_speed
+                    self.player_dir = "left"
+                moved = True
+            else:
+                self.player_x = corridor_x
+                if self.npc_knight_found and self.knight_dialogue_state == 2:
+                    target_y = self.npc_knight_y - 36
+                else:
+                    target_y = (self.ROWS - 1) * TILE_SIZE
+                
+                if self.player_y < target_y:
+                    self.player_y += follow_speed
+                    self.player_dir = "down"
+                    moved = True
+
+        elif self.player_following_target == 'bromen':
+            # Follow Bromen upwards towards North Portal (x=25*TILE_SIZE, y=0)
+            corridor_x = 25 * TILE_SIZE
+            if abs(self.player_x - corridor_x) > 2:
+                if self.player_x < corridor_x:
+                    self.player_x += follow_speed
+                    self.player_dir = "right"
+                else:
+                    self.player_x -= follow_speed
+                    self.player_dir = "left"
+                moved = True
+            else:
+                self.player_x = corridor_x
+                if self.npc_bromen_found and self.bromen_dialogue_state == 2:
+                    target_y = self.npc_bromen_y + 36
+                else:
+                    target_y = 0
+                
+                if self.player_y > target_y:
+                    self.player_y -= follow_speed
+                    self.player_dir = "up"
+                    moved = True
+
+        # Animate player while moving
+        if moved:
+            self.anim_timer += 1
+            if self.anim_timer >= 10:
+                self.anim_timer = 0
+                self.anim_frame = (self.anim_frame + 1) % 2
+        else:
+            self.anim_frame = 0
+
+    # ============================================================
     # UPDATE PLAYER MOVEMENT
     # ============================================================
     def update_player_movement(self):
-        # Block movement during active dialogue or while Old Man / Skeleton / Knight / Bromen is in sequence
-        if self.oldman_dialogue_state in (1, 2) or self.skeleton_dialogue_state in (1, 2) or self.knight_dialogue_state in (1, 2) or self.bromen_dialogue_state in (1, 2) or self.player_block_timer > 0:
+        # Block manual movement during active dialogue, while following an NPC, or during block timer
+        if self.oldman_dialogue_state == 1 or self.skeleton_dialogue_state == 1 or self.knight_dialogue_state == 1 or self.bromen_dialogue_state == 1 or self.player_following_target or self.player_block_timer > 0:
             return
 
         vx, vy = 0, 0
@@ -1597,12 +1825,15 @@ class StageSelect:
             portal.draw(self.screen, self.camera_x, self.camera_y, ZOOM, self.width, self.height)
 
         # Draw NPCs (before player so player is on top)
-        # Bromen - Idle, Teleporting, or Quest Exclamation
+        # Bromen - Idle, Walking Up, or Quest Exclamation
         if self.npc_bromen_found:
             if self.bromen_dialogue_state == 2:
-                if self.npc_bromen_teleport_sprites and self.bromen_teleport_frame < len(self.npc_bromen_teleport_sprites):
-                    sprite = self.npc_bromen_teleport_sprites[self.bromen_teleport_frame]
-                    self.draw_npc_static(self.npc_bromen_x, self.npc_bromen_y, sprite)
+                if self.npc_bromen_up_sprites:
+                    self.draw_npc_animated(self.npc_bromen_x, self.npc_bromen_y,
+                                           self.npc_bromen_up_sprites, self.npc_bromen_anim_frame)
+                elif self.npc_bromen_sprites:
+                    self.draw_npc_animated(self.npc_bromen_x, self.npc_bromen_y,
+                                           self.npc_bromen_sprites, self.npc_bromen_anim_frame)
             else:
                 if self.npc_bromen_sprites:
                     self.draw_npc_animated(self.npc_bromen_x, self.npc_bromen_y,

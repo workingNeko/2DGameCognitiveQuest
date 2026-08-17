@@ -243,17 +243,31 @@ class MainMenu:
     # ==========================================
 
     def is_fist(self, hand_landmarks):
-        """Simple fist detection - checks if fingers are closed"""
-        # Check if finger tips are below knuckles (closed)
-        fingers = [
-            hand_landmarks.landmark[8].y > hand_landmarks.landmark[6].y,  # Index
-            hand_landmarks.landmark[12].y > hand_landmarks.landmark[10].y,  # Middle
-            hand_landmarks.landmark[16].y > hand_landmarks.landmark[14].y,  # Ring
-            hand_landmarks.landmark[20].y > hand_landmarks.landmark[18].y  # Pinky
+        """Calibrated robust fist detection using Euclidean distance to wrist (landmark 0)"""
+        import math
+        wrist = hand_landmarks.landmark[0]
+        
+        # Calculate distance from wrist to finger PIP joints (middle knuckles: 6, 10, 14, 18)
+        # and finger tips (8, 12, 16, 20)
+        knuckle_dists = [
+            math.hypot(hand_landmarks.landmark[6].x - wrist.x, hand_landmarks.landmark[6].y - wrist.y),
+            math.hypot(hand_landmarks.landmark[10].x - wrist.x, hand_landmarks.landmark[10].y - wrist.y),
+            math.hypot(hand_landmarks.landmark[14].x - wrist.x, hand_landmarks.landmark[14].y - wrist.y),
+            math.hypot(hand_landmarks.landmark[18].x - wrist.x, hand_landmarks.landmark[18].y - wrist.y)
         ]
-
-        # If 3 or more fingers are closed, it's a fist
-        return sum(fingers) >= 3
+        
+        tip_dists = [
+            math.hypot(hand_landmarks.landmark[8].x - wrist.x, hand_landmarks.landmark[8].y - wrist.y),
+            math.hypot(hand_landmarks.landmark[12].x - wrist.x, hand_landmarks.landmark[12].y - wrist.y),
+            math.hypot(hand_landmarks.landmark[16].x - wrist.x, hand_landmarks.landmark[16].y - wrist.y),
+            math.hypot(hand_landmarks.landmark[20].x - wrist.x, hand_landmarks.landmark[20].y - wrist.y)
+        ]
+        
+        # A finger is truly folded/closed if its tip is closer to the wrist than its middle knuckle
+        closed_fingers = [tip_dists[i] < knuckle_dists[i] * 1.05 for i in range(4)]
+        
+        # Require at least 3 fingers to be folded into the palm
+        return sum(closed_fingers) >= 3
 
     def update_gesture(self):
         """Update gesture detection - USING WRIST FOR CURSOR (landmark 0)"""

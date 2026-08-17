@@ -73,7 +73,9 @@ class MapLoader:
         self.player_start = None
 
         # NPC markers to look for - using 'O' for oldman as in stage select
-        npc_markers = ['B', 'O', 'S', 'K']
+        npc_markers = ['O', 'S', 'K']
+        if self.current_map_name == "map.txt":
+            npc_markers.append('B')
 
         for y, row in enumerate(self.game_map):
             for x, char in enumerate(row):

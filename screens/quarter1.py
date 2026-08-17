@@ -183,7 +183,7 @@ class Quarter1:
         # ============================================================
         # WALKABLE TILES
         # ============================================================
-        self.WALKABLE_TILES = {"G", "#", "1", "2", "3", "4", "5", "6", "7", "8","P"}
+        self.WALKABLE_TILES = {"G", "#", "1", "2", "3", "4", "5", "6", "7", "8", "P", "B"}
 
         # ============================================================
         # LOAD PLAYER SPRITES
@@ -432,7 +432,8 @@ class Quarter1:
         self.TELEPORT_COOLDOWN_TIME = 1.0
 
         # Goal portal tracking - which portal completes the level
-        self.goal_portal_direction = self.portals[0].direction if self.portals else ('right' if self.is_quiz_map else 'up')
+        all_portals = self.portals + self.locked_portals
+        self.goal_portal_direction = all_portals[0].direction if all_portals else ('right' if self.is_quiz_map else 'up')
 
         # ============================================================
         # UI
@@ -447,6 +448,38 @@ class Quarter1:
 
         # Completion flag
         self.completed = False
+
+        # Jigsaw puzzle state (map1.txt specific)
+        self.puzzle_active = False
+        self.puzzle_solved = False
+        self.puzzle_pieces = []
+        self.dragged_piece = None
+        self.drag_offset_x = 0
+        self.drag_offset_y = 0
+        self.puzzle_solved_time = 0
+        self.snap_sound = None
+        self.success_sound = None
+        
+        # Jigsaw piece award animation state
+        self.award_anim_active = False
+        self.award_anim_start_time = 0
+        self.award_piece_sprite = None
+        self.generate_award_piece_sprite()
+        
+        # Bridge building & camera pan variables
+        self.camera_pan_active = False
+        self.camera_pan_start_time = 0
+        self.pan_start_cam_x = 0
+        self.pan_start_cam_y = 0
+        self.bridge_spawned_in_pan = False
+        self.bridge_warning_message = ""
+        self.bridge_warning_timer = 0
+        
+        # Initialize bridge tiles on startup for map1.txt
+        self.update_bridge_tiles()
+        
+        # Load custom synthesized puzzle sound effects
+        self.load_puzzle_sounds()
 
         print(f"✅ Quarter1 initialized with map: {self.map_name}")
         print(f"   Goal portal: {self.goal_portal_direction}")
@@ -561,6 +594,7 @@ class Quarter1:
             ("3", "002.png"), ("4", "002.png"), ("5", "002.png"), ("6", "010.png"),
             ("7", "008.png"), ("8", "007.png"), ("+", "012.png"), ("-", "013.png"),
             ("/", "014.png"), ("*", "015.png"), ("T", "quarter1tiles/100.png"), ("W", "019.png"),
+            ("w", "019.png"),
             ("!", "020.png"), ("@", "022.png"), (")", "021.png"), ("$", "026.png"),
             ("%", "025.png"), ("^", "027.png"), ("&", "023.png"), ("(", "024.png"),
             ("<", "028.png"), (">", "029.png"), (";", "030.png"), (":", "032.png"),
@@ -570,6 +604,20 @@ class Quarter1:
 
         for key, filename in tile_files:
             tiles[key] = load_tile(filename)
+
+        def load_custom_tile(name):
+            path = os.path.join(self.BASE_DIR, "assets", "images", "sprites", "objects", "tiles", "quarter1tiles", name)
+            if os.path.exists(path):
+                try:
+                    img = pygame.image.load(path).convert_alpha()
+                    return pygame.transform.scale(img, (TILE_SIZE, TILE_SIZE))
+                except Exception as e:
+                    print(f"Error loading custom tile {name}: {e}")
+            placeholder = pygame.Surface((TILE_SIZE, TILE_SIZE))
+            placeholder.fill((218, 165, 32)) # gold placeholder
+            return placeholder
+
+        tiles["B"] = load_custom_tile("brick_bridge.png")
 
         # Load 16 autotile images for walls ('T')
         self.autotile_images = {}
@@ -945,8 +993,15 @@ class Quarter1:
             portal_right = portal_left + self.get_width_pixels()
             portal_top = self.get_world_y()
             portal_bottom = portal_top + self.get_height_pixels()
-            return (portal_left <= world_x < portal_right and
-                    portal_top <= world_y < portal_bottom)
+            
+            # Check overlap with player's 32x32 size bounding box
+            player_right = world_x + TILE_SIZE
+            player_bottom = world_y + TILE_SIZE
+            
+            return not (portal_right <= world_x or
+                        portal_left >= player_right or
+                        portal_bottom <= world_y or
+                        portal_top >= player_bottom)
 
     # ============================================================
     # LOAD PORTAL FRAMES
@@ -1000,7 +1055,7 @@ class Quarter1:
                 if c == 'r':
                     portal = self.Portal(x, y, 'right', is_static=True)
                     portal.set_animation(self.portal_frames_cache['right'])
-                    if self.is_quiz_map:
+                    if self.is_quiz_map and self.map_name.lower() != 'map1.txt':
                         self.locked_portals.append(portal)
                     else:
                         self.portals.append(portal)
@@ -1009,7 +1064,7 @@ class Quarter1:
                 elif c == 'l':
                     portal = self.Portal(x, y, 'left', is_static=True)
                     portal.set_animation(self.portal_frames_cache['left'])
-                    if self.is_quiz_map:
+                    if self.is_quiz_map and self.map_name.lower() != 'map1.txt':
                         self.locked_portals.append(portal)
                     else:
                         self.portals.append(portal)
@@ -1018,7 +1073,7 @@ class Quarter1:
                 elif c == 'u':
                     portal = self.Portal(x, y, 'up', is_static=True)
                     portal.set_animation(self.portal_frames_cache['up'])
-                    if self.is_quiz_map:
+                    if self.is_quiz_map and self.map_name.lower() != 'map1.txt':
                         self.locked_portals.append(portal)
                     else:
                         self.portals.append(portal)
@@ -1027,7 +1082,7 @@ class Quarter1:
                 elif c == 'd':
                     portal = self.Portal(x, y, 'down', is_static=True)
                     portal.set_animation(self.portal_frames_cache['down'])
-                    if self.is_quiz_map:
+                    if self.is_quiz_map and self.map_name.lower() != 'map1.txt':
                         self.locked_portals.append(portal)
                     else:
                         self.portals.append(portal)
@@ -1137,6 +1192,128 @@ class Quarter1:
         return []
 
     # ============================================================
+    # BRIDGE BUILDING MECHANIC METHODS (map1.txt specific)
+    # ============================================================
+    def update_bridge_tiles(self):
+        if self.map_name.lower() != 'map1.txt':
+            return
+        q_count = sum(1 for s in self.shape_npcs.values() if s['answered'])
+        
+        # Modify both self.game_map and self.render_map
+        # Columns 37 to 46 in Row 3 and Row 4
+        for r in [3, 4]:
+            if r >= len(self.game_map):
+                continue
+            game_row = list(self.game_map[r])
+            render_row = list(self.render_map[r])
+            
+            for col in range(37, 47):
+                if col >= len(game_row):
+                    continue
+                segment = (col - 37) // 2 + 1  # 1 to 5
+                if q_count >= segment:
+                    game_row[col] = 'B'
+                    render_row[col] = 'B'
+                else:
+                    game_row[col] = 'w'
+                    render_row[col] = 'w'
+                    
+            self.game_map[r] = ''.join(game_row)
+            self.render_map[r] = ''.join(render_row)
+
+    def trigger_bridge_pan_sequence(self):
+        self.camera_pan_active = True
+        self.camera_pan_start_time = pygame.time.get_ticks()
+        self.pan_start_cam_x = self.camera_x
+        self.pan_start_cam_y = self.camera_y
+        self.bridge_spawned_in_pan = False
+        
+        # Trigger the collect animation overlay variables for the brick tile
+        self.award_anim_active = True
+        # Delay the animation by 1.0s so it triggers when camera arrives at bridge
+        self.award_anim_start_time = pygame.time.get_ticks() + 1000
+
+    def show_bridge_warning(self, msg):
+        self.bridge_warning_message = msg
+        self.bridge_warning_timer = pygame.time.get_ticks()
+
+    # ============================================================
+    # JIGSAW PIECE AWARD ANIMATION METHODS
+    # ============================================================
+    def generate_award_piece_sprite(self):
+        # Path to the copied user jigsaw piece image
+        img_path = os.path.join("assets", "images", "sprites", "objects", "tiles", "quarter1tiles", "puzzleimages", "jigsaw_piece.png")
+        if os.path.exists(img_path):
+            try:
+                # Load user image
+                raw_img = pygame.image.load(img_path).convert_alpha()
+                
+                # Dynamic flood fill background removal starting from the 4 corners
+                width, height = raw_img.get_size()
+                pixels = pygame.PixelArray(raw_img)
+                
+                visited = set()
+                # Start flood-fill from the four corners of the image
+                queue = [(0, 0), (width - 1, 0), (0, height - 1), (width - 1, height - 1)]
+                for x, y in queue:
+                    visited.add((x, y))
+                    
+                # Standard BFS to clear white background pixels
+                while queue:
+                    cx, cy = queue.pop(0)
+                    color = raw_img.get_at((cx, cy))
+                    # Check if pixel is white-ish (R, G, B > 245)
+                    if color.r > 245 and color.g > 245 and color.b > 245:
+                        raw_img.set_at((cx, cy), (0, 0, 0, 0))
+                        for dx, dy in [(-1,0), (1,0), (0,-1), (0,1)]:
+                            nx, ny = cx + dx, cy + dy
+                            if 0 <= nx < width and 0 <= ny < height and (nx, ny) not in visited:
+                                visited.add((nx, ny))
+                                queue.append((nx, ny))
+                
+                # Release pixel array lock before using
+                del pixels
+                self.award_piece_sprite = raw_img
+                return
+            except Exception as e:
+                print(f"⚠️ Error processing user jigsaw image: {e}. Falling back to vector generator.")
+
+        # Fallback to vector shape drawing if file is missing/corrupted
+        icon_surf = pygame.Surface((160, 160), pygame.SRCALPHA)
+        mask = pygame.Surface((160, 160), pygame.SRCALPHA)
+        mask.fill((0, 0, 0, 0))
+        pygame.draw.rect(mask, (255, 255, 255, 255), (40, 40, 80, 80)) # main body
+        pygame.draw.circle(mask, (255, 255, 255, 255), (80, 40), 20)  # top tab
+        pygame.draw.circle(mask, (255, 255, 255, 255), (120, 80), 20) # right tab
+        pygame.draw.circle(mask, (0, 0, 0, 0), (80, 120), 20)         # bottom hole
+        pygame.draw.circle(mask, (0, 0, 0, 0), (40, 80), 20)          # left hole
+        
+        # Color fill: Premium Amber/Yellow
+        icon_surf.fill((245, 190, 40, 255))
+        
+        # Draw clean light-grey/white outlines on piece_surf (clipped by mask)
+        pygame.draw.line(icon_surf, (241, 245, 249, 255), (40, 40), (40, 120), 5)
+        pygame.draw.line(icon_surf, (241, 245, 249, 255), (120, 40), (120, 120), 5)
+        pygame.draw.line(icon_surf, (241, 245, 249, 255), (40, 40), (120, 40), 5)
+        pygame.draw.line(icon_surf, (241, 245, 249, 255), (40, 120), (120, 120), 5)
+        
+        pygame.draw.circle(icon_surf, (241, 245, 249, 255), (80, 40), 20, 5)
+        pygame.draw.circle(icon_surf, (241, 245, 249, 255), (120, 80), 20, 5)
+        pygame.draw.circle(icon_surf, (241, 245, 249, 255), (80, 120), 20, 5)
+        pygame.draw.circle(icon_surf, (241, 245, 249, 255), (40, 80), 20, 5)
+        
+        # Apply mask
+        icon_surf.blit(mask, (0, 0), special_flags=pygame.BLEND_RGBA_MULT)
+        self.award_piece_sprite = icon_surf
+
+    def trigger_award_animation(self):
+        self.award_anim_active = True
+        self.award_anim_start_time = pygame.time.get_ticks()
+        # Play the snap chime sound effect as the reward tone
+        if self.snap_sound:
+            self.snap_sound.play()
+
+    # ============================================================
     # RETURN TO STAGE SELECT
     # ============================================================
     def return_to_stage_select(self):
@@ -1150,6 +1327,319 @@ class Quarter1:
             print("🏠 Returning to stage select")
             self.completed = True
         return "back"
+
+    # ============================================================
+    # JIGSAW PUZZLE SOUND SYNTHESIS
+    # ============================================================
+    def load_puzzle_sounds(self):
+        try:
+            self.snap_sound = self.generate_snap_sound()
+            self.success_sound = self.generate_success_sound()
+            print("🔊 Jigsaw puzzle sound effects initialized.")
+        except Exception as e:
+            print(f"⚠️ Error loading puzzle sounds: {e}")
+
+    def generate_snap_sound(self):
+        import numpy as np
+        sample_rate = 22050
+        duration = 0.12
+        t = np.linspace(0, duration, int(sample_rate * duration), False)
+        # Clean retro pitch chime (double beep tone glide)
+        frequency = 880
+        sound_data = np.sin(2 * np.pi * frequency * t) * 0.4
+        decay = np.exp(-25 * t)
+        sound_data = sound_data * decay
+        audio_data = (sound_data * 32767).astype(np.int16)
+        try:
+            return pygame.mixer.Sound(buffer=audio_data.tobytes())
+        except Exception:
+            return None
+
+    def generate_success_sound(self):
+        import numpy as np
+        sample_rate = 22050
+        duration = 0.8
+        t = np.linspace(0, duration, int(sample_rate * duration), False)
+        notes = [523.25, 659.25, 784.99, 1046.50]  # C5, E5, G5, C6 arpeggio chord
+        sound_data = np.zeros_like(t)
+        
+        for idx, freq in enumerate(notes):
+            delay = idx * 0.12
+            note_t = t - delay
+            started = note_t >= 0
+            note_sound = np.sin(2 * np.pi * freq * note_t) * 0.25 * started
+            note_decay = np.exp(-8 * note_t) * started
+            sound_data += note_sound * note_decay
+            
+        sound_data = np.clip(sound_data, -1.0, 1.0)
+        audio_data = (sound_data * 32767).astype(np.int16)
+        try:
+            return pygame.mixer.Sound(buffer=audio_data.tobytes())
+        except Exception:
+            return None
+
+    # ============================================================
+    # JIGSAW PUZZLE STATE MANAGEMENT
+    # ============================================================
+    def init_puzzle(self):
+        puzzle_img_path = os.path.join(self.BASE_DIR, "assets", "images", "sprites", "objects", "tiles", "quarter1tiles", "puzzleimages", "CircleNPC.png")
+        if os.path.exists(puzzle_img_path):
+            try:
+                img = pygame.image.load(puzzle_img_path).convert_alpha()
+                scaled_img = pygame.transform.smoothscale(img, (300, 300))
+                
+                self.puzzle_pieces = []
+                
+                # Tab configuration settings for the jigsaw vertical interlocking boundaries.
+                # directions: "right" means tab protrudes from left-to-right, "left" from right-to-left
+                directions = {1: "right", 2: "right", 3: "left", 4: "right"}
+                y_coords = {1: 80, 2: 180, 3: 110, 4: 210}
+                R = 16  # radius of interlocking jigsaw tab/hole
+                
+                for i in range(5):
+                    # Local Nominal size is 60x300, but surface is 100x300 to allow room for jigsaw tabs.
+                    # Local x=20 is the nominal left edge (global boundary i)
+                    # Local x=80 is the nominal right edge (global boundary i+1)
+                    mask = pygame.Surface((100, 300), pygame.SRCALPHA)
+                    mask.fill((0, 0, 0, 0))
+                    # Base solid nominal rectangle body
+                    pygame.draw.rect(mask, (255, 255, 255, 255), (20, 0, 60, 300))
+                    
+                    # Create actual piece surface
+                    piece_surf = pygame.Surface((100, 300), pygame.SRCALPHA)
+                    piece_surf.fill((0, 0, 0, 0))
+                    # Blit the source image shifted to align with nominal bounds
+                    piece_surf.blit(scaled_img, (20 - i * 60, 0))
+                    
+                    # Left Boundary interlocking tab/hole
+                    if i > 0:
+                        dir_val = directions[i]
+                        cy = y_coords[i]
+                        if dir_val == "right":  # Indentation/hole
+                            pygame.draw.circle(mask, (0, 0, 0, 0), (20, cy), R)
+                        else:  # Protrusion/tab
+                            pygame.draw.circle(mask, (255, 255, 255, 255), (20, cy), R)
+                            
+                    # Right Boundary interlocking tab/hole
+                    if i < 4:
+                        dir_val = directions[i + 1]
+                        cy = y_coords[i + 1]
+                        if dir_val == "right":  # Protrusion/tab
+                            pygame.draw.circle(mask, (255, 255, 255, 255), (80, cy), R)
+                        else:  # Indentation/hole
+                            pygame.draw.circle(mask, (0, 0, 0, 0), (80, cy), R)
+                            
+                    # Apply final jigsaw boundary alpha multiplication
+                    piece_surf.blit(mask, (0, 0), special_flags=pygame.BLEND_RGBA_MULT)
+                    
+                    self.puzzle_pieces.append({
+                        "index": i,
+                        "surface": piece_surf,
+                        "x": 0,
+                        "y": 0,
+                        "is_placed": False,
+                        "deck_x": 0,
+                        "deck_y": 0
+                    })
+                self.reset_puzzle()
+                print("🧩 Jigsaw puzzle loaded and initialized.")
+            except Exception as e:
+                print(f"❌ Error initializing puzzle: {e}")
+        else:
+            print(f"❌ Puzzle image not found at: {puzzle_img_path}")
+
+    def reset_puzzle(self):
+        import random
+        shuffled_indices = list(range(5))
+        random.shuffle(shuffled_indices)
+        
+        box_w, box_h = 760, 480
+        box_x = (self.width - box_w) // 2
+        box_y = (self.height - box_h) // 2
+        deck_x = box_x + 410
+        deck_y = box_y + 110
+        
+        for i, piece in enumerate(self.puzzle_pieces):
+            shuffled_pos = shuffled_indices.index(i)
+            # Position piece nominally inside 60px slot columns in the deck
+            piece["x"] = deck_x + shuffled_pos * 60
+            piece["y"] = deck_y
+            piece["deck_x"] = piece["x"]
+            piece["deck_y"] = piece["y"]
+            piece["is_placed"] = False
+            
+        self.dragged_piece = None
+        self.puzzle_solved_time = 0
+
+    def release_dragged_piece(self):
+        if not self.dragged_piece:
+            return
+            
+        piece = self.dragged_piece
+        box_w, box_h = 760, 480
+        box_x = (self.width - box_w) // 2
+        box_y = (self.height - box_h) // 2
+        board_x = box_x + 50
+        board_y = box_y + 110
+        
+        target_x = board_x + piece["index"] * 60
+        target_y = board_y
+        
+        # Check if piece is released close to its correct target slot (within 35 pixels)
+        import math
+        dist = math.hypot(piece["x"] - target_x, piece["y"] - target_y)
+        if dist < 35:
+            # Snap to target slot
+            piece["x"] = target_x
+            piece["y"] = target_y
+            piece["is_placed"] = True
+            print(f"🧩 Piece {piece['index']} correctly placed!")
+            if self.snap_sound:
+                self.snap_sound.play()
+                
+            # Check if all pieces are placed
+            if all(p["is_placed"] for p in self.puzzle_pieces):
+                print("🎉 Puzzle arpeggio triggers!")
+                self.puzzle_solved_time = pygame.time.get_ticks()
+                if self.success_sound:
+                    self.success_sound.play()
+        else:
+            # Snap back to starting deck coordinates
+            piece["x"] = piece["deck_x"]
+            piece["y"] = piece["deck_y"]
+            print(f"🧩 Piece {piece['index']} snapped back to deck.")
+            
+        self.dragged_piece = None
+
+    def update_puzzle(self):
+        if not self.puzzle_active:
+            return
+            
+        # Check if solved and 1.8 seconds elapsed (for play-out arpeggio sound effect)
+        if all(p["is_placed"] for p in self.puzzle_pieces):
+            if hasattr(self, "puzzle_solved_time") and self.puzzle_solved_time > 0:
+                current_time = pygame.time.get_ticks()
+                if current_time - self.puzzle_solved_time > 1800:
+                    self.puzzle_solved = True
+                    self.puzzle_active = False
+                    self.return_to_stage_select()
+                    return
+
+        # Track gesture fist coordinates if hand is active
+        if self.hand_detected and self.fist_closed:
+            if not self.dragged_piece:
+                for piece in self.puzzle_pieces:
+                    if not piece["is_placed"]:
+                        piece_rect = pygame.Rect(piece["x"], piece["y"], 60, 300)
+                        if piece_rect.collidepoint(self.cursor_pos):
+                            self.dragged_piece = piece
+                            self.drag_offset_x = piece["x"] - self.cursor_pos[0]
+                            self.drag_offset_y = piece["y"] - self.cursor_pos[1]
+                            break
+            if self.dragged_piece:
+                self.dragged_piece["x"] = self.cursor_pos[0] + self.drag_offset_x
+                self.dragged_piece["y"] = self.cursor_pos[1] + self.drag_offset_y
+        else:
+            if self.dragged_piece and self.hand_detected:
+                self.release_dragged_piece()
+
+    def draw_puzzle(self):
+        if not self.puzzle_active:
+            return
+            
+        # Background overlay
+        overlay = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
+        overlay.fill((0, 0, 0, 180))
+        self.screen.blit(overlay, (0, 0))
+        
+        # Dialogue box layout
+        box_w, box_h = 760, 480
+        box_x = (self.width - box_w) // 2
+        box_y = (self.height - box_h) // 2
+        
+        bg_surf = pygame.Surface((box_w, box_h), pygame.SRCALPHA)
+        bg_surf.fill((15, 23, 42, 230))
+        self.screen.blit(bg_surf, (box_x, box_y))
+        
+        pygame.draw.rect(self.screen, (218, 165, 32), (box_x, box_y, box_w, box_h), 3, border_radius=12)
+        
+        # Text Header
+        title_font = pygame.font.SysFont("Comic Sans MS", 22, bold=True)
+        title_surf = title_font.render("CircleNPC Jigsaw Puzzle", True, (255, 215, 0))
+        self.screen.blit(title_surf, (box_x + (box_w - title_surf.get_width()) // 2, box_y + 20))
+        
+        desc_font = pygame.font.SysFont("Comic Sans MS", 13)
+        desc_surf = desc_font.render("Drag and drop the pieces into their matching slots to activate the portal.", True, (200, 200, 200))
+        self.screen.blit(desc_surf, (box_x + (box_w - desc_surf.get_width()) // 2, box_y + 55))
+        
+        label_font = pygame.font.SysFont("Comic Sans MS", 14, bold=True)
+        board_label = label_font.render("TARGET BOARD", True, (255, 255, 255))
+        self.screen.blit(board_label, (box_x + 50 + (300 - board_label.get_width()) // 2, box_y + 85))
+        
+        slices_label = label_font.render("DECK AREA", True, (255, 255, 255))
+        self.screen.blit(slices_label, (box_x + 410 + (300 - slices_label.get_width()) // 2, box_y + 85))
+        
+        # Board (Left)
+        board_x = box_x + 50
+        board_y = box_y + 110
+        pygame.draw.rect(self.screen, (30, 41, 59), (board_x, board_y, 300, 300))
+        pygame.draw.rect(self.screen, (100, 116, 139), (board_x, board_y, 300, 300), 2)
+        for i in range(1, 5):
+            pygame.draw.line(self.screen, (71, 85, 105), (board_x + i * 60, board_y), (board_x + i * 60, board_y + 300), 1)
+            
+        # Deck (Right)
+        deck_x = box_x + 410
+        deck_y = box_y + 110
+        pygame.draw.rect(self.screen, (30, 41, 59), (deck_x, deck_y, 300, 300))
+        pygame.draw.rect(self.screen, (100, 116, 139), (deck_x, deck_y, 300, 300), 2)
+        for i in range(1, 5):
+            pygame.draw.line(self.screen, (71, 85, 105), (deck_x + i * 60, deck_y), (deck_x + i * 60, deck_y + 300), 1)
+            
+        # Draw jigsaw pieces (unplaced, placed, then active dragging)
+        for piece in self.puzzle_pieces:
+            if not piece["is_placed"] and piece != self.dragged_piece:
+                self.screen.blit(piece["surface"], (piece["x"] - 20, piece["y"]))
+                
+        for piece in self.puzzle_pieces:
+            if piece["is_placed"]:
+                self.screen.blit(piece["surface"], (piece["x"] - 20, piece["y"]))
+                
+        if self.dragged_piece:
+            self.screen.blit(self.dragged_piece["surface"], (self.dragged_piece["x"] - 20, self.dragged_piece["y"]))
+            pygame.draw.rect(self.screen, (250, 204, 21), (self.dragged_piece["x"], self.dragged_piece["y"], 60, 300), 2)
+            
+        # Reset and Close Buttons
+        close_btn_rect = pygame.Rect(box_x + box_w // 2 - 120, box_y + box_h - 55, 110, 36)
+        reset_btn_rect = pygame.Rect(box_x + box_w // 2 + 10, box_y + box_h - 55, 110, 36)
+        
+        mouse_pos = pygame.mouse.get_pos()
+        close_color = (220, 38, 38) if close_btn_rect.collidepoint(mouse_pos) else (185, 28, 28)
+        pygame.draw.rect(self.screen, close_color, close_btn_rect, border_radius=6)
+        close_label = desc_font.render("Close", True, (255, 255, 255))
+        self.screen.blit(close_label, (close_btn_rect.x + (110 - close_label.get_width()) // 2, close_btn_rect.y + (36 - close_label.get_height()) // 2))
+        
+        reset_color = (79, 70, 229) if reset_btn_rect.collidepoint(mouse_pos) else (67, 56, 202)
+        pygame.draw.rect(self.screen, reset_color, reset_btn_rect, border_radius=6)
+        reset_label = desc_font.render("Reset", True, (255, 255, 255))
+        self.screen.blit(reset_label, (reset_btn_rect.x + (110 - reset_label.get_width()) // 2, reset_btn_rect.y + (36 - reset_label.get_height()) // 2))
+        
+        # Success overlay arpeggio triggers success board banner
+        if all(p["is_placed"] for p in self.puzzle_pieces):
+            success_overlay = pygame.Surface((box_w - 20, box_h - 100), pygame.SRCALPHA)
+            success_overlay.fill((15, 23, 42, 220))
+            self.screen.blit(success_overlay, (box_x + 10, box_y + 80))
+            
+            success_font = pygame.font.SysFont("Comic Sans MS", 26, bold=True)
+            success_surf = success_font.render("PUZZLE SOLVED!", True, (34, 197, 94))
+            unlock_surf = desc_font.render("The portal is now active. Exiting area...", True, (248, 250, 252))
+            
+            self.screen.blit(success_surf, (box_x + (box_w - success_surf.get_width()) // 2, box_y + 200))
+            self.screen.blit(unlock_surf, (box_x + (box_w - unlock_surf.get_width()) // 2, box_y + 245))
+            
+        if self.hand_detected:
+            color = (255, 200, 0) if self.fist_start_time > 0 else (255, 255, 255)
+            pygame.draw.circle(self.screen, color, self.cursor_pos, 15, 2)
+            pygame.draw.circle(self.screen, (255, 100, 100), self.cursor_pos, 4)
 
     # ============================================================
     # CHECK PORTAL TELEPORT
@@ -1166,6 +1656,19 @@ class Quarter1:
             if current_portal.direction == self.goal_portal_direction:
                 if self.is_quiz_map and self.quiz_state < 6:
                     return False
+                # Intercept for map1.txt (bridge completion) and map3.txt (jigsaw puzzle minigame)
+                if self.map_name.lower() == 'map1.txt':
+                    answered_count = sum(1 for s in self.shape_npcs.values() if s['answered'])
+                    if answered_count < 5:
+                        self.show_bridge_warning("I should answer the questions to build the bridge!")
+                        return False
+                elif self.map_name.lower() == 'map3.txt':
+                    if not self.puzzle_solved:
+                        if not self.puzzle_active:
+                            self.puzzle_active = True
+                            if not self.puzzle_pieces:
+                                self.init_puzzle()
+                        return False
                 print(f"🎯 Goal reached! Returning to stage select...")
                 self.return_to_stage_select()
                 return True
@@ -1184,6 +1687,56 @@ class Quarter1:
     # UPDATE CAMERA
     # ============================================================
     def update_camera(self):
+        # Override camera logic during active panning
+        if self.camera_pan_active:
+            elapsed = (pygame.time.get_ticks() - self.camera_pan_start_time) / 1000.0
+            
+            # Bridge target camera coordinates
+            # Center of the bridge (cols 37-46, row 4)
+            bridge_target_x = 41.5 * TILE_SIZE - (self.width // 2) / ZOOM
+            bridge_target_y = 4 * TILE_SIZE - (self.height // 2) / ZOOM
+            
+            # Clamp bridge targets
+            max_cam_x = max(0, self.MAP_WIDTH - self.width / ZOOM)
+            max_cam_y = max(0, self.MAP_HEIGHT - self.height / ZOOM)
+            bridge_target_x = max(0, min(max_cam_x, bridge_target_x))
+            bridge_target_y = max(0, min(max_cam_y, bridge_target_y))
+            
+            if elapsed < 1.0:
+                # Phase 1: Smoothstep pan to bridge
+                t = elapsed / 1.0
+                t = t * t * (3 - 2 * t)
+                self.camera_x = self.pan_start_cam_x + t * (bridge_target_x - self.pan_start_cam_x)
+                self.camera_y = self.pan_start_cam_y + t * (bridge_target_y - self.pan_start_cam_y)
+            elif elapsed < 2.5:
+                # Phase 2: Hold camera on bridge, spawn bridge tiles visually
+                self.camera_x = bridge_target_x
+                self.camera_y = bridge_target_y
+                
+                # Spawn bridge tiles 1.0s into the panning sequence
+                if not self.bridge_spawned_in_pan:
+                    self.bridge_spawned_in_pan = True
+                    self.update_bridge_tiles()
+                    # Play snap chime sound effect
+                    if self.snap_sound:
+                        self.snap_sound.play()
+            elif elapsed < 3.5:
+                # Phase 3: Smoothstep pan back to player
+                t = (elapsed - 2.5) / 1.0
+                t = t * t * (3 - 2 * t)
+                
+                player_target_x = self.player_x + TILE_SIZE // 2 - (self.width // 2) / ZOOM
+                player_target_y = self.player_y + TILE_SIZE // 2 - (self.height // 2) / ZOOM
+                player_target_x = max(0, min(max_cam_x, player_target_x))
+                player_target_y = max(0, min(max_cam_y, player_target_y))
+                
+                self.camera_x = bridge_target_x + t * (player_target_x - bridge_target_x)
+                self.camera_y = bridge_target_y + t * (player_target_y - bridge_target_y)
+            else:
+                # Sequence complete, hand camera control back to player tracking
+                self.camera_pan_active = False
+            return
+
         target_x = self.player_x + TILE_SIZE // 2 - (self.width // 2) / ZOOM
         target_y = self.player_y + TILE_SIZE // 2 - (self.height // 2) / ZOOM
         self.camera_x += (target_x - self.camera_x) * 0.1
@@ -1266,6 +1819,13 @@ class Quarter1:
                 if self.is_quiz_map:
                     self.shape_npcs[self.active_shape_id]['answered'] = True
                     answered_count = sum(1 for s in self.shape_npcs.values() if s['answered'])
+                    
+                    # Trigger collect animations or bridge pan sequences
+                    if self.map_name.lower() == 'map1.txt':
+                        self.trigger_bridge_pan_sequence()
+                    elif self.map_name.lower() == 'map3.txt':
+                        self.trigger_award_animation()
+                        
                     if answered_count == 5:
                         self.spawn_portals()
                         self.quiz_state = 5
@@ -1295,6 +1855,11 @@ class Quarter1:
     def update(self):
         dt = self.clock.tick(FPS) / 1000.0
         self.frame_counter += 1
+        
+        if self.puzzle_active:
+            self.update_puzzle()
+            return
+            
         # Update cooldowns
         if self.teleport_cooldown > 0:
             self.teleport_cooldown -= dt
@@ -1360,7 +1925,7 @@ class Quarter1:
     # UPDATE PLAYER MOVEMENT
     # ============================================================
     def update_player_movement(self):
-        if self.quiz_state in [1, 2, 3, 5] or self.player_block_timer > 0:
+        if self.quiz_state in [1, 2, 3, 5] or self.player_block_timer > 0 or self.puzzle_active or self.camera_pan_active:
             self.anim_frame = 0
             return
 
@@ -1388,6 +1953,20 @@ class Quarter1:
 
         new_x = self.player_x + vx
         new_y = self.player_y + vy
+
+        # Check if player tries to walk onto water 'w' on the bridge in map1.txt
+        if self.map_name.lower() == 'map1.txt' and vx > 0:
+            player_col = int((self.player_x + TILE_SIZE // 2) // TILE_SIZE)
+            player_row = int((self.player_y + TILE_SIZE // 2) // TILE_SIZE)
+            # Columns 36 to 46 is the bridge area (including start/end bricks)
+            if player_row in [3, 4] and 36 <= player_col <= 46:
+                if not self.can_move(self.player_x + SPEED, self.player_y):
+                    next_col = player_col + 1
+                    if next_col <= 46:
+                        tile_r3 = self.game_map[3][next_col] if 3 < len(self.game_map) and next_col < len(self.game_map[3]) else ''
+                        tile_r4 = self.game_map[4][next_col] if 4 < len(self.game_map) and next_col < len(self.game_map[4]) else ''
+                        if tile_r3 == 'w' or tile_r4 == 'w':
+                            self.show_bridge_warning("I should answer the questions to build the bridge!")
 
         if self.can_move(new_x, self.player_y):
             self.player_x = new_x
@@ -1574,6 +2153,85 @@ class Quarter1:
                         self.draw_tile(tile_char, col * TILE_SIZE, row * TILE_SIZE)
         self.draw_ui()
 
+        # Draw jigsaw piece or bridge tile award animation (flies down to bottom-center objectives HUD)
+        if self.award_anim_active:
+            elapsed = (pygame.time.get_ticks() - self.award_anim_start_time) / 1000.0
+            if elapsed >= 0:
+                if elapsed > 1.2:
+                    self.award_anim_active = False
+                else:
+                    # Choose sprite and text based on map
+                    if self.map_name.lower() == 'map1.txt':
+                        sprite_to_draw = self.tile_images.get('B', self.fallback_tile)
+                        banner_text = "NEW BRIDGE TILE COMPLETED!"
+                    else:
+                        sprite_to_draw = self.award_piece_sprite
+                        banner_text = "NEW PIECE COLLECTED!"
+                    
+                    if sprite_to_draw:
+                        if elapsed <= 0.4:
+                            scale = min(1.2, 1.2 * (elapsed / 0.4))
+                            alpha = 255
+                            x = self.width // 2
+                            y = self.height // 2
+                        else:
+                            t = min(1.0, (elapsed - 0.4) / 0.8)
+                            scale = 1.2 * (1.0 - t * 0.85)
+                            alpha = int(255 * (1.0 - t))
+                            x = self.width // 2
+                            y = self.height // 2 + t * (self.height - 60 - self.height // 2)
+                            
+                        size = int(160 * scale)
+                        if size > 0:
+                            try:
+                                scaled_sprite = pygame.transform.smoothscale(sprite_to_draw, (size, size))
+                                if alpha < 255:
+                                    scaled_sprite.set_alpha(alpha)
+                                self.screen.blit(scaled_sprite, (x - size // 2, y - size // 2))
+                            except Exception:
+                                pass
+                            
+                            if elapsed <= 0.4:
+                                award_font = pygame.font.SysFont("Comic Sans MS", 18, bold=True)
+                                text_surf = award_font.render(banner_text, True, (255, 215, 0))
+                                text_bg = pygame.Surface((text_surf.get_width() + 8, text_surf.get_height() + 8))
+                                text_bg.set_alpha(180)
+                                text_bg.fill((15, 23, 42))
+                                self.screen.blit(text_bg, (x - text_surf.get_width() // 2 - 4, y - size // 2 - 34))
+                                self.screen.blit(text_surf, (x - text_surf.get_width() // 2, y - size // 2 - 30))
+
+        # Draw floating thought bubble warning above player's head
+        if self.bridge_warning_message and pygame.time.get_ticks() - self.bridge_warning_timer < 3000:
+            # Calculate player screen coordinates
+            screen_x = (self.player_x - self.camera_x) * ZOOM
+            screen_y = (self.player_y - self.camera_y) * ZOOM
+            
+            # Setup bubble dimensions
+            bubble_font = pygame.font.SysFont("Comic Sans MS", 12, bold=True)
+            text_surf = bubble_font.render(self.bridge_warning_message, True, (15, 23, 42))
+            
+            # Draw thought bubble shape
+            bubble_w = text_surf.get_width() + 16
+            bubble_h = text_surf.get_height() + 12
+            bubble_x = screen_x + (TILE_SIZE * ZOOM) // 2 - bubble_w // 2
+            bubble_y = screen_y - bubble_h - 10
+            
+            # Keep on screen bounds
+            bubble_x = max(10, min(self.width - bubble_w - 10, bubble_x))
+            bubble_y = max(10, bubble_y)
+            
+            # Draw white background and gold border
+            pygame.draw.rect(self.screen, (255, 255, 255), (bubble_x, bubble_y, bubble_w, bubble_h), border_radius=6)
+            pygame.draw.rect(self.screen, (218, 165, 32), (bubble_x, bubble_y, bubble_w, bubble_h), 2, border_radius=6)
+            
+            # Draw pointer pointing down to player
+            ptr_x = screen_x + (TILE_SIZE * ZOOM) // 2
+            ptr_y = screen_y - 10
+            pygame.draw.polygon(self.screen, (255, 255, 255), [(ptr_x - 6, ptr_y - 6), (ptr_x + 6, ptr_y - 6), (ptr_x, ptr_y)])
+            pygame.draw.polygon(self.screen, (218, 165, 32), [(ptr_x - 6, ptr_y - 6), (ptr_x + 6, ptr_y - 6), (ptr_x, ptr_y)], 2)
+            
+            self.screen.blit(text_surf, (bubble_x + 8, bubble_y + 6))
+
         # Draw floating exclamation mark if active and player is in proximity
         if self.quiz_state == 0 and self.is_quiz_map and self.npc_oldman_found:
             import math
@@ -1662,6 +2320,10 @@ class Quarter1:
                 self.screen.blit(main, (x, y + offset))
                 
                 x += data["width"] + self.title_spacing
+
+        # Draw jigsaw puzzle overlay if active
+        if self.puzzle_active:
+            self.draw_puzzle()
 
     def draw_quiz_dialog(self):
         overlay = pygame.Surface((self.width, self.height))
@@ -1891,7 +2553,7 @@ class Quarter1:
 
         # Draw Objectives HUD Box at the bottom center of the screen
         if self.is_quiz_map:
-            box_w, box_h = 340, 80
+            box_w, box_h = 360, 80
             box_x = (self.width - box_w) // 2
             box_y = self.height - box_h - 20
             
@@ -1912,15 +2574,28 @@ class Quarter1:
             # Details font
             item_font = pygame.font.SysFont("Comic Sans MS", 12)
             
-            # Quiz completion progress item
+            # Progress counts
             if self.is_quiz_map:
                 q_count = sum(1 for s in self.shape_npcs.values() if s['answered'])
             else:
                 q_count = min(self.current_question_index, 5)
-            obj1 = f"• Quiz Progress: {q_count}/5 questions answered"
-            obj1_color = (255, 255, 255) if q_count < 5 else (34, 197, 94)
-            obj1_surf = item_font.render(obj1, True, obj1_color)
-            self.screen.blit(obj1_surf, (box_x + 15, box_y + 28))
+                
+            # Render Jigsaw or Quiz progress
+            if self.map_name.lower() in ['map1.txt', 'map3.txt']:
+                obj1 = f"• Jigsaw Pieces: {q_count}/5 collected"
+                obj1_color = (255, 255, 255) if q_count < 5 else (34, 197, 94)
+                obj1_surf = item_font.render(obj1, True, obj1_color)
+                self.screen.blit(obj1_surf, (box_x + 15, box_y + 28))
+                
+                # Draw the 5 Jigsaw piece collection indicator checkboxes inside the Objectives panel
+                for i in range(5):
+                    indicator_color = (34, 197, 94) if i < q_count else (71, 85, 105)
+                    pygame.draw.rect(self.screen, indicator_color, (box_x + 220 + i * 14, box_y + 31, 10, 10), border_radius=2)
+            else:
+                obj1 = f"• Quiz Progress: {q_count}/5 questions answered"
+                obj1_color = (255, 255, 255) if q_count < 5 else (34, 197, 94)
+                obj1_surf = item_font.render(obj1, True, obj1_color)
+                self.screen.blit(obj1_surf, (box_x + 15, box_y + 28))
             
             # Goal portal state item
             if self.quiz_state < 6:
@@ -1970,6 +2645,49 @@ class Quarter1:
     # HANDLE EVENT
     # ============================================================
     def handle_event(self, event):
+        if self.puzzle_active:
+            if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_ESCAPE:
+                    if self.main_menu:
+                        self.main_menu.current_screen = "menu"
+                        self.main_menu.quarter1 = None
+                    return "back"
+            elif event.type == pygame.MOUSEBUTTONDOWN:
+                if event.button == 1:  # Left click
+                    box_w, box_h = 760, 480
+                    box_x = (self.width - box_w) // 2
+                    box_y = (self.height - box_h) // 2
+                    close_btn_rect = pygame.Rect(box_x + box_w // 2 - 120, box_y + box_h - 55, 110, 36)
+                    reset_btn_rect = pygame.Rect(box_x + box_w // 2 + 10, box_y + box_h - 55, 110, 36)
+                    
+                    if close_btn_rect.collidepoint(event.pos):
+                        self.puzzle_active = False
+                        self.dragged_piece = None
+                        print("🧩 Puzzle closed by player")
+                        return None
+                    elif reset_btn_rect.collidepoint(event.pos):
+                        self.reset_puzzle()
+                        print("🧩 Puzzle reset")
+                        return None
+                        
+                    # Check if picking up a jigsaw piece
+                    for piece in self.puzzle_pieces:
+                        if not piece["is_placed"]:
+                            piece_rect = pygame.Rect(piece["x"], piece["y"], 60, 300)
+                            if piece_rect.collidepoint(event.pos):
+                                self.dragged_piece = piece
+                                self.drag_offset_x = piece["x"] - event.pos[0]
+                                self.drag_offset_y = piece["y"] - event.pos[1]
+                                break
+            elif event.type == pygame.MOUSEBUTTONUP:
+                if event.button == 1 and self.dragged_piece:
+                    self.release_dragged_piece()
+            elif event.type == pygame.MOUSEMOTION:
+                if self.dragged_piece:
+                    self.dragged_piece["x"] = event.pos[0] + self.drag_offset_x
+                    self.dragged_piece["y"] = event.pos[1] + self.drag_offset_y
+            return "blocked"
+
         if event.type == pygame.KEYDOWN:
             if event.key == pygame.K_ESCAPE:
                 if self.main_menu:
