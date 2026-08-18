@@ -1010,7 +1010,7 @@ class StageSelect:
                     self.locked_portal_banner_msg = "🔒 Talk to the Old Man first to unlock Quarter 1!"
                     self.locked_portal_banner_timer = 2.5
                     return False
-                map_name = "map2.txt"
+                map_name = random.choice(["map1.txt", "map2.txt", "map3.txt"])
                 print(f"🎮 Entering Quarter 1 - {map_name}")
                 self.main_menu.current_screen = "quarter1"
                 self.main_menu.quarter1 = Quarter1(self.screen, self.main_menu, map_name)
@@ -1201,7 +1201,7 @@ class StageSelect:
                     self.locked_portal_banner_msg = "🔒 Talk to the Old Man first to unlock Quarter 1!"
                     self.locked_portal_banner_timer = 1.0
                 else:
-                    map_name = "map2.txt"
+                    map_name = random.choice(["map1.txt", "map2.txt", "map3.txt"])
                     print(f"🎮 Entering Quarter 1 - {map_name}")
                     self.main_menu.current_screen = "quarter1"
                     self.main_menu.quarter1 = Quarter1(self.screen, self.main_menu, map_name)
@@ -1527,7 +1527,7 @@ class StageSelect:
                 if port_rect.colliderect(p_rect) or portal.contains_position(self.player_x + TILE_SIZE // 2, self.player_y + TILE_SIZE // 2):
                     if portal.direction == 'left':
                         if self.oldman_dialogue_state >= 2 or self.player_following_target == 'oldman':
-                            map_name = "map2.txt"
+                            map_name = random.choice(["map1.txt", "map2.txt", "map3.txt"])
                             print(f"🎮 Auto-entering Quarter 1 - {map_name}")
                             self.main_menu.current_screen = "quarter1"
                             self.main_menu.quarter1 = Quarter1(self.screen, self.main_menu, map_name)
