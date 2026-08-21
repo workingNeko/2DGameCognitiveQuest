@@ -1,0 +1,17 @@
+{
+    "select_btn_x": 433,
+    "select_btn_y": 235,
+    "start_btn_x": 432,
+    "start_btn_y": 329,
+    "exit_btn_x": 994,
+    "exit_btn_y": 21,
+    "boy_x": 0,
+    "boy_y": 300,
+    "girl_x": 920,
+    "girl_y": 300,
+    "dialogue_box_x": 211,
+    "dialogue_box_y": 458,
+    "dialogue_box_width": 800,
+    "dialogue_box_height": 180,
+    "title_y": 24
+}
