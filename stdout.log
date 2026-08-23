@@ -1,0 +1,179 @@
+pygame 2.6.1 (SDL 2.28.4, Python 3.11.9)
+Hello from the pygame community. https://www.pygame.org/contribute.html
+Warning: db module not found, using mock data for testing
+✅ Camera initialized!
+🎮 Simple Gesture Control Active!
+   - WRIST movement controls cursor (stable when making fist)
+   - Make a FIST and hold for 0.9 seconds to click
+👊 Fist detected! Hold to click...
+✅ CLICK! (Held for 0.9s)
+🖱️ Click at: (663, 506)
+🔘 Button clicked: START ACTIVITY
+🎮 START ACTIVITY clicked!
+✅ Loaded map: map.txt (27x53)
+   Player start: (26, 13)
+   NPCs found: 4
+✅ Loaded 11 frames for bromen
+✅ Loaded Bromen teleport frame: sprite_bromen_teleport00.png
+✅ Loaded Bromen teleport frame: sprite_bromen_teleport01.png
+✅ Loaded Bromen teleport frame: sprite_bromen_teleport02.png
+✅ Loaded Bromen teleport frame: sprite_bromen_teleport03.png
+✅ Loaded Bromen teleport frame: sprite_bromen_teleport04.png
+✅ Loaded Bromen teleport frame: sprite_bromen_teleport05.png
+✅ Loaded Bromen teleport frame: sprite_bromen_teleport06.png
+✅ Loaded Bromen teleport frame: sprite_bromen_teleport07.png
+✅ Loaded Oldman sprite
+✅ Loaded Old Man walking frame: oldmanleft.png
+✅ Loaded Old Man walking frame: oldmanleft1.png
+✅ Loaded Old Man walking frame: oldmanleft2.png
+✅ Loaded Old Man down frame: oldman.png
+✅ Loaded Old Man down frame: oldmandown1.png
+✅ Loaded Old Man down frame: oldmandown2.png
+✅ Loaded Old Man right frame: oldmanright.png
+✅ Loaded Old Man right frame: oldmanright1.png
+✅ Loaded Old Man right frame: oldmanright2.png
+✅ Loaded Old Man up frame: oldmanup.png
+✅ Loaded Old Man up frame: oldmanup1.png
+✅ Loaded Old Man up frame: oldmanup2.png
+✅ Loaded Skeleton sprite
+✅ Loaded Skeleton left frame: skeleton_left.png
+✅ Loaded Skeleton left frame: skeleton_left_1.png
+✅ Loaded Skeleton left frame: skeleton_left_2.png
+✅ Loaded Skeleton down frame: skeleton_down.png
+✅ Loaded Skeleton down frame: skeleton_down_1.png
+✅ Loaded Skeleton down frame: skeleton_down_2.png
+✅ Loaded Skeleton right frame: skeleton_right.png
+✅ Loaded Skeleton right frame: skeleton_right_1.png
+✅ Loaded Skeleton right frame: skeleton_right_2.png
+✅ Loaded Skeleton up frame: skeleton_up.png
+✅ Loaded Skeleton up frame: skeleton_up_1.png
+✅ Loaded Skeleton up frame: skeleton_up_2.png
+✅ Loaded Knight sprite
+✅ Loaded Knight left frame: knight_left_1.png
+✅ Loaded Knight left frame: knight_left_2.png
+✅ Loaded Knight down frame: knight_down.png
+✅ Loaded Knight down frame: knight_down_1.png
+✅ Loaded Knight down frame: knight_down_2.png
+✅ Loaded Knight right frame: knight_right_1.png
+✅ Loaded Knight right frame: knight_right_2.png
+✅ Loaded Knight up frame: knight_up.png
+✅ Loaded Knight up frame: knight_up_1.png
+✅ Loaded Knight up frame: knight_up_2.png
+Player spawned at: (26, 13)
+Bromen NPC at: (25, 3)
+Oldman NPC at: (5, 12)
+Skeleton NPC at: (46, 12)
+Knight NPC at: (25, 23)
+✅ StageSelect initialized with map: 27x53
+   Walkable tiles: {'G', '7', '6', '5', 'P', '3', '8', '1', '4', '2', '#'}
+   Portals loaded: 4
+   Bromen NPC found: True
+   Oldman NPC found: True
+   Skeleton NPC found: True
+   Knight NPC found: True
+✋ Fist released
+👊 Fist detected! Hold to click...
+✅ CLICK! (Held for 0.9s)
+🖱️ Click at: (549, 463)
+✋ Fist released
+👊 Fist detected! Hold to click...
+✅ CLICK! (Held for 0.9s)
+🖱️ Click at: (558, 475)
+✋ Fist released
+👊 Fist detected! Hold to click...
+✋ Fist released
+👊 Fist detected! Hold to click...
+✅ CLICK! (Held for 0.9s)
+🖱️ Click at: (569, 479)
+✋ Fist released
+👊 Fist detected! Hold to click...
+✅ CLICK! (Held for 0.9s)
+🖱️ Click at: (574, 484)
+✋ Fist released
+👊 Fist detected! Hold to click...
+✅ CLICK! (Held for 0.9s)
+🖱️ Click at: (560, 484)
+✋ Fist released
+👊 Fist detected! Hold to click...
+✅ CLICK! (Held for 0.9s)
+🖱️ Click at: (507, 463)
+✋ Fist released
+👊 Fist detected! Hold to click...
+✅ CLICK! (Held for 0.9s)
+🖱️ Click at: (500, 469)
+🧙‍♂️ Dialog complete! Old Man starts moving left.
+✋ Fist released
+🧙‍♂️ Old Man reached portal and disappeared from stage select!
+👊 Fist detected! Hold to click...
+✋ Fist released
+👊 Fist detected! Hold to click...
+✋ Fist released
+👊 Fist detected! Hold to click...
+✋ Fist released
+👊 Fist detected! Hold to click...
+✅ CLICK! (Held for 0.9s)
+🖱️ Click at: (302, 448)
+🎮 Entering Quarter 1 - map3.txt
+✅ Loaded map: map3.txt (20x50)
+   Player start: (1, 1)
+   NPCs found: 0
+📍 Quiz Station 1 found at: (33, 1)
+📍 Quiz Station 2 found at: (1, 8)
+📍 Quiz Station 5 found at: (46, 8)
+📍 Quiz Station 3 found at: (1, 16)
+📍 Quiz Station 4 found at: (47, 16)
+✅ Loaded 11 frames for bromen
+🏀 Loaded 8 animation frames for shape 1 (CircleNPC)
+🏀 Loaded 8 animation frames for shape 2 (HeartNPC)
+🏀 Loaded 8 animation frames for shape 3 (SquareNPC)
+🏀 Loaded 8 animation frames for shape 4 (StarNPC)
+🏀 Loaded 8 animation frames for shape 5 (DiamondNPC)
+✅ Loaded Ball frame: sprite_ball00.png
+✅ Loaded Ball frame: sprite_ball01.png
+✅ Loaded Ball frame: sprite_ball02.png
+✅ Loaded Ball frame: sprite_ball03.png
+✅ Loaded Ball frame: sprite_ball04.png
+✅ Loaded Ball frame: sprite_ball05.png
+✅ Loaded Ball frame: sprite_ball06.png
+✅ Loaded Ball frame: sprite_ball07.png
+✅ Loaded Ball frame: sprite_ball08.png
+✅ Loaded Ball frame: sprite_ball09.png
+✅ Loaded Ball frame: sprite_ball10.png
+✅ Loaded Ball frame: sprite_ball11.png
+✅ Loaded Ball frame: sprite_ball12.png
+✅ Loaded Ball frame: sprite_ball13.png
+✅ Loaded Ball frame: sprite_ball14.png
+✅ Loaded Ball frame: sprite_ball15.png
+🏀 Loaded Ball sprites to replace Old Man
+✅ Loaded Skeleton sprite
+✅ Loaded Knight sprite
+✅ Loaded Knight left frame: knight_left_1.png
+✅ Loaded Knight left frame: knight_left_2.png
+✅ Loaded Knight down frame: knight_down.png
+✅ Loaded Knight down frame: knight_down_1.png
+✅ Loaded Knight down frame: knight_down_2.png
+✅ Loaded Knight right frame: knight_right_1.png
+✅ Loaded Knight right frame: knight_right_2.png
+✅ Loaded Knight up frame: knight_up.png
+✅ Loaded Knight up frame: knight_up_1.png
+✅ Loaded Knight up frame: knight_up_2.png
+Player spawned at: (1, 1)
+🏀 Spawned Shape NPC 1: circle at (33, 1)
+🏀 Spawned Shape NPC 2: heart at (1, 8)
+🏀 Spawned Shape NPC 5: diamond at (46, 8)
+🏀 Spawned Shape NPC 3: square at (1, 16)
+🏀 Spawned Shape NPC 4: star at (47, 16)
+✅ Quarter1 initialized with map: map3.txt
+   Goal portal: right
+   Portals loaded: 0
+✋ Fist released
+👊 Fist detected! Hold to click...
+👊 Fist detected! Hold to click...
+✋ Fist released
+👊 Fist detected! Hold to click...
+✅ CLICK! (Held for 0.9s)
+🖱️ Click at: (834, 549)
+✋ Fist released
+👊 Fist detected! Hold to click...
+✋ Fist released
+👊 Fist detected! Hold to click...
