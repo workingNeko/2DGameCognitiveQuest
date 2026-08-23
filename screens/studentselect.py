@@ -203,46 +203,30 @@ class StudentSelect:
     # LOAD STUDENTS
     # =========================================================
     def load_students(self):
-        # Try to load from database, otherwise use mock data for testing
         try:
-            if db and db.connection and db.connection.is_connected():
-                query = """
-                    SELECT
-                        student_id,
-                        firstName,
-                        lastName,
-                        score,
-                        progress,
-                        level,
-                        extra_data
-                    FROM student
-                    WHERE status = 'Enrolled'
-                    ORDER BY lastName, firstName
-                """
-                db.cursor.execute(query)
-                results = db.cursor.fetchall()
-
-                self.students = []
-
-                for student in results:
-                    gender = self.get_gender_from_extra_data(student.get("extra_data"))
-                    self.students.append({
-                        "student_id": student["student_id"],
-                        "first_name": student["firstName"],
-                        "last_name": student["lastName"],
-                        "score": student.get("score", 0),
-                        "progress": student.get("progress", 0),
-                        "level": student.get("level", "Level 1"),
-                        "gender": gender
-                    })
-
-                print(f"✅ Loaded {len(self.students)} students")
+            if db:
+                results = db.get_students()
+                if results is not None:
+                    self.students = []
+                    for student in results:
+                        # Map keys from the API response (camelCase in Vercel JSON!)
+                        self.students.append({
+                            "id": student.get("id"),
+                            "student_id": student.get("studentId") or student.get("student_id") or "MOCK-ID",
+                            "first_name": student.get("fullName") or student.get("full_name") or "Unknown",
+                            "last_name": "",
+                            "score": 0,
+                            "progress": 0,
+                            "level": student.get("gradeLevel") or student.get("grade_level", "Grade 2"),
+                            "gender": str(student.get("gender", "male")).lower()
+                        })
+                    print(f"✅ Loaded {len(self.students)} students from Vercel API")
+                else:
+                    self.load_mock_students()
             else:
-                # Mock data for testing
                 self.load_mock_students()
-
         except Exception as e:
-            print(f"Database Error: {e}")
+            print(f"API Student Roster Error: {e}")
             self.load_mock_students()
 
         if not self.students:
@@ -251,15 +235,15 @@ class StudentSelect:
     def load_mock_students(self):
         """Mock student data for testing without database"""
         self.students = [
-            {"student_id": 1, "first_name": "John", "last_name": "Smith",
+            {"id": 1, "student_id": "MOCK-01", "first_name": "John", "last_name": "Smith",
              "score": 85, "progress": 75, "level": "Level 2", "gender": "male"},
-            {"student_id": 2, "first_name": "Emma", "last_name": "Johnson",
+            {"id": 2, "student_id": "MOCK-02", "first_name": "Emma", "last_name": "Johnson",
              "score": 92, "progress": 88, "level": "Level 3", "gender": "female"},
-            {"student_id": 3, "first_name": "Michael", "last_name": "Brown",
+            {"id": 3, "student_id": "MOCK-03", "first_name": "Michael", "last_name": "Brown",
              "score": 78, "progress": 65, "level": "Level 1", "gender": "male"},
-            {"student_id": 4, "first_name": "Sophia", "last_name": "Davis",
+            {"id": 4, "student_id": "MOCK-04", "first_name": "Sophia", "last_name": "Davis",
              "score": 95, "progress": 92, "level": "Level 3", "gender": "female"},
-            {"student_id": 5, "first_name": "James", "last_name": "Wilson",
+            {"id": 5, "student_id": "MOCK-05", "first_name": "James", "last_name": "Wilson",
              "score": 70, "progress": 60, "level": "Level 1", "gender": "male"},
         ]
         print(f"📋 Loaded {len(self.students)} mock students for testing")
@@ -278,11 +262,13 @@ class StudentSelect:
         self.selected_student = student
         self.main_menu.selected_student = student
         self.main_menu.student_id = student['student_id']
+        self.main_menu.student_db_id = student.get('id')  # Store the primary key ID from database
 
         self.main_menu.current_screen = "menu"
 
-        self.show_message(f"✅ Selected: {student['first_name']} {student['last_name']}", 2000)
-        print(f"✅ Selected Student: {student['first_name']} {student['last_name']} (ID: {student['student_id']})")
+        display_name = f"{student['first_name']} {student['last_name']}".strip()
+        self.show_message(f"✅ Selected: {display_name}", 2000)
+        print(f"✅ Selected Student: {display_name} (ID: {student['student_id']}, DB ID: {student.get('id')})")
 
     # =========================================================
     # DRAW BUTTON (with hover detection from cursor)

@@ -845,6 +845,14 @@ class Quarter3:
     # LOAD PLAYER SPRITES
     # ============================================================
     def load_player_sprites(self):
+        prefix = "boy"
+        if hasattr(self, 'main_menu') and self.main_menu and getattr(self.main_menu, 'selected_student', None):
+            gender = self.main_menu.selected_student.get("gender")
+            if gender:
+                gender = str(gender).lower()
+                if gender in ["female", "girl", "f"]:
+                    prefix = "female"
+
         def load_sprite(name):
             path = os.path.join(self.PLAYER_PATH, name)
             try:
@@ -857,10 +865,10 @@ class Quarter3:
                 return placeholder
 
         return {
-            "down": [load_sprite("boy_down_1.png"), load_sprite("boy_down_2.png")],
-            "left": [load_sprite("boy_left_1.png"), load_sprite("boy_left_2.png")],
-            "right": [load_sprite("boy_right_1.png"), load_sprite("boy_right_2.png")],
-            "up": [load_sprite("boy_up_1.png"), load_sprite("boy_up_2.png")]
+            "down": [load_sprite(f"{prefix}_down_1.png"), load_sprite(f"{prefix}_down_2.png")],
+            "left": [load_sprite(f"{prefix}_left_1.png"), load_sprite(f"{prefix}_left_2.png")],
+            "right": [load_sprite(f"{prefix}_right_1.png"), load_sprite(f"{prefix}_right_2.png")],
+            "up": [load_sprite(f"{prefix}_up_1.png"), load_sprite(f"{prefix}_up_2.png")]
         }
 
     # ============================================================

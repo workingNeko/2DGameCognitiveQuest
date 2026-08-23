@@ -122,6 +122,46 @@ class Quarter4:
             "knight"
         )
 
+        self.NPC_PATH_CIRCLE = os.path.join(
+            self.BASE_DIR,
+            "assets",
+            "images",
+            "sprites",
+            "objects",
+            "NPC",
+            "CircleNPC"
+        )
+
+        self.NPC_PATH_STAR = os.path.join(
+            self.BASE_DIR,
+            "assets",
+            "images",
+            "sprites",
+            "objects",
+            "NPC",
+            "StarNPC"
+        )
+
+        self.NPC_PATH_NUM3 = os.path.join(
+            self.BASE_DIR,
+            "assets",
+            "images",
+            "sprites",
+            "objects",
+            "NPC",
+            "Number3NPC"
+        )
+
+        self.NPC_PATH_NUM4 = os.path.join(
+            self.BASE_DIR,
+            "assets",
+            "images",
+            "sprites",
+            "objects",
+            "NPC",
+            "Number4NPC"
+        )
+
         # ============================================================
         # MAP LOADER
         # ============================================================
@@ -177,50 +217,8 @@ class Quarter4:
         # LOAD NPC SPRITES
         # ============================================================
         # Bromen NPC (animated)
-        self.npc_bromen_sprites = self.load_npc_sprites_animated(self.NPC_PATH_BROMEN, "bromen")
-        self.npc_bromen_anim_frame = 0
-        self.npc_bromen_anim_timer = 0
-        self.npc_bromen_x = 0
-        self.npc_bromen_y = 0
-        self.npc_bromen_tile_x = 0
-        self.npc_bromen_tile_y = 0
-        self.npc_bromen_found = False
-
-        # Oldman NPC (static)
-        self.npc_oldman_sprite = None
-        self.npc_oldman_x = 0
-        self.npc_oldman_y = 0
-        self.npc_oldman_tile_x = 0
-        self.npc_oldman_tile_y = 0
-        self.npc_oldman_found = False
-
-        # Skeleton NPC (static)
-        self.npc_skeleton_sprite = None
-        self.npc_skeleton_x = 0
-        self.npc_skeleton_y = 0
-        self.npc_skeleton_tile_x = 0
-        self.npc_skeleton_tile_y = 0
-        self.npc_skeleton_found = False
-
-        # Knight NPC (static & interactive)
-        self.npc_knight_sprite = None
-        self.npc_knight_x = 0
-        self.npc_knight_y = 0
-        self.npc_knight_tile_x = 0
-        self.npc_knight_tile_y = 0
-        self.npc_knight_found = False
-        self.npc_knight_left_sprites = []
-        self.npc_knight_down_sprites = []
-        self.npc_knight_right_sprites = []
-        self.npc_knight_up_sprites = []
-        self.npc_knight_dir = "down"
-        self.npc_knight_anim_frame = 0
-        self.npc_knight_anim_timer = 0
-
-        # ============================================================
-        # LOAD STATIC NPC SPRITES
-        # ============================================================
-        self.load_static_npc_sprites()
+        self.station_npcs = {}
+        self.load_station_npcs()
 
         # ============================================================
         # SPAWN PLAYER AND FIND NPCS
@@ -281,64 +279,32 @@ class Quarter4:
 
         # Completion flag
         self.completed = False
-
         self.is_quiz_map = True
-        self.quiz_state = 0  # 0: waiting proximity, 1: dialog Q, 2: wrong try again, 3: correct phrase transition, 4: walking along path, 5: final speech, 6: quiz complete
-        self.quiz_station_index = 1  # current station (1-5)
+        self.answered_stations = set()
+
+        self.quiz_state = 0  # 0: waiting proximity, 1: dialog Q, 2: wrong try again, 3: correct phrase transition, 5: final speech, 6: quiz complete
+        self.quiz_station_index = 1  # current active station (1-6)
         self.current_question_index = 0
         self.selected_choice_index = -1  # choice highlighted
 
         # Station Standby Directions based on Map Name and User Requests
-        if self.map_name == "map10.txt":
-            self.station_directions = {
-                1: "left",
-                2: "left",
-                3: "left",
-                4: "right",
-                5: "right"
-            }
-        elif self.map_name == "map11.txt":
-            self.station_directions = {
-                1: "left",
-                2: "left",
-                3: "left",
-                4: "left",
-                5: "left"
-            }
-        elif self.map_name == "map12.txt":
-            self.station_directions = {
-                1: "right",
-                2: "right",
-                3: "right",
-                4: "right",
-                5: "right"
-            }
-        else: # Default values
-            self.station_directions = {
-                1: "left",
-                2: "left",
-                3: "left",
-                4: "right",
-                5: "right"
-            }
+        self.station_directions = {
+            1: "left",
+            2: "left",
+            3: "left",
+            4: "right",
+            5: "right",
+            6: "right"
+        }
 
-        # Scan map for quiz stations 1, 2, 3, 4, 5
+        # Scan map for quiz stations 1, 2, 3, 4, 5, 6
         self.quiz_stations = {}
         for y, row in enumerate(self.game_map):
             for x, c in enumerate(row):
-                if c in ['1', '2', '3', '4', '5']:
+                if c in ['1', '2', '3', '4', '5', '6']:
                     num = int(c)
                     self.quiz_stations[num] = (x, y)
                     print(f"📍 Quiz Station {num} found at: ({x}, {y})")
-
-        # Initialize Bromen at station 1 if available
-        if 1 in self.quiz_stations:
-            self.npc_bromen_tile_x, self.npc_bromen_tile_y = self.quiz_stations[1]
-            self.npc_bromen_x = self.npc_bromen_tile_x * TILE_SIZE
-            self.npc_bromen_y = self.npc_bromen_tile_y * TILE_SIZE
-            self.npc_bromen_found = True
-            self.npc_bromen_dir = self.station_directions.get(1, "left")
-            print(f"🧙‍♂️ Bromen spawned at Quiz Station 1: {self.quiz_stations[1]} facing {self.npc_bromen_dir}")
 
         # Correct answer random responses
         self.current_correct_phrase = ""
@@ -348,36 +314,39 @@ class Quarter4:
             "Superb! Your logic is unbreakable, adventurer!"
         ]
 
-        self.npc_bromen_path = []
-        self.npc_bromen_path_index = 0
         self.player_block_timer = 0.0
 
-        # Mathematics/Logic-themed Quiz Questions
+        # Curated review questions (2 shapes Q1, 2 geometry Q2, 2 arithmetic/fractions Q3)
         self.quiz_questions = [
             {
-                "question": "What is the next number in the Fibonacci sequence: 1, 1, 2, 3, 5, 8, 13, ...?",
-                "choices": ["A. 15", "B. 21", "C. 34", "D. 55"],
-                "correct": 1  # B
-            },
-            {
-                "question": "What is the value of 2^10 (2 to the power of 10)?",
-                "choices": ["A. 512", "B. 1024", "C. 2048", "D. 4096"],
-                "correct": 1  # B
-            },
-            {
-                "question": "Solve for x: 3x - 7 = 14.",
-                "choices": ["A. x = 5", "B. x = 6", "C. x = 7", "D. x = 8"],
-                "correct": 2  # C
-            },
-            {
-                "question": "What is the area of a circle with a radius of 7? (Use pi ≈ 22/7)",
-                "choices": ["A. 44", "B. 154", "C. 308", "D. 616"],
-                "correct": 1  # B
-            },
-            {
-                "question": "What is the sum of angles in a regular hexagon?",
-                "choices": ["A. 180 degrees", "B. 360 degrees", "C. 540 degrees", "D. 720 degrees"],
+                "question": "Which shape has 5 sharp points and is colored yellow?",
+                "choices": ["A. Circle", "B. Heart", "C. Square", "D. Star"],
                 "correct": 3  # D
+            },
+            {
+                "question": "I have 4 equal straight sides and 4 square corners. What shape am I?",
+                "choices": ["A. Diamond", "B. Square", "C. Triangle", "D. Heart"],
+                "correct": 1  # B
+            },
+            {
+                "question": "If you add up all three interior angles of any triangle, what is the total sum?",
+                "choices": ["A. 90 degrees", "B. 180 degrees", "C. 360 degrees", "D. 270 degrees"],
+                "correct": 1  # B
+            },
+            {
+                "question": "Which polygon has exactly 5 straight sides and 5 vertices?",
+                "choices": ["A. Pentagon", "B. Hexagon", "C. Octagon", "D. Triangle"],
+                "correct": 0  # A
+            },
+            {
+                "question": "Farmer Ben arranged golden apples into 3 equal rows with 4 apples in each row. What multiplication sentence matches this array?",
+                "choices": ["A. 3 + 4 = 7", "B. 3 x 4 = 12", "C. 3 + 3 + 3 = 9", "D. 4 + 4 = 8"],
+                "correct": 1  # B
+            },
+            {
+                "question": "A pizza is cut into 2 equal slices. If you eat 1 slice, what fraction of the pizza did you eat?",
+                "choices": ["A. 1/3 (One-Third)", "B. 1/4 (One-Fourth)", "C. 1/2 (One-Half)", "D. 2/2 (Whole)"],
+                "correct": 2  # C
             }
         ]
 
@@ -515,6 +484,14 @@ class Quarter4:
     # LOAD PLAYER SPRITES
     # ============================================================
     def load_player_sprites(self):
+        prefix = "boy"
+        if hasattr(self, 'main_menu') and self.main_menu and getattr(self.main_menu, 'selected_student', None):
+            gender = self.main_menu.selected_student.get("gender")
+            if gender:
+                gender = str(gender).lower()
+                if gender in ["female", "girl", "f"]:
+                    prefix = "female"
+
         def load_sprite(name):
             path = os.path.join(self.PLAYER_PATH, name)
             try:
@@ -527,10 +504,10 @@ class Quarter4:
                 return placeholder
 
         return {
-            "down": [load_sprite("boy_down_1.png"), load_sprite("boy_down_2.png")],
-            "left": [load_sprite("boy_left_1.png"), load_sprite("boy_left_2.png")],
-            "right": [load_sprite("boy_right_1.png"), load_sprite("boy_right_2.png")],
-            "up": [load_sprite("boy_up_1.png"), load_sprite("boy_up_2.png")]
+            "down": [load_sprite(f"{prefix}_down_1.png"), load_sprite(f"{prefix}_down_2.png")],
+            "left": [load_sprite(f"{prefix}_left_1.png"), load_sprite(f"{prefix}_left_2.png")],
+            "right": [load_sprite(f"{prefix}_right_1.png"), load_sprite(f"{prefix}_right_2.png")],
+            "up": [load_sprite(f"{prefix}_up_1.png"), load_sprite(f"{prefix}_up_2.png")]
         }
 
     # ============================================================
@@ -575,46 +552,73 @@ class Quarter4:
     # ============================================================
     # LOAD STATIC NPC SPRITES (Oldman, Skeleton, Knight)
     # ============================================================
-    def load_static_npc_sprites(self):
-        # Load Bromen walking left sprites
-        self.npc_bromen_left_sprites = []
-        for name in ["bromenleft.png", "bromen_left_1.png", "bromen_left_2.png"]:
-            path = os.path.join(self.NPC_PATH_BROMEN, name)
-            if os.path.exists(path):
-                img = pygame.image.load(path).convert_alpha()
-                scaled = pygame.transform.scale(img, (TILE_SIZE, TILE_SIZE))
-                self.npc_bromen_left_sprites.append(scaled)
-                print(f"✅ Loaded Bromen left frame: {name}")
+    def load_station_npcs(self):
+        def load_frames(folder_path, prefix):
+            frames = []
+            for i in range(8):
+                filename = f"sprite_{prefix}{i:02d}.png"
+                path = os.path.join(folder_path, filename)
+                try:
+                    if os.path.exists(path):
+                        img = pygame.image.load(path).convert_alpha()
+                        scaled = pygame.transform.scale(img, (TILE_SIZE, TILE_SIZE))
+                        frames.append(scaled)
+                except Exception as e:
+                    print(f"Error loading frame {path}: {e}")
+            if not frames:
+                # Try loading standard sprite if animated frames are not found
+                static_path = os.path.join(folder_path, f"{prefix}.png")
+                if os.path.exists(static_path):
+                    try:
+                        img = pygame.image.load(static_path).convert_alpha()
+                        scaled = pygame.transform.scale(img, (TILE_SIZE, TILE_SIZE))
+                        frames.append(scaled)
+                    except Exception as e:
+                        print(f"Error loading static fallback: {e}")
+                else:
+                    placeholder = pygame.Surface((TILE_SIZE, TILE_SIZE))
+                    placeholder.fill((255, 180, 0))
+                    frames.append(placeholder)
+            return frames
 
-        # Load Bromen walking down sprites
-        self.npc_bromen_down_sprites = []
-        for name in ["bromen.png", "bromen_down_1.png", "bromen_down_2.png"]:
-            path = os.path.join(self.NPC_PATH_BROMEN, name)
-            if os.path.exists(path):
-                img = pygame.image.load(path).convert_alpha()
-                scaled = pygame.transform.scale(img, (TILE_SIZE, TILE_SIZE))
-                self.npc_bromen_down_sprites.append(scaled)
-                print(f"✅ Loaded Bromen down frame: {name}")
+        # Load knight static sprite
+        knight_frames = []
+        knight_path = os.path.join(self.NPC_PATH_KNIGHT, "knight.png")
+        try:
+            if os.path.exists(knight_path):
+                img = pygame.image.load(knight_path).convert_alpha()
+                knight_frames.append(pygame.transform.scale(img, (TILE_SIZE, TILE_SIZE)))
+        except Exception as e:
+            print(f"Error loading knight: {e}")
+        if not knight_frames:
+            p = pygame.Surface((TILE_SIZE, TILE_SIZE))
+            p.fill((100, 100, 255))
+            knight_frames.append(p)
 
-        # Load Bromen walking right sprites
-        self.npc_bromen_right_sprites = []
-        for name in ["bromenright.png", "bromen_right_1.png", "bromen_right_2.png"]:
-            path = os.path.join(self.NPC_PATH_BROMEN, name)
-            if os.path.exists(path):
-                img = pygame.image.load(path).convert_alpha()
-                scaled = pygame.transform.scale(img, (TILE_SIZE, TILE_SIZE))
-                self.npc_bromen_right_sprites.append(scaled)
-                print(f"✅ Loaded Bromen right frame: {name}")
+        # Load oldman static sprite
+        oldman_frames = []
+        oldman_path = os.path.join(self.NPC_PATH_OLDMAN, "oldman.png")
+        try:
+            if os.path.exists(oldman_path):
+                img = pygame.image.load(oldman_path).convert_alpha()
+                oldman_frames.append(pygame.transform.scale(img, (TILE_SIZE, TILE_SIZE)))
+        except Exception as e:
+            print(f"Error loading oldman: {e}")
+        if not oldman_frames:
+            p = pygame.Surface((TILE_SIZE, TILE_SIZE))
+            p.fill((255, 100, 100))
+            oldman_frames.append(p)
 
-        # Load Bromen walking up sprites
-        self.npc_bromen_up_sprites = []
-        for name in ["bromenup.png", "bromen_up_1.png", "bromen_up_2.png"]:
-            path = os.path.join(self.NPC_PATH_BROMEN, name)
-            if os.path.exists(path):
-                img = pygame.image.load(path).convert_alpha()
-                scaled = pygame.transform.scale(img, (TILE_SIZE, TILE_SIZE))
-                self.npc_bromen_up_sprites.append(scaled)
-                print(f"✅ Loaded Bromen up frame: {name}")
+        self.station_npcs = {
+            1: {"name": "Circle Guardian (Q1)", "frames": load_frames(self.NPC_PATH_CIRCLE, "circlenpc"), "anim_frame": 0, "anim_timer": 0},
+            2: {"name": "Star Guardian (Q1)", "frames": load_frames(self.NPC_PATH_STAR, "starnpc"), "anim_frame": 0, "anim_timer": 0},
+            3: {"name": "Knight Guardian (Q2)", "frames": knight_frames, "anim_frame": 0, "anim_timer": 0},
+            4: {"name": "Sage Guardian (Q2)", "frames": oldman_frames, "anim_frame": 0, "anim_timer": 0},
+            5: {"name": "Number 3 Guardian (Q3)", "frames": load_frames(self.NPC_PATH_NUM3, "number3npc"), "anim_frame": 0, "anim_timer": 0},
+            6: {"name": "Number 4 Guardian (Q3)", "frames": load_frames(self.NPC_PATH_NUM4, "number4npc"), "anim_frame": 0, "anim_timer": 0},
+        }
+        print("✅ Loaded 6 Animated/Static Station NPCs for Quarter 4 Evaluation")
+
 
     # ============================================================
     # PORTAL CLASS
@@ -970,6 +974,7 @@ class Quarter4:
                     if i == q_data["correct"]:
                         self.current_correct_phrase = random.choice(self.correct_phrases)
                         self.quiz_state = 3
+                        self.answered_stations.add(self.quiz_station_index)
                         print("✨ Correct answer selected!")
                     else:
                         self.quiz_state = 2
@@ -992,19 +997,9 @@ class Quarter4:
             box_y = (self.height - box_h) // 2
             btn_rect = pygame.Rect(box_x + (box_w - 200) // 2, box_y + 140, 200, 42)
             if btn_rect.collidepoint(pos):
-                if self.quiz_station_index < 5:
-                    start_coord = (self.npc_bromen_tile_x, self.npc_bromen_tile_y)
-                    self.quiz_station_index += 1
-                    self.current_question_index += 1
-                    if self.quiz_station_index in self.quiz_stations:
-                        end_coord = self.quiz_stations[self.quiz_station_index]
-                        self.npc_bromen_path = self.find_path(start_coord, end_coord)
-                        self.npc_bromen_path_index = 1
-                        self.quiz_state = 4
-                        self.player_block_timer = 3.0
-                        print(f"🧙‍♂️ Moving Bromen from {start_coord} to {end_coord}")
+                if len(self.answered_stations) < 6:
+                    self.quiz_state = 0
                 else:
-                    self.current_question_index += 1
                     self.quiz_state = 5
                 
         # State 5: Final speech click
@@ -1015,8 +1010,7 @@ class Quarter4:
             btn_rect = pygame.Rect(box_x + (box_w - 200) // 2, box_y + 210, 200, 42)
             if btn_rect.collidepoint(pos):
                 self.quiz_state = 6
-                self.npc_bromen_found = False
-                print("🧙‍♂️ Bromen disappeared from Quarter 4")
+                print("🎓 Quarter 4 evaluation completed!")
 
     # ============================================================
     # UPDATE
@@ -1031,53 +1025,40 @@ class Quarter4:
         if hasattr(self, 'player_block_timer') and self.player_block_timer > 0:
             self.player_block_timer -= dt
 
-        # Proximity interaction check for Bromen NPC
-        if self.quiz_state == 0 and self.npc_bromen_found:
-            px, py = self.player_x // TILE_SIZE, self.player_y // TILE_SIZE
-            nx, ny = self.npc_bromen_tile_x, self.npc_bromen_tile_y
-            if abs(px - nx) <= 1 and abs(py - ny) <= 1:
-                self.quiz_state = 1
-                self.selected_choice_index = -1
-                print("🧙‍♂️ Interacting with Bromen! Quiz dialog popped up.")
+        # Update animations for all 6 Shape/Number Station NPCs
+        if hasattr(self, 'station_npcs') and self.station_npcs:
+            for num, data in self.station_npcs.items():
+                if len(data["frames"]) > 1:
+                    data["anim_timer"] += 1
+                    if data["anim_timer"] >= 6:
+                        data["anim_timer"] = 0
+                        data["anim_frame"] = (data["anim_frame"] + 1) % len(data["frames"])
 
-        # Bromen walking sequence along BFS path
-        if self.quiz_state == 4:
-            if hasattr(self, 'npc_bromen_path') and self.npc_bromen_path_index < len(self.npc_bromen_path):
-                t_col, t_row = self.npc_bromen_path[self.npc_bromen_path_index]
-                target_x = t_col * TILE_SIZE
-                target_y = t_row * TILE_SIZE
+        # Proximity interaction check for any unanswered Station NPC
+        if self.quiz_state == 0 and hasattr(self, 'quiz_stations'):
+            import math
+            player_center_x = self.player_x + TILE_SIZE // 2
+            player_center_y = self.player_y + TILE_SIZE // 2
+            for num, pos in self.quiz_stations.items():
+                is_answered = num in self.answered_stations
+                if num == 5:
+                    is_answered = (5 in self.answered_stations) and (6 in self.answered_stations)
                 
-                dx = target_x - self.npc_bromen_x
-                dy = target_y - self.npc_bromen_y
-                
-                move_speed = 2  # Walk speed: 2 pixels per frame
-                
-                if abs(dx) > abs(dy):
-                    self.npc_bromen_dir = "right" if dx > 0 else "left"
-                else:
-                    self.npc_bromen_dir = "down" if dy > 0 else "up"
-                
-                if abs(dx) <= move_speed and abs(dy) <= move_speed:
-                    self.npc_bromen_x = target_x
-                    self.npc_bromen_y = target_y
-                    self.npc_bromen_tile_x = t_col
-                    self.npc_bromen_tile_y = t_row
-                    self.npc_bromen_path_index += 1
-                else:
-                    if dx != 0:
-                        self.npc_bromen_x += move_speed if dx > 0 else -move_speed
-                    if dy != 0:
-                        self.npc_bromen_y += move_speed if dy > 0 else -move_speed
-                
-                self.npc_bromen_anim_timer += 1
-                if self.npc_bromen_anim_timer >= 10:
-                    self.npc_bromen_anim_timer = 0
-                    self.npc_bromen_anim_frame = (self.npc_bromen_anim_frame + 1) % 3
-            else:
-                self.quiz_state = 0
-                self.npc_bromen_anim_frame = 0
-                self.npc_bromen_anim_timer = 0
-                self.npc_bromen_dir = self.station_directions.get(self.quiz_station_index, "left")
+                if not is_answered:
+                    npc_center_x = pos[0] * TILE_SIZE + TILE_SIZE // 2
+                    npc_center_y = pos[1] * TILE_SIZE + TILE_SIZE // 2
+                    dist = math.hypot(player_center_x - npc_center_x, player_center_y - npc_center_y)
+                    if dist < TILE_SIZE * 1.5:
+                        if num == 5 and 5 in self.answered_stations:
+                            self.quiz_station_index = 6
+                            self.current_question_index = 5
+                        else:
+                            self.quiz_station_index = num
+                            self.current_question_index = num - 1
+                        self.quiz_state = 1
+                        self.selected_choice_index = -1
+                        print(f"🧙‍♂️ Interacting with Station {self.quiz_station_index} NPC!")
+                        break
 
         self.update_player_movement()
         self.check_portal_teleport_on_hold()
@@ -1217,32 +1198,26 @@ class Quarter4:
             for portal in self.portals:
                 portal.draw(self.screen, self.camera_x, self.camera_y, ZOOM, self.width, self.height)
 
-        # Draw Bromen NPC
-        if self.npc_bromen_found:
-            if self.quiz_state == 4:
-                # Walk animation
-                if self.npc_bromen_dir == "left":
-                    sprites = self.npc_bromen_left_sprites
-                elif self.npc_bromen_dir == "right":
-                    sprites = self.npc_bromen_right_sprites
-                elif self.npc_bromen_dir == "up":
-                    sprites = self.npc_bromen_up_sprites
-                else:
-                    sprites = self.npc_bromen_down_sprites
-                
-                self.draw_npc_animated(self.npc_bromen_x, self.npc_bromen_y,
-                                      sprites, self.npc_bromen_anim_frame)
-            else:
-                # Standby frame: index 0 of directional sprites
-                if self.npc_bromen_dir == "left":
-                    sprite = self.npc_bromen_left_sprites[0] if self.npc_bromen_left_sprites else self.npc_bromen_sprites[0]
-                elif self.npc_bromen_dir == "right":
-                    sprite = self.npc_bromen_right_sprites[0] if self.npc_bromen_right_sprites else self.npc_bromen_sprites[0]
-                elif self.npc_bromen_dir == "up":
-                    sprite = self.npc_bromen_up_sprites[0] if self.npc_bromen_up_sprites else self.npc_bromen_sprites[0]
-                else:
-                    sprite = self.npc_bromen_down_sprites[0] if self.npc_bromen_down_sprites else self.npc_bromen_sprites[0]
-                self.draw_npc_static(self.npc_bromen_x, self.npc_bromen_y, sprite)
+        # Draw Station NPCs at coordinates 1, 2, 3, 4, 5, 6
+        if hasattr(self, 'quiz_stations') and hasattr(self, 'station_npcs'):
+            for num, pos in self.quiz_stations.items():
+                is_answered = num in self.answered_stations
+                if num == 5:
+                    is_answered = (5 in self.answered_stations) and (6 in self.answered_stations)
+
+                if num in self.station_npcs and not is_answered and self.quiz_state < 6:
+                    data = self.station_npcs[num]
+                    frame = data["frames"][data["anim_frame"]]
+                    
+                    # If this station is not answered yet, draw a glowing pulsing aura
+                    if self.quiz_state == 0:
+                        import math
+                        pulse_r = int((TILE_SIZE // 2 + 6) * ZOOM + math.sin(self.frame_counter * 0.15) * 3)
+                        cx = (pos[0] * TILE_SIZE + TILE_SIZE // 2 - self.camera_x) * ZOOM
+                        cy = (pos[1] * TILE_SIZE + TILE_SIZE // 2 - self.camera_y) * ZOOM
+                        pygame.draw.circle(self.screen, (255, 215, 0), (int(cx), int(cy)), pulse_r, 2)
+                    
+                    self.draw_npc_static(pos[0] * TILE_SIZE, pos[1] * TILE_SIZE, frame)
 
         self.draw_player()
 
@@ -1303,14 +1278,14 @@ class Quarter4:
             item_font = pygame.font.SysFont("Comic Sans MS", 12)
             
             # Quiz completion progress item
-            q_count = min(self.current_question_index, 5)
-            obj1 = f"• Quiz Progress: {q_count}/5 questions answered"
-            obj1_color = (255, 255, 255) if q_count < 5 else (34, 197, 94)
+            q_count = len(self.answered_stations)
+            obj1 = f"• Quiz Progress: {q_count}/6 questions answered"
+            obj1_color = (255, 255, 255) if q_count < 6 else (34, 197, 94)
             obj1_surf = item_font.render(obj1, True, obj1_color)
             self.screen.blit(obj1_surf, (box_x + 15, box_y + 28))
             
             # Goal portal state item
-            if self.quiz_state < 6:
+            if len(self.answered_stations) < 6:
                 obj2 = "• Portal Status: LOCKED"
                 obj2_color = (244, 63, 94)  # Rose
             else:
@@ -1321,14 +1296,10 @@ class Quarter4:
 
         if self.show_info:
             npc_status = []
-            if self.npc_bromen_found:
-                npc_status.append("Bromen")
-            if self.npc_oldman_found:
-                npc_status.append("Oldman")
-            if self.npc_skeleton_found:
-                npc_status.append("Skeleton")
-            if self.npc_knight_found:
-                npc_status.append("Knight")
+            if hasattr(self, 'station_npcs'):
+                for k, v in self.station_npcs.items():
+                    if k not in self.answered_stations:
+                        npc_status.append(v["name"])
 
             npc_text = ", ".join(npc_status) if npc_status else "None"
 
@@ -1385,7 +1356,8 @@ class Quarter4:
         pygame.draw.rect(self.screen, (218, 165, 32), dialog_rect, 3, border_radius=8)
 
         speaker_font = pygame.font.SysFont("Comic Sans MS", 18, bold=True)
-        speaker_surf = speaker_font.render("Bromen", True, (218, 165, 32))
+        speaker_name = self.station_npcs.get(self.quiz_station_index, {}).get("name", "Guardian")
+        speaker_surf = speaker_font.render(speaker_name, True, (218, 165, 32))
         self.screen.blit(speaker_surf, (box_x + 25, box_y + 20))
         pygame.draw.line(self.screen, (218, 165, 32), (box_x + 25, box_y + 48), (box_x + 120, box_y + 48), 2)
 
@@ -1438,7 +1410,8 @@ class Quarter4:
         pygame.draw.rect(self.screen, (220, 38, 38), dialog_rect, 3, border_radius=8)
 
         speaker_font = pygame.font.SysFont("Comic Sans MS", 18, bold=True)
-        speaker_surf = speaker_font.render("Bromen", True, (220, 38, 38))
+        speaker_name = self.station_npcs.get(self.quiz_station_index, {}).get("name", "Guardian")
+        speaker_surf = speaker_font.render(speaker_name, True, (220, 38, 38))
         self.screen.blit(speaker_surf, (box_x + 25, box_y + 20))
 
         q_font = pygame.font.SysFont("Comic Sans MS", 16)
@@ -1475,7 +1448,8 @@ class Quarter4:
         pygame.draw.rect(self.screen, (22, 163, 74), dialog_rect, 3, border_radius=8)
 
         speaker_font = pygame.font.SysFont("Comic Sans MS", 18, bold=True)
-        speaker_surf = speaker_font.render("Bromen", True, (22, 163, 74))
+        speaker_name = self.station_npcs.get(self.quiz_station_index, {}).get("name", "Guardian")
+        speaker_surf = speaker_font.render(speaker_name, True, (22, 163, 74))
         self.screen.blit(speaker_surf, (box_x + 25, box_y + 20))
 
         q_font = pygame.font.SysFont("Comic Sans MS", 16)

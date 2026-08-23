@@ -8,6 +8,12 @@ import numpy as np
 import time
 from .map_loader import MapLoader
 
+# Import db - safe import in case db modules are missing
+try:
+    from db import db
+except ImportError:
+    db = None
+
 # ============================================================
 # SETTINGS
 # ============================================================
@@ -426,6 +432,12 @@ class Quarter1:
             }
         ]
 
+        # Initialize tracking for questions answered correctly on the first attempt
+        self.first_attempt_correct = {1: True, 2: True, 3: True, 4: True, 5: True}
+        
+        # Load questions from the database if available
+        self.load_database_questions()
+
         # ============================================================
         # LOAD PORTALS
         # ============================================================
@@ -677,9 +689,124 @@ class Quarter1:
         return val_map.get(val, 0)
 
     # ============================================================
+    # DATABASE INTEGRATION
+    # ============================================================
+    def load_database_questions(self):
+        self.database_unit_id = None
+        if not self.is_quiz_map:
+            return
+
+        try:
+            if not db:
+                return
+            
+            questions_result = db.get_questions(quarter=1)
+            if not questions_result or len(questions_result) < 5:
+                print(f"⚠️ Found {len(questions_result) if questions_result else 0} active questions from Vercel API, but need at least 5. Using local questions.")
+                return
+            
+            # Map questions to Pygame format
+            mapped_questions = []
+            for row in questions_result:
+                # camelCase keys from Vercel API
+                prompt = row.get("prompt")
+                opt_a = row.get("optionA") or row.get("option_a")
+                opt_b = row.get("optionB") or row.get("option_b")
+                opt_c = row.get("optionC") or row.get("option_c")
+                opt_d = row.get("optionD") or row.get("option_d")
+                correct_answer = row.get("correctAnswer") or row.get("correct_answer")
+                
+                options = [opt_a, opt_b, opt_c, opt_d]
+                ans = str(correct_answer).upper().strip()
+                if ans == "A" or ans == "OPTION_A" or ans.endswith("A"):
+                    correct_idx = 0
+                elif ans == "B" or ans == "OPTION_B" or ans.endswith("B"):
+                    correct_idx = 1
+                elif ans == "C" or ans == "OPTION_C" or ans.endswith("C"):
+                    correct_idx = 2
+                elif ans == "D" or ans == "OPTION_D" or ans.endswith("D"):
+                    correct_idx = 3
+                else:
+                    correct_idx = 0
+                    for idx, opt in enumerate(options):
+                        if opt and opt.lower() == ans.lower():
+                            correct_idx = idx
+                            break
+                
+                mapped_questions.append({
+                    "question": prompt,
+                    "choices": [
+                        f"A. {opt_a}",
+                        f"B. {opt_b}",
+                        f"C. {opt_c}",
+                        f"D. {opt_d}"
+                    ],
+                    "correct": correct_idx
+                })
+            
+            self.quiz_questions = mapped_questions
+            print(f"✅ Successfully loaded 5 questions from Vercel API for Quarter 1!")
+            
+        except Exception as e:
+            print(f"⚠️ Exception loading database questions from Vercel: {e}. Using local questions.")
+
+    def save_results_to_database(self):
+        if not self.is_quiz_map:
+            return
+
+        try:
+            if not db:
+                return
+
+            student_db_id = getattr(self.main_menu, 'student_db_id', None)
+            if not student_db_id:
+                print("⚠️ No student_db_id available in main_menu. Skipping database record.")
+                return
+
+            total_questions = 5
+            correct_answers = sum(1 for v in self.first_attempt_correct.values() if v)
+            percentage = (correct_answers / float(total_questions)) * 100.0
+            score = float(correct_answers)
+
+            # Try to fetch assessment_id for Quarter 1 Quiz from Vercel
+            assessment_id = db.get_assessment_id(quarter=1)
+            if assessment_id:
+                print(f"📝 Linked result to Assessment ID: {assessment_id}")
+
+            feedback_msg = f"Completed Quarter 1. Answered {correct_answers} of {total_questions} questions correctly on the first attempt."
+            grade_level = getattr(self.main_menu, 'selected_student', {}).get('level', 'Grade 2')
+            
+            success = db.save_game_result(
+                student_id=student_db_id,
+                score=score,
+                total_questions=total_questions,
+                correct_answers=correct_answers,
+                percentage=percentage,
+                feedback=feedback_msg,
+                grade_level=grade_level,
+                assessment_id=assessment_id
+            )
+            if success:
+                print(f"🎉 Successfully saved Quarter 1 Game Result to Vercel for Student DB ID {student_db_id}!")
+                print(f"   Score: {score}/{total_questions} ({percentage}%)")
+            else:
+                print("⚠️ Failed to save game results via Vercel API.")
+
+        except Exception as e:
+            print(f"⚠️ Exception saving game results to Vercel: {e}")
+
+    # ============================================================
     # LOAD PLAYER SPRITES
     # ============================================================
     def load_player_sprites(self):
+        prefix = "boy"
+        if hasattr(self, 'main_menu') and self.main_menu and getattr(self.main_menu, 'selected_student', None):
+            gender = self.main_menu.selected_student.get("gender")
+            if gender:
+                gender = str(gender).lower()
+                if gender in ["female", "girl", "f"]:
+                    prefix = "female"
+
         def load_sprite(name):
             path = os.path.join(self.PLAYER_PATH, name)
             try:
@@ -692,10 +819,10 @@ class Quarter1:
                 return placeholder
 
         return {
-            "down": [load_sprite("boy_down_1.png"), load_sprite("boy_down_2.png")],
-            "left": [load_sprite("boy_left_1.png"), load_sprite("boy_left_2.png")],
-            "right": [load_sprite("boy_right_1.png"), load_sprite("boy_right_2.png")],
-            "up": [load_sprite("boy_up_1.png"), load_sprite("boy_up_2.png")]
+            "down": [load_sprite(f"{prefix}_down_1.png"), load_sprite(f"{prefix}_down_2.png")],
+            "left": [load_sprite(f"{prefix}_left_1.png"), load_sprite(f"{prefix}_left_2.png")],
+            "right": [load_sprite(f"{prefix}_right_1.png"), load_sprite(f"{prefix}_right_2.png")],
+            "up": [load_sprite(f"{prefix}_up_1.png"), load_sprite(f"{prefix}_up_2.png")]
         }
 
     # ============================================================
@@ -1417,6 +1544,9 @@ class Quarter1:
     # ============================================================
     def return_to_stage_select(self):
         """Return to the stage select screen"""
+        # Save quiz results to database if active
+        self.save_results_to_database()
+
         if self.main_menu:
             self.main_menu.current_screen = "stage_select"
             self.main_menu.quarter1 = None
@@ -1510,7 +1640,14 @@ class Quarter1:
                 print(f"❌ Error loading shape matching puzzle: {e}")
                 return
 
-        puzzle_img_path = os.path.join(self.BASE_DIR, "assets", "images", "sprites", "objects", "tiles", "quarter1tiles", "puzzleimages", "CircleNPC.png")
+        if self.map_name.lower() == 'map3.txt':
+            import random
+            puzzle_files = ["CircleNPC.png", "DiamondNPC.png", "HeartNPC.png", "SquareNPC.png", "StarNPC.png"]
+            selected_file = random.choice(puzzle_files)
+            puzzle_img_path = os.path.join(self.BASE_DIR, "assets", "images", "sprites", "objects", "tiles", "quarter1tiles", "puzzleimages", selected_file)
+            print(f"🎲 Randomized puzzle image for map3.txt: {selected_file}")
+        else:
+            puzzle_img_path = os.path.join(self.BASE_DIR, "assets", "images", "sprites", "objects", "tiles", "quarter1tiles", "puzzleimages", "CircleNPC.png")
         if os.path.exists(puzzle_img_path):
             try:
                 img = pygame.image.load(puzzle_img_path).convert_alpha()
@@ -2130,6 +2267,8 @@ class Quarter1:
                         print(f"✅ Correct answer selected: {q_data['choices'][i]}")
                     else:
                         self.quiz_state = 2
+                        if hasattr(self, 'first_attempt_correct') and self.active_shape_id in self.first_attempt_correct:
+                            self.first_attempt_correct[self.active_shape_id] = False
                         print(f"❌ Incorrect answer selected: {q_data['choices'][i]}")
                     break
                     
