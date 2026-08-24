@@ -48,8 +48,10 @@ class MainMenu:
 
         # Click tracking
         self.fist_start_time = 0
+        self.peace_start_time = 0
         self.CLICK_HOLD_TIME = 0.9
         self.click_ready = False
+        self.popup_state = None
 
         # Cursor smoothing - USING WRIST (landmark 0) for stability
         self.cursor_x = float(self.w // 2)
@@ -269,6 +271,32 @@ class MainMenu:
         # Require at least 3 fingers to be folded into the palm
         return sum(closed_fingers) >= 3
 
+    def is_peace_sign(self, hand_landmarks):
+        """Detect peace sign / digit 2 (index and middle fingers open, ring and pinky closed)"""
+        import math
+        wrist = hand_landmarks.landmark[0]
+        
+        # Knuckles (6, 10, 14, 18) and tips (8, 12, 16, 20)
+        knuckle_dists = [
+            math.hypot(hand_landmarks.landmark[6].x - wrist.x, hand_landmarks.landmark[6].y - wrist.y),
+            math.hypot(hand_landmarks.landmark[10].x - wrist.x, hand_landmarks.landmark[10].y - wrist.y),
+            math.hypot(hand_landmarks.landmark[14].x - wrist.x, hand_landmarks.landmark[14].y - wrist.y),
+            math.hypot(hand_landmarks.landmark[18].x - wrist.x, hand_landmarks.landmark[18].y - wrist.y)
+        ]
+        
+        tip_dists = [
+            math.hypot(hand_landmarks.landmark[8].x - wrist.x, hand_landmarks.landmark[8].y - wrist.y),
+            math.hypot(hand_landmarks.landmark[12].x - wrist.x, hand_landmarks.landmark[12].y - wrist.y),
+            math.hypot(hand_landmarks.landmark[16].x - wrist.x, hand_landmarks.landmark[16].y - wrist.y),
+            math.hypot(hand_landmarks.landmark[20].x - wrist.x, hand_landmarks.landmark[20].y - wrist.y)
+        ]
+        
+        # A finger is closed if its tip is closer to the wrist than its middle knuckle
+        closed_fingers = [tip_dists[i] < knuckle_dists[i] * 1.05 for i in range(4)]
+        
+        # Index and Middle open, Ring and Pinky closed
+        return (not closed_fingers[0]) and (not closed_fingers[1]) and closed_fingers[2] and closed_fingers[3]
+
     def update_gesture(self):
         """Update gesture detection - USING WRIST FOR CURSOR (landmark 0)"""
         ret, img = self.cap.read()
@@ -309,6 +337,7 @@ class MainMenu:
 
                 # Detect if fist is closed (using finger tips)
                 fist_detected = self.is_fist(hand_landmarks)
+                peace_detected = self.is_peace_sign(hand_landmarks)
 
                 if fist_detected:
                     if self.fist_start_time == 0:
@@ -327,7 +356,24 @@ class MainMenu:
                     self.fist_start_time = 0
                     self.click_ready = False
 
-                self.current_gesture = "FIST" if fist_detected else "OPEN"
+                if peace_detected:
+                    if self.peace_start_time == 0:
+                        self.peace_start_time = time.time()
+                        print("✌️ Peace sign detected! Hold to trigger confirmation...")
+
+                    hold_time = time.time() - self.peace_start_time
+                    if hold_time >= self.CLICK_HOLD_TIME:
+                        self.peace_start_time = 0
+                        if not self.popup_state:
+                            if self.current_screen == "menu":
+                                self.popup_state = "confirm_exit"
+                            else:
+                                self.popup_state = "confirm_menu"
+                            print(f"✅ PEACE SIGN TRIGGERED! Popup state: {self.popup_state}")
+                else:
+                    self.peace_start_time = 0
+
+                self.current_gesture = "FIST" if fist_detected else ("PEACE" if peace_detected else "OPEN")
 
         # HAND GRACE PERIOD - keep cursor position for a while after hand is lost
         if not hand_detected:
@@ -339,6 +385,7 @@ class MainMenu:
             else:
                 self.current_gesture = "NO HAND"
                 self.fist_start_time = 0
+                self.peace_start_time = 0
                 self.click_ready = False
 
     # ==========================================
@@ -349,6 +396,11 @@ class MainMenu:
         """Handle click at cursor position"""
         pos = self.cursor_pos
         print(f"🖱️ Click at: {pos}")
+
+        # If pop-up is active, intercept clicks!
+        if self.popup_state:
+            self.handle_popup_click(pos)
+            return
 
         # Route click to active screen if not in menu
         if self.current_screen == "stage_select" and self.stage_select:
@@ -386,6 +438,119 @@ class MainMenu:
                 return
 
         print("❌ Nothing clicked")
+
+    def handle_popup_click(self, pos):
+        """Handle clicking inside confirmation pop-ups"""
+        box_w, box_h = 500, 260
+        box_x = (self.w - box_w) // 2
+        box_y = (self.h - box_h) // 2
+
+        btn_w, btn_h = 160, 42
+        yes_rect = pygame.Rect(box_x + 60, box_y + 180, btn_w, btn_h)
+        no_rect = pygame.Rect(box_x + box_w - 60 - btn_w, box_y + 180, btn_w, btn_h)
+
+        if yes_rect.collidepoint(pos):
+            print("👍 Confirmation pop-up: YES clicked")
+            if self.popup_state == "confirm_exit":
+                self.exit_game()
+            elif self.popup_state == "confirm_menu":
+                # Go back to main menu
+                # Cleanup any active screens safely
+                if self.quarter1 and hasattr(self.quarter1, 'cleanup'):
+                    self.quarter1.cleanup()
+                self.quarter1 = None
+                if self.quarter2 and hasattr(self.quarter2, 'cleanup'):
+                    self.quarter2.cleanup()
+                self.quarter2 = None
+                if self.quarter3 and hasattr(self.quarter3, 'cleanup'):
+                    self.quarter3.cleanup()
+                self.quarter3 = None
+                if self.quarter4 and hasattr(self.quarter4, 'cleanup'):
+                    self.quarter4.cleanup()
+                self.quarter4 = None
+                if self.stage_select and hasattr(self.stage_select, 'cleanup'):
+                    self.stage_select.cleanup()
+                self.stage_select = None
+                self.student_select = None
+                self.current_screen = "menu"
+                self.popup_state = None
+        elif no_rect.collidepoint(pos):
+            print("👎 Confirmation pop-up: NO clicked")
+            self.popup_state = None
+
+    def draw_popup(self):
+        """Draw the confirmation pop-up dialog"""
+        if not self.popup_state:
+            return
+
+        # 1. Semi-transparent full-screen overlay
+        overlay = pygame.Surface((self.w, self.h))
+        overlay.fill((0, 0, 0))
+        overlay.set_alpha(180)
+        self.screen.blit(overlay, (0, 0))
+
+        # 2. Centered dialog box
+        box_w, box_h = 500, 260
+        box_x = (self.w - box_w) // 2
+        box_y = (self.h - box_h) // 2
+        dialog_rect = pygame.Rect(box_x, box_y, box_w, box_h)
+        
+        # Slate background
+        pygame.draw.rect(self.screen, (15, 23, 42), dialog_rect, border_radius=12)
+        # Gold/Yellow border
+        pygame.draw.rect(self.screen, (218, 165, 32), dialog_rect, 3, border_radius=12)
+
+        # 3. Text
+        title_font = pygame.font.SysFont("Comic Sans MS", 24, bold=True)
+        text_font = pygame.font.SysFont("Comic Sans MS", 18)
+
+        if self.popup_state == "confirm_exit":
+            title_text = "Exit Game"
+            body_text1 = "Are you sure you want to"
+            body_text2 = "exit the game?"
+        else:
+            title_text = "Return to Menu"
+            body_text1 = "Are you sure you want to"
+            body_text2 = "return to the main menu?"
+
+        # Draw Title
+        title_surf = title_font.render(title_text, True, (218, 165, 32))
+        self.screen.blit(title_surf, (box_x + (box_w - title_surf.get_width()) // 2, box_y + 30))
+
+        # Divider line
+        pygame.draw.line(self.screen, (218, 165, 32), (box_x + 40, box_y + 75), (box_x + box_w - 40, box_y + 75), 2)
+
+        # Draw Body text
+        body_surf1 = text_font.render(body_text1, True, (241, 245, 249))
+        body_surf2 = text_font.render(body_text2, True, (241, 245, 249))
+        self.screen.blit(body_surf1, (box_x + (box_w - body_surf1.get_width()) // 2, box_y + 95))
+        self.screen.blit(body_surf2, (box_x + (box_w - body_surf2.get_width()) // 2, box_y + 125))
+
+        # 4. Buttons
+        btn_w, btn_h = 160, 42
+        yes_rect = pygame.Rect(box_x + 60, box_y + 180, btn_w, btn_h)
+        no_rect = pygame.Rect(box_x + box_w - 60 - btn_w, box_y + 180, btn_w, btn_h)
+
+        # Yes button hover & draw
+        yes_hover = yes_rect.collidepoint(self.cursor_pos)
+        yes_bg = (239, 68, 68) if yes_hover else (30, 41, 59) # Red on hover, dark slate on idle
+        yes_fg = (255, 255, 255) if yes_hover else (241, 245, 249)
+        pygame.draw.rect(self.screen, yes_bg, yes_rect, border_radius=6)
+        pygame.draw.rect(self.screen, (239, 68, 68), yes_rect, 2, border_radius=6)
+        
+        btn_font = pygame.font.SysFont("Comic Sans MS", 16, bold=True)
+        yes_text_surf = btn_font.render("Yes, exit" if self.popup_state == "confirm_exit" else "Yes, return", True, yes_fg)
+        self.screen.blit(yes_text_surf, (yes_rect.x + (btn_w - yes_text_surf.get_width()) // 2, yes_rect.y + (btn_h - yes_text_surf.get_height()) // 2))
+
+        # No button hover & draw
+        no_hover = no_rect.collidepoint(self.cursor_pos)
+        no_bg = (34, 197, 94) if no_hover else (30, 41, 59) # Green on hover, dark slate on idle
+        no_fg = (255, 255, 255) if no_hover else (241, 245, 249)
+        pygame.draw.rect(self.screen, no_bg, no_rect, border_radius=6)
+        pygame.draw.rect(self.screen, (34, 197, 94), no_rect, 2, border_radius=6)
+        
+        no_text_surf = btn_font.render("No, cancel", True, no_fg)
+        self.screen.blit(no_text_surf, (no_rect.x + (btn_w - no_text_surf.get_width()) // 2, no_rect.y + (btn_h - no_text_surf.get_height()) // 2))
 
     def next_dialogue(self):
         """Go to next dialogue line"""
@@ -439,10 +604,10 @@ class MainMenu:
     def update(self):
         if self.current_screen == "menu":
             self.update_gesture()
-
-            # Update button hover states
-            for b in self.buttons:
-                b.hovered = b.rect.collidepoint(self.cursor_pos)
+            if not self.popup_state:
+                # Update button hover states
+                for b in self.buttons:
+                    b.hovered = b.rect.collidepoint(self.cursor_pos)
 
         elif self.current_screen == "stage_select" and self.stage_select:
             self.update_gesture()
@@ -453,7 +618,8 @@ class MainMenu:
                     self.CLICK_HOLD_TIME,
                     self.current_gesture
                 )
-                self.stage_select.update()
+                if not self.popup_state:
+                    self.stage_select.update()
 
         elif self.current_screen == "student_select" and self.student_select:
             self.update_gesture()
@@ -464,7 +630,8 @@ class MainMenu:
                     self.CLICK_HOLD_TIME,
                     self.current_gesture
                 )
-                self.student_select.update()
+                if not self.popup_state:
+                    self.student_select.update()
 
         elif self.current_screen == "quarter1" and self.quarter1:
             self.update_gesture()
@@ -475,7 +642,8 @@ class MainMenu:
                     self.CLICK_HOLD_TIME,
                     self.current_gesture
                 )
-                self.quarter1.update()
+                if not self.popup_state:
+                    self.quarter1.update()
 
         elif self.current_screen == "quarter2" and self.quarter2:
             self.update_gesture()
@@ -486,7 +654,8 @@ class MainMenu:
                     self.CLICK_HOLD_TIME,
                     self.current_gesture
                 )
-                self.quarter2.update()
+                if not self.popup_state:
+                    self.quarter2.update()
 
         elif self.current_screen == "quarter3" and self.quarter3:
             self.update_gesture()
@@ -497,7 +666,8 @@ class MainMenu:
                     self.CLICK_HOLD_TIME,
                     self.current_gesture
                 )
-                self.quarter3.update()
+                if not self.popup_state:
+                    self.quarter3.update()
 
         elif self.current_screen == "quarter4" and self.quarter4:
             self.update_gesture()
@@ -508,11 +678,26 @@ class MainMenu:
                     self.CLICK_HOLD_TIME,
                     self.current_gesture
                 )
-                self.quarter4.update()
+                if not self.popup_state:
+                    self.quarter4.update()
 
     def handle_event(self, event):
+        # If popup is active, intercept clicks and key events!
+        if self.popup_state:
+            if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                self.handle_popup_click(event.pos)
+            elif event.type == pygame.KEYDOWN:
+                if event.key in [pygame.K_SPACE, pygame.K_RETURN]:
+                    self.handle_popup_click(self.cursor_pos)
+            return
+
         if self.current_screen == "menu":
-            pass
+            if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                self.cursor_pos = event.pos
+                self.trigger_click()
+            elif event.type == pygame.KEYDOWN:
+                if event.key in [pygame.K_SPACE, pygame.K_RETURN]:
+                    self.trigger_click()
         elif self.current_screen == "stage_select" and self.stage_select:
             result = self.stage_select.handle_event(event)
             if result == "back":
@@ -576,6 +761,21 @@ class MainMenu:
                 text_x = camera_x + (120 - text.get_width()) // 2
                 text_y = camera_y + 90 - 35
                 self.screen.blit(text, (text_x, text_y))
+            elif getattr(self, 'peace_start_time', 0) > 0:
+                hold_time = time.time() - self.peace_start_time
+                progress = min(100, (hold_time / self.CLICK_HOLD_TIME) * 100)
+
+                bar_width = 100
+                bar_height = 8
+                bar_x = camera_x + 10
+                bar_y = camera_y + 90 - 15
+                pygame.draw.rect(self.screen, (100, 100, 100), (bar_x, bar_y, bar_width, bar_height))
+                pygame.draw.rect(self.screen, (34, 197, 94), (bar_x, bar_y, int(bar_width * progress / 100), bar_height))
+
+                text = self.small_font.render(f"CONFIRM {int(progress)}%", True, (34, 197, 94))
+                text_x = camera_x + (120 - text.get_width()) // 2
+                text_y = camera_y + 90 - 35
+                self.screen.blit(text, (text_x, text_y))
 
             gesture_text = self.small_font.render(self.current_gesture, True, (0, 255, 0))
             text_x = camera_x + (120 - gesture_text.get_width()) // 2
@@ -586,11 +786,26 @@ class MainMenu:
         if self.current_gesture != "NO HAND":
             if self.fist_start_time > 0:
                 color = (255, 200, 0)  # Yellow when holding fist
+                hold_time = time.time() - self.fist_start_time
+                pct = min(1.0, hold_time / self.CLICK_HOLD_TIME)
+                pygame.draw.circle(self.screen, color, self.cursor_pos, 15, 2)
+                pygame.draw.circle(self.screen, (255, 100, 100), self.cursor_pos, 4)
+                # Draw loading progress bar under cursor
+                pygame.draw.rect(self.screen, (30, 41, 59), (self.cursor_pos[0] - 20, self.cursor_pos[1] + 20, 40, 6))
+                pygame.draw.rect(self.screen, (255, 200, 0), (self.cursor_pos[0] - 20, self.cursor_pos[1] + 20, int(40 * pct), 6))
+            elif getattr(self, 'peace_start_time', 0) > 0:
+                color = (34, 197, 94)  # Green when holding peace sign
+                hold_time = time.time() - self.peace_start_time
+                pct = min(1.0, hold_time / self.CLICK_HOLD_TIME)
+                pygame.draw.circle(self.screen, color, self.cursor_pos, 15, 2)
+                pygame.draw.circle(self.screen, (255, 100, 100), self.cursor_pos, 4)
+                # Draw loading progress bar under cursor
+                pygame.draw.rect(self.screen, (30, 41, 59), (self.cursor_pos[0] - 20, self.cursor_pos[1] + 20, 40, 6))
+                pygame.draw.rect(self.screen, (34, 197, 94), (self.cursor_pos[0] - 20, self.cursor_pos[1] + 20, int(40 * pct), 6))
             else:
                 color = (255, 255, 255)  # White normally
-
-            pygame.draw.circle(self.screen, color, self.cursor_pos, 15, 2)
-            pygame.draw.circle(self.screen, (255, 100, 100), self.cursor_pos, 4)
+                pygame.draw.circle(self.screen, color, self.cursor_pos, 15, 2)
+                pygame.draw.circle(self.screen, (255, 100, 100), self.cursor_pos, 4)
 
     def draw(self):
         if self.current_screen == "menu":
@@ -701,71 +916,34 @@ class MainMenu:
         elif self.current_screen == "stage_select" and self.stage_select:
             self.stage_select.draw()
             self.draw_camera_feed()
-            # Draw cursor on top
-            if self.current_gesture != "NO HAND":
-                if self.fist_start_time > 0:
-                    color = (255, 200, 0)
-                else:
-                    color = (255, 255, 255)
-                pygame.draw.circle(self.screen, color, self.cursor_pos, 15, 2)
-                pygame.draw.circle(self.screen, (255, 100, 100), self.cursor_pos, 4)
+            self.draw_cursor()
 
         elif self.current_screen == "student_select" and self.student_select:
             self.student_select.draw()
             self.draw_camera_feed()
-            # Draw cursor on top
-            if self.current_gesture != "NO HAND":
-                if self.fist_start_time > 0:
-                    color = (255, 200, 0)
-                else:
-                    color = (255, 255, 255)
-                pygame.draw.circle(self.screen, color, self.cursor_pos, 15, 2)
-                pygame.draw.circle(self.screen, (255, 100, 100), self.cursor_pos, 4)
+            self.draw_cursor()
 
         elif self.current_screen == "quarter1" and self.quarter1:
             self.quarter1.draw()
             self.draw_camera_feed()
-            # Draw cursor on top
-            if self.current_gesture != "NO HAND":
-                if self.fist_start_time > 0:
-                    color = (255, 200, 0)
-                else:
-                    color = (255, 255, 255)
-                pygame.draw.circle(self.screen, color, self.cursor_pos, 15, 2)
-                pygame.draw.circle(self.screen, (255, 100, 100), self.cursor_pos, 4)
+            self.draw_cursor()
 
         elif self.current_screen == "quarter2" and self.quarter2:
             self.quarter2.draw()
             self.draw_camera_feed()
-            # Draw cursor on top
-            if self.current_gesture != "NO HAND":
-                if self.fist_start_time > 0:
-                    color = (255, 200, 0)
-                else:
-                    color = (255, 255, 255)
-                pygame.draw.circle(self.screen, color, self.cursor_pos, 15, 2)
-                pygame.draw.circle(self.screen, (255, 100, 100), self.cursor_pos, 4)
+            self.draw_cursor()
 
         elif self.current_screen == "quarter3" and self.quarter3:
             self.quarter3.draw()
             self.draw_camera_feed()
-            # Draw cursor on top
-            if self.current_gesture != "NO HAND":
-                if self.fist_start_time > 0:
-                    color = (255, 200, 0)
-                else:
-                    color = (255, 255, 255)
-                pygame.draw.circle(self.screen, color, self.cursor_pos, 15, 2)
-                pygame.draw.circle(self.screen, (255, 100, 100), self.cursor_pos, 4)
+            self.draw_cursor()
 
         elif self.current_screen == "quarter4" and self.quarter4:
             self.quarter4.draw()
             self.draw_camera_feed()
-            # Draw cursor on top
-            if self.current_gesture != "NO HAND":
-                if self.fist_start_time > 0:
-                    color = (255, 200, 0)
-                else:
-                    color = (255, 255, 255)
-                pygame.draw.circle(self.screen, color, self.cursor_pos, 15, 2)
-                pygame.draw.circle(self.screen, (255, 100, 100), self.cursor_pos, 4)
+            self.draw_cursor()
+
+        # Draw confirmation pop-up if active
+        if self.popup_state:
+            self.draw_popup()
+            self.draw_cursor()

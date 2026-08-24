@@ -1351,6 +1351,8 @@ class Quarter3:
     # CHECK PORTAL TELEPORT
     # ============================================================
     def check_portal_teleport_on_hold(self):
+        if self.quiz_state != 0:
+            return False
         current_portal = None
         for portal in self.portals:
             if portal.contains_position(self.player_x, self.player_y):

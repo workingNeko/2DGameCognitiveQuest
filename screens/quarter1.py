@@ -2101,6 +2101,8 @@ class Quarter1:
     # CHECK PORTAL TELEPORT
     # ============================================================
     def check_portal_teleport_on_hold(self):
+        if self.quiz_state != 0:
+            return False
         current_portal = None
         for portal in self.portals:
             if portal.contains_position(self.player_x, self.player_y):
@@ -2390,7 +2392,10 @@ class Quarter1:
             box_y = (self.height - box_h) // 2
             btn_rect = pygame.Rect(box_x + (box_w - 200) // 2, box_y + 210, 200, 42)
             if btn_rect.collidepoint(pos):
-                self.player_block_timer = 1.0  # block to walk away
+                self.quiz_state = 0
+                self.oldman_interaction_cooldown = 5.0  # 5 seconds to walk away
+                self.player_block_timer = 0.0
+                self.teleport_cooldown = 3.0  # Cooldown to walk away before teleporting
 
         # State 20: Old Man map3 Warning Dialog OK Click
         elif self.quiz_state == 20:
