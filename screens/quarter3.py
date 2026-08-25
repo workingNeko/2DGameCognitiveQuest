@@ -315,6 +315,7 @@ class Quarter3:
         self.quiz_state = 0  # 0: waiting proximity, 1: dialog Q, 2: wrong try again, 3: correct phrase transition, 4: walking along path, 5: final speech, 6: quiz complete
         self.quiz_station_index = 1  # current station (1-5)
         self.current_question_index = 0
+        self.first_attempt_correct = {1: True, 2: True, 3: True, 4: True, 5: True}
         self.selected_choice_index = -1  # choice highlighted
 
         # 50:50 Wizard Hint & friendly elimination tracking
@@ -1345,6 +1346,11 @@ class Quarter3:
             self.main_menu.stage_select = StageSelect(self.screen, self.main_menu)
             print("🏠 Returning to stage select")
             self.completed = True
+            
+            # Save student progress immediately to record quarter completion
+            from db.save_system import save_student_progress
+            save_student_progress(self.main_menu)
+            
         return "back"
 
     # ============================================================
@@ -1440,16 +1446,24 @@ class Quarter3:
                 self.success_sound.play()
             print(f"✅ Correct identification answer submitted: {self.ident_input_text}")
         else:
+            if hasattr(self, 'first_attempt_correct') and (self.current_question_index + 1) in self.first_attempt_correct:
+                self.first_attempt_correct[self.current_question_index + 1] = False
             if self.snap_sound:
                 self.snap_sound.play()
             self.wrong_feedback_msg = f"Almost there! Check the visual model ({q_data.get('hint', '')}) and try again! 💡"
+            print(f"❌ Incorrect identification answer submitted: {self.ident_input_text}")
             print(f"❌ Incorrect identification answer: '{self.ident_input_text}'. Expected one of: {valid_answers}")
+            
+        from db.save_system import save_student_progress
+        save_student_progress(self.main_menu)
 
     # ============================================================
     # TRIGGER CLICK
     # ============================================================
     def trigger_click(self, pos):
         import random
+        from db.save_system import save_student_progress
+        
         # State 1: Multiple Choice Answer Selection
         if self.quiz_state == 1:
             box_w, box_h = 780, 540
@@ -1484,9 +1498,12 @@ class Quarter3:
                         # 50:50 Wizard Hint: eliminate the clicked wrong choice and give gentle encouragement
                         self.eliminated_choices.add(i)
                         self.wrong_feedback_msg = "Almost there! Let's eliminate that choice. Pick again! ⭐"
+                        if hasattr(self, 'first_attempt_correct') and (self.current_question_index + 1) in self.first_attempt_correct:
+                            self.first_attempt_correct[self.current_question_index + 1] = False
                         if self.snap_sound:
                             self.snap_sound.play()
                         print(f"❌ Incorrect choice eliminated: {q_data['choices'][i]} (Active: {self.eliminated_choices})")
+                    save_student_progress(self.main_menu)
                     break
                     
         # State 2: Retry click fallback
@@ -1497,6 +1514,7 @@ class Quarter3:
             btn_rect = pygame.Rect(box_x + (box_w - 220) // 2, box_y + 190, 220, 46)
             if btn_rect.collidepoint(pos):
                 self.quiz_state = 1
+                save_student_progress(self.main_menu)
             
         # State 3: Correct answer transition screen click -> Award Cargo & Speed Rush!
         elif self.quiz_state == 3:
@@ -2920,8 +2938,8 @@ class Quarter3:
         if event.type == pygame.KEYDOWN:
             if event.key == pygame.K_ESCAPE:
                 if self.main_menu:
-                    self.main_menu.current_screen = "menu"
-                    self.main_menu.quarter3 = None
+                    from db.save_system import show_saving_and_exit
+                    show_saving_and_exit(self.main_menu)
                 return "back"
             elif event.key == pygame.K_i:
                 self.show_info = not self.show_info

@@ -1555,6 +1555,11 @@ class Quarter1:
             self.main_menu.stage_select = StageSelect(self.screen, self.main_menu)
             print("🏠 Returning to stage select")
             self.completed = True
+            
+            # Save student progress immediately to record quarter completion
+            from db.save_system import save_student_progress
+            save_student_progress(self.main_menu)
+            
         return "back"
 
     # ============================================================
@@ -2236,14 +2241,12 @@ class Quarter1:
     # ============================================================
     # TRIGGER CLICK
     # ============================================================
-    # ============================================================
-    # TRIGGER CLICK
-    # ============================================================
     def trigger_click(self, pos):
         if not self.is_quiz_map:
             return
             
         import random
+        from db.save_system import save_student_progress
         
         # State 1: Dialog with choices
         if self.quiz_state == 1:
@@ -2272,6 +2275,9 @@ class Quarter1:
                         if hasattr(self, 'first_attempt_correct') and self.active_shape_id in self.first_attempt_correct:
                             self.first_attempt_correct[self.active_shape_id] = False
                         print(f"❌ Incorrect answer selected: {q_data['choices'][i]}")
+                    
+                    # Auto-save immediately upon answer selection
+                    save_student_progress(self.main_menu)
                     break
                     
         # State 2: Wrong answer retry screen click
@@ -2282,6 +2288,7 @@ class Quarter1:
             btn_rect = pygame.Rect(box_x + (box_w - 200) // 2, box_y + 140, 200, 42)
             if btn_rect.collidepoint(pos):
                 self.quiz_state = 1
+                save_student_progress(self.main_menu)
             
         # State 3: Correct answer transition screen click
         elif self.quiz_state == 3:
@@ -2318,6 +2325,9 @@ class Quarter1:
                     else:
                         self.quiz_state = 5
                 
+                # Auto-save after completing question transitions
+                save_student_progress(self.main_menu)
+                
         # State 5: Final speech click
         elif self.quiz_state == 5:
             box_w, box_h = 550, 300
@@ -2328,7 +2338,8 @@ class Quarter1:
                 self.quiz_state = 6
                 self.npc_oldman_found = False
                 print("🧙‍♂️ Old Man disappeared from Quarter 1")
-
+                save_student_progress(self.main_menu)
+ 
         # State 10: Old Man Warning Dialog OK Click
         elif self.quiz_state == 10:
             box_w, box_h = 550, 240
@@ -2339,6 +2350,7 @@ class Quarter1:
                 self.quiz_state = 0
                 self.oldman_interaction_cooldown = 5.0  # 5 seconds to walk away
                 self.player_block_timer = 0.0
+                save_student_progress(self.main_menu)
 
         # State 11: Old Man Riddle Dialog Choice Clicks
         elif self.quiz_state == 11:
@@ -3796,8 +3808,8 @@ class Quarter1:
         if event.type == pygame.KEYDOWN:
             if event.key == pygame.K_ESCAPE:
                 if self.main_menu:
-                    self.main_menu.current_screen = "menu"
-                    self.main_menu.quarter1 = None
+                    from db.save_system import show_saving_and_exit
+                    show_saving_and_exit(self.main_menu)
                 return "back"
             elif event.key == pygame.K_i:
                 self.show_info = not self.show_info

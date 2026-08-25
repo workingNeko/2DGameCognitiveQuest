@@ -285,6 +285,7 @@ class Quarter4:
         self.quiz_state = 0  # 0: waiting proximity, 1: dialog Q, 2: wrong try again, 3: correct phrase transition, 5: final speech, 6: quiz complete
         self.quiz_station_index = 1  # current active station (1-6)
         self.current_question_index = 0
+        self.first_attempt_correct = {1: True, 2: True, 3: True, 4: True, 5: True, 6: True}
         self.selected_choice_index = -1  # choice highlighted
 
         # Station Standby Directions based on Map Name and User Requests
@@ -892,6 +893,11 @@ class Quarter4:
             self.main_menu.stage_select = StageSelect(self.screen, self.main_menu)
             print("🏠 Returning to stage select")
             self.completed = True
+            
+            # Save student progress immediately to record quarter completion
+            from db.save_system import save_student_progress
+            save_student_progress(self.main_menu)
+            
         return "back"
 
     # ============================================================
@@ -957,6 +963,8 @@ class Quarter4:
     # TRIGGER CLICK
     # ============================================================
     def trigger_click(self, pos):
+        from db.save_system import save_student_progress
+        
         # State 1: Quiz Question dialogue click
         if self.quiz_state == 1:
             box_w, box_h = 580, 370
@@ -980,9 +988,13 @@ class Quarter4:
                         print("✨ Correct answer selected!")
                     else:
                         self.quiz_state = 2
+                        if hasattr(self, 'first_attempt_correct') and (self.current_question_index + 1) in self.first_attempt_correct:
+                            self.first_attempt_correct[self.current_question_index + 1] = False
                         print("❌ Incorrect answer selected!")
+                    
+                    save_student_progress(self.main_menu)
                     break
-
+ 
         # State 2: Incorrect answer feedback click
         elif self.quiz_state == 2:
             box_w, box_h = 500, 240
@@ -991,6 +1003,7 @@ class Quarter4:
             btn_rect = pygame.Rect(box_x + (box_w - 200) // 2, box_y + 140, 200, 42)
             if btn_rect.collidepoint(pos):
                 self.quiz_state = 1
+                save_student_progress(self.main_menu)
             
         # State 3: Correct answer transition screen click
         elif self.quiz_state == 3:
@@ -1003,6 +1016,7 @@ class Quarter4:
                     self.quiz_state = 0
                 else:
                     self.quiz_state = 5
+                save_student_progress(self.main_menu)
                 
         # State 5: Final speech click
         elif self.quiz_state == 5:
@@ -1012,6 +1026,7 @@ class Quarter4:
             btn_rect = pygame.Rect(box_x + (box_w - 200) // 2, box_y + 210, 200, 42)
             if btn_rect.collidepoint(pos):
                 self.quiz_state = 6
+                save_student_progress(self.main_menu)
                 print("🎓 Quarter 4 evaluation completed!")
 
     # ============================================================
@@ -1333,8 +1348,8 @@ class Quarter4:
         if event.type == pygame.KEYDOWN:
             if event.key == pygame.K_ESCAPE:
                 if self.main_menu:
-                    self.main_menu.current_screen = "menu"
-                    self.main_menu.quarter4 = None
+                    from db.save_system import show_saving_and_exit
+                    show_saving_and_exit(self.main_menu)
                 return "back"
             elif event.key == pygame.K_i:
                 self.show_info = not self.show_info

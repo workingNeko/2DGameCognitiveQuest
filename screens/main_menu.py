@@ -173,45 +173,7 @@ class MainMenu:
         # ==========================================
         # BUTTONS
         # ==========================================
-
-        bw = 300
-        bh = 70
-        gap = 20
-
-        total_height = (bh * 2) + gap
-        start_y = (self.h // 2) - (total_height // 2)
-
-        self.select_student_btn = Button(
-            (self.w // 2 - bw // 2, start_y, bw, bh),
-            text="SELECT STUDENT",
-            font=self.button_font,
-            bg_color=(255, 215, 0),
-            text_color=(0, 0, 0),
-            action=self.select_student,
-            image_path=None
-        )
-
-        self.start_activity_btn = Button(
-            (self.w // 2 - bw // 2, start_y + bh + gap, bw, bh),
-            text="START ACTIVITY",
-            font=self.button_font,
-            bg_color=(46, 204, 113),
-            text_color=(255, 255, 255),
-            action=self.start_activity,
-            image_path=None
-        )
-
-        self.exit_btn = Button(
-            (30, 30, 200, 70),
-            text="",
-            font=self.button_font,
-            bg_color=None,
-            text_color=(255, 255, 255),
-            action=self.exit_game,
-            image_path=exit_btn_path
-        )
-
-        self.buttons = [self.select_student_btn, self.start_activity_btn, self.exit_btn]
+        self.setup_buttons()
 
         self.title_y = 40
         self.student_info_y = self.h - 90
@@ -453,27 +415,20 @@ class MainMenu:
             print("👍 Confirmation pop-up: YES clicked")
             if self.popup_state == "confirm_exit":
                 self.exit_game()
-            elif self.popup_state == "confirm_menu":
-                # Go back to main menu
-                # Cleanup any active screens safely
-                if self.quarter1 and hasattr(self.quarter1, 'cleanup'):
-                    self.quarter1.cleanup()
-                self.quarter1 = None
-                if self.quarter2 and hasattr(self.quarter2, 'cleanup'):
-                    self.quarter2.cleanup()
-                self.quarter2 = None
-                if self.quarter3 and hasattr(self.quarter3, 'cleanup'):
-                    self.quarter3.cleanup()
-                self.quarter3 = None
-                if self.quarter4 and hasattr(self.quarter4, 'cleanup'):
-                    self.quarter4.cleanup()
-                self.quarter4 = None
-                if self.stage_select and hasattr(self.stage_select, 'cleanup'):
-                    self.stage_select.cleanup()
-                self.stage_select = None
-                self.student_select = None
-                self.current_screen = "menu"
+            elif self.popup_state == "confirm_new_activity":
+                from db.save_system import delete_student_progress
+                delete_student_progress(self.student_id)
                 self.popup_state = None
+                
+                # Refresh main menu buttons to default "START ACTIVITY"
+                self.setup_buttons()
+                
+                # Start fresh Stage Select screen
+                self.current_screen = "stage_select"
+                self.stage_select = StageSelect(self.screen, self)
+            elif self.popup_state == "confirm_menu":
+                from db.save_system import show_saving_and_exit
+                show_saving_and_exit(self)
         elif no_rect.collidepoint(pos):
             print("👎 Confirmation pop-up: NO clicked")
             self.popup_state = None
@@ -508,6 +463,10 @@ class MainMenu:
             title_text = "Exit Game"
             body_text1 = "Are you sure you want to"
             body_text2 = "exit the game?"
+        elif self.popup_state == "confirm_new_activity":
+            title_text = "Start New Activity"
+            body_text1 = "Are you sure to Start a new Activity?"
+            body_text2 = "This will delete any progress you have made."
         else:
             title_text = "Return to Menu"
             body_text1 = "Are you sure you want to"
@@ -539,7 +498,7 @@ class MainMenu:
         pygame.draw.rect(self.screen, (239, 68, 68), yes_rect, 2, border_radius=6)
         
         btn_font = pygame.font.SysFont("Comic Sans MS", 16, bold=True)
-        yes_text_surf = btn_font.render("Yes, exit" if self.popup_state == "confirm_exit" else "Yes, return", True, yes_fg)
+        yes_text_surf = btn_font.render("Yes, exit" if self.popup_state == "confirm_exit" else ("Yes, restart" if self.popup_state == "confirm_new_activity" else "Yes, return"), True, yes_fg)
         self.screen.blit(yes_text_surf, (yes_rect.x + (btn_w - yes_text_surf.get_width()) // 2, yes_rect.y + (btn_h - yes_text_surf.get_height()) // 2))
 
         # No button hover & draw
@@ -565,6 +524,93 @@ class MainMenu:
     # BUTTON ACTIONS
     # ==========================================
 
+    def setup_buttons(self):
+        """Set up main menu buttons dynamically based on student save progress."""
+        from db.save_system import check_save_exists
+        
+        bw = 440
+        bh = 70
+        gap = 20
+        exit_btn_path = os.path.join("assets", "images", "exitbutton.png")
+        
+        has_save = False
+        if self.selected_student:
+            has_save = check_save_exists(self.student_id)
+            
+        # Exit button is always present
+        self.exit_btn = Button(
+            (30, 30, 200, 70),
+            text="",
+            font=self.button_font,
+            bg_color=None,
+            text_color=(255, 255, 255),
+            action=self.exit_game,
+            image_path=exit_btn_path
+        )
+        
+        if has_save:
+            # Case: Selected student has existing save progress -> 3 vertical buttons
+            total_height = (bh * 3) + (gap * 2)
+            start_y = (self.h // 2) - (total_height // 2)
+            
+            self.select_student_btn = Button(
+                (self.w // 2 - bw // 2, start_y, bw, bh),
+                text="SELECT STUDENT",
+                font=self.button_font,
+                bg_color=(255, 215, 0),
+                text_color=(0, 0, 0),
+                action=self.select_student,
+                image_path=None
+            )
+            
+            self.continue_activity_btn = Button(
+                (self.w // 2 - bw // 2, start_y + bh + gap, bw, bh),
+                text="CONTINUE ACTIVITY",
+                font=self.button_font,
+                bg_color=(46, 204, 113),
+                text_color=(255, 255, 255),
+                action=self.continue_activity,
+                image_path=None
+            )
+            
+            self.start_new_activity_btn = Button(
+                (self.w // 2 - bw // 2, start_y + (bh + gap) * 2, bw, bh),
+                text="START NEW ACTIVITY",
+                font=self.button_font,
+                bg_color=(231, 76, 60),
+                text_color=(255, 255, 255),
+                action=self.confirm_start_new_activity,
+                image_path=None
+            )
+            
+            self.buttons = [self.select_student_btn, self.continue_activity_btn, self.start_new_activity_btn, self.exit_btn]
+        else:
+            # Case: No saved progress or no student selected -> 2 vertical buttons
+            total_height = (bh * 2) + gap
+            start_y = (self.h // 2) - (total_height // 2)
+            
+            self.select_student_btn = Button(
+                (self.w // 2 - bw // 2, start_y, bw, bh),
+                text="SELECT STUDENT",
+                font=self.button_font,
+                bg_color=(255, 215, 0),
+                text_color=(0, 0, 0),
+                action=self.select_student,
+                image_path=None
+            )
+            
+            self.start_activity_btn = Button(
+                (self.w // 2 - bw // 2, start_y + bh + gap, bw, bh),
+                text="START ACTIVITY",
+                font=self.button_font,
+                bg_color=(46, 204, 113),
+                text_color=(255, 255, 255),
+                action=self.start_activity,
+                image_path=None
+            )
+            
+            self.buttons = [self.select_student_btn, self.start_activity_btn, self.exit_btn]
+
     def select_student(self):
         print(f"📋 SELECT STUDENT clicked!")
         self.current_screen = "student_select"
@@ -572,16 +618,41 @@ class MainMenu:
 
     def start_activity(self):
         print(f"🎮 START ACTIVITY clicked!")
-        # COMMENTED OUT: Student select requirement for testing
-        # if not self.selected_student:
-        #     self.show_no_student_message = True
-        #     self.no_student_timer = pygame.time.get_ticks() + 2000
-        #     return
+        if not self.selected_student:
+            self.show_no_student_message = True
+            self.no_student_timer = pygame.time.get_ticks() + 2000
+            return
         self.current_screen = "stage_select"
         self.stage_select = StageSelect(self.screen, self)
 
+    def continue_activity(self):
+        print("🎮 CONTINUE ACTIVITY clicked!")
+        if not self.selected_student:
+            self.show_no_student_message = True
+            self.no_student_timer = pygame.time.get_ticks() + 2000
+            return
+            
+        from db.save_system import load_student_progress, apply_student_progress
+        save_data = load_student_progress(self.student_id)
+        if save_data:
+            apply_student_progress(self, save_data)
+        else:
+            print("⚠️ Save progress not found, starting new activity instead.")
+            self.start_activity()
+
+    def confirm_start_new_activity(self):
+        print("🔄 START NEW ACTIVITY clicked! Requesting confirmation popup...")
+        if not self.selected_student:
+            self.show_no_student_message = True
+            self.no_student_timer = pygame.time.get_ticks() + 2000
+            return
+        self.popup_state = "confirm_new_activity"
+
     def exit_game(self):
         print("🚪 EXIT clicked!")
+        from db.save_system import save_student_progress
+        save_student_progress(self)
+        
         if self.stage_select:
             self.stage_select.cleanup()
         if self.quarter1:

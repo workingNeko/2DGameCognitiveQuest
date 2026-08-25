@@ -1,0 +1,59 @@
+{
+    "student_id": "2",
+    "selected_student": {
+        "id": 2,
+        "student_id": "2",
+        "first_name": "Oreo Adlawan",
+        "last_name": "",
+        "score": 0,
+        "progress": 0,
+        "level": "Grade 2",
+        "gender": "female"
+    },
+    "current_screen": "quarter1",
+    "timestamp": 1787663870.3710701,
+    "stage_select": {
+        "player_x": 748,
+        "player_y": 416,
+        "oldman_dialogue_state": 0,
+        "knight_dialogue_state": 0,
+        "skeleton_dialogue_state": 0,
+        "bromen_dialogue_state": 0,
+        "player_following_target": null
+    },
+    "quarter_data": {
+        "quarter_name": "quarter1",
+        "map_name": "map3.txt",
+        "player_x": 28,
+        "player_y": 248,
+        "player_dir": "left",
+        "quiz_state": 0,
+        "quiz_station_index": 1,
+        "current_question_index": 1,
+        "completed": false,
+        "first_attempt_correct": {
+            "1": true,
+            "2": true,
+            "3": true,
+            "4": true,
+            "5": true
+        },
+        "shape_npcs": {
+            "1": {
+                "answered": false
+            },
+            "2": {
+                "answered": true
+            },
+            "5": {
+                "answered": false
+            },
+            "3": {
+                "answered": false
+            },
+            "4": {
+                "answered": false
+            }
+        }
+    }
+}

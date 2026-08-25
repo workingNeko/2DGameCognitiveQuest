@@ -265,6 +265,10 @@ class StudentSelect:
         self.main_menu.student_db_id = student.get('id')  # Store the primary key ID from database
 
         self.main_menu.current_screen = "menu"
+        
+        # Refresh main menu buttons dynamically to check for saved progress
+        if hasattr(self.main_menu, 'setup_buttons'):
+            self.main_menu.setup_buttons()
 
         display_name = f"{student['first_name']} {student['last_name']}".strip()
         self.show_message(f"✅ Selected: {display_name}", 2000)

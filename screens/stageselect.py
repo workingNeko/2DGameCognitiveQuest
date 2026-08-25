@@ -1011,6 +1011,18 @@ class StageSelect:
                 break
 
         if current_portal and self.fist_closed and self.teleport_cooldown <= 0:
+            # Helper to save Stage Select states
+            def save_ss_state():
+                self.main_menu.last_stage_select_data = {
+                    "player_x": self.player_x,
+                    "player_y": self.player_y,
+                    "oldman_dialogue_state": self.oldman_dialogue_state,
+                    "knight_dialogue_state": self.knight_dialogue_state,
+                    "skeleton_dialogue_state": self.skeleton_dialogue_state,
+                    "bromen_dialogue_state": self.bromen_dialogue_state,
+                    "player_following_target": self.player_following_target
+                }
+
             # Check if it's a left portal (goes to Quarter1)
             if current_portal.direction == 'left':
                 if self.oldman_dialogue_state == 0:
@@ -1020,8 +1032,13 @@ class StageSelect:
                     return False
                 map_name = random.choice(["map1.txt", "map2.txt", "map3.txt"])
                 print(f"🎮 Entering Quarter 1 - {map_name}")
+                save_ss_state()
                 self.main_menu.current_screen = "quarter1"
                 self.main_menu.quarter1 = Quarter1(self.screen, self.main_menu, map_name)
+                
+                from db.save_system import save_student_progress
+                save_student_progress(self.main_menu)
+                
                 self.main_menu.stage_select = None
                 return True
             # Check if it's an up portal (goes to Quarter2)
@@ -1033,8 +1050,13 @@ class StageSelect:
                     return False
                 map_name = random.choice(["map4.txt", "map5.txt", "map6.txt"])
                 print(f"🎮 Entering Quarter 2 - {map_name}")
+                save_ss_state()
                 self.main_menu.current_screen = "quarter2"
                 self.main_menu.quarter2 = Quarter2(self.screen, self.main_menu, map_name)
+                
+                from db.save_system import save_student_progress
+                save_student_progress(self.main_menu)
+                
                 self.main_menu.stage_select = None
                 return True
             # Check if it's a right portal (goes to Quarter3)
@@ -1046,8 +1068,13 @@ class StageSelect:
                     return False
                 map_name = random.choice(["map7.txt", "map8.txt", "map9.txt"])
                 print(f"🎮 Entering Quarter 3 - {map_name}")
+                save_ss_state()
                 self.main_menu.current_screen = "quarter3"
                 self.main_menu.quarter3 = Quarter3(self.screen, self.main_menu, map_name)
+                
+                from db.save_system import save_student_progress
+                save_student_progress(self.main_menu)
+                
                 self.main_menu.stage_select = None
                 return True
             # Check if it's a down portal (goes to Quarter4)
@@ -1059,8 +1086,13 @@ class StageSelect:
                     return False
                 map_name = random.choice(["map10.txt", "map11.txt", "map12.txt"])
                 print(f"🎮 Entering Quarter 4 - {map_name}")
+                save_ss_state()
                 self.main_menu.current_screen = "quarter4"
                 self.main_menu.quarter4 = Quarter4(self.screen, self.main_menu, map_name)
+                
+                from db.save_system import save_student_progress
+                save_student_progress(self.main_menu)
+                
                 self.main_menu.stage_select = None
                 return True
             # Regular portal teleport (to another portal on same map)
