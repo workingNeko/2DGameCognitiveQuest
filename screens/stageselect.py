@@ -1048,7 +1048,7 @@ class StageSelect:
                     self.locked_portal_banner_msg = "🔒 Talk to the Knight first to unlock Quarter 2!"
                     self.locked_portal_banner_timer = 2.5
                     return False
-                map_name = random.choice(["map4.txt", "map5.txt", "map6.txt"])
+                map_name = "map5.txt"
                 print(f"🎮 Entering Quarter 2 - {map_name}")
                 save_ss_state()
                 self.main_menu.current_screen = "quarter2"
@@ -1251,7 +1251,7 @@ class StageSelect:
                     self.locked_portal_banner_msg = "🔒 Talk to the Knight first to unlock Quarter 2!"
                     self.locked_portal_banner_timer = 1.0
                 else:
-                    map_name = random.choice(["map4.txt", "map5.txt", "map6.txt"])
+                    map_name = "map5.txt"
                     print(f"🎮 Entering Quarter 2 - {map_name}")
                     self.main_menu.current_screen = "quarter2"
                     self.main_menu.quarter2 = Quarter2(self.screen, self.main_menu, map_name)
@@ -1589,7 +1589,7 @@ class StageSelect:
                             self.locked_portal_banner_timer = 2.0
                     elif portal.direction == 'up':
                         if self.knight_dialogue_state >= 2 or self.player_following_target == 'knight':
-                            map_name = random.choice(["map4.txt", "map5.txt", "map6.txt"])
+                            map_name = "map5.txt"
                             print(f"🎮 Auto-entering Quarter 2 - {map_name}")
                             self.main_menu.current_screen = "quarter2"
                             self.main_menu.quarter2 = Quarter2(self.screen, self.main_menu, map_name)

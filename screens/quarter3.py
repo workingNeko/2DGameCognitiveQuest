@@ -9,6 +9,14 @@ import random
 import collections
 from .map_loader import MapLoader
 
+try:
+    from db import db
+except ImportError:
+    try:
+        from db.connect_db import db
+    except ImportError:
+        db = None
+
 # ============================================================
 # SETTINGS
 # ============================================================
@@ -431,6 +439,9 @@ class Quarter3:
             }
         ]
 
+        # Load dynamic questions from Database / Vercel API
+        self.load_database_questions()
+
         # ============================================================
         # EXPLORER'S CARAVAN & COMPANION WAGON SYSTEM
         # ============================================================
@@ -684,6 +695,120 @@ class Quarter3:
 
         # 14. Scaled Icon Cache mapping (icon_key, target_size) -> pre-scaled Surface
         self._scaled_icon_cache = {}
+
+    # ============================================================
+    # DATABASE INTEGRATION
+    # ============================================================
+    def load_database_questions(self):
+        if not self.is_quiz_map:
+            return
+        try:
+            if not db:
+                return
+            questions_result = db.get_questions(quarter=3)
+            if not questions_result or len(questions_result) == 0:
+                print("ℹ️ No custom database questions found for Quarter 3. Using default curriculum questions.")
+                return
+
+            mapped_questions = []
+            for idx, row in enumerate(questions_result):
+                prompt = row.get("prompt") or row.get("question") or ""
+                opt_a = row.get("optionA") or row.get("option_a")
+                opt_b = row.get("optionB") or row.get("option_b")
+                opt_c = row.get("optionC") or row.get("option_c")
+                opt_d = row.get("optionD") or row.get("option_d")
+                correct_answer = row.get("correctAnswer") or row.get("correct_answer")
+
+                raw_options = [opt for opt in [opt_a, opt_b, opt_c, opt_d] if opt is not None and str(opt).strip() != ""]
+                if not raw_options:
+                    continue
+
+                choices = []
+                choice_letters = ["A", "B", "C", "D"]
+                for c_i, opt in enumerate(raw_options):
+                    prefix = f"{choice_letters[c_i]}. " if c_i < len(choice_letters) else f"{c_i+1}. "
+                    choices.append(f"{prefix}{opt}")
+
+                ans = str(correct_answer).upper().strip()
+                if ans == "A" or ans == "OPTION_A" or ans.endswith("A") or ans == "0":
+                    correct_idx = 0
+                elif ans == "B" or ans == "OPTION_B" or ans.endswith("B") or ans == "1":
+                    correct_idx = 1
+                elif ans == "C" or ans == "OPTION_C" or ans.endswith("C") or ans == "2":
+                    correct_idx = 2
+                elif ans == "D" or ans == "OPTION_D" or ans.endswith("D") or ans == "3":
+                    correct_idx = 3
+                else:
+                    correct_idx = 0
+                    for c_i, opt in enumerate(raw_options):
+                        if opt and str(opt).strip().lower() == ans.lower():
+                            correct_idx = c_i
+                            break
+
+                station_num = idx + 1
+                mapped_questions.append({
+                    "station": station_num,
+                    "title": f"⭐ CHALLENGE {station_num}",
+                    "question": prompt,
+                    "q_type": "multiple_choice",
+                    "choices": choices,
+                    "correct": correct_idx,
+                    "hint": row.get("hint") or "Examine the choices carefully and select the best answer below! ⭐"
+                })
+
+            if mapped_questions:
+                for i in range(min(5, len(mapped_questions))):
+                    if i < len(self.quiz_questions):
+                        orig = self.quiz_questions[i]
+                        if "visual_type" in orig and not mapped_questions[i].get("visual_type"):
+                            mapped_questions[i]["visual_type"] = orig["visual_type"]
+                        self.quiz_questions[i] = mapped_questions[i]
+                    else:
+                        self.quiz_questions.append(mapped_questions[i])
+
+                print(f"✅ Successfully loaded {len(mapped_questions)} dynamic question(s) from Database for Quarter 3!")
+        except Exception as e:
+            print(f"⚠️ Exception loading database questions for Quarter 3: {e}")
+
+    def save_results_to_database(self):
+        if not self.is_quiz_map:
+            return
+        try:
+            if not db:
+                return
+            student_db_id = getattr(self.main_menu, 'student_db_id', None)
+            if not student_db_id:
+                print("⚠️ No student_db_id available in main_menu. Skipping database record.")
+                return
+            total_questions = min(5, len(self.quiz_questions))
+            correct_answers = sum(1 for k, v in self.first_attempt_correct.items() if k <= total_questions and v)
+            percentage = (correct_answers / float(total_questions)) * 100.0 if total_questions > 0 else 0.0
+            score = float(correct_answers)
+
+            assessment_id = db.get_assessment_id(quarter=3)
+            if assessment_id:
+                print(f"📝 Linked Quarter 3 result to Assessment ID: {assessment_id}")
+
+            feedback_msg = f"Completed Quarter 3 (Math Explorations). Answered {correct_answers} of {total_questions} questions correctly on the first attempt."
+            grade_level = getattr(self.main_menu, 'selected_student', {}).get('level', 'Grade 2')
+
+            success = db.save_game_result(
+                student_id=student_db_id,
+                score=score,
+                total_questions=total_questions,
+                correct_answers=correct_answers,
+                percentage=percentage,
+                feedback=feedback_msg,
+                grade_level=grade_level,
+                assessment_id=assessment_id
+            )
+            if success:
+                print(f"🎉 Successfully saved Quarter 3 Game Result to Database for Student DB ID {student_db_id}!")
+                print(f"   Score: {score}/{total_questions} ({percentage}%)")
+            else:
+                print("⚠️ Failed to save Quarter 3 game results via Database API.")
+        except Exception as e:
+            print(f"⚠️ Exception saving Quarter 3 game results: {e}")
 
     # ============================================================
     # CREATE DEFAULT MAP (fallback)
@@ -1337,6 +1462,8 @@ class Quarter3:
     def return_to_stage_select(self):
         """Return to the stage select screen"""
         if self.main_menu:
+            # Save results to database on completion
+            self.save_results_to_database()
             self.main_menu.current_screen = "stage_select"
             self.main_menu.quarter3 = None
             try:
@@ -1656,6 +1783,8 @@ class Quarter3:
             if btn_rect.collidepoint(pos):
                 self.quiz_state = 6
                 self.clear_portal_overlapping_tiles()
+                self.save_results_to_database()
+                save_student_progress(self.main_menu)
                 
                 # Calculate BFS path from current Caravan position to Goal Portal
                 start_tile = (int((self.caravan_x + TILE_SIZE // 2) // TILE_SIZE), 

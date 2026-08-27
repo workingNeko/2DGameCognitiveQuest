@@ -44,10 +44,13 @@ class Button:
             screen.blit(self.image, (self.rect.x + 10, img_y))  # 10px padding
             text_offset_x = self.image.get_width() + 20  # space between image and text
 
-        # Draw text (centered vertically, shifted right if image exists)
+        # Draw text (centered horizontally and vertically, adjusted if image exists)
         if self.text and self.font:
             text_surf = self.font.render(self.text, True, self.text_color)
             text_rect = text_surf.get_rect()
             text_rect.centery = self.rect.y + self.rect.height // 2
-            text_rect.x = self.rect.x + text_offset_x
+            if self.image:
+                text_rect.centerx = self.rect.x + text_offset_x + (self.rect.width - text_offset_x) // 2
+            else:
+                text_rect.centerx = self.rect.centerx
             screen.blit(text_surf, text_rect)

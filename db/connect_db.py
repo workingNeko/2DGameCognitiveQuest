@@ -48,25 +48,25 @@ class Database:
     def get_questions(self, quarter=1):
         """Fetch questions for a specific quarter unit from Vercel API."""
         try:
-            # 1. Fetch units to find the matching unit_id for the quarter
+            # 1. Fetch units to find all matching unit_ids for the quarter
             units_url = f"{BASE_URL}/units"
             req_units = urllib.request.Request(units_url, headers={'User-Agent': 'Mozilla/5.0'})
             with urllib.request.urlopen(req_units, timeout=8) as resp:
                 units = json.loads(resp.read().decode('utf-8'))
             
-            # Find unit matching Quarter (e.g. Q1, Q2, etc.)
+            # Find all units matching Quarter (e.g. Q1, Q2, etc.)
             q_str = f"Q{quarter}"
             q_full_str = f"Quarter {quarter}"
-            unit_id = None
+            matching_unit_ids = set()
             for unit in units:
                 unit_quarter = unit.get("quarter", "")
                 code = str(unit.get("code", "")).upper()
                 title = str(unit.get("title", "")).upper()
-                # Check new quarter field first, then fallback to code/title search
+                # Check quarter field first, then fallback to code/title search
                 if q_full_str.upper() == str(unit_quarter).upper() or q_str in code or q_full_str.upper() in title:
-                    unit_id = unit.get("id")
-                    print(f"[API INFO] Found Unit ID {unit_id} for {q_full_str}")
-                    break
+                    matching_unit_ids.add(unit.get("id"))
+            
+            print(f"[API INFO] Matching Unit IDs for {q_full_str}: {list(matching_unit_ids)}")
             
             # 2. Fetch all questions and filter by unit_id or quarter field
             questions_url = f"{BASE_URL}/questions"
@@ -83,11 +83,11 @@ class Database:
                 
                 is_match = False
                 if q_active:
-                    # Check the new quarter column directly
+                    # Check the quarter column directly
                     if q_quarter and q_full_str.upper() == str(q_quarter).upper():
                         is_match = True
-                    # Fallback to unit ID
-                    elif unit_id is not None and q_unit_id == unit_id:
+                    # Match against any of the unit IDs associated with this Quarter
+                    elif q_unit_id in matching_unit_ids:
                         is_match = True
                 
                 if is_match:

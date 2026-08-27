@@ -1,0 +1,24 @@
+{
+    "student_id": "1",
+    "selected_student": {
+        "id": 1,
+        "student_id": "1",
+        "first_name": "Nico Adlawan",
+        "last_name": "",
+        "score": 0,
+        "progress": 0,
+        "level": "Grade 2",
+        "gender": "male"
+    },
+    "current_screen": "stage_select",
+    "timestamp": 1787806289.6981254,
+    "stage_select": {
+        "player_x": 956,
+        "player_y": 476,
+        "oldman_dialogue_state": 0,
+        "knight_dialogue_state": 0,
+        "skeleton_dialogue_state": 0,
+        "bromen_dialogue_state": 0,
+        "player_following_target": null
+    }
+}

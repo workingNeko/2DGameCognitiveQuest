@@ -1,4 +1,15 @@
 # screens/main_menu.py - USING WRIST FOR STABLE CURSOR
+import sys
+if sys.stdout is not None:
+    try:
+        sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+    except Exception:
+        pass
+if sys.stderr is not None:
+    try:
+        sys.stderr.reconfigure(encoding='utf-8', errors='replace')
+    except Exception:
+        pass
 
 import pygame
 import cv2
@@ -35,11 +46,26 @@ class MainMenu:
         )
 
         # Camera setup
-        self.cap = cv2.VideoCapture(0)
-        self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 320)
-        self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 240)
         self.camera_size = (160, 120)
-        print("✅ Camera initialized!")
+        self.cap = None
+        try:
+            self.cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
+            if not self.cap.isOpened():
+                self.cap = cv2.VideoCapture(0)
+            if self.cap.isOpened():
+                self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 320)
+                self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 240)
+                print("✅ Camera initialized!")
+            else:
+                print("⚠️ Camera not available, falling back to mouse control.")
+                try:
+                    self.cap.release()
+                except Exception:
+                    pass
+                self.cap = None
+        except Exception as e:
+            print(f"⚠️ Camera init exception: {e}")
+            self.cap = None
 
         # Gesture state
         self.current_gesture = "NO HAND"
@@ -261,8 +287,15 @@ class MainMenu:
 
     def update_gesture(self):
         """Update gesture detection - USING WRIST FOR CURSOR (landmark 0)"""
+        if self.cap is None or not self.cap.isOpened():
+            mouse_x, mouse_y = pygame.mouse.get_pos()
+            self.cursor_pos = (mouse_x, mouse_y)
+            return
+
         ret, img = self.cap.read()
         if not ret:
+            mouse_x, mouse_y = pygame.mouse.get_pos()
+            self.cursor_pos = (mouse_x, mouse_y)
             return
 
         img = cv2.flip(img, 1)
@@ -663,7 +696,11 @@ class MainMenu:
             self.quarter3.cleanup()
         if self.quarter4:
             self.quarter4.cleanup()
-        self.cap.release()
+        if self.cap is not None:
+            try:
+                self.cap.release()
+            except Exception:
+                pass
         cv2.destroyAllWindows()
         pygame.quit()
         raise SystemExit
@@ -971,8 +1008,8 @@ class MainMenu:
                 error_bg.fill((231, 76, 60))
                 error_bg.set_alpha(220)
                 self.screen.blit(error_bg, (self.w // 2 - 190, self.error_y))
-                msg = self.small_font.render("⚠ Please select a student first!", True, (255, 255, 255))
-                self.screen.blit(msg, (self.w // 2 - msg.get_width() // 2, self.error_y + 8))
+                msg = self.small_font.render("Please select a student first!", True, (255, 255, 255))
+                self.screen.blit(msg, (self.w // 2 - msg.get_width() // 2, self.error_y + 12))
             else:
                 self.show_no_student_message = False
 

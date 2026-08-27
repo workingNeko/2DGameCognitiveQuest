@@ -5,12 +5,12 @@ import sys
 # Reconfigure stdout and stderr to UTF-8 to support emojis and prevent crashes on Windows consoles
 if sys.stdout is not None:
     try:
-        sys.stdout.reconfigure(encoding='utf-8')
+        sys.stdout.reconfigure(encoding='utf-8', errors='replace')
     except Exception:
         pass
 if sys.stderr is not None:
     try:
-        sys.stderr.reconfigure(encoding='utf-8')
+        sys.stderr.reconfigure(encoding='utf-8', errors='replace')
     except Exception:
         pass
 
