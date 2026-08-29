@@ -707,6 +707,11 @@ class Quarter2:
                 # Blend with default questions if fewer than 5
                 for i in range(min(5, len(mapped_questions))):
                     if i < len(self.quiz_questions):
+                        orig = self.quiz_questions[i]
+                        # Preserve original game-specific visual metadata and hint fallback
+                        for key in ["visual_type", "station", "title", "hint"]:
+                            if key in orig and not mapped_questions[i].get(key):
+                                mapped_questions[i][key] = orig[key]
                         self.quiz_questions[i] = mapped_questions[i]
                     else:
                         self.quiz_questions.append(mapped_questions[i])
