@@ -7,6 +7,7 @@ import cv2
 import numpy as np
 import time
 import random
+import math
 from .map_loader import MapLoader
 
 # ============================================================
@@ -245,6 +246,14 @@ class Quarter4:
                 if self.player_x != 0:
                     break
 
+        # Snap camera immediately to player on load
+        target_cam_x = self.player_x + TILE_SIZE // 2 - (self.width // 2) / ZOOM
+        target_cam_y = self.player_y + TILE_SIZE // 2 - (self.height // 2) / ZOOM
+        max_cam_x = max(0, self.MAP_WIDTH - self.width / ZOOM)
+        max_cam_y = max(0, self.MAP_HEIGHT - self.height / ZOOM)
+        self.camera_x = max(0, min(target_cam_x, max_cam_x))
+        self.camera_y = max(0, min(target_cam_y, max_cam_y))
+
         for y, row in enumerate(self.render_map):
             if "P" in row:
                 self.render_map[y] = row.replace("P", "G")
@@ -457,9 +466,19 @@ class Quarter4:
         # Overwrite T and G with Q4 tiles for Quarter 4 Maps
         tiles["T"] = load_tile("dungeon1.png", is_q4=True)
         tiles["G"] = load_tile("floor.png", is_q4=True)
+        tiles["W"] = load_tile("water.png", is_q4=True)
+        tiles["F"] = load_tile("fountain.png", is_q4=True)
+        tiles["*"] = load_tile("fountain.png", is_q4=True)
+        tiles["S"] = load_tile("statue.png", is_q4=True)
+        tiles["C"] = load_tile("pot.png", is_q4=True)
+        tiles["|"] = load_tile("pillar.png", is_q4=True)
+        tiles["L"] = load_tile("lily.png", is_q4=True)
+        tiles["R"] = load_tile("torch.png", is_q4=True)
+        tiles["$"] = load_tile("chest.png", is_q4=True)
+        tiles["H"] = load_tile("banner.png", is_q4=True)
         
         # Map quiz stations and player spawn tiles to render on the smooth slate floor texture
-        for k in ["1", "2", "3", "4", "5", "P"]:
+        for k in ["1", "2", "3", "4", "5", "6", "P"]:
             tiles[k] = tiles["G"]
 
         # New Q4 tiles (Dungeon boundaries)
@@ -1141,10 +1160,38 @@ class Quarter4:
         margin = TILE_SIZE * ZOOM * 2
         if (-margin <= screen_x <= self.width + margin and
                 -margin <= screen_y <= self.height + margin):
-            image = self.tile_images.get(c, self.fallback_tile)
             scaled_size = int(TILE_SIZE * ZOOM)
+
+            # For transparent floor props (fountains, statues, pots, pillars, braziers, chests, banners), draw clean floor first
+            if c in ["F", "*", "S", "C", "|", "R", "$", "H"]:
+                floor_img = self.tile_images.get("G", self.fallback_tile)
+                scaled_floor = pygame.transform.scale(floor_img, (scaled_size, scaled_size))
+                self.screen.blit(scaled_floor, (screen_x, screen_y))
+            # For lily pads on water, draw water first
+            elif c == "L":
+                water_img = self.tile_images.get("W", self.fallback_tile)
+                scaled_water = pygame.transform.scale(water_img, (scaled_size, scaled_size))
+                self.screen.blit(scaled_water, (screen_x, screen_y))
+
+            image = self.tile_images.get(c, self.fallback_tile)
             scaled_image = pygame.transform.scale(image, (scaled_size, scaled_size))
             self.screen.blit(scaled_image, (screen_x, screen_y))
+
+            # Stardew Valley animated wave glints on water tiles
+            if c in ['W', 'L']:
+                shimmer = pygame.Surface((scaled_size, scaled_size), pygame.SRCALPHA)
+                alpha = int(12 + 8 * math.sin((world_x * 0.03 + self.frame_counter * 0.05)))
+                shimmer.fill((180, 230, 255, alpha))
+                self.screen.blit(shimmer, (screen_x, screen_y))
+
+            # Temple Aqua Brazier Pulsing Glow
+            if c == 'R':
+                glow = pygame.Surface((scaled_size * 2, scaled_size * 2), pygame.SRCALPHA)
+                pulse = 0.5 + 0.5 * math.sin(self.frame_counter * 0.1)
+                glow_alpha = int(25 + 15 * pulse)
+                pygame.draw.circle(glow, (0, 230, 255, glow_alpha), (scaled_size, scaled_size), int(scaled_size * 0.85))
+                pygame.draw.circle(glow, (200, 255, 255, int(glow_alpha * 0.6)), (scaled_size, scaled_size), int(scaled_size * 0.45))
+                self.screen.blit(glow, (screen_x - scaled_size // 2, screen_y - scaled_size // 2))
 
     # ============================================================
     # DRAW NPC
@@ -1210,6 +1257,30 @@ class Quarter4:
                     if tile_char != 'T':
                         self.draw_tile(tile_char, col * TILE_SIZE, row * TILE_SIZE)
 
+        # Draw Station Pedestal Rings on the ground
+        if hasattr(self, 'quiz_stations'):
+            for num, pos in self.quiz_stations.items():
+                is_answered = num in self.answered_stations
+                if num == 5:
+                    is_answered = (5 in self.answered_stations) and (6 in self.answered_stations)
+
+                cx = (pos[0] * TILE_SIZE + TILE_SIZE // 2 - self.camera_x) * ZOOM
+                cy = (pos[1] * TILE_SIZE + TILE_SIZE // 2 - self.camera_y) * ZOOM
+
+                if -60 <= cx <= self.width + 60 and -60 <= cy <= self.height + 60:
+                    base_r = int((TILE_SIZE // 2 + 5) * ZOOM)
+                    ring_surf = pygame.Surface((base_r * 2 + 12, base_r * 2 + 12), pygame.SRCALPHA)
+                    center_pt = (base_r + 6, base_r + 6)
+                    if is_answered:
+                        pygame.draw.circle(ring_surf, (56, 232, 198, 90), center_pt, base_r, 3)
+                        pygame.draw.circle(ring_surf, (56, 232, 198, 40), center_pt, base_r - 4)
+                    else:
+                        pulse = int(math.sin(self.frame_counter * 0.12) * 3)
+                        r = base_r + pulse
+                        pygame.draw.circle(ring_surf, (255, 215, 0, 140), center_pt, r, 3)
+                        pygame.draw.circle(ring_surf, (0, 240, 255, 50), center_pt, max(1, r - 5))
+                    self.screen.blit(ring_surf, (cx - base_r - 6, cy - base_r - 6))
+
         # Only draw portals when quiz is complete
         if self.quiz_state == 6:
             for portal in self.portals:
@@ -1225,15 +1296,6 @@ class Quarter4:
                 if num in self.station_npcs and not is_answered and self.quiz_state < 6:
                     data = self.station_npcs[num]
                     frame = data["frames"][data["anim_frame"]]
-                    
-                    # If this station is not answered yet, draw a glowing pulsing aura
-                    if self.quiz_state == 0:
-                        import math
-                        pulse_r = int((TILE_SIZE // 2 + 6) * ZOOM + math.sin(self.frame_counter * 0.15) * 3)
-                        cx = (pos[0] * TILE_SIZE + TILE_SIZE // 2 - self.camera_x) * ZOOM
-                        cy = (pos[1] * TILE_SIZE + TILE_SIZE // 2 - self.camera_y) * ZOOM
-                        pygame.draw.circle(self.screen, (255, 215, 0), (int(cx), int(cy)), pulse_r, 2)
-                    
                     self.draw_npc_static(pos[0] * TILE_SIZE, pos[1] * TILE_SIZE, frame)
 
         self.draw_player()
@@ -1273,23 +1335,35 @@ class Quarter4:
 
         # Draw Objectives HUD Box at the bottom center of the screen
         if self.is_quiz_map:
-            box_w, box_h = 340, 80
+            box_w, box_h = 360, 85
             box_x = (self.width - box_w) // 2
-            box_y = self.height - box_h - 20
+            box_y = self.height - box_h - 15
             
-            # Translucent slate blue background (alpha = 190)
+            # Translucent slate blue background
             bg_surf = pygame.Surface((box_w, box_h), pygame.SRCALPHA)
-            bg_surf.fill((15, 23, 42, 190))
+            bg_surf.fill((16, 32, 44, 215))
             self.screen.blit(bg_surf, (box_x, box_y))
             
-            # Border: Gold when locked, Green when complete
-            border_color = (218, 165, 32) if self.quiz_state < 6 else (34, 197, 94)
-            pygame.draw.rect(self.screen, border_color, (box_x, box_y, box_w, box_h), 2, border_radius=8)
+            # Border: Cyan/Gold when exploring, Emerald Green when complete
+            border_color = (0, 210, 230) if self.quiz_state < 6 else (34, 197, 94)
+            pygame.draw.rect(self.screen, border_color, (box_x, box_y, box_w, box_h), 2, border_radius=10)
             
             # Header title in Gold
             title_font = pygame.font.SysFont("Comic Sans MS", 12, bold=True)
-            title_surf = title_font.render("CURRENT OBJECTIVES", True, (255, 215, 0))
+            title_surf = title_font.render("WATER TEMPLE OBJECTIVES", True, (255, 215, 0))
             self.screen.blit(title_surf, (box_x + 15, box_y + 8))
+            
+            # 6 Segmented Progress Pips for Grade 2 visual feedback
+            pip_w, pip_h = 16, 8
+            pip_spacing = 5
+            start_pip_x = box_x + box_w - 15 - (6 * (pip_w + pip_spacing) - pip_spacing)
+            for s_idx in range(1, 7):
+                px = start_pip_x + (s_idx - 1) * (pip_w + pip_spacing)
+                py = box_y + 11
+                is_done = s_idx in self.answered_stations
+                pip_color = (56, 232, 198) if is_done else (40, 60, 75)
+                pygame.draw.rect(self.screen, pip_color, (px, py, pip_w, pip_h), border_radius=3)
+                pygame.draw.rect(self.screen, (255, 255, 255) if is_done else (20, 35, 45), (px, py, pip_w, pip_h), 1, border_radius=3)
             
             # Details font
             item_font = pygame.font.SysFont("Comic Sans MS", 12)
@@ -1299,17 +1373,17 @@ class Quarter4:
             obj1 = f"• Quiz Progress: {q_count}/6 questions answered"
             obj1_color = (255, 255, 255) if q_count < 6 else (34, 197, 94)
             obj1_surf = item_font.render(obj1, True, obj1_color)
-            self.screen.blit(obj1_surf, (box_x + 15, box_y + 28))
+            self.screen.blit(obj1_surf, (box_x + 15, box_y + 30))
             
             # Goal portal state item
             if len(self.answered_stations) < 6:
-                obj2 = "• Portal Status: LOCKED"
+                obj2 = "• Portal Status: LOCKED (Answer all 6 questions)"
                 obj2_color = (244, 63, 94)  # Rose
             else:
-                obj2 = "• Portal Status: OPEN (Enter the portal to exit!)"
+                obj2 = "• Portal Status: OPEN (Enter the portal to finish!)"
                 obj2_color = (34, 197, 94)  # Green
             obj2_surf = item_font.render(obj2, True, obj2_color)
-            self.screen.blit(obj2_surf, (box_x + 15, box_y + 48))
+            self.screen.blit(obj2_surf, (box_x + 15, box_y + 52))
 
         if self.show_info:
             npc_status = []
