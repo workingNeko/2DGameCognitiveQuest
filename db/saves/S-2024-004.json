@@ -1,0 +1,34 @@
+{
+    "student_id": "S-2024-004",
+    "selected_student": {
+        "id": 4,
+        "student_id": "S-2024-004",
+        "first_name": "Ana Mendoza",
+        "last_name": "",
+        "score": 0,
+        "progress": 0,
+        "level": "Grade 2",
+        "gender": "female"
+    },
+    "current_screen": "quarter4",
+    "timestamp": 1788097189.138008,
+    "quarter_data": {
+        "quarter_name": "quarter4",
+        "map_name": "map10.txt",
+        "player_x": 1280,
+        "player_y": 284,
+        "player_dir": "right",
+        "quiz_state": 0,
+        "quiz_station_index": 3,
+        "current_question_index": 2,
+        "completed": false,
+        "first_attempt_correct": {
+            "1": true,
+            "2": true,
+            "3": false,
+            "4": true,
+            "5": true,
+            "6": true
+        }
+    }
+}

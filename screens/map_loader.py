@@ -147,7 +147,7 @@ class MapLoader:
                     elif char in ['B', 'K']:
                         row_list[x] = '7'
                     elif char == 'O':
-                        if self.current_map_name and self.current_map_name.lower() in ["map1.txt", "map2.txt", "map3.txt"]:
+                        if self.current_map_name and self.current_map_name.lower() in ["map1.txt", "map2.txt", "map3.txt", "map10.txt", "map11.txt", "map12.txt"]:
                             row_list[x] = 'G'
                         else:
                             row_list[x] = '6'

@@ -220,6 +220,19 @@ class Quarter4:
         # Bromen NPC (animated)
         self.station_npcs = {}
         self.load_station_npcs()
+        self.npc_bromen_sprites = self.load_npc_sprites_animated(self.NPC_PATH_BROMEN, "bromen")
+        self.npc_bromen_anim_frame = 0
+        self.npc_bromen_anim_timer = 0
+        self.npc_bromen_x = 0
+        self.npc_bromen_y = 0
+        self.npc_bromen_tile_x = 0
+        self.npc_bromen_tile_y = 0
+        self.npc_bromen_found = False
+        self.bromen_dialogue_state = 0  # 0: idle, 1: not enough, 2: ready, 3: completed
+        self.emblem_puzzle_active = False
+        self.emblem_puzzle_solved = False
+        self.load_emblem_puzzle_assets()
+        self.load_puzzle_sounds()
 
         # ============================================================
         # SPAWN PLAYER AND FIND NPCS
@@ -405,15 +418,13 @@ class Quarter4:
         # Set positions from map data
         for marker, positions in self.npc_positions_data.items():
             for x, y in positions:
-                if marker == 'B':
+                if marker == 'B' or marker == 'O':
                     self.npc_bromen_tile_x = x
                     self.npc_bromen_tile_y = y
                     self.npc_bromen_x = x * TILE_SIZE
                     self.npc_bromen_y = y * TILE_SIZE
                     self.npc_bromen_found = True
-                    print(f"Bromen NPC at: ({x}, {y})")
-                elif marker == 'O':
-                    pass
+                    print(f"Bromen NPC (via {marker}) at: ({x}, {y})")
                 elif marker == 'S':
                     self.npc_skeleton_tile_x = x
                     self.npc_skeleton_tile_y = y
@@ -1031,10 +1042,7 @@ class Quarter4:
             box_y = (self.height - box_h) // 2
             btn_rect = pygame.Rect(box_x + (box_w - 200) // 2, box_y + 140, 200, 42)
             if btn_rect.collidepoint(pos):
-                if len(self.answered_stations) < 6:
-                    self.quiz_state = 0
-                else:
-                    self.quiz_state = 5
+                self.quiz_state = 0
                 save_student_progress(self.main_menu)
                 
         # State 5: Final speech click
@@ -1047,6 +1055,24 @@ class Quarter4:
                 self.quiz_state = 6
                 save_student_progress(self.main_menu)
                 print("🎓 Quarter 4 evaluation completed!")
+
+        # Bromen Proximity Dialogue click
+        elif self.bromen_dialogue_state in [1, 2]:
+            if hasattr(self, 'bromen_btn_rect') and self.bromen_btn_rect.collidepoint(pos):
+                if self.bromen_dialogue_state == 1:
+                    self.bromen_dialogue_state = 0
+                    # Push back player to prevent instant trigger loop
+                    self.player_x -= SPEED * 8
+                else:
+                    self.bromen_dialogue_state = 0
+                    self.emblem_puzzle_active = True
+                    self.init_emblem_puzzle()
+                save_student_progress(self.main_menu)
+
+        # Emblem Puzzle reset button click
+        elif self.emblem_puzzle_active:
+            if hasattr(self, 'reset_btn_rect') and self.reset_btn_rect.collidepoint(pos):
+                self.init_emblem_puzzle()
 
     # ============================================================
     # UPDATE
@@ -1096,6 +1122,32 @@ class Quarter4:
                         print(f"🧙‍♂️ Interacting with Station {self.quiz_station_index} NPC!")
                         break
 
+        # Proximity check for Bromen (Final obstacle)
+        if self.quiz_state == 0 and not self.emblem_puzzle_active and self.bromen_dialogue_state == 0 and self.npc_bromen_found:
+            import math
+            player_center_x = self.player_x + TILE_SIZE // 2
+            player_center_y = self.player_y + TILE_SIZE // 2
+            bromen_center_x = self.npc_bromen_x + TILE_SIZE // 2
+            bromen_center_y = self.npc_bromen_y + TILE_SIZE // 2
+            dist = math.hypot(player_center_x - bromen_center_x, player_center_y - bromen_center_y)
+            if dist < TILE_SIZE * 1.5:
+                if len(self.answered_stations) < 6:
+                    self.bromen_dialogue_state = 1  # Not enough
+                else:
+                    self.bromen_dialogue_state = 2  # Ready
+                print(f"🧙‍♂️ Interacting with Bromen! state={self.bromen_dialogue_state}")
+
+        # Update Bromen animation
+        if self.npc_bromen_found and self.npc_bromen_sprites:
+            self.npc_bromen_anim_timer += 1
+            if self.npc_bromen_anim_timer >= 6:
+                self.npc_bromen_anim_timer = 0
+                self.npc_bromen_anim_frame = (self.npc_bromen_anim_frame + 1) % len(self.npc_bromen_sprites)
+
+        # Update Emblem Puzzle if active
+        if self.emblem_puzzle_active:
+            self.update_emblem_puzzle()
+
         self.update_player_movement()
         self.check_portal_teleport_on_hold()
 
@@ -1108,7 +1160,7 @@ class Quarter4:
     # UPDATE PLAYER MOVEMENT
     # ============================================================
     def update_player_movement(self):
-        if self.quiz_state in [1, 2, 3, 5] or (hasattr(self, 'player_block_timer') and self.player_block_timer > 0):
+        if self.quiz_state in [1, 2, 3, 5] or self.emblem_puzzle_active or self.bromen_dialogue_state in [1, 2] or (hasattr(self, 'player_block_timer') and self.player_block_timer > 0):
             self.anim_frame = 0
             return
 
@@ -1298,6 +1350,11 @@ class Quarter4:
                     frame = data["frames"][data["anim_frame"]]
                     self.draw_npc_static(pos[0] * TILE_SIZE, pos[1] * TILE_SIZE, frame)
 
+        # Draw Bromen
+        if self.npc_bromen_found and self.npc_bromen_sprites:
+            frame = self.npc_bromen_sprites[self.npc_bromen_anim_frame]
+            self.draw_npc_static(self.npc_bromen_x, self.npc_bromen_y, frame)
+
         self.draw_player()
 
         # Draw visible tree tiles on top of everything (Second pass)
@@ -1317,6 +1374,14 @@ class Quarter4:
             self.draw_correct_dialog()
         elif self.quiz_state == 5:
             self.draw_final_dialog()
+
+        # Draw Bromen proximity dialogue
+        if self.bromen_dialogue_state in [1, 2]:
+            self.draw_bromen_dialog()
+
+        # Draw Emblem Puzzle overlay
+        if self.emblem_puzzle_active:
+            self.draw_emblem_puzzle()
 
         self.draw_ui()
 
@@ -1427,6 +1492,50 @@ class Quarter4:
                 return "back"
             elif event.key == pygame.K_i:
                 self.show_info = not self.show_info
+                
+        elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+            self.cursor_pos = event.pos
+            self.trigger_click(event.pos)
+            
+            if self.emblem_puzzle_active and not self.emblem_puzzle_solved:
+                for piece in self.emblem_puzzle_pieces:
+                    if not piece["is_placed"]:
+                        piece_rect = pygame.Rect(piece["x"], piece["y"], 75, 75)
+                        if piece_rect.collidepoint(event.pos):
+                            self.dragged_emblem = piece
+                            self.drag_offset_x = piece["x"] - event.pos[0]
+                            self.drag_offset_y = piece["y"] - event.pos[1]
+                            break
+                            
+        elif event.type == pygame.MOUSEBUTTONUP and event.button == 1:
+            if self.emblem_puzzle_active and self.dragged_emblem:
+                matching_slot = None
+                for slot in self.emblem_puzzle_slots:
+                    if slot["name"] == self.dragged_emblem["name"]:
+                        matching_slot = slot
+                        break
+                if matching_slot:
+                    dist = math.hypot(self.dragged_emblem["x"] - matching_slot["target_x"], self.dragged_emblem["y"] - matching_slot["target_y"])
+                    if dist < 45:
+                        self.dragged_emblem["x"] = matching_slot["target_x"]
+                        self.dragged_emblem["y"] = matching_slot["target_y"]
+                        self.dragged_emblem["is_placed"] = True
+                        if self.sound_snap:
+                            try:
+                                self.sound_snap.play()
+                            except Exception:
+                                pass
+                    else:
+                        self.dragged_emblem["x"] = self.dragged_emblem["deck_x"]
+                        self.dragged_emblem["y"] = self.dragged_emblem["deck_y"]
+                self.dragged_emblem = None
+                
+        elif event.type == pygame.MOUSEMOTION:
+            self.cursor_pos = event.pos
+            if self.emblem_puzzle_active and self.dragged_emblem:
+                self.dragged_emblem["x"] = event.pos[0] + self.drag_offset_x
+                self.dragged_emblem["y"] = event.pos[1] + self.drag_offset_y
+                
         return None
 
     # ============================================================
@@ -1608,6 +1717,298 @@ class Quarter4:
         c_surf = speaker_font.render("Activate Portal", True, (255, 255, 255) if not is_hovered else (0, 0, 0))
         c_rect = c_surf.get_rect(center=btn_rect.center)
         self.screen.blit(c_surf, c_rect)
+
+    def load_emblem_puzzle_assets(self):
+        self.emblem_puzzle_bg = None
+        self.emblem_images = {}
+        
+        puzzle_dir = os.path.join(self.OBJECTS_PATH, "quarter4tiles", "EmblemPuzzle")
+        bg_path = os.path.join(puzzle_dir, "background.png")
+        if os.path.exists(bg_path):
+            try:
+                self.emblem_puzzle_bg = pygame.image.load(bg_path).convert()
+                self.emblem_puzzle_bg = pygame.transform.smoothscale(self.emblem_puzzle_bg, (500, 500))
+            except Exception as e:
+                print(f"Error loading puzzle background: {e}")
+                
+        names = ["fish", "octopus", "starfish", "coin", "chest", "turtle"]
+        for name in names:
+            p_path = os.path.join(puzzle_dir, f"{name}.png")
+            if os.path.exists(p_path):
+                try:
+                    img = pygame.image.load(p_path).convert_alpha()
+                    self.emblem_images[name] = pygame.transform.smoothscale(img, (75, 75))
+                except Exception as e:
+                    print(f"Error loading emblem {name}: {e}")
+
+    def load_puzzle_sounds(self):
+        self.sound_correct = None
+        self.sound_snap = None
+        try:
+            correct_path = os.path.join(self.BASE_DIR, "assets", "sounds", "correct.wav")
+            if os.path.exists(correct_path):
+                self.sound_correct = pygame.mixer.Sound(correct_path)
+            snap_path = os.path.join(self.BASE_DIR, "assets", "sounds", "snap.wav")
+            if os.path.exists(snap_path):
+                self.sound_snap = pygame.mixer.Sound(snap_path)
+        except Exception as e:
+            print(f"Sound load warning: {e}")
+
+    def init_emblem_puzzle(self):
+        self.emblem_puzzle_pieces = []
+        self.emblem_puzzle_slots = []
+        self.dragged_emblem = None
+        self.emblem_puzzle_solved = False
+        self.emblem_puzzle_solved_time = 0
+        
+        box_w, box_h = 800, 560
+        box_x = (self.width - box_w) // 2
+        box_y = (self.height - box_h) // 2
+        
+        mural_x = box_x + 30
+        mural_y = box_y + 40
+        
+        slot_defs = [
+            {"name": "fish", "tx": 100, "ty": 120},
+            {"name": "octopus", "tx": 250, "ty": 110},
+            {"name": "starfish", "tx": 400, "ty": 130},
+            {"name": "coin", "tx": 90, "ty": 380},
+            {"name": "chest", "tx": 250, "ty": 370},
+            {"name": "turtle", "tx": 410, "ty": 390}
+        ]
+        
+        for sd in slot_defs:
+            self.emblem_puzzle_slots.append({
+                "name": sd["name"],
+                "target_x": mural_x + sd["tx"],
+                "target_y": mural_y + sd["ty"]
+            })
+            
+        deck_x = box_x + 560
+        deck_y = box_y + 40
+        deck_w = 210
+        deck_h = 500
+        
+        import random
+        shuffled_names = ["fish", "octopus", "starfish", "coin", "chest", "turtle"]
+        random.shuffle(shuffled_names)
+        
+        for idx, name in enumerate(shuffled_names):
+            row = idx // 2
+            col = idx % 2
+            px = deck_x + 25 + col * 90
+            py = deck_y + 60 + row * 130
+            
+            self.emblem_puzzle_pieces.append({
+                "name": name,
+                "x": px,
+                "y": py,
+                "deck_x": px,
+                "deck_y": py,
+                "is_placed": False
+            })
+
+    def update_emblem_puzzle(self):
+        if not self.emblem_puzzle_active:
+            return
+            
+        if all(p["is_placed"] for p in self.emblem_puzzle_pieces):
+            if self.emblem_puzzle_solved_time == 0:
+                self.emblem_puzzle_solved_time = pygame.time.get_ticks()
+            else:
+                current_time = pygame.time.get_ticks()
+                if current_time - self.emblem_puzzle_solved_time > 1800:
+                    self.emblem_puzzle_solved = True
+                    self.emblem_puzzle_active = False
+                    self.quiz_state = 5  # final congrats speech!
+                    self.bromen_dialogue_state = 3
+                    if self.sound_correct:
+                        try:
+                            self.sound_correct.play()
+                        except Exception:
+                            pass
+                    return
+                    
+        # Track gesture fist coordinates if hand is active
+        if self.hand_detected and self.fist_closed:
+            if not self.dragged_emblem:
+                for piece in self.emblem_puzzle_pieces:
+                    if not piece["is_placed"]:
+                        piece_rect = pygame.Rect(piece["x"], piece["y"], 75, 75)
+                        if piece_rect.collidepoint(self.cursor_pos):
+                            self.dragged_emblem = piece
+                            self.drag_offset_x = piece["x"] - self.cursor_pos[0]
+                            self.drag_offset_y = piece["y"] - self.cursor_pos[1]
+                            break
+            if self.dragged_emblem:
+                self.dragged_emblem["x"] = self.cursor_pos[0] + self.drag_offset_x
+                self.dragged_emblem["y"] = self.cursor_pos[1] + self.drag_offset_y
+        else:
+            if self.dragged_emblem:
+                matching_slot = None
+                for slot in self.emblem_puzzle_slots:
+                    if slot["name"] == self.dragged_emblem["name"]:
+                        matching_slot = slot
+                        break
+                        
+                if matching_slot:
+                    dist = math.hypot(self.dragged_emblem["x"] - matching_slot["target_x"], self.dragged_emblem["y"] - matching_slot["target_y"])
+                    if dist < 45:
+                        self.dragged_emblem["x"] = matching_slot["target_x"]
+                        self.dragged_emblem["y"] = matching_slot["target_y"]
+                        self.dragged_emblem["is_placed"] = True
+                        if self.sound_snap:
+                            try:
+                                self.sound_snap.play()
+                            except Exception:
+                                pass
+                    else:
+                        self.dragged_emblem["x"] = self.dragged_emblem["deck_x"]
+                        self.dragged_emblem["y"] = self.dragged_emblem["deck_y"]
+                self.dragged_emblem = None
+
+    def draw_emblem_puzzle(self):
+        if not self.emblem_puzzle_active:
+            return
+            
+        overlay = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
+        overlay.fill((0, 0, 0, 180))
+        self.screen.blit(overlay, (0, 0))
+        
+        box_w, box_h = 800, 560
+        box_x = (self.width - box_w) // 2
+        box_y = (self.height - box_h) // 2
+        
+        bg_surf = pygame.Surface((box_w, box_h), pygame.SRCALPHA)
+        bg_surf.fill((15, 23, 42, 240))
+        self.screen.blit(bg_surf, (box_x, box_y))
+        pygame.draw.rect(self.screen, (218, 165, 32), (box_x, box_y, box_w, box_h), 3, border_radius=12)
+        
+        title_font = pygame.font.SysFont("Comic Sans MS", 22, bold=True)
+        title_surf = title_font.render("Ancient Shipwreck Mural Puzzle", True, (255, 215, 0))
+        self.screen.blit(title_surf, (box_x + (box_w - title_surf.get_width()) // 2, box_y + 12))
+        
+        mural_x = box_x + 30
+        mural_y = box_y + 40
+        if self.emblem_puzzle_bg:
+            self.screen.blit(self.emblem_puzzle_bg, (mural_x, mural_y))
+        else:
+            pygame.draw.rect(self.screen, (30, 41, 59), (mural_x, mural_y, 500, 500), border_radius=8)
+        pygame.draw.rect(self.screen, (100, 116, 139), (mural_x, mural_y, 500, 500), 2, border_radius=8)
+        
+        deck_x = box_x + 560
+        deck_y = box_y + 40
+        deck_w = 210
+        deck_h = 500
+        pygame.draw.rect(self.screen, (30, 41, 59), (deck_x, deck_y, deck_w, deck_h), border_radius=12)
+        pygame.draw.rect(self.screen, (100, 116, 139), (deck_x, deck_y, deck_w, deck_h), 2, border_radius=12)
+        
+        label_font = pygame.font.SysFont("Comic Sans MS", 13, bold=True)
+        deck_lbl = label_font.render("COLLECTED EMBLEMS", True, (218, 165, 32))
+        self.screen.blit(deck_lbl, (deck_x + (deck_w - deck_lbl.get_width()) // 2, deck_y + 15))
+        
+        for slot in self.emblem_puzzle_slots:
+            name = slot["name"]
+            sx = slot["target_x"]
+            sy = slot["target_y"]
+            
+            if name in self.emblem_images:
+                orig = self.emblem_images[name]
+                silh = orig.copy()
+                silh.fill((0, 0, 0, 140), special_flags=pygame.BLEND_RGBA_MULT)
+                pygame.draw.circle(self.screen, (255, 215, 0), (sx + 37, sy + 37), 40, 1)
+                self.screen.blit(silh, (sx, sy))
+                
+        for piece in self.emblem_puzzle_pieces:
+            name = piece["name"]
+            if name in self.emblem_images:
+                if not piece["is_placed"] and piece != self.dragged_emblem:
+                    self.screen.blit(self.emblem_images[name], (piece["x"], piece["y"]))
+                    
+        for piece in self.emblem_puzzle_pieces:
+            name = piece["name"]
+            if name in self.emblem_images:
+                if piece["is_placed"]:
+                    self.screen.blit(self.emblem_images[name], (piece["x"], piece["y"]))
+                    pygame.draw.rect(self.screen, (56, 232, 198), (piece["x"], piece["y"], 75, 75), 2, border_radius=6)
+                    
+        if self.dragged_emblem:
+            name = self.dragged_emblem["name"]
+            if name in self.emblem_images:
+                self.screen.blit(self.emblem_images[name], (self.dragged_emblem["x"], self.dragged_emblem["y"]))
+                pygame.draw.rect(self.screen, (250, 204, 21), (self.dragged_emblem["x"], self.dragged_emblem["y"], 75, 75), 2, border_radius=6)
+                
+        reset_rect = pygame.Rect(deck_x + 30, deck_y + deck_h - 60, 150, 40)
+        is_hover = reset_rect.collidepoint(self.cursor_pos)
+        r_color = (255, 215, 0) if is_hover else (30, 41, 59)
+        t_color = (0, 0, 0) if is_hover else (255, 255, 255)
+        
+        pygame.draw.rect(self.screen, r_color, reset_rect, border_radius=8)
+        pygame.draw.rect(self.screen, (218, 165, 32), reset_rect, 2, border_radius=8)
+        btn_font = pygame.font.SysFont("Comic Sans MS", 14, bold=True)
+        btn_txt = btn_font.render("Reset Puzzle", True, t_color)
+        self.screen.blit(btn_txt, btn_txt.get_rect(center=reset_rect.center))
+        
+        self.reset_btn_rect = reset_rect
+
+    def draw_bromen_dialog(self):
+        overlay = pygame.Surface((self.width, self.height))
+        overlay.fill((0, 0, 0))
+        overlay.set_alpha(150)
+        self.screen.blit(overlay, (0, 0))
+
+        box_w, box_h = 580, 240
+        box_x = (self.width - box_w) // 2
+        box_y = (self.height - box_h) // 2
+
+        dialog_rect = pygame.Rect(box_x, box_y, box_w, box_h)
+        pygame.draw.rect(self.screen, (15, 23, 42), dialog_rect)
+        pygame.draw.rect(self.screen, (218, 165, 32), dialog_rect, 3, border_radius=8)
+
+        speaker_font = pygame.font.SysFont("Comic Sans MS", 18, bold=True)
+        speaker_surf = speaker_font.render("Guardian Bromen", True, (218, 165, 32))
+        self.screen.blit(speaker_surf, (box_x + 25, box_y + 20))
+        pygame.draw.line(self.screen, (218, 165, 32), (box_x + 25, box_y + 48), (box_x + 180, box_y + 48), 2)
+
+        q_font = pygame.font.SysFont("Comic Sans MS", 16)
+        if self.bromen_dialogue_state == 1:
+            line1 = "Halt, student! The exit portal is sealed."
+            line2 = f"You must first collect all 6 sacred emblems from the"
+            line3 = f"guardians in this crypt. (Current: {len(self.answered_stations)}/6)"
+            btn_text = "I will go search for them"
+        else:
+            line1 = "Excellent! You have collected all 6 emblems."
+            line2 = "To unlock the gate, you must now place the emblems"
+            line3 = "onto the correct slots on the ancient shipwreck mural."
+            btn_text = "Solve the Mural Puzzle"
+
+        y_text = box_y + 65
+        for line in [line1, line2, line3]:
+            txt_surf = q_font.render(line, True, (255, 255, 255))
+            self.screen.blit(txt_surf, (box_x + 25, y_text))
+            y_text += 25
+
+        button_w, button_h = 300, 42
+        button_x = box_x + (box_w - button_w) // 2
+        button_y = box_y + 170
+        btn_rect = pygame.Rect(button_x, button_y, button_w, button_h)
+        is_hovered = btn_rect.collidepoint(self.cursor_pos)
+
+        if is_hovered:
+            bg_color = (255, 215, 0)
+            text_color = (0, 0, 0)
+        else:
+            bg_color = (30, 41, 59)
+            text_color = (255, 255, 255)
+
+        pygame.draw.rect(self.screen, bg_color, btn_rect, border_radius=12)
+        pygame.draw.rect(self.screen, (0, 0, 0), btn_rect, 3, border_radius=12)
+
+        c_surf = q_font.render(btn_text, True, text_color)
+        c_rect = c_surf.get_rect(center=btn_rect.center)
+        self.screen.blit(c_surf, c_rect)
+
+        self.bromen_btn_rect = btn_rect
 
     def wrap_text(self, text, font, max_width):
         words = text.split(' ')
