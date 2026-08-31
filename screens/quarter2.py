@@ -237,59 +237,59 @@ class Quarter2:
         self.npc_star_anim_frame = 0
         self.npc_star_anim_timer = 0
 
-        # Distinct Filipino Character NPCs for Stations 1 to 5
+        # Distinct Filipino Character NPCs for Stations 1 to 5 (Topic Titles only, No NPC names)
         if self.map_name == "map5.txt":
             self.station_npc_info = {
                 1: {
-                    "name": "Aling Nena",
-                    "title": "Aling Nena - Bibingka & Unit Fractions (1/4 Slices)",
-                    "dialog_title": "Aling Nena's Fresh Bibingka Fraction Challenge",
-                    "wrong_encouragement": "Aling Nena - Check the Slices (Try Again)",
-                    "correct_praise": "Aling Nena - Correct Fraction! (Delicious Slices)",
+                    "name": "Station 1",
+                    "title": "Bibingka & Unit Fractions (1/4 Slices)",
+                    "dialog_title": "Fresh Bibingka Fraction Challenge",
+                    "wrong_encouragement": "Check the Slices • Try Again",
+                    "correct_praise": "Correct Fraction! • Well Done",
                     "target_math": "1 Slice out of 4 Equal Slices = 1/4 (One-fourth)",
                     "frames": [],
                     "anim_frame": 0,
                     "anim_timer": 0
                 },
                 2: {
-                    "name": "Kuya Jun",
-                    "title": "Kuya Jun - Equal Sharing & Division (20 ÷ 4)",
-                    "dialog_title": "Kuya Jun's Mango Harvest Division Challenge",
-                    "wrong_encouragement": "Kuya Jun - Count the Baskets (Try Again)",
-                    "correct_praise": "Kuya Jun - Equal Sharing Mastered!",
+                    "name": "Station 2",
+                    "title": "Equal Sharing & Division (20 ÷ 4)",
+                    "dialog_title": "Mango Harvest Division Challenge",
+                    "wrong_encouragement": "Count the Baskets • Try Again",
+                    "correct_praise": "Equal Sharing Mastered! • Well Done",
                     "target_math": "20 Mangoes ÷ 4 Baskets = 5 Mangoes per Basket",
                     "frames": [],
                     "anim_frame": 0,
                     "anim_timer": 0
                 },
                 3: {
-                    "name": "Mang Berto",
-                    "title": "Mang Berto - 3D Geometric Solids (Salakot Cone)",
-                    "dialog_title": "Mang Berto's Traditional Shape Crafting Challenge",
-                    "wrong_encouragement": "Mang Berto - Inspect the Shape Faces (Try Again)",
-                    "correct_praise": "Mang Berto - Exact Geometric Shape!",
+                    "name": "Station 3",
+                    "title": "3D Geometric Solids (Salakot Cone)",
+                    "dialog_title": "Traditional Shape Crafting Challenge",
+                    "wrong_encouragement": "Inspect the Shape Faces • Try Again",
+                    "correct_praise": "Exact Geometric Shape! • Well Done",
                     "target_math": "Salakot Hat = Cone (1 Flat Circular Base + 1 Vertex)",
                     "frames": [],
                     "anim_frame": 0,
                     "anim_timer": 0
                 },
                 4: {
-                    "name": "Kapitan Dan",
-                    "title": "Kapitan Dan - Analog Clock Time Reading (8:30 AM)",
-                    "dialog_title": "Kapitan Dan's Fiesta Schedule Clock Challenge",
-                    "wrong_encouragement": "Kapitan Dan - Check the Clock Hands (Try Again)",
-                    "correct_praise": "Kapitan Dan - Exactly On Time!",
+                    "name": "Station 4",
+                    "title": "Analog Clock Time Reading (8:30 AM)",
+                    "dialog_title": "Fiesta Schedule Clock Challenge",
+                    "wrong_encouragement": "Check the Clock Hands • Try Again",
+                    "correct_praise": "Exactly On Time! • Well Done",
                     "target_math": "8:30 AM = Hour Hand between 8 & 9, Minute Hand at 6",
                     "frames": [],
                     "anim_frame": 0,
                     "anim_timer": 0
                 },
                 5: {
-                    "name": "Tito Dante",
-                    "title": "Tito Dante - Garden Perimeter & Measurement",
-                    "dialog_title": "Tito Dante's Bamboo Garden Perimeter Challenge",
-                    "wrong_encouragement": "Tito Dante - Measure All Outer Sides (Try Again)",
-                    "correct_praise": "Tito Dante - Garden Perimeter Complete!",
+                    "name": "Station 5",
+                    "title": "Garden Perimeter & Measurement",
+                    "dialog_title": "Bamboo Garden Perimeter Challenge",
+                    "wrong_encouragement": "Measure All Outer Sides • Try Again",
+                    "correct_praise": "Garden Perimeter Complete! • Well Done",
                     "target_math": "Perimeter = 5m + 3m + 5m + 3m = 16 Meters Total",
                     "frames": [],
                     "anim_frame": 0,
@@ -299,56 +299,56 @@ class Quarter2:
         else:
             self.station_npc_info = {
                 1: {
-                    "name": "Tindero Tomas",
-                    "title": "Tindero Tomas - Sari-Sari Store & Change (₱50 - ₱35)",
-                    "dialog_title": "Tindero Tomas' Sari-Sari Store Change Challenge",
-                    "wrong_encouragement": "Tomas - Count the Change (Try Again)",
-                    "correct_praise": "Tomas - Exact Change! (Well Done)",
+                    "name": "Station 1",
+                    "title": "Sari-Sari Store & Change (₱50 - ₱35)",
+                    "dialog_title": "Sari-Sari Store Change Challenge",
+                    "wrong_encouragement": "Count the Change • Try Again",
+                    "correct_praise": "Exact Change! • Well Done",
                     "target_math": "₱50 Bill - ₱35 Purchase = ₱15 Change",
                     "frames": [],
                     "anim_frame": 0,
                     "anim_timer": 0
                 },
                 2: {
-                    "name": "Manong Sorbetero",
-                    "title": "Manong Sorbetero - Philippine Coins (₱25 Combinations)",
-                    "dialog_title": "Manong Sorbetero's ₱25 Sorbetes Coin Challenge",
-                    "wrong_encouragement": "Sorbetero - Count the Coins (Try Again)",
-                    "correct_praise": "Sorbetero - Exact Payment! (Delicious Reward)",
+                    "name": "Station 2",
+                    "title": "Philippine Coins (₱25 Combinations)",
+                    "dialog_title": "₱25 Sorbetes Coin Challenge",
+                    "wrong_encouragement": "Count the Coins • Try Again",
+                    "correct_praise": "Exact Payment! • Well Done",
                     "target_math": "₱25 Cone = One ₱20 Coin + One ₱5 Coin",
                     "frames": [],
                     "anim_frame": 0,
                     "anim_timer": 0
                 },
                 3: {
-                    "name": "Kuya Drayber",
-                    "title": "Kuya Drayber - Jeepney Passenger Fare & Multiplication",
-                    "dialog_title": "Kuya Drayber's Jeepney Passenger Fare Challenge",
-                    "wrong_encouragement": "Kuya Drayber - Check the Fare (Try Again)",
-                    "correct_praise": "Kuya Drayber - Full Fare Collected!",
+                    "name": "Station 3",
+                    "title": "Jeepney Passenger Fare & Multiplication",
+                    "dialog_title": "Jeepney Passenger Fare Challenge",
+                    "wrong_encouragement": "Check the Fare • Try Again",
+                    "correct_praise": "Full Fare Collected! • Well Done",
                     "target_math": "3 Students × ₱12 Fare = ₱36 Total Payment",
                     "frames": [],
                     "anim_frame": 0,
                     "anim_timer": 0
                 },
                 4: {
-                    "name": "Ate Maya",
-                    "title": "Ate Maya - Market Fruit Scale (Grams & Kilograms)",
-                    "dialog_title": "Ate Maya's Market Fruit Scale Challenge",
-                    "wrong_encouragement": "Ate Maya - Weigh the Fruit (Try Again)",
-                    "correct_praise": "Ate Maya - Exact Weight Scale! (Sweet Harvest)",
+                    "name": "Station 4",
+                    "title": "Market Fruit Scale (Grams & Kilograms)",
+                    "dialog_title": "Market Fruit Scale Challenge",
+                    "wrong_encouragement": "Weigh the Fruit • Try Again",
+                    "correct_praise": "Exact Weight Scale! • Well Done",
                     "target_math": "4 Mangoes × 500g = 2,000g = 2 Kilograms (2kg)",
                     "frames": [],
                     "anim_frame": 0,
                     "anim_timer": 0
                 },
                 5: {
-                    "name": "Lola Rosa",
-                    "title": "Lola Rosa - Fiesta Budgeting & Money Comparison",
-                    "dialog_title": "Lola Rosa's Fiesta Parol Budget Challenge",
-                    "wrong_encouragement": "Lola Rosa - Check Your Budget (Try Again)",
-                    "correct_praise": "Lola Rosa - Budget is Enough! (Fiesta Unlocked)",
-                    "target_math": "₱350 Budget > ₱300 Total Cost (Budget is Sufficient!)",
+                    "name": "Station 5",
+                    "title": "Fiesta Budgeting & Money Comparison",
+                    "dialog_title": "Fiesta Parol Budget Challenge",
+                    "wrong_encouragement": "Check Your Budget • Try Again",
+                    "correct_praise": "Budget is Enough! • Well Done",
+                    "target_math": "₱350 Budget > ₱300 Total Materials Cost",
                     "frames": [],
                     "anim_frame": 0,
                     "anim_timer": 0
@@ -543,13 +543,13 @@ class Quarter2:
             "Well done! The Barrio Fiesta continues!"
         ]
 
-        # Questions List (DepEd Grade 2 Curriculum: Customized per Map)
+        # Questions List (DepEd Grade 2 Curriculum: Customized per Map - No NPC Names)
         if self.map_name == "map5.txt":
             self.quiz_questions = [
                 {
                     "station": 1,
-                    "title": "ALING NENA • BIBINGKA FRACTIONS (1/4)",
-                    "question": "Aling Nena sliced a fresh circular Bibingka into 4 equal slices. Juan ate 1 slice. What fraction part of the Bibingka did Juan eat?",
+                    "title": "STATION 1 • BIBINGKA FRACTIONS (1/4)",
+                    "question": "A fresh circular Bibingka was sliced into 4 equal parts. Juan ate 1 slice. What fraction part of the Bibingka did Juan eat?",
                     "choices": ["A. 1/2 (One-half)", "B. 1/4 (One-fourth)", "C. 1/3 (One-third)", "D. 3/4 (Three-fourths)"],
                     "correct": 1,
                     "visual_type": "bibingka_fraction",
@@ -557,8 +557,8 @@ class Quarter2:
                 },
                 {
                     "station": 2,
-                    "title": "KUYA JUN • EQUAL SHARING DIVISION (20 ÷ 4)",
-                    "question": "Kuya Jun harvested 20 ripe Carabao mangoes. He divides them equally into 4 woven bayong baskets. How many mangoes are in each basket? (20 ÷ 4)",
+                    "title": "STATION 2 • EQUAL SHARING DIVISION (20 ÷ 4)",
+                    "question": "There are 20 ripe Carabao mangoes divided equally into 4 woven bayong baskets. How many mangoes are in each basket? (20 ÷ 4)",
                     "choices": ["A. 4 mangoes", "B. 5 mangoes", "C. 6 mangoes", "D. 8 mangoes"],
                     "correct": 1,
                     "visual_type": "mango_division",
@@ -566,8 +566,8 @@ class Quarter2:
                 },
                 {
                     "station": 3,
-                    "title": "MANG BERTO • 3D GEOMETRIC SOLIDS (CONE)",
-                    "question": "Mang Berto is crafting a traditional farmer's Salakot hat. Which 3D geometric solid has 1 flat circular base and 1 pointed top vertex?",
+                    "title": "STATION 3 • 3D GEOMETRIC SOLIDS (CONE)",
+                    "question": "A traditional farmer's Salakot hat is being crafted. Which 3D geometric solid has 1 flat circular base and 1 pointed top vertex?",
                     "choices": ["A. Cube", "B. Cylinder", "C. Cone", "D. Sphere"],
                     "correct": 2,
                     "visual_type": "salakot_cone",
@@ -575,7 +575,7 @@ class Quarter2:
                 },
                 {
                     "station": 4,
-                    "title": "KAPITAN DAN • ANALOG CLOCK TIME (8:30 AM)",
+                    "title": "STATION 4 • ANALOG CLOCK TIME (8:30 AM)",
                     "question": "The Grand Fiesta Parade starts at 8:30 AM. How should the hands be positioned on the analog clock at 8:30?",
                     "choices": [
                         "A. Short hand between 8 and 9, Long hand pointing at 6",
@@ -589,8 +589,8 @@ class Quarter2:
                 },
                 {
                     "station": 5,
-                    "title": "TITO DANTE • GARDEN PERIMETER (5m + 3m + 5m + 3m)",
-                    "question": "Tito Dante builds a rectangular bamboo vegetable garden. The length is 5 meters and width is 3 meters. What is the total perimeter around the garden?",
+                    "title": "STATION 5 • GARDEN PERIMETER (5m + 3m + 5m + 3m)",
+                    "question": "A rectangular bamboo vegetable garden has a length of 5 meters and width of 3 meters. What is the total perimeter around the garden?",
                     "choices": ["A. 8 meters", "B. 15 meters", "C. 16 meters", "D. 20 meters"],
                     "correct": 2,
                     "visual_type": "garden_perimeter",
@@ -601,8 +601,8 @@ class Quarter2:
             self.quiz_questions = [
                 {
                     "station": 1,
-                    "title": "TINDERO TOMAS • SARI-SARI STORE SUKLI",
-                    "question": "A customer bought items worth ₱35 and gave Tomas a ₱50 bill. How much change (Sukli) should Tomas give back? (₱50 - ₱35)",
+                    "title": "STATION 1 • SARI-SARI STORE SUKLI",
+                    "question": "A customer bought items worth ₱35 and paid with a ₱50 bill. How much change (Sukli) should be given back? (₱50 - ₱35)",
                     "choices": ["A. ₱10", "B. ₱15", "C. ₱20", "D. ₱25"],
                     "correct": 1,
                     "visual_type": "sari_sukli",
@@ -610,7 +610,7 @@ class Quarter2:
                 },
                 {
                     "station": 2,
-                    "title": "MANONG SORBETERO • ₱25 COIN COMBINATIONS",
+                    "title": "STATION 2 • ₱25 COIN COMBINATIONS",
                     "question": "A Double Ube-Cheese Sorbetes cone costs ₱25. Which combination of Philippine coins equals exactly ₱25?",
                     "choices": ["A. One ₱20 coin + One ₱5 coin", "B. Two ₱10 coins + One ₱1 coin", "C. Three ₱5 coins", "D. One ₱10 coin + One ₱5 coin"],
                     "correct": 0,
@@ -619,7 +619,7 @@ class Quarter2:
                 },
                 {
                     "station": 3,
-                    "title": "KUYA DRAYBER • JEEPNEY FARE MULTIPLICATION",
+                    "title": "STATION 3 • JEEPNEY FARE MULTIPLICATION",
                     "question": "3 students rode the Jeepney. The fare is ₱12 per student. How much is the total fare payment? (3 × ₱12 or ₱12 + ₱12 + ₱12)",
                     "choices": ["A. ₱24", "B. ₱30", "C. ₱36", "D. ₱40"],
                     "correct": 2,
@@ -628,7 +628,7 @@ class Quarter2:
                 },
                 {
                     "station": 4,
-                    "title": "ATE MAYA • PALENGKE FRUIT SCALE (MASS)",
+                    "title": "STATION 4 • PALENGKE FRUIT SCALE (MASS)",
                     "question": "One Carabao mango weighs 500 grams (g). How many mangoes are needed to weigh exactly 2 Kilograms (2,000 g)? (500g × 4 = 2,000g = 2kg)",
                     "choices": ["A. 2 mangoes", "B. 3 mangoes", "C. 4 mangoes", "D. 5 mangoes"],
                     "correct": 2,
@@ -637,12 +637,12 @@ class Quarter2:
                 },
                 {
                     "station": 5,
-                    "title": "LOLA ROSA • FIESTA PAROL BUDGET (> < =)",
-                    "question": "Lola Rosa has a budget of ₱350. The bamboo sticks cost ₱120 and the papel de hapon costs ₱180 (Total = ₱300). Is her budget enough? (₱350 > ₱300)",
+                    "title": "STATION 5 • FIESTA PAROL BUDGET (> < =)",
+                    "question": "A budget for fiesta parol making is ₱350. The bamboo sticks cost ₱120 and the papel de hapon costs ₱180 (Total = ₱300). Is the budget enough? (₱350 > ₱300)",
                     "choices": ["A. Yes, ₱350 is greater than ₱300 (₱350 > ₱300)", "B. No, ₱350 is less than ₱300 (₱350 < ₱300)", "C. No, the budget is exactly equal (₱350 = ₱300)", "D. No, she needs ₱100 more"],
                     "correct": 0,
                     "visual_type": "fiesta_budget",
-                    "hint": "Add the materials: ₱120 + ₱180 = ₱300. Since ₱350 is greater than ₱300 (₱350 > ₱300), her budget is enough!"
+                    "hint": "Add the materials: ₱120 + ₱180 = ₱300. Since ₱350 is greater than ₱300 (₱350 > ₱300), the budget is enough!"
                 }
             ]
 
