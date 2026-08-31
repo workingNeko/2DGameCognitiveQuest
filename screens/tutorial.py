@@ -449,13 +449,16 @@ class TutorialScreen:
         scaled_pl = pygame.transform.scale(pl_f, (int(TILE_SIZE * ZOOM), int(TILE_SIZE * ZOOM)))
         self.screen.blit(scaled_pl, (pl_sx, pl_sy))
 
-        # 5. Dynamic Compass Pointers & On-Screen Quest Badges
+        # 5. Demonstration Animation Overlay (Visual guide trail, animated steering, and fist hold demo)
+        self.draw_demonstration_overlay()
+
+        # 6. Dynamic Compass Pointers & On-Screen Quest Badges
         self.draw_compass_and_badges()
 
-        # 6. Top Visual Gameplay Banner
+        # 7. Top Visual Gameplay Banner
         self.draw_top_banner()
 
-        # 7. Prominent Skip Button
+        # 8. Prominent Skip Button
         skip_rect = pygame.Rect(self.width - 220, 20, 200, 46)
         skip_hov = skip_rect.collidepoint(self.cursor_pos)
         pygame.draw.rect(self.screen, (220, 38, 38) if skip_hov else (30, 41, 59), skip_rect, border_radius=12)
@@ -463,9 +466,10 @@ class TutorialScreen:
         skip_txt = self.skip_font.render("SKIP TUTORIAL >>", True, (255, 255, 255))
         self.screen.blit(skip_txt, skip_txt.get_rect(center=skip_rect.center))
 
-        # 8. Render Quiz Modal Dialogs
+        # 9. Render Quiz Modal Dialogs
         if self.quiz_state == 1:
             self.draw_sample_quiz_dialog()
+            self.draw_quiz_gesture_demo()
         elif self.quiz_state == 2:
             self.draw_sample_wrong_dialog()
         elif self.quiz_state == 3:
@@ -546,6 +550,147 @@ class TutorialScreen:
                 pygame.draw.rect(self.screen, (74, 222, 128), p_rect, border_radius=8)
                 pygame.draw.rect(self.screen, (255, 255, 255), p_rect, 2, border_radius=8)
                 self.screen.blit(ptr_surf, (p_rect.x + 8, p_rect.y + 4))
+
+    # ============================================================
+    # DEMONSTRATION ANIMATION OVERLAY
+    # ============================================================
+    def draw_demonstration_overlay(self):
+        """Draws visual demonstration animations guiding the player on screen"""
+        now = pygame.time.get_ticks()
+
+        # 1. In-World Animated Guide Trail (Floor Chevrons)
+        if self.phase == 1:
+            pl_sx = (self.player_x - self.camera_x) * ZOOM + (TILE_SIZE * ZOOM) / 2
+            pl_sy = (self.player_y - self.camera_y) * ZOOM + (TILE_SIZE * ZOOM) / 2
+            npc_sx = (self.npc_tile_x * TILE_SIZE - self.camera_x) * ZOOM + (TILE_SIZE * ZOOM) / 2
+            npc_sy = (self.npc_tile_y * TILE_SIZE - self.camera_y) * ZOOM + (TILE_SIZE * ZOOM) / 2
+
+            # Only draw if player is to the left of the NPC
+            if npc_sx > pl_sx + 20:
+                step = 36 * ZOOM
+                offset = (now * 0.04) % step
+                cur_x = pl_sx + offset
+                while cur_x < npc_sx - 20:
+                    pulse_r = int((4 + math.sin(now * 0.01 + cur_x * 0.1) * 1.5) * ZOOM)
+                    p1 = (cur_x - 6 * ZOOM, pl_sy - 8 * ZOOM)
+                    p2 = (cur_x + 4 * ZOOM, pl_sy)
+                    p3 = (cur_x - 6 * ZOOM, pl_sy + 8 * ZOOM)
+                    pygame.draw.lines(self.screen, (255, 215, 0), False, [p1, p2, p3], 3)
+                    pygame.draw.circle(self.screen, (254, 240, 138), (int(cur_x), int(pl_sy)), pulse_r)
+                    cur_x += step
+
+        elif self.phase == 4:
+            pl_sx = (self.player_x - self.camera_x) * ZOOM + (TILE_SIZE * ZOOM) / 2
+            pl_sy = (self.player_y - self.camera_y) * ZOOM + (TILE_SIZE * ZOOM) / 2
+            p_sx = (self.portal_tile_x * TILE_SIZE - self.camera_x) * ZOOM + (TILE_SIZE * ZOOM) / 2
+            p_sy = (self.portal_tile_y * TILE_SIZE - self.camera_y) * ZOOM + (TILE_SIZE * ZOOM) / 2
+
+            if p_sx > pl_sx + 20:
+                step = 36 * ZOOM
+                offset = (now * 0.04) % step
+                cur_x = pl_sx + offset
+                while cur_x < p_sx - 20:
+                    pulse_r = int((4 + math.sin(now * 0.01 + cur_x * 0.1) * 1.5) * ZOOM)
+                    p1 = (cur_x - 6 * ZOOM, pl_sy - 8 * ZOOM)
+                    p2 = (cur_x + 4 * ZOOM, pl_sy)
+                    p3 = (cur_x - 6 * ZOOM, pl_sy + 8 * ZOOM)
+                    pygame.draw.lines(self.screen, (74, 222, 128), False, [p1, p2, p3], 3)
+                    pygame.draw.circle(self.screen, (187, 247, 208), (int(cur_x), int(pl_sy)), pulse_r)
+                    cur_x += step
+
+        # 2. Bottom-Left Demonstration HUD Card
+        if self.phase in [1, 4] and self.quiz_state == 0:
+            card_w, card_h = 320, 100
+            card_x = 30
+            card_y = self.height - card_h - 24
+
+            card_surf = pygame.Surface((card_w, card_h), pygame.SRCALPHA)
+            card_surf.fill((15, 23, 42, 230))
+            self.screen.blit(card_surf, (card_x, card_y))
+            border_col = (245, 158, 11) if self.phase == 1 else (34, 197, 94)
+            pygame.draw.rect(self.screen, border_col, (card_x, card_y, card_w, card_h), 2, border_radius=12)
+
+            # Text instructions
+            if self.phase == 1:
+                t1 = self.dialog_btn_font.render("🖐️ STEERING DEMO", True, (255, 215, 0))
+                t2 = self.ui_font.render("Move hand away from center", True, (255, 255, 255))
+                t3 = self.ui_font.render("towards the Guide NPC ➡️", True, (203, 213, 225))
+            else:
+                t1 = self.dialog_btn_font.render("🌀 PORTAL UNLOCKED", True, (74, 222, 128))
+                t2 = self.ui_font.render("Walk into the glowing Exit Portal", True, (255, 255, 255))
+                t3 = self.ui_font.render("to enter Stage Select ➡️", True, (203, 213, 225))
+
+            self.screen.blit(t1, (card_x + 14, card_y + 12))
+            self.screen.blit(t2, (card_x + 14, card_y + 44))
+            self.screen.blit(t3, (card_x + 14, card_y + 68))
+
+            # Right Side: Animated Hand Motion Demo Sub-panel
+            sub_cx = card_x + card_w - 50
+            sub_cy = card_y + card_h // 2
+            pygame.draw.circle(self.screen, (30, 41, 59), (sub_cx, sub_cy), 32)
+            pygame.draw.circle(self.screen, border_col, (sub_cx, sub_cy), 32, 1)
+
+            # Center target crosshair
+            pygame.draw.circle(self.screen, (71, 85, 105), (sub_cx, sub_cy), 6)
+
+            # Animated hand moving right
+            hand_slide = (math.sin(now * 0.005) + 1) / 2 # 0.0 to 1.0
+            animated_hand_x = sub_cx - 15 + hand_slide * 30
+            # Draw moving hand cursor
+            pygame.draw.line(self.screen, border_col, (sub_cx - 10, sub_cy), (int(animated_hand_x), sub_cy), 2)
+            pygame.draw.circle(self.screen, (255, 255, 255), (int(animated_hand_x), sub_cy), 10)
+            pygame.draw.circle(self.screen, border_col, (int(animated_hand_x), sub_cy), 10, 2)
+            h_lbl = self.ui_font.render("🖐️", True, (0, 0, 0))
+            self.screen.blit(h_lbl, h_lbl.get_rect(center=(int(animated_hand_x), sub_cy)))
+
+    def draw_quiz_gesture_demo(self):
+        """Draws an animated demonstration over Choice B showing how to hold a fist to click"""
+        now = pygame.time.get_ticks()
+        box_w, box_h = 580, 380
+        box_x = (self.width - box_w) // 2
+        box_y = (self.height - box_h) // 2
+        button_w, button_h = 500, 44
+        button_x = box_x + (box_w - button_w) // 2
+        button_y_start = box_y + 130
+        spacing = 52
+
+        # Choice B is index 1
+        target_btn_y = button_y_start + 1 * spacing
+        btn_center_x = button_x + button_w - 45
+        btn_center_y = target_btn_y + button_h // 2
+
+        # 2.4-second looping cycle
+        cycle = (now % 2400) / 2400.0 # 0.0 to 1.0
+
+        demo_card_x = box_x + box_w + 16
+        demo_card_y = target_btn_y - 20
+        if demo_card_x + 200 < self.width:
+            d_rect = pygame.Rect(demo_card_x, demo_card_y, 200, 90)
+            d_surf = pygame.Surface((200, 90), pygame.SRCALPHA)
+            d_surf.fill((15, 23, 42, 230))
+            self.screen.blit(d_surf, d_rect)
+            pygame.draw.rect(self.screen, (251, 191, 36), d_rect, 2, border_radius=10)
+
+            t1 = self.ui_font.render("✊ HOW TO SELECT:", True, (255, 215, 0))
+            t2 = self.ui_font.render("Hold Fist (0.9s)", True, (255, 255, 255))
+            self.screen.blit(t1, (demo_card_x + 10, demo_card_y + 10))
+            self.screen.blit(t2, (demo_card_x + 10, demo_card_y + 32))
+
+            # Progress bar demo in card
+            p_bar_rect = pygame.Rect(demo_card_x + 10, demo_card_y + 58, 180, 16)
+            pygame.draw.rect(self.screen, (30, 41, 59), p_bar_rect, border_radius=6)
+            fill_w = int(180 * min(1.0, cycle * 1.3))
+            pygame.draw.rect(self.screen, (255, 215, 0), (demo_card_x + 10, demo_card_y + 58, fill_w, 16), border_radius=6)
+            pygame.draw.rect(self.screen, (255, 255, 255), p_bar_rect, 1, border_radius=6)
+
+        # Draw animated pulsing fist icon right on Choice B
+        hold_charge = min(1.0, cycle * 1.3)
+        pygame.draw.circle(self.screen, (255, 255, 255), (btn_center_x, btn_center_y), 18, 2)
+        if hold_charge > 0.1:
+            pygame.draw.circle(self.screen, (255, 215, 0), (btn_center_x, btn_center_y), int(18 * hold_charge))
+        icon_txt = "✊" if hold_charge > 0.2 else "🖐️"
+        f_surf = self.ui_font.render(icon_txt, True, (0, 0, 0) if hold_charge > 0.5 else (255, 255, 255))
+        self.screen.blit(f_surf, f_surf.get_rect(center=(btn_center_x, btn_center_y)))
 
     # ============================================================
     # TOP VISUAL GAMEPLAY BANNER
