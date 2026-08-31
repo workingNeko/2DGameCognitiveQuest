@@ -38,21 +38,9 @@ class TutorialScreen:
         self.npc_frames = self.load_npc_sprites()
         self.portal_frames = self.load_portal_sprites()
 
-        # Mini Tutorial Map (12 rows x 24 cols)
-        self.map_grid = [
-            "TTTTTTTTTTTTTTTTTTTTTTTT",
-            "TGGGGGGGGGGGGGGGGGGGGGGGT",
-            "TGGGGGGGGGGGGGGGGGGGGGGGT",
-            "TGGPGGGGGGGGGGGGGGGGGGGGT",
-            "TGGPGGGGGGGGGGGGGGGGGGGGT",
-            "TGGPPPPPPPPPPPPPPPGGGGGGT",
-            "TGGPGGGGGGGGGGGGGPGGGGGGT",
-            "TGGPGGGGGGGGGGGGGPGGGGGGT",
-            "TGGGGGGGGGGGGGGGGGGGGGGGT",
-            "TGGGGGGGGGGGGGGGGGGGGGGGT",
-            "TGGGGGGGGGGGGGGGGGGGGGGGT",
-            "TTTTTTTTTTTTTTTTTTTTTTTT"
-        ]
+        # Tutorial Map File (assets/map/tutorial_map.txt)
+        self.map_path = os.path.join(self.BASE_DIR, "assets", "map", "tutorial_map.txt")
+        self.map_grid = self.load_tutorial_map()
 
         # Player State
         self.player_x = 3 * TILE_SIZE
@@ -106,8 +94,36 @@ class TutorialScreen:
         print("🎓 Live Interactive Gameplay Tutorial Initialized!")
 
     # ============================================================
-    # ASSET LOADERS
+    # ASSET & MAP LOADERS
     # ============================================================
+    def load_tutorial_map(self):
+        """Loads the tutorial map from assets/map/tutorial_map.txt with fallback"""
+        if os.path.exists(self.map_path):
+            try:
+                with open(self.map_path, "r") as f:
+                    lines = [line.rstrip("\r\n") for line in f if line.strip()]
+                if lines:
+                    print(f"✅ Loaded tutorial map from: {self.map_path} ({len(lines)}x{len(lines[0])})")
+                    return lines
+            except Exception as e:
+                print(f"⚠️ Error reading tutorial map file: {e}")
+
+        # Fallback grid
+        return [
+            "TTTTTTTTTTTTTTTTTTTTTTTT",
+            "TGGGGGGGGGGGGGGGGGGGGGGGT",
+            "TGGGGGGGGGGGGGGGGGGGGGGGT",
+            "TGGPGGGGGGGGGGGGGGGGGGGGT",
+            "TGGPGGGGGGGGGGGGGGGGGGGGT",
+            "TGGPPPPPPPPPPPPPPPGGGGGGT",
+            "TGGPGGGGGGGGGGGGGPGGGGGGT",
+            "TGGPGGGGGGGGGGGGGPGGGGGGT",
+            "TGGGGGGGGGGGGGGGGGGGGGGGT",
+            "TGGGGGGGGGGGGGGGGGGGGGGGT",
+            "TGGGGGGGGGGGGGGGGGGGGGGGT",
+            "TTTTTTTTTTTTTTTTTTTTTTTT"
+        ]
+
     def load_player_sprites(self):
         prefix = "boy"
         if hasattr(self, 'main_menu') and self.main_menu and getattr(self.main_menu, 'selected_student', None):
