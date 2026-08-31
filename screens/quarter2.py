@@ -1165,7 +1165,7 @@ class Quarter2:
                                                               (c1_rect.centerx - 22, c1_rect.top + 40),
                                                               (c1_rect.centerx + 22, c1_rect.top + 40)])
             pygame.draw.ellipse(self.screen, (217, 119, 6), (c1_rect.centerx - 22, c1_rect.top + 34, 44, 12))
-            l1 = self.dialog_hint_font.render("CONE (Salakot) [OK]", True, (74, 222, 128))
+            l1 = self.dialog_hint_font.render("CONE (Salakot) • OK", True, (74, 222, 128))
             self.screen.blit(l1, (c1_rect.centerx - l1.get_width() // 2, c1_rect.bottom - 18))
 
             # 2. Cylinder (Bamboo Kawayan)
@@ -1265,7 +1265,7 @@ class Quarter2:
             # Stylized Fiesta Coin Icon
             self.draw_peso_coin(self.screen, vis_rect.centerx, vis_rect.centery - 16, 22, "₱", "bimetal_gold")
             
-            h_surf = self.dialog_hint_font.render(f"[HINT] {hint_txt}", True, (253, 230, 138))
+            h_surf = self.dialog_hint_font.render(f"{hint_txt}", True, (253, 230, 138))
             self.screen.blit(h_surf, (vis_rect.centerx - h_surf.get_width() // 2, vis_rect.bottom - 24))
 
     # ============================================================
@@ -2080,7 +2080,7 @@ class Quarter2:
 
                     # Small lock indicator
                     lock_font = pygame.font.SysFont(["Segoe UI", "Tahoma", "Verdana", "Calibri", "Arial"], int(9 * zoom), bold=True)
-                    lock_surf = lock_font.render("[LOCKED]", True, (248, 113, 113))
+                    lock_surf = lock_font.render("LOCKED", True, (248, 113, 113))
                     lx = screen_x + scaled_width / 2 - lock_surf.get_width() / 2
                     ly = screen_y + scaled_height / 2 - lock_surf.get_height() / 2
                     screen.blit(lock_surf, (lx, ly))
@@ -2842,7 +2842,7 @@ class Quarter2:
 
         t_math = info.get("target_math", "")
         if t_math:
-            m_surf = self.dialog_hint_font.render(f"[INFO] {t_math}", True, (253, 230, 138))
+            m_surf = self.dialog_hint_font.render(f"{t_math}", True, (253, 230, 138))
             self.screen.blit(m_surf, (box_x + 30, box_y + 110))
 
         button_w, button_h = 240, 44
@@ -3682,7 +3682,7 @@ class Quarter2:
                 obj1_surf = item_font.render(obj1, True, (74, 222, 128))
                 self.screen.blit(obj1_surf, (box_x + 16, box_y + 32))
 
-                obj2 = ">> Exit Portal Status: [ OPEN ] Enter portal to return!"
+                obj2 = ">> Exit Portal Status: OPEN • Enter portal to return!"
                 obj2_surf = item_font.render(obj2, True, (255, 215, 0))
                 self.screen.blit(obj2_surf, (box_x + 16, box_y + 54))
 
