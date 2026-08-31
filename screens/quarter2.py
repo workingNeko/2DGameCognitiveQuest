@@ -3732,7 +3732,6 @@ class Quarter2:
         now = pygame.time.get_ticks()
         mins = int(self.stage_time_remaining // 60)
         secs = int(self.stage_time_remaining % 60)
-        time_str = f"⏱️ {mins:02d}:{secs:02d}"
 
         hud_w, hud_h = 160, 38
         hud_x = (self.width - hud_w) // 2
@@ -3759,9 +3758,16 @@ class Quarter2:
         self.screen.blit(hud_surf, (hud_x, hud_y))
         pygame.draw.rect(self.screen, border_col, (hud_x, hud_y, hud_w, hud_h), border_w, border_radius=10)
 
+        # Draw mini analog clock icon
+        clock_cx = hud_x + 22
+        clock_cy = hud_y + hud_h // 2
+        pygame.draw.circle(self.screen, border_col, (clock_cx, clock_cy), 9, 2)
+        pygame.draw.line(self.screen, border_col, (clock_cx, clock_cy), (clock_cx, clock_cy - 5), 2)
+        pygame.draw.line(self.screen, border_col, (clock_cx, clock_cy), (clock_cx + 4, clock_cy), 2)
+
         t_font = self.get_ui_font(16, bold=True)
-        t_surf = t_font.render(time_str, True, txt_col)
-        self.screen.blit(t_surf, t_surf.get_rect(center=(hud_x + hud_w // 2, hud_y + hud_h // 2)))
+        t_surf = t_font.render(f"{mins:02d}:{secs:02d}", True, txt_col)
+        self.screen.blit(t_surf, t_surf.get_rect(center=(hud_x + 95, hud_y + hud_h // 2)))
 
     def draw_time_up_dialog(self):
         """Draws a modal dialog when the 10-minute timer runs out"""
@@ -3780,7 +3786,7 @@ class Quarter2:
         msg_font = self.get_ui_font(18)
         btn_font = self.get_ui_font(16, bold=True)
 
-        title = t_font.render("⏰ TIME'S UP!", True, (239, 68, 68))
+        title = t_font.render("TIME'S UP!", True, (239, 68, 68))
         self.screen.blit(title, title.get_rect(center=(box_x + box_w // 2, box_y + 36)))
 
         m1 = msg_font.render("Your 10-minute stage time limit has expired.", True, (255, 255, 255))
