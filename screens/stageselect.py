@@ -1739,25 +1739,24 @@ class StageSelect:
         vx, vy = 0, 0
         current_speed = SPEED
 
-        # Hand Gesture / Cursor Directional Controls (Player as Center Basis)
-        player_screen_x = (self.player_x - self.camera_x) * ZOOM + (TILE_SIZE * ZOOM) / 2
-        player_screen_y = (self.player_y - self.camera_y) * ZOOM + (TILE_SIZE * ZOOM) / 2
+        # Hand Gesture / Cursor Directional Controls (Pure Gesture Navigation)
+        center_x, center_y = self.width // 2, self.height // 2
         cursor_x, cursor_y = self.cursor_pos
-        dx = cursor_x - player_screen_x
-        dy = cursor_y - player_screen_y
+        dx = cursor_x - center_x
+        dy = cursor_y - center_y
 
         # Dynamic speed scaling: faster when hand is stretched further out
         dist_factor = 1.3 if (abs(dx) > 160 or abs(dy) > 160) else 1.0
         g_speed = current_speed * dist_factor
 
-        if abs(dx) > 35:
+        if abs(dx) > 45:
             vx = g_speed if dx > 0 else -g_speed
             if dx > 0:
                 self.player_dir = "right"
             elif dx < 0:
                 self.player_dir = "left"
 
-        if abs(dy) > 35:
+        if abs(dy) > 45:
             vy = g_speed if dy > 0 else -g_speed
             if dy > 0:
                 self.player_dir = "down"
