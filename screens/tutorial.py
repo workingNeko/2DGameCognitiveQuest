@@ -222,9 +222,11 @@ class TutorialScreen:
         npc_dist = math.hypot(self.player_x - self.npc_tile_x * TILE_SIZE, self.player_y - self.npc_tile_y * TILE_SIZE)
         portal_dist = math.hypot(self.player_x - self.portal_tile_x * TILE_SIZE, self.player_y - self.portal_tile_y * TILE_SIZE)
 
+        # Proximity to NPC immediately triggers the question dialogue
         if self.phase == 1 and npc_dist < 2.5 * TILE_SIZE:
-            self.phase = 2
-            print("🎓 Tutorial Phase 2: NPC Proximity Reached! Ready for Fist Click.")
+            self.phase = 3
+            self.quiz_state = 1
+            print("🎓 Player approached Guide NPC: Automatically Triggered Question Dialogue!")
 
         if self.phase == 4 and portal_dist < 1.8 * TILE_SIZE:
             print("🎉 Exit Portal Entered! Tutorial Complete!")
@@ -523,13 +525,10 @@ class TutorialScreen:
         pygame.draw.rect(self.screen, (245, 158, 11), banner_rect, 2, border_radius=14)
 
         if self.phase == 1:
-            txt = "🖐️ Move your hand in front of the camera to walk towards the Guide NPC!"
+            txt = "🖐️ Move your hand in front of the camera to walk close to the Guide NPC!"
             color = (255, 215, 0)
-        elif self.phase == 2:
-            txt = "✊ Hover cursor over Guide NPC and HOLD A FIST (0.9s) to interact!"
-            color = (74, 222, 128)
         elif self.phase == 3:
-            txt = "⭐ Select the correct choice with your Fist Click (0.9s hold)!"
+            txt = "⭐ Select your choice by holding a FIST (0.9s) over the answer!"
             color = (251, 191, 36)
         else:
             txt = "🌀 Exit Portal open! Walk into the glowing portal to start your adventure!"
