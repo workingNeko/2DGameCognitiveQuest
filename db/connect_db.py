@@ -163,6 +163,195 @@ class Database:
             print(f"[API ERROR] Failed to save game result to Vercel: {e}")
             return False
 
+    def get_game_results(self):
+        """Fetch all recorded game results from Vercel API."""
+        url = f"{BASE_URL}/game-results"
+        try:
+            req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+            with urllib.request.urlopen(req, timeout=8) as response:
+                data = json.loads(response.read().decode('utf-8'))
+                return data if isinstance(data, list) else []
+        except Exception as e:
+            print(f"[API ERROR] Failed to fetch game results from Vercel: {e}")
+            return []
+
+    def get_leaderboard_data(self):
+        """
+        Aggregate and rank student performance across all Quarters
+        combining live Vercel API data and local progress saves.
+        """
+        import os
+
+        # 1. Fetch Students
+        students_api = self.get_students() or []
+        student_map = {}
+        alias_map = {}
+
+        for s in students_api:
+            s_db_id = str(s.get("id") or "")
+            s_custom_id = str(s.get("studentId") or "")
+            
+            primary_key = s_db_id if s_db_id else s_custom_id
+            if not primary_key:
+                continue
+                
+            student_entry = {
+                "id": s.get("id", primary_key),
+                "student_id": s_custom_id or primary_key,
+                "name": s.get("fullName") or f"{s.get('first_name', '')} {s.get('last_name', '')}".strip() or f"Student #{primary_key}",
+                "grade_level": s.get("gradeLevel") or s.get("grade_level") or "Grade 2",
+                "section": s.get("section") or "A",
+                "avatar_color": s.get("avatarColor") or "#6366f1",
+                "quarters": {1: None, 2: None, 3: None, 4: None},
+                "total_score": 0,
+                "total_correct": 0,
+                "total_questions": 0,
+                "quarters_completed": 0,
+                "average_percentage": 0.0
+            }
+            student_map[primary_key] = student_entry
+            if s_db_id:
+                alias_map[s_db_id] = primary_key
+            if s_custom_id:
+                alias_map[s_custom_id] = primary_key
+
+        # 2. Check local saves for any offline/local student profiles
+        saves_dir = os.path.join("db", "saves")
+        if os.path.exists(saves_dir):
+            for fname in os.listdir(saves_dir):
+                if fname.endswith(".json"):
+                    fpath = os.path.join(saves_dir, fname)
+                    try:
+                        with open(fpath, "r", encoding="utf-8") as f:
+                            sdata = json.load(f)
+                            raw_id = str(sdata.get("student_id") or fname[:-5])
+                            sel = sdata.get("selected_student") or {}
+                            s_id = alias_map.get(raw_id) or alias_map.get(str(sel.get("id", ""))) or alias_map.get(str(sel.get("studentId", ""))) or raw_id
+                            
+                            if s_id not in student_map:
+                                name = sel.get("fullName") or f"{sel.get('first_name', '')} {sel.get('last_name', '')}".strip() or f"Student #{s_id}"
+                                student_map[s_id] = {
+                                    "id": sel.get("id", s_id),
+                                    "student_id": s_id,
+                                    "name": name,
+                                    "grade_level": sel.get("grade_level") or sel.get("gradeLevel") or "Grade 2",
+                                    "section": sel.get("section") or "A",
+                                    "avatar_color": sel.get("avatarColor") or "#38bdf8",
+                                    "quarters": {1: None, 2: None, 3: None, 4: None},
+                                    "total_score": 0,
+                                    "total_correct": 0,
+                                    "total_questions": 0,
+                                    "quarters_completed": 0,
+                                    "average_percentage": 0.0
+                                }
+                                alias_map[raw_id] = s_id
+                            
+                            # Parse local quarter completion
+                            q_data = sdata.get("quarter_data") or {}
+                            q_type = q_data.get("quarter_type")
+                            if q_type:
+                                q_num = 1
+                                if "2" in q_type: q_num = 2
+                                elif "3" in q_type: q_num = 3
+                                elif "4" in q_type: q_num = 4
+                                
+                                score = q_data.get("score", 0)
+                                correct = q_data.get("correct_answers", 0)
+                                total = q_data.get("total_questions", 5)
+                                pct = (correct / total * 100) if total > 0 else 0
+                                student_map[s_id]["quarters"][q_num] = {
+                                    "score": score,
+                                    "correct": correct,
+                                    "total": total,
+                                    "percentage": pct,
+                                    "completed": bool(q_data.get("completed", False))
+                                }
+                    except Exception as e:
+                        print(f"⚠️ Error reading local save {fname}: {e}")
+
+        # 3. Fetch Game Results from Vercel API and overlay/aggregate
+        api_results = self.get_game_results()
+        for res in api_results:
+            raw_id = str(res.get("studentId") or res.get("student_id") or "")
+            if not raw_id:
+                continue
+            st_id = alias_map.get(raw_id, raw_id)
+            if st_id not in student_map:
+                student_map[st_id] = {
+                    "id": st_id,
+                    "student_id": st_id,
+                    "name": f"Student #{st_id}",
+                    "grade_level": res.get("gradeLevel") or "Grade 2",
+                    "section": "A",
+                    "avatar_color": "#6366f1",
+                    "quarters": {1: None, 2: None, 3: None, 4: None},
+                    "total_score": 0,
+                    "total_correct": 0,
+                    "total_questions": 0,
+                    "quarters_completed": 0,
+                    "average_percentage": 0.0
+                }
+
+            # Determine Quarter from assessmentId, feedback, or title
+            q_num = 1
+            fb = str(res.get("feedback", "")).upper()
+            if "QUARTER 2" in fb or "Q2" in fb: q_num = 2
+            elif "QUARTER 3" in fb or "Q3" in fb: q_num = 3
+            elif "QUARTER 4" in fb or "Q4" in fb: q_num = 4
+
+            score = int(res.get("score") or 0)
+            correct = int(res.get("correctAnswers") or res.get("correct_answers") or score)
+            total = int(res.get("totalQuestions") or res.get("total_questions") or 5)
+            pct = float(res.get("percentage") or ((correct / total * 100) if total > 0 else 0))
+
+            existing = student_map[st_id]["quarters"][q_num]
+            if not existing or score > existing.get("score", 0):
+                student_map[st_id]["quarters"][q_num] = {
+                    "score": score,
+                    "correct": correct,
+                    "total": total,
+                    "percentage": pct,
+                    "completed": True
+                }
+
+        # 4. Calculate aggregate totals
+        leaderboard_list = []
+        for s_id, s_info in student_map.items():
+            tot_score = 0
+            tot_correct = 0
+            tot_questions = 0
+            q_completed = 0
+            pcts = []
+
+            for qn in range(1, 5):
+                qd = s_info["quarters"][qn]
+                if qd:
+                    tot_score += qd.get("score", 0)
+                    tot_correct += qd.get("correct", 0)
+                    tot_questions += qd.get("total", 0)
+                    if qd.get("completed", False) or qd.get("score", 0) > 0:
+                        q_completed += 1
+                    pcts.append(qd.get("percentage", 0))
+
+            s_info["total_score"] = tot_score
+            s_info["total_correct"] = tot_correct
+            s_info["total_questions"] = tot_questions
+            s_info["quarters_completed"] = q_completed
+            s_info["average_percentage"] = (sum(pcts) / len(pcts)) if pcts else 0.0
+            leaderboard_list.append(s_info)
+
+        # 5. Sort by Total Score descending -> Quarters Completed -> Average Percentage
+        leaderboard_list.sort(
+            key=lambda x: (x["total_score"], x["quarters_completed"], x["average_percentage"]),
+            reverse=True
+        )
+
+        # Assign Ranks
+        for idx, entry in enumerate(leaderboard_list):
+            entry["rank"] = idx + 1
+
+        return leaderboard_list
+
 # Function to create mock database connection instance
 def connect_db(*args, **kwargs):
     return Database()

@@ -25,6 +25,7 @@ from screens.quarter1 import Quarter1
 from screens.quarter2 import Quarter2
 from screens.quarter3 import Quarter3
 from screens.quarter4 import Quarter4
+from screens.leaderboard import LeaderboardScreen
 
 
 class MainMenu:
@@ -214,6 +215,7 @@ class MainMenu:
         self.stage_select = None
         self.student_select = None
         self.tutorial = None
+        self.leaderboard = None
         self.quarter1 = None
         self.quarter2 = None
         self.quarter3 = None
@@ -421,6 +423,9 @@ class MainMenu:
         elif self.current_screen == "quarter4" and self.quarter4:
             self.quarter4.trigger_click(pos)
             return
+        elif self.current_screen == "leaderboard" and self.leaderboard:
+            self.leaderboard.trigger_click(pos)
+            return
 
         # Check dialogue box first
         if self.dialogue_active and self.dialogue_rect.collidepoint(pos):
@@ -568,8 +573,8 @@ class MainMenu:
         from db.save_system import check_save_exists
         
         bw = 440
-        bh = 70
-        gap = 20
+        bh = 58
+        gap = 14
         exit_btn_path = os.path.join("assets", "images", "exitbutton.png")
         
         has_save = False
@@ -588,8 +593,8 @@ class MainMenu:
         )
         
         if has_save:
-            # Case: Selected student has existing save progress -> 3 vertical buttons
-            total_height = (bh * 3) + (gap * 2)
+            # Case: Selected student has existing save progress -> 4 vertical buttons
+            total_height = (bh * 4) + (gap * 3)
             start_y = (self.h // 2) - (total_height // 2)
             
             self.select_student_btn = Button(
@@ -621,11 +626,21 @@ class MainMenu:
                 action=self.confirm_start_new_activity,
                 image_path=None
             )
+
+            self.leaderboard_btn = Button(
+                (self.w // 2 - bw // 2, start_y + (bh + gap) * 3, bw, bh),
+                text="LEADERBOARD",
+                font=self.button_font,
+                bg_color=(245, 158, 11),
+                text_color=(15, 23, 42),
+                action=self.show_leaderboard,
+                image_path=None
+            )
             
-            self.buttons = [self.select_student_btn, self.continue_activity_btn, self.start_new_activity_btn, self.exit_btn]
+            self.buttons = [self.select_student_btn, self.continue_activity_btn, self.start_new_activity_btn, self.leaderboard_btn, self.exit_btn]
         else:
-            # Case: No saved progress or no student selected -> 2 vertical buttons
-            total_height = (bh * 2) + gap
+            # Case: No saved progress or no student selected -> 3 vertical buttons
+            total_height = (bh * 3) + (gap * 2)
             start_y = (self.h // 2) - (total_height // 2)
             
             self.select_student_btn = Button(
@@ -647,8 +662,23 @@ class MainMenu:
                 action=self.start_activity,
                 image_path=None
             )
+
+            self.leaderboard_btn = Button(
+                (self.w // 2 - bw // 2, start_y + (bh + gap) * 2, bw, bh),
+                text="LEADERBOARD",
+                font=self.button_font,
+                bg_color=(245, 158, 11),
+                text_color=(15, 23, 42),
+                action=self.show_leaderboard,
+                image_path=None
+            )
             
-            self.buttons = [self.select_student_btn, self.start_activity_btn, self.exit_btn]
+            self.buttons = [self.select_student_btn, self.start_activity_btn, self.leaderboard_btn, self.exit_btn]
+
+    def show_leaderboard(self):
+        print("🏆 LEADERBOARD clicked! Loading Hall of Fame rankings...")
+        self.current_screen = "leaderboard"
+        self.leaderboard = LeaderboardScreen(self.screen, self)
 
     def select_student(self):
         print(f"📋 SELECT STUDENT clicked!")
@@ -815,6 +845,18 @@ class MainMenu:
                 if not self.popup_state:
                     self.quarter4.update()
 
+        elif self.current_screen == "leaderboard" and self.leaderboard:
+            self.update_gesture()
+            if self.leaderboard:
+                self.leaderboard.update_gesture(
+                    self.cursor_pos,
+                    self.fist_start_time,
+                    self.CLICK_HOLD_TIME,
+                    self.current_gesture
+                )
+                if not self.popup_state:
+                    self.leaderboard.update()
+
     def handle_event(self, event):
         # If popup is active, intercept clicks and key events!
         if self.popup_state:
@@ -867,6 +909,12 @@ class MainMenu:
             if result == "back":
                 self.current_screen = "menu"
                 self.quarter4 = None
+        elif self.current_screen == "leaderboard" and self.leaderboard:
+            result = self.leaderboard.handle_event(event)
+            if result == "back":
+                self.current_screen = "menu"
+                self.leaderboard = None
+                self.setup_buttons()
 
     # ==========================================
     # DRAW
@@ -1084,6 +1132,11 @@ class MainMenu:
 
         elif self.current_screen == "quarter4" and self.quarter4:
             self.quarter4.draw()
+            self.draw_camera_feed()
+            self.draw_cursor()
+
+        elif self.current_screen == "leaderboard" and self.leaderboard:
+            self.leaderboard.draw()
             self.draw_camera_feed()
             self.draw_cursor()
 

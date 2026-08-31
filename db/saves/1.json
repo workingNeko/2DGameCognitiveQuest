@@ -10,15 +10,7 @@
         "level": "Grade 2",
         "gender": "male"
     },
-    "current_screen": "stage_select",
-    "timestamp": 1788150812.100485,
-    "stage_select": {
-        "player_x": 948.5500000000003,
-        "player_y": 477.2000000000003,
-        "oldman_dialogue_state": 0,
-        "knight_dialogue_state": 0,
-        "skeleton_dialogue_state": 0,
-        "bromen_dialogue_state": 0,
-        "player_following_target": null
-    }
+    "current_screen": "menu",
+    "tutorial_completed": true,
+    "timestamp": 1788160177.4191644
 }
