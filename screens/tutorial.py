@@ -1,9 +1,15 @@
-# screens/tutorial.py - Interactive New Player Tutorial for Controls & Gameplay
+# screens/tutorial.py - Live Interactive Gameplay Showcase Tutorial
 import pygame
 import os
 import sys
 import math
 import time
+import cv2
+import numpy as np
+
+TILE_SIZE = 32
+ZOOM = 1.50
+SPEED = 4.5
 
 class TutorialScreen:
     def __init__(self, screen, main_menu):
@@ -19,41 +25,175 @@ class TutorialScreen:
         self.click_ready = False
         self.hand_detected = False
 
-        # Tutorial slide index (0 to 4)
-        self.current_slide = 0
-        self.total_slides = 5
+        # Paths
+        self.BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        self.PLAYER_PATH = os.path.join(self.BASE_DIR, "assets", "images", "sprites", "objects", "player")
+        self.OBJECTS_PATH = os.path.join(self.BASE_DIR, "assets", "images", "sprites", "objects", "tiles")
+        self.NPC_PATH_OLDMAN = os.path.join(self.BASE_DIR, "assets", "images", "sprites", "objects", "NPC", "oldman")
+        self.PORTAL_PATH = os.path.join(self.BASE_DIR, "assets", "images", "sprites", "objects", "portal")
 
-        # Interactive practice state (Slide 4)
-        self.practice_charge = 0.0
-        self.practice_completed = False
-        self.practice_pulse_timer = 0.0
+        # Load Sprites & Tiles
+        self.player_sprites = self.load_player_sprites()
+        self.tile_sprites = self.load_tile_sprites()
+        self.npc_frames = self.load_npc_sprites()
+        self.portal_frames = self.load_portal_sprites()
 
-        # Animation timer
-        self.anim_timer = 0.0
+        # Mini Tutorial Map (12 rows x 24 cols)
+        self.map_grid = [
+            "TTTTTTTTTTTTTTTTTTTTTTTT",
+            "TGGGGGGGGGGGGGGGGGGGGGGGT",
+            "TGGGGGGGGGGGGGGGGGGGGGGGT",
+            "TGGPGGGGGGGGGGGGGGGGGGGGT",
+            "TGGPGGGGGGGGGGGGGGGGGGGGT",
+            "TGGPPPPPPPPPPPPPPPGGGGGGT",
+            "TGGPGGGGGGGGGGGGGPGGGGGGT",
+            "TGGPGGGGGGGGGGGGGPGGGGGGT",
+            "TGGGGGGGGGGGGGGGGGGGGGGGT",
+            "TGGGGGGGGGGGGGGGGGGGGGGGT",
+            "TGGGGGGGGGGGGGGGGGGGGGGGT",
+            "TTTTTTTTTTTTTTTTTTTTTTTT"
+        ]
+
+        # Player State
+        self.player_x = 3 * TILE_SIZE
+        self.player_y = 5 * TILE_SIZE
+        self.player_dir = "right"
+        self.anim_frame = 0
+        self.anim_timer = 0
+
+        # Guide NPC State
+        self.npc_tile_x = 14
+        self.npc_tile_y = 5
+        self.npc_anim_frame = 0
+        self.npc_anim_timer = 0
+
+        # Exit Portal State
+        self.portal_tile_x = 21
+        self.portal_tile_y = 5
+        self.portal_anim_frame = 0
+        self.portal_anim_timer = 0
+
+        # Camera
+        self.camera_x = 0
+        self.camera_y = 0
+
+        # Tutorial Gameplay Phase (1 = Move, 2 = Interact, 3 = Quiz, 4 = Exit Portal)
+        self.phase = 1
+        self.phase_banner_timer = 0.0
+        self.phase_transition_timer = 0.0
+
+        # Quiz Modal State for Phase 3
+        self.quiz_state = 0 # 0=closed, 1=question open, 2=wrong retry, 3=correct
+        self.eliminated_choice = None
+        self.quiz_attempts = 0
+        self.wrong_feedback_msg = ""
+        self.sample_question = {
+            "title": "Tutorial Challenge",
+            "question": "What is 2 + 2?",
+            "choices": ["A. 3", "B. 4", "C. 5", "D. 6"],
+            "correct": 1
+        }
 
         # Fonts
-        self.title_font = pygame.font.SysFont(["Segoe UI", "Tahoma", "Comic Sans MS", "Arial"], 34, bold=True)
-        self.subtitle_font = pygame.font.SysFont(["Segoe UI", "Tahoma", "Comic Sans MS", "Arial"], 22, bold=True)
-        self.body_font = pygame.font.SysFont(["Segoe UI", "Tahoma", "Comic Sans MS", "Arial"], 18)
-        self.bold_body_font = pygame.font.SysFont(["Segoe UI", "Tahoma", "Comic Sans MS", "Arial"], 18, bold=True)
-        self.badge_font = pygame.font.SysFont(["Segoe UI", "Tahoma", "Comic Sans MS", "Arial"], 14, bold=True)
-        self.button_font = pygame.font.SysFont(["Segoe UI", "Tahoma", "Comic Sans MS", "Arial"], 18, bold=True)
+        self.banner_font = pygame.font.SysFont(["Segoe UI", "Tahoma", "Comic Sans MS", "Arial"], 20, bold=True)
+        self.dialog_header_font = pygame.font.SysFont(["Segoe UI", "Tahoma", "Comic Sans MS", "Arial"], 22, bold=True)
+        self.dialog_q_font = pygame.font.SysFont(["Segoe UI", "Tahoma", "Comic Sans MS", "Arial"], 20, bold=True)
+        self.dialog_choice_font = pygame.font.SysFont(["Segoe UI", "Tahoma", "Comic Sans MS", "Arial"], 18, bold=True)
+        self.dialog_btn_font = pygame.font.SysFont(["Segoe UI", "Tahoma", "Comic Sans MS", "Arial"], 18, bold=True)
+        self.ui_font = pygame.font.SysFont(["Segoe UI", "Tahoma", "Comic Sans MS", "Arial"], 12, bold=True)
+        self.skip_font = pygame.font.SysFont(["Segoe UI", "Tahoma", "Comic Sans MS", "Arial"], 16, bold=True)
 
-        # Background
-        bg_path = os.path.join("assets", "images", "menu_background.png")
-        if os.path.exists(bg_path):
+        print("🎓 Live Interactive Gameplay Tutorial Initialized!")
+
+    # ============================================================
+    # ASSET LOADERS
+    # ============================================================
+    def load_player_sprites(self):
+        prefix = "boy"
+        if hasattr(self, 'main_menu') and self.main_menu and getattr(self.main_menu, 'selected_student', None):
+            gender = self.main_menu.selected_student.get("gender")
+            if gender and str(gender).lower() in ["female", "girl", "f"]:
+                prefix = "female"
+
+        def load_sprite(name):
+            path = os.path.join(self.PLAYER_PATH, name)
             try:
-                raw_bg = pygame.image.load(bg_path).convert()
-                self.bg_image = pygame.transform.scale(raw_bg, (self.width, self.height))
+                img = pygame.image.load(path).convert_alpha()
+                return pygame.transform.scale(img, (TILE_SIZE, TILE_SIZE))
             except Exception:
-                self.bg_image = None
-        else:
-            self.bg_image = None
+                p = pygame.Surface((TILE_SIZE, TILE_SIZE))
+                p.fill((59, 130, 246))
+                pygame.draw.circle(p, (255, 255, 255), (TILE_SIZE // 2, TILE_SIZE // 2), TILE_SIZE // 3)
+                return p
 
-        print("🎓 Tutorial Screen Initialized!")
+        return {
+            "down": [load_sprite(f"{prefix}_down_1.png"), load_sprite(f"{prefix}_down_2.png")],
+            "left": [load_sprite(f"{prefix}_left_1.png"), load_sprite(f"{prefix}_left_2.png")],
+            "right": [load_sprite(f"{prefix}_right_1.png"), load_sprite(f"{prefix}_right_2.png")],
+            "up": [load_sprite(f"{prefix}_up_1.png"), load_sprite(f"{prefix}_up_2.png")]
+        }
 
+    def load_tile_sprites(self):
+        tiles = {}
+        tile_map = {
+            'G': "grass1.png",
+            'P': "pathway1.png",
+            'T': "tree.png",
+            '#': "wall.png"
+        }
+        for key, filename in tile_map.items():
+            path = os.path.join(self.OBJECTS_PATH, filename)
+            try:
+                if os.path.exists(path):
+                    img = pygame.image.load(path).convert_alpha()
+                    tiles[key] = pygame.transform.scale(img, (TILE_SIZE, TILE_SIZE))
+                else:
+                    p = pygame.Surface((TILE_SIZE, TILE_SIZE))
+                    p.fill((34, 197, 94) if key == 'G' else ((180, 83, 9) if key == 'P' else (22, 101, 52)))
+                    tiles[key] = p
+            except Exception:
+                p = pygame.Surface((TILE_SIZE, TILE_SIZE))
+                p.fill((34, 197, 94))
+                tiles[key] = p
+        return tiles
+
+    def load_npc_sprites(self):
+        frames = []
+        for name in ["oldman.png", "oldmandown1.png", "oldmandown2.png"]:
+            path = os.path.join(self.NPC_PATH_OLDMAN, name)
+            try:
+                if os.path.exists(path):
+                    img = pygame.image.load(path).convert_alpha()
+                    frames.append(pygame.transform.scale(img, (TILE_SIZE, TILE_SIZE)))
+            except Exception:
+                pass
+        if not frames:
+            p = pygame.Surface((TILE_SIZE, TILE_SIZE))
+            p.fill((245, 158, 11))
+            pygame.draw.circle(p, (255, 255, 255), (TILE_SIZE // 2, TILE_SIZE // 2), 12)
+            frames.append(p)
+        return frames
+
+    def load_portal_sprites(self):
+        frames = []
+        for i in range(1, 9):
+            path = os.path.join(self.PORTAL_PATH, f"portal_{i}.png")
+            try:
+                if os.path.exists(path):
+                    img = pygame.image.load(path).convert_alpha()
+                    frames.append(pygame.transform.scale(img, (TILE_SIZE * 2, TILE_SIZE * 2)))
+            except Exception:
+                pass
+        if not frames:
+            p = pygame.Surface((TILE_SIZE * 2, TILE_SIZE * 2), pygame.SRCALPHA)
+            pygame.draw.circle(p, (74, 222, 128), (TILE_SIZE, TILE_SIZE), TILE_SIZE)
+            frames.append(p)
+        return frames
+
+    # ============================================================
+    # GESTURE & UPDATE
+    # ============================================================
     def update_gesture(self, cursor_pos, fist_start_time, CLICK_HOLD_TIME, current_gesture):
-        """Receives gesture data from main menu"""
         self.cursor_pos = cursor_pos
         self.fist_start_time = fist_start_time
         self.CLICK_HOLD_TIME = CLICK_HOLD_TIME
@@ -61,446 +201,458 @@ class TutorialScreen:
         self.hand_detected = (current_gesture not in ["NO HAND", "NO HAND (GRACE)"])
 
     def update(self):
-        """Update animation and interactive practice"""
-        self.anim_timer += 0.05
-        self.practice_pulse_timer += 0.08
+        # Update camera
+        target_cam_x = self.player_x - (self.width / ZOOM) / 2
+        target_cam_y = self.player_y - (self.height / ZOOM) / 2
+        self.camera_x += (target_cam_x - self.camera_x) * 0.1
+        self.camera_y += (target_cam_y - self.camera_y) * 0.1
 
-        # If on Slide 4 (Interactive Practice), check if cursor is over the practice target
-        if self.current_slide == 4 and not self.practice_completed:
-            box_w, box_h = min(960, self.width - 80), min(600, self.height - 80)
-            box_x = (self.width - box_w) // 2
-            box_y = (self.height - box_h) // 2
+        # Animate NPC & Portal
+        self.npc_anim_timer += 0.05
+        self.npc_anim_frame = int(self.npc_anim_timer) % len(self.npc_frames)
 
-            target_center = (box_x + box_w // 2, box_y + 270)
-            dist = math.hypot(self.cursor_pos[0] - target_center[0], self.cursor_pos[1] - target_center[1])
+        self.portal_anim_timer += 0.15
+        self.portal_anim_frame = int(self.portal_anim_timer) % len(self.portal_frames)
 
-            if dist < 65 and self.fist_start_time > 0:
-                # Charging up with fist hold
-                hold_time = time.time() - self.fist_start_time
-                self.practice_charge = min(1.0, hold_time / self.CLICK_HOLD_TIME)
-                if self.practice_charge >= 1.0:
-                    self.practice_completed = True
-                    print("🎉 Interactive Practice Completed!")
-            elif dist < 65 and pygame.mouse.get_pressed()[0]:
-                # Mouse hold fallback
-                self.practice_charge = min(1.0, self.practice_charge + 0.03)
-                if self.practice_charge >= 1.0:
-                    self.practice_completed = True
-                    print("🎉 Interactive Practice Completed via Mouse!")
-            else:
-                if self.practice_charge < 1.0:
-                    self.practice_charge = max(0.0, self.practice_charge - 0.04)
+        # Player Movement (Active during Phase 1, Phase 2, and Phase 4 when quiz modal is closed)
+        if self.quiz_state == 0:
+            self.update_player_movement()
 
+        # Check Phase Transitions
+        npc_dist = math.hypot(self.player_x - self.npc_tile_x * TILE_SIZE, self.player_y - self.npc_tile_y * TILE_SIZE)
+        portal_dist = math.hypot(self.player_x - self.portal_tile_x * TILE_SIZE, self.player_y - self.portal_tile_y * TILE_SIZE)
+
+        if self.phase == 1 and npc_dist < 2.5 * TILE_SIZE:
+            self.phase = 2
+            print("🎓 Tutorial Phase 2: NPC Proximity Reached! Ready for Fist Click.")
+
+        if self.phase == 4 and portal_dist < 1.8 * TILE_SIZE:
+            print("🎉 Exit Portal Entered! Tutorial Complete!")
+            self.finish_tutorial()
+
+    def update_player_movement(self):
+        vx, vy = 0, 0
+        current_speed = SPEED
+
+        # Pure Gesture Steering
+        center_x, center_y = self.width // 2, self.height // 2
+        cursor_x, cursor_y = self.cursor_pos
+        dx = cursor_x - center_x
+        dy = cursor_y - center_y
+
+        dist_factor = 1.3 if (abs(dx) > 160 or abs(dy) > 160) else 1.0
+        g_speed = current_speed * dist_factor
+
+        if abs(dx) > 45:
+            vx = g_speed if dx > 0 else -g_speed
+            self.player_dir = "right" if dx > 0 else "left"
+
+        if abs(dy) > 45:
+            vy = g_speed if dy > 0 else -g_speed
+            self.player_dir = "down" if dy > 0 else "up"
+
+        new_x = self.player_x + vx
+        new_y = self.player_y + vy
+
+        # Collision with map boundaries & trees
+        if self.can_move(new_x, self.player_y):
+            self.player_x = new_x
+        if self.can_move(self.player_x, new_y):
+            self.player_y = new_y
+
+        if vx != 0 or vy != 0:
+            self.anim_timer += 1
+            if self.anim_timer >= 8:
+                self.anim_timer = 0
+                self.anim_frame = (self.anim_frame + 1) % 2
+        else:
+            self.anim_frame = 0
+
+    def can_move(self, x, y):
+        # 16px collision box centered on player feet
+        feet_rect = pygame.Rect(x + 6, y + 16, 20, 14)
+        for r, row in enumerate(self.map_grid):
+            for c, tile in enumerate(row):
+                if tile == 'T' or tile == '#':
+                    tile_rect = pygame.Rect(c * TILE_SIZE, r * TILE_SIZE, TILE_SIZE, TILE_SIZE)
+                    if feet_rect.colliderect(tile_rect):
+                        return False
+        return True
+
+    # ============================================================
+    # EVENT & CLICK HANDLERS
+    # ============================================================
     def handle_event(self, event):
-        """Handle keyboard & mouse events"""
         if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
             self.trigger_click(event.pos)
-        elif event.type == pygame.KEYDOWN:
-            if event.key == pygame.K_RIGHT or event.key == pygame.K_SPACE:
-                self.next_slide()
-            elif event.key == pygame.K_LEFT:
-                self.prev_slide()
-            elif event.key == pygame.K_ESCAPE:
-                self.finish_tutorial()
+        elif event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+            self.finish_tutorial()
 
     def trigger_click(self, pos=None):
-        """Handle click at cursor position"""
         if pos is None:
             pos = self.cursor_pos
 
-        box_w, box_h = min(960, self.width - 80), min(600, self.height - 80)
-        box_x = (self.width - box_w) // 2
-        box_y = (self.height - box_h) // 2
-
         # 1. Skip Button (Top Right)
-        skip_rect = pygame.Rect(box_x + box_w - 180, box_y + 14, 160, 40)
+        skip_rect = pygame.Rect(self.width - 220, 20, 200, 46)
         if skip_rect.collidepoint(pos):
             self.finish_tutorial()
             return
 
-        # 2. Tab Headers (Click to jump to any slide)
-        tab_w = (box_w - 60) // self.total_slides
-        for i in range(self.total_slides):
-            t_rect = pygame.Rect(box_x + 30 + i * tab_w, box_y + 64, tab_w - 8, 36)
-            if t_rect.collidepoint(pos):
-                self.current_slide = i
+        # 2. Phase 2: NPC Click Interaction
+        if self.phase == 2 and self.quiz_state == 0:
+            screen_npc_x = (self.npc_tile_x * TILE_SIZE - self.camera_x) * ZOOM
+            screen_npc_y = (self.npc_tile_y * TILE_SIZE - self.camera_y) * ZOOM
+            npc_rect = pygame.Rect(screen_npc_x - 20, screen_npc_y - 20, TILE_SIZE * ZOOM + 40, TILE_SIZE * ZOOM + 40)
+            if npc_rect.collidepoint(pos) or math.hypot(self.player_x - self.npc_tile_x * TILE_SIZE, self.player_y - self.npc_tile_y * TILE_SIZE) < 3.0 * TILE_SIZE:
+                self.phase = 3
+                self.quiz_state = 1
+                print("🎓 Opening Sample Quiz Modal!")
                 return
 
-        # 3. Bottom Navigation Buttons
-        btn_y = box_y + box_h - 60
-        prev_rect = pygame.Rect(box_x + 30, btn_y, 140, 44)
-        next_rect = pygame.Rect(box_x + box_w - 170, btn_y, 140, 44)
-        start_rect = pygame.Rect(box_x + box_w - 220, btn_y, 190, 44)
+        # 3. Phase 3: Sample Quiz Dialog Clicks
+        if self.quiz_state == 1:
+            box_w, box_h = 580, 380
+            box_x = (self.width - box_w) // 2
+            box_y = (self.height - box_h) // 2
+            button_w, button_h = 500, 44
+            button_x = box_x + (box_w - button_w) // 2
+            button_y_start = box_y + 130
+            spacing = 52
 
-        if self.current_slide > 0 and prev_rect.collidepoint(pos):
-            self.prev_slide()
-            return
+            for i in range(4):
+                if i == self.eliminated_choice:
+                    continue
+                btn_rect = pygame.Rect(button_x, button_y_start + i * spacing, button_w, button_h)
+                if btn_rect.collidepoint(pos):
+                    if i == self.sample_question["correct"]:
+                        self.quiz_state = 3 # Correct
+                        print("✅ Correct Answer in Tutorial Quiz!")
+                    else:
+                        self.quiz_attempts += 1
+                        self.eliminated_choice = i
+                        self.wrong_feedback_msg = "Almost! You have 1 try remaining. Pick again! ⭐"
+                        self.quiz_state = 2 if self.quiz_attempts < 2 else 3
+                        print("❌ Wrong Answer in Tutorial Quiz -> Showing 2-Attempt Mechanics!")
+                    return
 
-        if self.current_slide < self.total_slides - 1 and next_rect.collidepoint(pos):
-            self.next_slide()
-            return
+        # Retry / Continue Dialog Clicks
+        elif self.quiz_state == 2:
+            box_w, box_h = 580, 260
+            box_x = (self.width - box_w) // 2
+            box_y = (self.height - box_h) // 2
+            btn_rect = pygame.Rect(box_x + (box_w - 220) // 2, box_y + 180, 220, 46)
+            if btn_rect.collidepoint(pos):
+                self.quiz_state = 1
+                return
 
-        if (self.current_slide == self.total_slides - 1 or self.practice_completed) and start_rect.collidepoint(pos):
-            self.finish_tutorial()
-            return
-
-        # Interactive practice orb click
-        if self.current_slide == 4:
-            target_center = (box_x + box_w // 2, box_y + 270)
-            dist = math.hypot(pos[0] - target_center[0], pos[1] - target_center[1])
-            if dist < 65:
-                self.practice_completed = True
-
-    def next_slide(self):
-        if self.current_slide < self.total_slides - 1:
-            self.current_slide += 1
-        else:
-            self.finish_tutorial()
-
-    def prev_slide(self):
-        if self.current_slide > 0:
-            self.current_slide -= 1
+        elif self.quiz_state == 3:
+            box_w, box_h = 580, 260
+            box_x = (self.width - box_w) // 2
+            box_y = (self.height - box_h) // 2
+            btn_rect = pygame.Rect(box_x + (box_w - 220) // 2, box_y + 175, 220, 46)
+            if btn_rect.collidepoint(pos):
+                self.quiz_state = 0
+                self.phase = 4
+                print("🎓 Tutorial Phase 4: Portal Unlocked! Guide student to Exit Portal.")
+                return
 
     def finish_tutorial(self):
-        """Saves tutorial completion and proceeds to Stage Select"""
         from db.save_system import set_tutorial_completed
         student_id = getattr(self.main_menu, 'student_id', None)
         if student_id:
             set_tutorial_completed(self.main_menu, student_id, completed=True)
 
-        print("🚀 Tutorial Finished! Opening Stage Select...")
+        print("🚀 Tutorial Complete! Opening Stage Select...")
         from screens.stageselect import StageSelect
         self.main_menu.current_screen = "stage_select"
         self.main_menu.stage_select = StageSelect(self.screen, self.main_menu)
 
     # ============================================================
-    # DRAWING ROUTINES
+    # DRAW LOOP
     # ============================================================
     def draw(self):
-        # 1. Background
-        if self.bg_image:
-            self.screen.blit(self.bg_image, (0, 0))
+        self.screen.fill((15, 23, 42))
+
+        # 1. Render World Tiles
+        start_col = max(0, int(self.camera_x // TILE_SIZE))
+        end_col = min(len(self.map_grid[0]), int((self.camera_x + self.width / ZOOM) // TILE_SIZE) + 2)
+        start_row = max(0, int(self.camera_y // TILE_SIZE))
+        end_row = min(len(self.map_grid), int((self.camera_y + self.height / ZOOM) // TILE_SIZE) + 2)
+
+        for r in range(start_row, end_row):
+            for c in range(start_col, end_col):
+                tile_char = self.map_grid[r][c]
+                t_surf = self.tile_sprites.get(tile_char, self.tile_sprites['G'])
+                sx = (c * TILE_SIZE - self.camera_x) * ZOOM
+                sy = (r * TILE_SIZE - self.camera_y) * ZOOM
+                scaled_t = pygame.transform.scale(t_surf, (int(TILE_SIZE * ZOOM), int(TILE_SIZE * ZOOM)))
+                self.screen.blit(scaled_t, (sx, sy))
+
+        # 2. Render Exit Portal
+        p_sx = (self.portal_tile_x * TILE_SIZE - self.camera_x) * ZOOM
+        p_sy = (self.portal_tile_y * TILE_SIZE - self.camera_y) * ZOOM
+        if self.portal_frames:
+            p_frame = self.portal_frames[self.portal_anim_frame]
+            scaled_p = pygame.transform.scale(p_frame, (int(TILE_SIZE * 2 * ZOOM), int(TILE_SIZE * 2 * ZOOM)))
+            self.screen.blit(scaled_p, (p_sx - 16 * ZOOM, p_sy - 16 * ZOOM))
+
+        # 3. Render Guide NPC
+        npc_sx = (self.npc_tile_x * TILE_SIZE - self.camera_x) * ZOOM
+        npc_sy = (self.npc_tile_y * TILE_SIZE - self.camera_y) * ZOOM
+        if self.npc_frames:
+            npc_f = self.npc_frames[self.npc_anim_frame]
+            scaled_npc = pygame.transform.scale(npc_f, (int(TILE_SIZE * ZOOM), int(TILE_SIZE * ZOOM)))
+            self.screen.blit(scaled_npc, (npc_sx, npc_sy))
+
+        # 4. Render Player Character
+        pl_sx = (self.player_x - self.camera_x) * ZOOM
+        pl_sy = (self.player_y - self.camera_y) * ZOOM
+        dir_sprites = self.player_sprites.get(self.player_dir, self.player_sprites["down"])
+        pl_f = dir_sprites[self.anim_frame]
+        scaled_pl = pygame.transform.scale(pl_f, (int(TILE_SIZE * ZOOM), int(TILE_SIZE * ZOOM)))
+        self.screen.blit(scaled_pl, (pl_sx, pl_sy))
+
+        # 5. Dynamic Compass Pointers & On-Screen Quest Badges
+        self.draw_compass_and_badges()
+
+        # 6. Top Visual Gameplay Banner
+        self.draw_top_banner()
+
+        # 7. Prominent Skip Button
+        skip_rect = pygame.Rect(self.width - 220, 20, 200, 46)
+        skip_hov = skip_rect.collidepoint(self.cursor_pos)
+        pygame.draw.rect(self.screen, (220, 38, 38) if skip_hov else (30, 41, 59), skip_rect, border_radius=12)
+        pygame.draw.rect(self.screen, (255, 215, 0) if skip_hov else (203, 213, 225), skip_rect, 2, border_radius=12)
+        skip_txt = self.skip_font.render("SKIP TUTORIAL >>", True, (255, 255, 255))
+        self.screen.blit(skip_txt, skip_txt.get_rect(center=skip_rect.center))
+
+        # 8. Render Quiz Modal Dialogs
+        if self.quiz_state == 1:
+            self.draw_sample_quiz_dialog()
+        elif self.quiz_state == 2:
+            self.draw_sample_wrong_dialog()
+        elif self.quiz_state == 3:
+            self.draw_sample_correct_dialog()
+
+    # ============================================================
+    # DYNAMIC COMPASS & BADGES
+    # ============================================================
+    def draw_compass_and_badges(self):
+        # Target = Guide NPC for Phase 1 & 2
+        if self.phase in [1, 2]:
+            st_x, st_y = self.npc_tile_x, self.npc_tile_y
+            screen_npc_x = (st_x * TILE_SIZE - self.camera_x) * ZOOM
+            screen_npc_y = (st_y * TILE_SIZE - self.camera_y) * ZOOM
+
+            # On-Screen Diamond Badge '!'
+            bob = math.sin(pygame.time.get_ticks() * 0.008) * 4 * ZOOM
+            badge_x = screen_npc_x + (TILE_SIZE * ZOOM) / 2 - 8 * ZOOM
+            badge_y = screen_npc_y - 22 * ZOOM + bob
+
+            badge_rect = pygame.Rect(badge_x, badge_y, 16 * ZOOM, 16 * ZOOM)
+            pygame.draw.rect(self.screen, (255, 215, 0), badge_rect, border_radius=4)
+            pygame.draw.rect(self.screen, (0, 0, 0), badge_rect, 1, border_radius=4)
+            excl_surf = self.ui_font.render("!", True, (0, 0, 0))
+            self.screen.blit(excl_surf, excl_surf.get_rect(center=badge_rect.center))
+
+            # Name Tag
+            tag_surf = self.ui_font.render("Guide Sage", True, (255, 235, 120))
+            tag_w, tag_h = tag_surf.get_width() + 10, tag_surf.get_height() + 4
+            tag_rect = pygame.Rect(screen_npc_x + (TILE_SIZE * ZOOM) / 2 - tag_w / 2, badge_y - tag_h - 2, tag_w, tag_h)
+            tag_bg = pygame.Surface((tag_w, tag_h), pygame.SRCALPHA)
+            tag_bg.fill((15, 23, 42, 210))
+            self.screen.blit(tag_bg, tag_rect)
+            pygame.draw.rect(self.screen, (255, 215, 0), tag_rect, 1, border_radius=4)
+            self.screen.blit(tag_surf, (tag_rect.x + 5, tag_rect.y + 2))
+
+            # Off-Screen Pointer Pill
+            is_on_screen = (40 <= screen_npc_x <= self.width - 60 and 40 <= screen_npc_y <= self.height - 110)
+            if not is_on_screen:
+                player_screen_x = (self.player_x - self.camera_x) * ZOOM
+                player_screen_y = (self.player_y - self.camera_y) * ZOOM
+                dx = screen_npc_x - player_screen_x
+                dy = screen_npc_y - player_screen_y
+                dist_m = int(math.hypot(self.player_x - st_x * TILE_SIZE, self.player_y - st_y * TILE_SIZE) // TILE_SIZE)
+                angle = math.atan2(dy, dx)
+                clamp_x = max(60, min(self.width - 60, player_screen_x + math.cos(angle) * 180))
+                clamp_y = max(60, min(self.height - 100, player_screen_y + math.sin(angle) * 180))
+
+                ptr_text = f">> Guide Sage ({dist_m}m)"
+                ptr_surf = self.ui_font.render(ptr_text, True, (15, 23, 42))
+                pw, ph = ptr_surf.get_width() + 16, 26
+                p_rect = pygame.Rect(clamp_x - pw // 2, clamp_y - ph // 2, pw, ph)
+                pygame.draw.rect(self.screen, (255, 215, 0), p_rect, border_radius=8)
+                pygame.draw.rect(self.screen, (255, 255, 255), p_rect, 2, border_radius=8)
+                self.screen.blit(ptr_surf, (p_rect.x + 8, p_rect.y + 4))
+
+        # Target = Exit Portal for Phase 4
+        elif self.phase == 4:
+            p_cx = self.portal_tile_x * TILE_SIZE
+            p_cy = self.portal_tile_y * TILE_SIZE
+            screen_p_x = (p_cx - self.camera_x) * ZOOM
+            screen_p_y = (p_cy - self.camera_y) * ZOOM
+            is_on_screen = (40 <= screen_p_x <= self.width - 60 and 40 <= screen_p_y <= self.height - 110)
+            if not is_on_screen:
+                player_screen_x = (self.player_x - self.camera_x) * ZOOM
+                player_screen_y = (self.player_y - self.camera_y) * ZOOM
+                dx = screen_p_x - player_screen_x
+                dy = screen_p_y - player_screen_y
+                dist_m = int(math.hypot(self.player_x - p_cx, self.player_y - p_cy) // TILE_SIZE)
+                angle = math.atan2(dy, dx)
+                clamp_x = max(60, min(self.width - 60, player_screen_x + math.cos(angle) * 180))
+                clamp_y = max(60, min(self.height - 100, player_screen_y + math.sin(angle) * 180))
+
+                ptr_text = f">> Exit Portal ({dist_m}m)"
+                ptr_surf = self.ui_font.render(ptr_text, True, (15, 23, 42))
+                pw, ph = ptr_surf.get_width() + 16, 26
+                p_rect = pygame.Rect(clamp_x - pw // 2, clamp_y - ph // 2, pw, ph)
+                pygame.draw.rect(self.screen, (74, 222, 128), p_rect, border_radius=8)
+                pygame.draw.rect(self.screen, (255, 255, 255), p_rect, 2, border_radius=8)
+                self.screen.blit(ptr_surf, (p_rect.x + 8, p_rect.y + 4))
+
+    # ============================================================
+    # TOP VISUAL GAMEPLAY BANNER
+    # ============================================================
+    def draw_top_banner(self):
+        bw, bh = min(720, self.width - 260), 56
+        bx = 30
+        by = 16
+
+        banner_rect = pygame.Rect(bx, by, bw, bh)
+        pygame.draw.rect(self.screen, (15, 23, 42), banner_rect, border_radius=14)
+        pygame.draw.rect(self.screen, (245, 158, 11), banner_rect, 2, border_radius=14)
+
+        if self.phase == 1:
+            txt = "🖐️ Move your hand in front of the camera to walk towards the Guide NPC!"
+            color = (255, 215, 0)
+        elif self.phase == 2:
+            txt = "✊ Hover cursor over Guide NPC and HOLD A FIST (0.9s) to interact!"
+            color = (74, 222, 128)
+        elif self.phase == 3:
+            txt = "⭐ Select the correct choice with your Fist Click (0.9s hold)!"
+            color = (251, 191, 36)
         else:
-            self.screen.fill((15, 23, 42))
+            txt = "🌀 Exit Portal open! Walk into the glowing portal to start your adventure!"
+            color = (74, 222, 128)
 
-        # Dim overlay
-        dim = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
-        dim.fill((0, 0, 0, 160))
-        self.screen.blit(dim, (0, 0))
+        msg_surf = self.banner_font.render(txt, True, color)
+        self.screen.blit(msg_surf, msg_surf.get_rect(center=banner_rect.center))
 
-        # 2. Main Parchment Container Box
-        box_w, box_h = min(960, self.width - 80), min(600, self.height - 80)
+    # ============================================================
+    # SAMPLE QUIZ MODAL DIALOGS
+    # ============================================================
+    def draw_sample_quiz_dialog(self):
+        box_w, box_h = 580, 380
         box_x = (self.width - box_w) // 2
         box_y = (self.height - box_h) // 2
 
-        main_box = pygame.Rect(box_x, box_y, box_w, box_h)
-        pygame.draw.rect(self.screen, (15, 23, 42), main_box, border_radius=16)
-        pygame.draw.rect(self.screen, (245, 158, 11), main_box, 3, border_radius=16)
-        pygame.draw.rect(self.screen, (251, 191, 36), main_box.inflate(-6, -6), 1, border_radius=12)
+        dim = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
+        dim.fill((0, 0, 0, 150))
+        self.screen.blit(dim, (0, 0))
 
-        # 3. Header Bar
-        title_surf = self.title_font.render("COGNITIVE PLAY: HOW TO PLAY", True, (255, 215, 0))
-        self.screen.blit(title_surf, (box_x + 30, box_y + 16))
+        dialog_rect = pygame.Rect(box_x, box_y, box_w, box_h)
+        pygame.draw.rect(self.screen, (15, 23, 42), dialog_rect, border_radius=16)
+        pygame.draw.rect(self.screen, (245, 158, 11), dialog_rect, 3, border_radius=16)
 
-        # Skip Button (Top Right)
-        skip_rect = pygame.Rect(box_x + box_w - 180, box_y + 14, 160, 40)
-        skip_hov = skip_rect.collidepoint(self.cursor_pos)
-        skip_bg = (220, 38, 38) if skip_hov else (30, 41, 59)
-        pygame.draw.rect(self.screen, skip_bg, skip_rect, border_radius=10)
-        pygame.draw.rect(self.screen, (255, 215, 0) if skip_hov else (203, 213, 225), skip_rect, 2, border_radius=10)
-        skip_txt = self.button_font.render("SKIP TUTORIAL >>", True, (255, 255, 255))
-        self.screen.blit(skip_txt, skip_txt.get_rect(center=skip_rect.center))
+        header_surf = pygame.Surface((box_w - 36, 40), pygame.SRCALPHA)
+        header_surf.fill((30, 41, 59, 230))
+        self.screen.blit(header_surf, (box_x + 18, box_y + 12))
+        pygame.draw.rect(self.screen, (245, 158, 11), (box_x + 18, box_y + 12, box_w - 36, 40), 1, border_radius=8)
 
-        # 4. Slide Progress Tabs (Top)
-        tab_names = ["1. Hand Steering", "2. Fist Click", "3. Objective Compass", "4. Quiz & Rewards", "5. Quick Practice"]
-        tab_w = (box_w - 60) // self.total_slides
-        for i, tname in enumerate(tab_names):
-            t_rect = pygame.Rect(box_x + 30 + i * tab_w, box_y + 64, tab_w - 8, 36)
-            is_active = (i == self.current_slide)
-            is_hov = t_rect.collidepoint(self.cursor_pos)
+        title = self.dialog_header_font.render("Guide Sage • Tutorial Question", True, (255, 215, 0))
+        self.screen.blit(title, (box_x + 30, box_y + 18))
 
-            if is_active:
-                bg_col = (245, 158, 11)
-                txt_col = (15, 23, 42)
-                border_col = (255, 255, 255)
+        q_txt = self.dialog_q_font.render(self.sample_question["question"], True, (255, 255, 255))
+        self.screen.blit(q_txt, (box_x + 30, box_y + 70))
+
+        if self.wrong_feedback_msg:
+            fb_surf = self.ui_font.render(self.wrong_feedback_msg, True, (252, 211, 77))
+            self.screen.blit(fb_surf, (box_x + 30, box_y + 98))
+
+        button_w, button_h = 500, 44
+        button_x = box_x + (box_w - button_w) // 2
+        button_y_start = box_y + 130
+        spacing = 52
+
+        for i, choice_text in enumerate(self.sample_question["choices"]):
+            b_y = button_y_start + i * spacing
+            btn_rect = pygame.Rect(button_x, b_y, button_w, button_h)
+            is_elim = (i == self.eliminated_choice)
+            is_hov = btn_rect.collidepoint(self.cursor_pos) and not is_elim
+
+            if is_elim:
+                bg_color = (20, 25, 35)
+                text_color = (100, 110, 120)
+                border_color = (50, 55, 65)
             elif is_hov:
-                bg_col = (51, 65, 85)
-                txt_col = (255, 255, 255)
-                border_col = (245, 158, 11)
+                bg_color = (255, 215, 0)
+                text_color = (15, 23, 42)
+                border_color = (255, 255, 255)
             else:
-                bg_col = (30, 41, 59)
-                txt_col = (148, 163, 184)
-                border_col = (71, 85, 105)
+                bg_color = (30, 41, 59)
+                text_color = (255, 255, 255)
+                border_color = (71, 85, 105)
 
-            pygame.draw.rect(self.screen, bg_col, t_rect, border_radius=8)
-            pygame.draw.rect(self.screen, border_col, t_rect, 1 if not is_active else 2, border_radius=8)
+            pygame.draw.rect(self.screen, bg_color, btn_rect, border_radius=10)
+            pygame.draw.rect(self.screen, border_color, btn_rect, 2, border_radius=10)
 
-            lbl = self.badge_font.render(tname, True, txt_col)
-            self.screen.blit(lbl, lbl.get_rect(center=t_rect.center))
+            c_surf = self.dialog_choice_font.render(choice_text, True, text_color)
+            self.screen.blit(c_surf, c_surf.get_rect(center=btn_rect.center))
 
-        # 5. Content Area based on Slide
-        content_rect = pygame.Rect(box_x + 30, box_y + 115, box_w - 60, box_h - 190)
-        pygame.draw.rect(self.screen, (20, 29, 48), content_rect, border_radius=12)
-        pygame.draw.rect(self.screen, (51, 65, 85), content_rect, 1, border_radius=12)
+    def draw_sample_wrong_dialog(self):
+        box_w, box_h = 580, 260
+        box_x = (self.width - box_w) // 2
+        box_y = (self.height - box_h) // 2
 
-        if self.current_slide == 0:
-            self.draw_slide_hand_steering(content_rect)
-        elif self.current_slide == 1:
-            self.draw_slide_fist_click(content_rect)
-        elif self.current_slide == 2:
-            self.draw_slide_compass_radar(content_rect)
-        elif self.current_slide == 3:
-            self.draw_slide_quiz_progression(content_rect)
-        elif self.current_slide == 4:
-            self.draw_slide_interactive_practice(content_rect)
+        dim = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
+        dim.fill((0, 0, 0, 150))
+        self.screen.blit(dim, (0, 0))
 
-        # 6. Bottom Navigation Controls
-        btn_y = box_y + box_h - 58
-        if self.current_slide > 0:
-            prev_rect = pygame.Rect(box_x + 30, btn_y, 140, 42)
-            prev_hov = prev_rect.collidepoint(self.cursor_pos)
-            pygame.draw.rect(self.screen, (30, 41, 59) if not prev_hov else (51, 65, 85), prev_rect, border_radius=8)
-            pygame.draw.rect(self.screen, (148, 163, 184), prev_rect, 1, border_radius=8)
-            p_txt = self.button_font.render("< Previous", True, (255, 255, 255))
-            self.screen.blit(p_txt, p_txt.get_rect(center=prev_rect.center))
+        dialog_rect = pygame.Rect(box_x, box_y, box_w, box_h)
+        pygame.draw.rect(self.screen, (15, 23, 42), dialog_rect, border_radius=14)
+        pygame.draw.rect(self.screen, (220, 38, 38), dialog_rect, 3, border_radius=14)
 
-        if self.current_slide < self.total_slides - 1:
-            next_rect = pygame.Rect(box_x + box_w - 170, btn_y, 140, 42)
-            next_hov = next_rect.collidepoint(self.cursor_pos)
-            pygame.draw.rect(self.screen, (245, 158, 11) if not next_hov else (251, 191, 36), next_rect, border_radius=8)
-            pygame.draw.rect(self.screen, (255, 255, 255), next_rect, 2, border_radius=8)
-            n_txt = self.button_font.render("Next Step >", True, (15, 23, 42))
-            self.screen.blit(n_txt, n_txt.get_rect(center=next_rect.center))
-        else:
-            start_rect = pygame.Rect(box_x + box_w - 220, btn_y, 190, 42)
-            start_hov = start_rect.collidepoint(self.cursor_pos)
-            bg_start = (34, 197, 94) if not start_hov else (74, 222, 128)
-            pygame.draw.rect(self.screen, bg_start, start_rect, border_radius=8)
-            pygame.draw.rect(self.screen, (255, 255, 255), start_rect, 2, border_radius=8)
-            s_txt = self.button_font.render("Start Adventure! >>", True, (15, 23, 42))
-            self.screen.blit(s_txt, s_txt.get_rect(center=start_rect.center))
+        speaker = self.dialog_header_font.render("Guide Sage", True, (239, 68, 68))
+        self.screen.blit(speaker, (box_x + 25, box_y + 20))
 
-    # ============================================================
-    # SLIDE 1: HAND STEERING & CURSOR
-    # ============================================================
-    def draw_slide_hand_steering(self, rect):
-        # Header
-        h_surf = self.subtitle_font.render("🖐️ Hand Movement & Directional Steering", True, (255, 215, 0))
-        self.screen.blit(h_surf, (rect.left + 30, rect.top + 20))
+        m1 = self.dialog_q_font.render("Hmm, that is not correct.", True, (255, 255, 255))
+        m2 = self.dialog_choice_font.render("You have 1 try remaining! Think carefully and try again. ⭐", True, (253, 230, 138))
+        self.screen.blit(m1, (box_x + 25, box_y + 75))
+        self.screen.blit(m2, (box_x + 25, box_y + 110))
 
-        # Left Column: Instructions
-        lines = [
-            "1. Stand or sit in front of your camera.",
-            "2. Move your open hand to steer the on-screen cursor.",
-            "3. Directional Steering: Move your hand away from the center to make",
-            "   your character walk in that direction (Left, Right, Up, Down).",
-            "4. The further you stretch your hand, the faster your character walks!",
-            "5. The camera tracks your character smoothly through the quest world."
-        ]
-        y_off = rect.top + 65
-        for line in lines:
-            col = (255, 255, 255) if not line.startswith("   ") else (203, 213, 225)
-            fnt = self.bold_body_font if line.startswith("1.") or line.startswith("2.") or line.startswith("3.") else self.body_font
-            txt = fnt.render(line, True, col)
-            self.screen.blit(txt, (rect.left + 30, y_off))
-            y_off += 28
+        btn_rect = pygame.Rect(box_x + (box_w - 220) // 2, box_y + 180, 220, 46)
+        is_hov = btn_rect.collidepoint(self.cursor_pos)
+        pygame.draw.rect(self.screen, (220, 38, 38) if is_hov else (153, 27, 27), btn_rect, border_radius=12)
+        pygame.draw.rect(self.screen, (255, 255, 255), btn_rect, 2, border_radius=12)
 
-        # Right Column: Visual Diagram
-        diag_rect = pygame.Rect(rect.right - 280, rect.top + 40, 250, 220)
-        pygame.draw.rect(self.screen, (15, 23, 42), diag_rect, border_radius=12)
-        pygame.draw.rect(self.screen, (245, 158, 11), diag_rect, 2, border_radius=12)
+        c_surf = self.dialog_btn_font.render("Try Again", True, (255, 255, 255))
+        self.screen.blit(c_surf, c_surf.get_rect(center=btn_rect.center))
 
-        cx, cy = diag_rect.centerx, diag_rect.centery
-        # Directional compass circle
-        pygame.draw.circle(self.screen, (51, 65, 85), (cx, cy), 65, 2)
-        pygame.draw.circle(self.screen, (245, 158, 11), (cx, cy), 15, 2)
+    def draw_sample_correct_dialog(self):
+        box_w, box_h = 580, 260
+        box_x = (self.width - box_w) // 2
+        box_y = (self.height - box_h) // 2
 
-        # Floating Hand Indicator animation
-        h_x = cx + math.cos(self.anim_timer) * 45
-        h_y = cy + math.sin(self.anim_timer) * 45
-        pygame.draw.line(self.screen, (251, 191, 36), (cx, cy), (int(h_x), int(h_y)), 2)
-        pygame.draw.circle(self.screen, (255, 215, 0), (int(h_x), int(h_y)), 12)
-        pygame.draw.circle(self.screen, (255, 255, 255), (int(h_x), int(h_y)), 12, 2)
+        dim = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
+        dim.fill((0, 0, 0, 150))
+        self.screen.blit(dim, (0, 0))
 
-        diag_lbl = self.badge_font.render("Move Hand to Walk", True, (254, 240, 138))
-        self.screen.blit(diag_lbl, diag_lbl.get_rect(center=(cx, diag_rect.bottom - 20)))
+        dialog_rect = pygame.Rect(box_x, box_y, box_w, box_h)
+        pygame.draw.rect(self.screen, (15, 23, 42), dialog_rect, border_radius=14)
+        pygame.draw.rect(self.screen, (22, 163, 74), dialog_rect, 3, border_radius=14)
 
-    # ============================================================
-    # SLIDE 2: FIST CLICK & INTERACTIONS
-    # ============================================================
-    def draw_slide_fist_click(self, rect):
-        h_surf = self.subtitle_font.render("✊ Fist Click & Interaction Gestures", True, (255, 215, 0))
-        self.screen.blit(h_surf, (rect.left + 30, rect.top + 20))
+        speaker = self.dialog_header_font.render("Guide Sage", True, (22, 163, 74))
+        self.screen.blit(speaker, (box_x + 25, box_y + 20))
 
-        lines = [
-            "1. Hover your cursor over buttons, challenge NPCs, or answer choices.",
-            "2. Make a FIST (close all fingers into your palm) to begin clicking.",
-            "3. Hold your fist closed for 0.9 seconds to confirm your selection!",
-            "   A yellow charging ring will fill up to show your progress.",
-            "4. Peace Sign (✌️): Hold a peace sign gesture anytime to trigger quick",
-            "   pause / main menu confirmation."
-        ]
-        y_off = rect.top + 65
-        for line in lines:
-            col = (255, 255, 255) if not line.startswith("   ") else (203, 213, 225)
-            fnt = self.bold_body_font if line.startswith("1.") or line.startswith("2.") or line.startswith("3.") or line.startswith("4.") else self.body_font
-            txt = fnt.render(line, True, col)
-            self.screen.blit(txt, (rect.left + 30, y_off))
-            y_off += 28
+        m1 = self.dialog_q_font.render("Outstanding! That is correct!", True, (255, 255, 255))
+        m2 = self.dialog_choice_font.render("The Exit Portal has been unlocked. Step through to begin! ⭐", True, (253, 230, 138))
+        self.screen.blit(m1, (box_x + 25, box_y + 75))
+        self.screen.blit(m2, (box_x + 25, box_y + 110))
 
-        # Visual Diagram
-        diag_rect = pygame.Rect(rect.right - 280, rect.top + 40, 250, 220)
-        pygame.draw.rect(self.screen, (15, 23, 42), diag_rect, border_radius=12)
-        pygame.draw.rect(self.screen, (34, 197, 94), diag_rect, 2, border_radius=12)
+        btn_rect = pygame.Rect(box_x + (box_w - 220) // 2, box_y + 175, 220, 46)
+        is_hov = btn_rect.collidepoint(self.cursor_pos)
+        pygame.draw.rect(self.screen, (34, 197, 94) if is_hov else (30, 41, 59), btn_rect, border_radius=12)
+        pygame.draw.rect(self.screen, (255, 255, 255), btn_rect, 2, border_radius=12)
 
-        cx, cy = diag_rect.centerx, diag_rect.centery - 10
-        # Button mock
-        btn_mock = pygame.Rect(cx - 75, cy - 25, 150, 50)
-        pygame.draw.rect(self.screen, (245, 158, 11), btn_mock, border_radius=8)
-        pygame.draw.rect(self.screen, (255, 255, 255), btn_mock, 2, border_radius=8)
-        b_txt = self.badge_font.render("SELECT OPTION", True, (15, 23, 42))
-        self.screen.blit(b_txt, b_txt.get_rect(center=btn_mock.center))
-
-        # Animated Fist Cursor & Progress Ring
-        charge_pct = (math.sin(self.anim_timer * 1.5) + 1) / 2
-        pygame.draw.circle(self.screen, (255, 255, 255), (cx + 40, cy + 20), 16, 2)
-        pygame.draw.circle(self.screen, (255, 215, 0), (cx + 40, cy + 20), int(16 * charge_pct))
-
-        diag_lbl = self.badge_font.render("Hold Fist (0.9s) to Select", True, (74, 222, 128))
-        self.screen.blit(diag_lbl, diag_lbl.get_rect(center=(cx, diag_rect.bottom - 20)))
-
-    # ============================================================
-    # SLIDE 3: OBJECTIVE COMPASS & RADAR
-    # ============================================================
-    def draw_slide_compass_radar(self, rect):
-        h_surf = self.subtitle_font.render("📍 Objective Badges & Off-Screen Compass Radar", True, (255, 215, 0))
-        self.screen.blit(h_surf, (rect.left + 30, rect.top + 20))
-
-        lines = [
-            "1. On-Screen Quest Badges: Active challenge NPCs display a bouncing yellow",
-            "   diamond '!' badge and name tag above them.",
-            "2. Off-Screen Compass Pointer: If your target is far away across the map,",
-            "   a gold directional radar pill shows you the direction & distance:",
-            "   Example: >> Circle Guardian (15m)",
-            "3. Exit Portals: When all stage challenges are cleared, an emerald green",
-            "   compass pointer guides you directly to the unlocked Exit Portal!"
-        ]
-        y_off = rect.top + 65
-        for line in lines:
-            col = (255, 255, 255) if not line.startswith("   ") else (203, 213, 225)
-            fnt = self.bold_body_font if line.startswith("1.") or line.startswith("2.") or line.startswith("3.") else self.body_font
-            txt = fnt.render(line, True, col)
-            self.screen.blit(txt, (rect.left + 30, y_off))
-            y_off += 28
-
-        # Visual Diagram showing Radar Pointers
-        diag_rect = pygame.Rect(rect.right - 280, rect.top + 40, 250, 220)
-        pygame.draw.rect(self.screen, (15, 23, 42), diag_rect, border_radius=12)
-        pygame.draw.rect(self.screen, (245, 158, 11), diag_rect, 2, border_radius=12)
-
-        cx, cy = diag_rect.centerx, diag_rect.centery - 15
-
-        # Gold Station Pointer Mock
-        p1_rect = pygame.Rect(cx - 100, cy - 35, 200, 32)
-        pygame.draw.rect(self.screen, (255, 215, 0), p1_rect, border_radius=8)
-        pygame.draw.rect(self.screen, (255, 255, 255), p1_rect, 2, border_radius=8)
-        p1_txt = self.badge_font.render(">> Station NPC (12m)", True, (15, 23, 42))
-        self.screen.blit(p1_txt, p1_txt.get_rect(center=p1_rect.center))
-
-        # Green Exit Portal Pointer Mock
-        p2_rect = pygame.Rect(cx - 100, cy + 15, 200, 32)
-        pygame.draw.rect(self.screen, (74, 222, 128), p2_rect, border_radius=8)
-        pygame.draw.rect(self.screen, (255, 255, 255), p2_rect, 2, border_radius=8)
-        p2_txt = self.badge_font.render(">> Exit Portal (18m)", True, (15, 23, 42))
-        self.screen.blit(p2_txt, p2_txt.get_rect(center=p2_rect.center))
-
-        diag_lbl = self.badge_font.render("Follow Dynamic Radar Pointers", True, (254, 240, 138))
-        self.screen.blit(diag_lbl, diag_lbl.get_rect(center=(cx, diag_rect.bottom - 20)))
-
-    # ============================================================
-    # SLIDE 4: QUIZ & 2-ATTEMPT GUARANTEED PROGRESSION
-    # ============================================================
-    def draw_slide_quiz_progression(self, rect):
-        h_surf = self.subtitle_font.render("⭐ 2-Attempt Quiz Rule & Guaranteed Progression", True, (255, 215, 0))
-        self.screen.blit(h_surf, (rect.left + 30, rect.top + 20))
-
-        lines = [
-            "1. Approach challenge NPCs to open clean multiple-choice math questions.",
-            "2. Attempt 1 (Try Your Best): If you answer correctly, you receive instant",
-            "   praise and a quest artifact (Jigsaw Piece, Bahay Kubo, Keystone)!",
-            "3. Attempt 2 (Gentle Retry): If incorrect on try 1, you get a friendly retry",
-            "   screen to review the choices and try one more time.",
-            "4. Guaranteed Progression: Even after 2 tries, the correct answer is revealed",
-            "   and you STILL receive the quest reward so your adventure never stops!"
-        ]
-        y_off = rect.top + 65
-        for line in lines:
-            col = (255, 255, 255) if not line.startswith("   ") else (203, 213, 225)
-            fnt = self.bold_body_font if line.startswith("1.") or line.startswith("2.") or line.startswith("3.") or line.startswith("4.") else self.body_font
-            txt = fnt.render(line, True, col)
-            self.screen.blit(txt, (rect.left + 30, y_off))
-            y_off += 28
-
-        # Visual Diagram
-        diag_rect = pygame.Rect(rect.right - 280, rect.top + 40, 250, 220)
-        pygame.draw.rect(self.screen, (15, 23, 42), diag_rect, border_radius=12)
-        pygame.draw.rect(self.screen, (245, 158, 11), diag_rect, 2, border_radius=12)
-
-        cx, cy = diag_rect.centerx, diag_rect.centery - 10
-        # Retry card mock
-        r_box = pygame.Rect(cx - 90, cy - 30, 180, 60)
-        pygame.draw.rect(self.screen, (30, 41, 59), r_box, border_radius=8)
-        pygame.draw.rect(self.screen, (245, 158, 11), r_box, 2, border_radius=8)
-        r_txt1 = self.badge_font.render("Attempt 1: Retry Feedback", True, (255, 215, 0))
-        r_txt2 = self.badge_font.render("Attempt 2: Solution Reveal", True, (74, 222, 128))
-        self.screen.blit(r_txt1, (r_box.left + 10, r_box.top + 10))
-        self.screen.blit(r_txt2, (r_box.left + 10, r_box.top + 32))
-
-        diag_lbl = self.badge_font.render("Guaranteed Quest Progression", True, (254, 240, 138))
-        self.screen.blit(diag_lbl, diag_lbl.get_rect(center=(cx, diag_rect.bottom - 20)))
-
-    # ============================================================
-    # SLIDE 5: INTERACTIVE GESTURE PRACTICE
-    # ============================================================
-    def draw_slide_interactive_practice(self, rect):
-        h_surf = self.subtitle_font.render("🎯 Practice Your Fist Click Gesture!", True, (255, 215, 0))
-        self.screen.blit(h_surf, (rect.left + 30, rect.top + 20))
-
-        sub_txt = self.body_font.render("Move your cursor over the Power Orb below and HOLD A FIST for 0.9s to charge it up:", True, (241, 245, 249))
-        self.screen.blit(sub_txt, (rect.left + 30, rect.top + 60))
-
-        cx, cy = rect.centerx, rect.top + 155
-
-        # Glowing Power Orb Target
-        pulse = math.sin(self.practice_pulse_timer) * 4
-        orb_r = int(50 + pulse)
-
-        if self.practice_completed:
-            orb_col = (34, 197, 94)
-            border_col = (255, 255, 255)
-            label_text = "GREAT JOB! READY!"
-        else:
-            orb_col = (30, 58, 138) if self.practice_charge < 0.1 else (245, 158, 11)
-            border_col = (251, 191, 36)
-            label_text = f"HOLD FIST {int(self.practice_charge * 100)}%"
-
-        # Outer charging ring
-        pygame.draw.circle(self.screen, (51, 65, 85), (cx, cy), orb_r + 12, 4)
-        if self.practice_charge > 0 or self.practice_completed:
-            charged_r = orb_r + 12
-            pygame.draw.circle(self.screen, (34, 197, 94) if self.practice_completed else (255, 215, 0), (cx, cy), charged_r, 4)
-
-        # Orb Center
-        pygame.draw.circle(self.screen, orb_col, (cx, cy), orb_r)
-        pygame.draw.circle(self.screen, border_col, (cx, cy), orb_r, 3)
-
-        o_lbl = self.bold_body_font.render(label_text, True, (255, 255, 255))
-        self.screen.blit(o_lbl, o_lbl.get_rect(center=(cx, cy)))
-
-        # Status Banner
-        if self.practice_completed:
-            status_txt = self.subtitle_font.render("✨ You have mastered the gesture controls! Click 'Start Adventure' below to begin.", True, (74, 222, 128))
-            self.screen.blit(status_txt, status_txt.get_rect(center=(cx, rect.bottom - 30)))
-        else:
-            status_txt = self.body_font.render("(You can also click the orb or click 'Start Adventure' whenever you are ready)", True, (148, 163, 184))
-            self.screen.blit(status_txt, status_txt.get_rect(center=(cx, rect.bottom - 30)))
+        c_surf = self.dialog_btn_font.render("Continue >>", True, (255, 255, 255))
+        self.screen.blit(c_surf, c_surf.get_rect(center=btn_rect.center))
