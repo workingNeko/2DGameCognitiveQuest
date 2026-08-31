@@ -56,6 +56,11 @@ class Quarter1:
         self.last_click_time = 0
         self.click_cooldown = 0.5
 
+        # 10-Minute Stage Timer
+        self.stage_time_limit = 600.0
+        self.stage_time_remaining = 600.0
+        self.time_up_dialog_active = False
+
         # ============================================================
         # PATHS
         # ============================================================
@@ -2243,6 +2248,27 @@ class Quarter1:
     # TRIGGER CLICK
     # ============================================================
     def trigger_click(self, pos):
+        if getattr(self, 'time_up_dialog_active', False):
+            box_w, box_h = 560, 260
+            box_x = (self.width - box_w) // 2
+            box_y = (self.height - box_h) // 2
+            retry_rect = pygame.Rect(box_x + 40, box_y + 175, 220, 46)
+            exit_rect = pygame.Rect(box_x + box_w - 260, box_y + 175, 220, 46)
+            if retry_rect.collidepoint(pos):
+                self.stage_time_remaining = 600.0
+                self.time_up_dialog_active = False
+                from screens.quarter1 import Quarter1
+                self.main_menu.quarter1 = Quarter1(self.screen, self.main_menu, "map1.txt")
+                return
+            elif exit_rect.collidepoint(pos):
+                self.time_up_dialog_active = False
+                from screens.stageselect import StageSelect
+                self.main_menu.current_screen = "stage_select"
+                self.main_menu.stage_select = StageSelect(self.screen, self.main_menu)
+                self.main_menu.quarter1 = None
+                return
+            return
+
         if not self.is_quiz_map:
             return
             
@@ -2496,7 +2522,18 @@ class Quarter1:
     def update(self):
         dt = self.clock.tick(FPS) / 1000.0
         self.frame_counter += 1
-        
+
+        # 10-Minute Stage Timer
+        if not getattr(self, 'completed', False) and not self.time_up_dialog_active:
+            self.stage_time_remaining = max(0.0, self.stage_time_remaining - dt)
+            if self.stage_time_remaining <= 0.0:
+                self.stage_time_remaining = 0.0
+                self.time_up_dialog_active = True
+                print("⏰ Quarter 1 Time's Up!")
+
+        if self.time_up_dialog_active:
+            return
+
         if self.puzzle_active:
             self.update_puzzle()
             return
@@ -3037,6 +3074,13 @@ class Quarter1:
         # Draw jigsaw puzzle overlay if active
         if self.puzzle_active:
             self.draw_puzzle()
+
+        # Draw 10-Minute Stage Timer HUD
+        self.draw_stage_timer_hud()
+
+        # Draw Time's Up modal dialog if timer expired
+        if self.time_up_dialog_active:
+            self.draw_time_up_dialog()
 
     def draw_quiz_dialog(self):
         overlay = pygame.Surface((self.width, self.height))
@@ -4015,6 +4059,83 @@ class Quarter1:
                 pygame.draw.rect(self.screen, (74, 222, 128), ptr_rect, border_radius=8)
                 pygame.draw.rect(self.screen, (255, 255, 255), ptr_rect, 2, border_radius=8)
                 self.screen.blit(ptr_surf, (ptr_rect.x + 8, ptr_rect.y + 4))
+
+    def draw_stage_timer_hud(self):
+        """Draws the sleek 10-minute digital stopwatch timer HUD at top center"""
+        now = pygame.time.get_ticks()
+        mins = int(self.stage_time_remaining // 60)
+        secs = int(self.stage_time_remaining % 60)
+        time_str = f"⏱️ {mins:02d}:{secs:02d}"
+
+        hud_w, hud_h = 160, 38
+        hud_x = (self.width - hud_w) // 2
+        hud_y = 16
+
+        # Color based on remaining time
+        if self.stage_time_remaining > 120:
+            border_col = (245, 158, 11)
+            txt_col = (255, 255, 255)
+            border_w = 2
+        elif self.stage_time_remaining > 60:
+            border_col = (251, 191, 36)
+            txt_col = (253, 230, 138)
+            border_w = 2
+        else:
+            pulse = (math.sin(now * 0.008) + 1) / 2
+            border_col = (239, 68, 68) if pulse > 0.3 else (255, 255, 255)
+            txt_col = (254, 202, 202)
+            border_w = 3
+
+        # Translucent Background
+        hud_surf = pygame.Surface((hud_w, hud_h), pygame.SRCALPHA)
+        hud_surf.fill((15, 23, 42, 220))
+        self.screen.blit(hud_surf, (hud_x, hud_y))
+        pygame.draw.rect(self.screen, border_col, (hud_x, hud_y, hud_w, hud_h), border_w, border_radius=10)
+
+        t_font = self.get_ui_font(16, bold=True)
+        t_surf = t_font.render(time_str, True, txt_col)
+        self.screen.blit(t_surf, t_surf.get_rect(center=(hud_x + hud_w // 2, hud_y + hud_h // 2)))
+
+    def draw_time_up_dialog(self):
+        """Draws a modal dialog when the 10-minute timer runs out"""
+        dim = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
+        dim.fill((0, 0, 0, 180))
+        self.screen.blit(dim, (0, 0))
+
+        box_w, box_h = 560, 260
+        box_x = (self.width - box_w) // 2
+        box_y = (self.height - box_h) // 2
+
+        pygame.draw.rect(self.screen, (15, 23, 42), (box_x, box_y, box_w, box_h), border_radius=16)
+        pygame.draw.rect(self.screen, (239, 68, 68), (box_x, box_y, box_w, box_h), 3, border_radius=16)
+
+        t_font = self.get_ui_font(24, bold=True)
+        msg_font = self.get_ui_font(18)
+        btn_font = self.get_ui_font(16, bold=True)
+
+        title = t_font.render("⏰ TIME'S UP!", True, (239, 68, 68))
+        self.screen.blit(title, title.get_rect(center=(box_x + box_w // 2, box_y + 36)))
+
+        m1 = msg_font.render("Your 10-minute stage time limit has expired.", True, (255, 255, 255))
+        m2 = msg_font.render("Would you like to try again or return to Stage Select?", True, (203, 213, 225))
+        self.screen.blit(m1, m1.get_rect(center=(box_x + box_w // 2, box_y + 85)))
+        self.screen.blit(m2, m2.get_rect(center=(box_x + box_w // 2, box_y + 115)))
+
+        # Button 1: Retry Quarter
+        retry_rect = pygame.Rect(box_x + 40, box_y + 175, 220, 46)
+        r_hov = retry_rect.collidepoint(self.cursor_pos)
+        pygame.draw.rect(self.screen, (245, 158, 11) if r_hov else (30, 41, 59), retry_rect, border_radius=10)
+        pygame.draw.rect(self.screen, (255, 255, 255), retry_rect, 2, border_radius=10)
+        r_txt = btn_font.render("Retry Quarter 🔄", True, (15, 23, 42) if r_hov else (255, 255, 255))
+        self.screen.blit(r_txt, r_txt.get_rect(center=retry_rect.center))
+
+        # Button 2: Return to Stage Select
+        exit_rect = pygame.Rect(box_x + box_w - 260, box_y + 175, 220, 46)
+        e_hov = exit_rect.collidepoint(self.cursor_pos)
+        pygame.draw.rect(self.screen, (220, 38, 38) if e_hov else (30, 41, 59), exit_rect, border_radius=10)
+        pygame.draw.rect(self.screen, (255, 255, 255), exit_rect, 2, border_radius=10)
+        e_txt = btn_font.render("Stage Select 🗺️", True, (255, 255, 255))
+        self.screen.blit(e_txt, e_txt.get_rect(center=exit_rect.center))
 
     # ============================================================
     # CLEANUP

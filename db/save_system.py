@@ -128,6 +128,7 @@ def gather_quarter_data(q, quarter_name):
         "quiz_state": getattr(q, 'quiz_state', 0),
         "quiz_station_index": getattr(q, 'quiz_station_index', 1),
         "current_question_index": getattr(q, 'current_question_index', 0),
+        "stage_time_remaining": getattr(q, 'stage_time_remaining', 600.0),
         "completed": getattr(q, 'completed', False)
     }
     
@@ -229,6 +230,7 @@ def apply_student_progress(main_menu, save_data):
             q.quiz_state = q_data.get("quiz_state", 0)
             q.quiz_station_index = q_data.get("quiz_station_index", 1)
             q.current_question_index = q_data.get("current_question_index", 0)
+            q.stage_time_remaining = q_data.get("stage_time_remaining", 600.0)
             q.completed = q_data.get("completed", False)
             
             # Restore first attempt correct tracking (all quarters)
