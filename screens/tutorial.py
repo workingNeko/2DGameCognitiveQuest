@@ -55,9 +55,16 @@ class TutorialScreen:
         self.npc_anim_frame = 0
         self.npc_anim_timer = 0
 
-        # Exit Portal State
-        self.portal_tile_x = 21
+        # Exit Portal State (Scanned from 'r' in tutorial_map.txt)
+        self.portal_tile_x = 20
         self.portal_tile_y = 5
+        for r_idx, row in enumerate(self.map_grid):
+            for c_idx, char in enumerate(row):
+                if char == 'r':
+                    self.portal_tile_x = c_idx
+                    self.portal_tile_y = r_idx
+                    print(f"🌀 Tutorial Exit Portal ('r') mapped at tile: ({c_idx}, {r_idx})")
+
         self.portal_anim_frame = 0
         self.portal_anim_timer = 0
 
@@ -154,6 +161,7 @@ class TutorialScreen:
         tile_map = {
             'G': "grass1.png",
             'P': "pathway1.png",
+            'r': "pathway1.png",
             'T': "tree.png",
             '#': "wall.png"
         }
