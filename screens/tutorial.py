@@ -200,18 +200,24 @@ class TutorialScreen:
 
     def load_portal_sprites(self):
         frames = []
-        for i in range(1, 9):
-            path = os.path.join(self.PORTAL_PATH, f"portal_{i}.png")
+        for i in range(9):
+            filename = f"sprite_right_portal{i}.png"
+            path = os.path.join(self.PORTAL_PATH, filename)
             try:
                 if os.path.exists(path):
                     img = pygame.image.load(path).convert_alpha()
-                    frames.append(pygame.transform.scale(img, (TILE_SIZE * 2, TILE_SIZE * 2)))
-            except Exception:
-                pass
+                    scaled_width = TILE_SIZE * 3
+                    scaled_height = TILE_SIZE * 3
+                    frames.append(pygame.transform.scale(img, (scaled_width, scaled_height)))
+            except Exception as e:
+                print(f"⚠️ Error loading tutorial portal frame {filename}: {e}")
+
         if not frames:
-            p = pygame.Surface((TILE_SIZE * 2, TILE_SIZE * 2), pygame.SRCALPHA)
-            pygame.draw.circle(p, (74, 222, 128), (TILE_SIZE, TILE_SIZE), TILE_SIZE)
+            p = pygame.Surface((TILE_SIZE * 3, TILE_SIZE * 3), pygame.SRCALPHA)
+            pygame.draw.circle(p, (74, 222, 128), (TILE_SIZE * 3 // 2, TILE_SIZE * 3 // 2), TILE_SIZE * 3 // 2)
             frames.append(p)
+        else:
+            print(f"✅ Loaded {len(frames)} portal animation frames for Tutorial!")
         return frames
 
     # ============================================================
@@ -420,12 +426,12 @@ class TutorialScreen:
             p_sy = (self.portal_tile_y * TILE_SIZE - self.camera_y) * ZOOM
             if self.portal_frames:
                 p_frame = self.portal_frames[self.portal_anim_frame]
-                scaled_p = pygame.transform.scale(p_frame, (int(TILE_SIZE * 2 * ZOOM), int(TILE_SIZE * 2 * ZOOM)))
-                self.screen.blit(scaled_p, (p_sx - 16 * ZOOM, p_sy - 16 * ZOOM))
+                scaled_p = pygame.transform.scale(p_frame, (int(TILE_SIZE * 3 * ZOOM), int(TILE_SIZE * 3 * ZOOM)))
+                self.screen.blit(scaled_p, (p_sx - int(TILE_SIZE * ZOOM), p_sy - int(TILE_SIZE * ZOOM)))
 
                 # Glowing portal magic aura ring
                 ring_radius = int((24 + math.sin(pygame.time.get_ticks() * 0.006) * 4) * ZOOM)
-                pygame.draw.circle(self.screen, (74, 222, 128), (int(p_sx + 16 * ZOOM), int(p_sy + 16 * ZOOM)), ring_radius, 2)
+                pygame.draw.circle(self.screen, (74, 222, 128), (int(p_sx + (TILE_SIZE / 2) * ZOOM), int(p_sy + (TILE_SIZE / 2) * ZOOM)), ring_radius, 2)
 
         # 3. Render Guide NPC
         npc_sx = (self.npc_tile_x * TILE_SIZE - self.camera_x) * ZOOM
