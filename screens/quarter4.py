@@ -15,7 +15,7 @@ from .map_loader import MapLoader
 # ============================================================
 TILE_SIZE = 32
 FPS = 60
-SPEED = 4
+SPEED = 4.5
 
 # Camera zoom settings - PERMANENT ZOOM
 ZOOM = 1.50  # Fixed zoom level
@@ -304,10 +304,11 @@ class Quarter4:
         self.is_quiz_map = True
         self.answered_stations = set()
 
-        self.quiz_state = 0  # 0: waiting proximity, 1: dialog Q, 2: wrong try again, 3: correct phrase transition, 5: final speech, 6: quiz complete
+        self.quiz_state = 0  # 0: waiting proximity, 1: dialog Q, 2: wrong try again, 3: correct phrase transition, 4: out of tries reveal, 5: final speech, 6: quiz complete
         self.quiz_station_index = 1  # current active station (1-6)
         self.current_question_index = 0
         self.first_attempt_correct = {1: True, 2: True, 3: True, 4: True, 5: True, 6: True}
+        self.station_attempts = {1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0}
         self.selected_choice_index = -1  # choice highlighted
 
         # Station Standby Directions based on Map Name and User Requests
@@ -1015,22 +1016,30 @@ class Quarter4:
                         self.current_correct_phrase = random.choice(self.correct_phrases)
                         self.quiz_state = 3
                         self.answered_stations.add(self.quiz_station_index)
-                        print("✨ Correct answer selected!")
+                        print(f"✨ Correct answer selected for Station {self.quiz_station_index}!")
                     else:
-                        self.quiz_state = 2
-                        if hasattr(self, 'first_attempt_correct') and (self.current_question_index + 1) in self.first_attempt_correct:
-                            self.first_attempt_correct[self.current_question_index + 1] = False
-                        print("❌ Incorrect answer selected!")
+                        self.first_attempt_correct[self.current_question_index + 1] = False
+                        self.station_attempts[self.quiz_station_index] = self.station_attempts.get(self.quiz_station_index, 0) + 1
+                        
+                        if self.station_attempts[self.quiz_station_index] < 2:
+                            # 1st wrong attempt: Give player 1 more try
+                            self.quiz_state = 2
+                            print(f"❌ Incorrect answer selected! (Attempt 1 of 2)")
+                        else:
+                            # 2nd wrong attempt: Out of tries! Recorded as wrong, but award emblem so game proceeds
+                            self.quiz_state = 4
+                            self.answered_stations.add(self.quiz_station_index)
+                            print(f"❌ Incorrect answer on 2nd try! Out of tries. Station {self.quiz_station_index} emblem awarded.")
                     
                     save_student_progress(self.main_menu)
                     break
  
-        # State 2: Incorrect answer feedback click
+        # State 2: Incorrect answer feedback click (1 try remaining)
         elif self.quiz_state == 2:
-            box_w, box_h = 500, 240
+            box_w, box_h = 520, 250
             box_x = (self.width - box_w) // 2
             box_y = (self.height - box_h) // 2
-            btn_rect = pygame.Rect(box_x + (box_w - 200) // 2, box_y + 140, 200, 42)
+            btn_rect = pygame.Rect(box_x + (box_w - 200) // 2, box_y + 160, 200, 42)
             if btn_rect.collidepoint(pos):
                 self.quiz_state = 1
                 save_student_progress(self.main_menu)
@@ -1041,6 +1050,16 @@ class Quarter4:
             box_x = (self.width - box_w) // 2
             box_y = (self.height - box_h) // 2
             btn_rect = pygame.Rect(box_x + (box_w - 200) // 2, box_y + 140, 200, 42)
+            if btn_rect.collidepoint(pos):
+                self.quiz_state = 0
+                save_student_progress(self.main_menu)
+
+        # State 4: Out of tries reveal screen click (Player gets emblem and continues)
+        elif self.quiz_state == 4:
+            box_w, box_h = 560, 260
+            box_x = (self.width - box_w) // 2
+            box_y = (self.height - box_h) // 2
+            btn_rect = pygame.Rect(box_x + (box_w - 200) // 2, box_y + 195, 200, 42)
             if btn_rect.collidepoint(pos):
                 self.quiz_state = 0
                 save_student_progress(self.main_menu)
@@ -1122,20 +1141,18 @@ class Quarter4:
                         print(f"🧙‍♂️ Interacting with Station {self.quiz_station_index} NPC!")
                         break
 
-        # Proximity check for Bromen (Final obstacle)
+        # Proximity check for Bromen (Final obstacle) - Only activates once all objectives are completed
         if self.quiz_state == 0 and not self.emblem_puzzle_active and self.bromen_dialogue_state == 0 and self.npc_bromen_found:
-            import math
-            player_center_x = self.player_x + TILE_SIZE // 2
-            player_center_y = self.player_y + TILE_SIZE // 2
-            bromen_center_x = self.npc_bromen_x + TILE_SIZE // 2
-            bromen_center_y = self.npc_bromen_y + TILE_SIZE // 2
-            dist = math.hypot(player_center_x - bromen_center_x, player_center_y - bromen_center_y)
-            if dist < TILE_SIZE * 1.5:
-                if len(self.answered_stations) < 6:
-                    self.bromen_dialogue_state = 1  # Not enough
-                else:
-                    self.bromen_dialogue_state = 2  # Ready
-                print(f"🧙‍♂️ Interacting with Bromen! state={self.bromen_dialogue_state}")
+            if len(self.answered_stations) >= 6:
+                import math
+                player_center_x = self.player_x + TILE_SIZE // 2
+                player_center_y = self.player_y + TILE_SIZE // 2
+                bromen_center_x = self.npc_bromen_x + TILE_SIZE // 2
+                bromen_center_y = self.npc_bromen_y + TILE_SIZE // 2
+                dist = math.hypot(player_center_x - bromen_center_x, player_center_y - bromen_center_y)
+                if dist < TILE_SIZE * 1.5:
+                    self.bromen_dialogue_state = 2  # Ready for Mural Puzzle
+                    print(f"🧙‍♂️ Objectives complete! Interacting with Bromen! state={self.bromen_dialogue_state}")
 
         # Update Bromen animation
         if self.npc_bromen_found and self.npc_bromen_sprites:
@@ -1160,27 +1177,52 @@ class Quarter4:
     # UPDATE PLAYER MOVEMENT
     # ============================================================
     def update_player_movement(self):
-        if self.quiz_state in [1, 2, 3, 5] or self.emblem_puzzle_active or self.bromen_dialogue_state in [1, 2] or (hasattr(self, 'player_block_timer') and self.player_block_timer > 0):
+        if self.quiz_state in [1, 2, 3, 4, 5] or self.emblem_puzzle_active or self.bromen_dialogue_state in [1, 2] or (hasattr(self, 'player_block_timer') and self.player_block_timer > 0):
             self.anim_frame = 0
             return
 
         vx, vy = 0, 0
+        current_speed = SPEED
 
-        if self.hand_detected:
+        # 1. Keyboard Controls (Arrow keys / WASD) with optional Shift Sprint
+        keys = pygame.key.get_pressed()
+        is_sprinting = keys[pygame.K_LSHIFT] or keys[pygame.K_RSHIFT]
+        move_speed = current_speed * 1.35 if is_sprinting else current_speed
+
+        if keys[pygame.K_LEFT] or keys[pygame.K_a]:
+            vx = -move_speed
+            self.player_dir = "left"
+        elif keys[pygame.K_RIGHT] or keys[pygame.K_d]:
+            vx = move_speed
+            self.player_dir = "right"
+
+        if keys[pygame.K_UP] or keys[pygame.K_w]:
+            vy = -move_speed
+            self.player_dir = "up"
+        elif keys[pygame.K_DOWN] or keys[pygame.K_s]:
+            vy = move_speed
+            self.player_dir = "down"
+
+        # 2. Hand Gesture Controls (if keyboard is not actively moving)
+        if vx == 0 and vy == 0 and self.hand_detected:
             center_x, center_y = self.width // 2, self.height // 2
             cursor_x, cursor_y = self.cursor_pos
             dx = cursor_x - center_x
             dy = cursor_y - center_y
 
-            if abs(dx) > 60:
-                vx = SPEED if dx > 0 else -SPEED
+            # Dynamic speed scaling: faster when hand is stretched further out
+            dist_factor = 1.3 if (abs(dx) > 160 or abs(dy) > 160) else 1.0
+            g_speed = current_speed * dist_factor
+
+            if abs(dx) > 45:
+                vx = g_speed if dx > 0 else -g_speed
                 if dx > 0:
                     self.player_dir = "right"
                 elif dx < 0:
                     self.player_dir = "left"
 
-            if abs(dy) > 60:
-                vy = SPEED if dy > 0 else -SPEED
+            if abs(dy) > 45:
+                vy = g_speed if dy > 0 else -g_speed
                 if dy > 0:
                     self.player_dir = "down"
                 elif dy < 0:
@@ -1196,7 +1238,7 @@ class Quarter4:
 
         if vx != 0 or vy != 0:
             self.anim_timer += 1
-            if self.anim_timer >= 10:
+            if self.anim_timer >= 8:
                 self.anim_timer = 0
                 self.anim_frame = (self.anim_frame + 1) % 2
         else:
@@ -1365,6 +1407,9 @@ class Quarter4:
                     if tile_char == 'T':
                         self.draw_tile(tile_char, col * TILE_SIZE, row * TILE_SIZE)
 
+        # Draw Active Objective NPC Indicator and Off-Screen Compass Pointer
+        self.draw_offscreen_compass_pointer()
+
         # Draw quiz dialog overlays
         if self.quiz_state == 1:
             self.draw_quiz_dialog()
@@ -1372,6 +1417,8 @@ class Quarter4:
             self.draw_wrong_dialog()
         elif self.quiz_state == 3:
             self.draw_correct_dialog()
+        elif self.quiz_state == 4:
+            self.draw_out_of_tries_dialog()
         elif self.quiz_state == 5:
             self.draw_final_dialog()
 
@@ -1444,6 +1491,9 @@ class Quarter4:
             if len(self.answered_stations) < 6:
                 obj2 = "• Portal Status: LOCKED (Answer all 6 questions)"
                 obj2_color = (244, 63, 94)  # Rose
+            elif self.quiz_state < 6:
+                obj2 = "• Emblems Collected! Approach Bromen to open gate"
+                obj2_color = (255, 215, 0)  # Gold
             else:
                 obj2 = "• Portal Status: OPEN (Enter the portal to finish!)"
                 obj2_color = (34, 197, 94)  # Green
@@ -1601,7 +1651,7 @@ class Quarter4:
         overlay.set_alpha(150)
         self.screen.blit(overlay, (0, 0))
 
-        box_w, box_h = 500, 240
+        box_w, box_h = 520, 250
         box_x = (self.width - box_w) // 2
         box_y = (self.height - box_h) // 2
 
@@ -1615,12 +1665,14 @@ class Quarter4:
         self.screen.blit(speaker_surf, (box_x + 25, box_y + 20))
 
         q_font = pygame.font.SysFont("Comic Sans MS", 16)
-        msg_surf = q_font.render("Hmm, that is not correct. Try again, young adventurer!", True, (255, 255, 255))
-        self.screen.blit(msg_surf, (box_x + 25, box_y + 70))
+        msg_surf1 = q_font.render("Hmm, that is not correct.", True, (255, 255, 255))
+        msg_surf2 = q_font.render("You have 1 try remaining! Think carefully.", True, (255, 215, 0))
+        self.screen.blit(msg_surf1, (box_x + 25, box_y + 65))
+        self.screen.blit(msg_surf2, (box_x + 25, box_y + 95))
 
         button_w, button_h = 200, 42
         button_x = box_x + (box_w - button_w) // 2
-        button_y = box_y + 140
+        button_y = box_y + 160
         btn_rect = pygame.Rect(button_x, button_y, button_w, button_h)
 
         is_hovered = btn_rect.collidepoint(self.cursor_pos)
@@ -1630,6 +1682,49 @@ class Quarter4:
         pygame.draw.rect(self.screen, (0, 0, 0), btn_rect, 3, border_radius=12)
 
         c_surf = speaker_font.render("Try Again", True, (255, 255, 255))
+        c_rect = c_surf.get_rect(center=btn_rect.center)
+        self.screen.blit(c_surf, c_rect)
+
+    def draw_out_of_tries_dialog(self):
+        overlay = pygame.Surface((self.width, self.height))
+        overlay.fill((0, 0, 0))
+        overlay.set_alpha(160)
+        self.screen.blit(overlay, (0, 0))
+
+        box_w, box_h = 560, 260
+        box_x = (self.width - box_w) // 2
+        box_y = (self.height - box_h) // 2
+
+        dialog_rect = pygame.Rect(box_x, box_y, box_w, box_h)
+        pygame.draw.rect(self.screen, (15, 23, 42), dialog_rect)
+        pygame.draw.rect(self.screen, (245, 158, 11), dialog_rect, 3, border_radius=8)
+
+        speaker_font = pygame.font.SysFont("Comic Sans MS", 18, bold=True)
+        speaker_name = self.station_npcs.get(self.quiz_station_index, {}).get("name", "Guardian")
+        speaker_surf = speaker_font.render(speaker_name, True, (245, 158, 11))
+        self.screen.blit(speaker_surf, (box_x + 25, box_y + 15))
+
+        q_data = self.quiz_questions[self.current_question_index]
+        correct_choice_text = q_data["choices"][q_data["correct"]]
+
+        q_font = pygame.font.SysFont("Comic Sans MS", 15)
+        msg1 = q_font.render(f"Out of tries! The correct answer was: {correct_choice_text}", True, (255, 255, 255))
+        msg2 = q_font.render("You still received the Emblem piece so your quest can continue!", True, (255, 215, 0))
+        self.screen.blit(msg1, (box_x + 25, box_y + 60))
+        self.screen.blit(msg2, (box_x + 25, box_y + 105))
+
+        button_w, button_h = 200, 42
+        button_x = box_x + (box_w - button_w) // 2
+        button_y = box_y + 195
+        btn_rect = pygame.Rect(button_x, button_y, button_w, button_h)
+
+        is_hovered = btn_rect.collidepoint(self.cursor_pos)
+        bg_color = (30, 41, 59) if not is_hovered else (245, 158, 11)
+
+        pygame.draw.rect(self.screen, bg_color, btn_rect, border_radius=12)
+        pygame.draw.rect(self.screen, (0, 0, 0), btn_rect, 3, border_radius=12)
+
+        c_surf = speaker_font.render("Continue", True, (255, 255, 255))
         c_rect = c_surf.get_rect(center=btn_rect.center)
         self.screen.blit(c_surf, c_rect)
 
@@ -2024,6 +2119,116 @@ class Quarter4:
         if current_line:
             lines.append(' '.join(current_line))
         return lines
+
+    def get_ui_font(self, size, bold=False):
+        """Returns a high-legibility system font for UI elements"""
+        return pygame.font.SysFont(["Segoe UI", "Tahoma", "Verdana", "Calibri", "Arial", "Comic Sans MS"], size, bold=bold)
+
+    def draw_offscreen_compass_pointer(self):
+        """Draw Active Objective NPC Indicator and Off-Screen Compass Pointer for Quarter 4"""
+        import math
+
+        target_info = None
+
+        # 1. Target Determination
+        if self.quiz_state == 0:
+            if self.quiz_station_index <= 6 and hasattr(self, 'quiz_stations') and self.quiz_station_index in self.quiz_stations:
+                if self.quiz_station_index not in self.answered_stations:
+                    st_x, st_y = self.quiz_stations[self.quiz_station_index]
+                    npc_name = self.station_npcs.get(self.quiz_station_index, {}).get("name", f"Guardian {self.quiz_station_index}")
+                    target_info = (st_x, st_y, npc_name)
+            elif self.npc_bromen_found and not self.emblem_puzzle_solved:
+                target_info = (self.npc_bromen_tile_x, self.npc_bromen_tile_y, "Bromen (Master Emblem)")
+
+        if target_info:
+            st_x, st_y, npc_name = target_info
+            screen_npc_x = (st_x * TILE_SIZE - self.camera_x) * ZOOM
+            screen_npc_y = (st_y * TILE_SIZE - self.camera_y) * ZOOM
+
+            # On-Screen Floating Objective Badge (Always visible over active target NPC)
+            bob = math.sin(self.frame_counter * 0.15) * 3 * ZOOM
+            badge_x = screen_npc_x + (TILE_SIZE * ZOOM) / 2 - 8 * ZOOM
+            badge_y = screen_npc_y - 20 * ZOOM + bob
+
+            badge_rect = pygame.Rect(badge_x, badge_y, 16 * ZOOM, 16 * ZOOM)
+            pygame.draw.rect(self.screen, (255, 215, 0), badge_rect, border_radius=4)
+            pygame.draw.rect(self.screen, (0, 0, 0), badge_rect, 1, border_radius=4)
+
+            excl_font = pygame.font.SysFont("Comic Sans MS", int(14 * ZOOM), bold=True)
+            excl_surf = excl_font.render("!", True, (0, 0, 0))
+            excl_rect = excl_surf.get_rect(center=badge_rect.center)
+            self.screen.blit(excl_surf, excl_rect)
+
+            # Small pill name tag over active NPC
+            name_font = self.get_ui_font(int(10 * ZOOM), bold=True)
+            name_surf = name_font.render(f"{npc_name}", True, (255, 235, 120))
+            tag_w = name_surf.get_width() + 10
+            tag_h = name_surf.get_height() + 4
+            tag_x = screen_npc_x + (TILE_SIZE * ZOOM) / 2 - tag_w / 2
+            tag_y = badge_y - tag_h - 2
+
+            tag_bg = pygame.Surface((tag_w, tag_h), pygame.SRCALPHA)
+            tag_bg.fill((15, 23, 42, 210))
+            self.screen.blit(tag_bg, (tag_x, tag_y))
+            pygame.draw.rect(self.screen, (255, 215, 0), (tag_x, tag_y, tag_w, tag_h), 1, border_radius=4)
+            self.screen.blit(name_surf, (tag_x + 5, tag_y + 2))
+
+            # Off-Screen Directional Compass Pointer
+            is_on_screen = (40 <= screen_npc_x <= self.width - 60 and 40 <= screen_npc_y <= self.height - 110)
+            if not is_on_screen:
+                player_screen_x = (self.player_x - self.camera_x) * ZOOM
+                player_screen_y = (self.player_y - self.camera_y) * ZOOM
+
+                dx = screen_npc_x - player_screen_x
+                dy = screen_npc_y - player_screen_y
+                dist_tiles = int(math.hypot(self.player_x - st_x * TILE_SIZE, self.player_y - st_y * TILE_SIZE) // TILE_SIZE)
+
+                angle = math.atan2(dy, dx)
+                margin = 55
+                clamp_x = max(margin, min(self.width - margin, player_screen_x + math.cos(angle) * 180))
+                clamp_y = max(margin, min(self.height - 100, player_screen_y + math.sin(angle) * 180))
+
+                # Draw glowing radar pointer pill
+                ptr_font = self.get_ui_font(12, bold=True)
+                ptr_text = f">> {npc_name} ({dist_tiles}m)"
+                ptr_surf = ptr_font.render(ptr_text, True, (15, 23, 42))
+                pw = ptr_surf.get_width() + 16
+                ph = 26
+
+                ptr_rect = pygame.Rect(clamp_x - pw // 2, clamp_y - ph // 2, pw, ph)
+                pygame.draw.rect(self.screen, (255, 215, 0), ptr_rect, border_radius=8)
+                pygame.draw.rect(self.screen, (255, 255, 255), ptr_rect, 2, border_radius=8)
+                self.screen.blit(ptr_surf, (ptr_rect.x + 8, ptr_rect.y + 4))
+
+        # 2. Exit Portal Compass Pointer (When stage is completed)
+        if self.quiz_state == 6 and self.portals:
+            exit_p = self.portals[0]
+            portal_cx = exit_p.get_center_x()
+            portal_cy = exit_p.get_center_y()
+            screen_p_x = (portal_cx - self.camera_x) * ZOOM
+            screen_p_y = (portal_cy - self.camera_y) * ZOOM
+            is_on_screen = (40 <= screen_p_x <= self.width - 60 and 40 <= screen_p_y <= self.height - 110)
+            if not is_on_screen:
+                player_screen_x = (self.player_x - self.camera_x) * ZOOM
+                player_screen_y = (self.player_y - self.camera_y) * ZOOM
+                dx = screen_p_x - player_screen_x
+                dy = screen_p_y - player_screen_y
+                dist_tiles = int(math.hypot(self.player_x - portal_cx, self.player_y - portal_cy) // TILE_SIZE)
+                angle = math.atan2(dy, dx)
+                margin = 55
+                clamp_x = max(margin, min(self.width - margin, player_screen_x + math.cos(angle) * 180))
+                clamp_y = max(margin, min(self.height - 100, player_screen_y + math.sin(angle) * 180))
+
+                ptr_font = self.get_ui_font(12, bold=True)
+                ptr_text = f">> Exit Portal ({dist_tiles}m)"
+                ptr_surf = ptr_font.render(ptr_text, True, (15, 23, 42))
+                pw = ptr_surf.get_width() + 16
+                ph = 26
+
+                ptr_rect = pygame.Rect(clamp_x - pw // 2, clamp_y - ph // 2, pw, ph)
+                pygame.draw.rect(self.screen, (74, 222, 128), ptr_rect, border_radius=8)
+                pygame.draw.rect(self.screen, (255, 255, 255), ptr_rect, 2, border_radius=8)
+                self.screen.blit(ptr_surf, (ptr_rect.x + 8, ptr_rect.y + 4))
 
     # ============================================================
     # CLEANUP

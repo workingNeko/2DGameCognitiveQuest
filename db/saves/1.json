@@ -1,9 +1,9 @@
 {
     "student_id": "1",
     "selected_student": {
-        "id": 1,
+        "id": 9,
         "student_id": "1",
-        "first_name": "Nico Adlawan",
+        "first_name": "Jessuny Dado",
         "last_name": "",
         "score": 0,
         "progress": 0,
@@ -11,10 +11,10 @@
         "gender": "male"
     },
     "current_screen": "stage_select",
-    "timestamp": 1787806289.6981254,
+    "timestamp": 1788150812.100485,
     "stage_select": {
-        "player_x": 956,
-        "player_y": 476,
+        "player_x": 948.5500000000003,
+        "player_y": 477.2000000000003,
         "oldman_dialogue_state": 0,
         "knight_dialogue_state": 0,
         "skeleton_dialogue_state": 0,

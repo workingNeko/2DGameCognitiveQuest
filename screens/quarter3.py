@@ -22,7 +22,7 @@ except ImportError:
 # ============================================================
 TILE_SIZE = 32
 FPS = 60
-SPEED = 4
+SPEED = 4.5
 
 # Camera zoom settings - PERMANENT ZOOM
 ZOOM = 1.50  # Fixed zoom level
@@ -320,10 +320,11 @@ class Quarter3:
         self.completed = False
 
         self.is_quiz_map = True
-        self.quiz_state = 0  # 0: waiting proximity, 1: dialog Q, 2: wrong try again, 3: correct phrase transition, 4: walking along path, 5: final speech, 6: quiz complete
+        self.quiz_state = 0  # 0: waiting proximity, 1: dialog Q, 2: wrong try again, 3: correct phrase transition, 4: out of tries reveal, 5: final speech, 6: quiz complete
         self.quiz_station_index = 1  # current station (1-5)
         self.current_question_index = 0
         self.first_attempt_correct = {1: True, 2: True, 3: True, 4: True, 5: True}
+        self.station_attempts = {1: 0, 2: 0, 3: 0, 4: 0, 5: 0}
         self.selected_choice_index = -1  # choice highlighted
 
         # 50:50 Wizard Hint & friendly elimination tracking
@@ -1575,14 +1576,121 @@ class Quarter3:
         else:
             if hasattr(self, 'first_attempt_correct') and (self.current_question_index + 1) in self.first_attempt_correct:
                 self.first_attempt_correct[self.current_question_index + 1] = False
+            
+            self.station_attempts[self.quiz_station_index] = self.station_attempts.get(self.quiz_station_index, 0) + 1
+            if self.station_attempts[self.quiz_station_index] < 2:
+                self.quiz_state = 2
+                print(f"❌ Incorrect identification answer submitted: {self.ident_input_text} (Attempt 1 of 2)")
+            else:
+                self.quiz_state = 4
+                print(f"❌ Incorrect identification on 2nd try! Out of tries. Station {self.quiz_station_index} cleared for progression.")
+                
             if self.snap_sound:
                 self.snap_sound.play()
             self.wrong_feedback_msg = f"Almost there! Check the visual model ({q_data.get('hint', '')}) and try again! 💡"
-            print(f"❌ Incorrect identification answer submitted: {self.ident_input_text}")
             print(f"❌ Incorrect identification answer: '{self.ident_input_text}'. Expected one of: {valid_answers}")
             
         from db.save_system import save_student_progress
         save_student_progress(self.main_menu)
+
+    def advance_station_progress(self):
+        """Executes guaranteed reward & station progression after answering or out-of-tries"""
+        import random
+        self.eliminated_choices.clear()
+        self.wrong_feedback_msg = ""
+        self.ident_input_text = ""
+
+        # Map 7 Reward: Load Cargo onto Explorer's Caravan
+        if self.is_caravan_mode and self.quiz_station_index in self.station_cargo_rewards:
+            reward = self.station_cargo_rewards[self.quiz_station_index]
+            self.caravan_cargo.append(reward)
+            self.caravan_upgrade_banner_text = f"📦 CARAVAN UPGRADE: {reward['name']} Loaded!"
+            self.caravan_upgrade_banner_sub = f"⚡ Speed Rush Activated! {reward['desc']}"
+            self.caravan_upgrade_banner_timer = 4.0
+            self.speed_boost_timer = 5.0  # 5 seconds of lightning sprint!
+
+            # Spawn celebration sparkles and music notes
+            for _ in range(20):
+                self.caravan_sparkles.append({
+                    "x": self.caravan_x + random.randint(0, 32),
+                    "y": self.caravan_y + random.randint(0, 32),
+                    "vx": random.uniform(-2.5, 2.5),
+                    "vy": random.uniform(-3.5, -0.5),
+                    "color": random.choice([(255, 255, 255), (251, 191, 36), (56, 189, 248), (239, 68, 68), (34, 197, 94)]),
+                    "life": random.uniform(0.8, 1.5),
+                    "rad": random.randint(3, 6)
+                })
+            print(f"🐪 Caravan Upgraded! Loaded {reward['name']} (Total Cargo: {len(self.caravan_cargo)}/5)")
+
+        # Map 9 Reward: Unlock Sacred Math Keystone
+        elif self.is_puzzle_hybrid_mode and self.quiz_station_index in self.citadel_keystones:
+            st_num = self.quiz_station_index
+            keystone = self.citadel_keystones[st_num]
+            self.citadel_collected_keystones.append(keystone)
+            self.citadel_banner_text = f"🏛️ SUN KEYSTONE {st_num}/5 UNLOCKED!"
+            self.citadel_banner_sub = f"✨ {keystone['name']} ({keystone['math']}) slotted into Citadel Altar!"
+            self.citadel_banner_timer = 4.0
+            self.speed_boost_timer = 5.0
+
+            for _ in range(25):
+                self.caravan_sparkles.append({
+                    "x": self.player_x + random.randint(0, 32),
+                    "y": self.player_y + random.randint(0, 32),
+                    "vx": random.uniform(-3, 3),
+                    "vy": random.uniform(-4, 0),
+                    "color": keystone["color"],
+                    "life": random.uniform(1.0, 1.8),
+                    "rad": random.randint(3, 7)
+                })
+            print(f"🏛️ Citadel Keystone {st_num} Acquired: {keystone['name']}")
+
+        elif self.is_relic_hunt_mode:
+            self.speed_boost_timer = 6.0
+
+        # In-World Bridge Construction and Camera Pan for Map 8
+        st_num = self.quiz_station_index
+        if hasattr(self, 'bridge_tiles') and self.bridge_tiles and st_num <= len(self.bridge_tiles):
+            bx, by = self.bridge_tiles[st_num - 1]
+            if by < len(self.game_map) and bx < len(self.game_map[by]):
+                self.game_map[by] = self.game_map[by][:bx] + "B" + self.game_map[by][bx+1:]
+                self.render_map[by] = self.render_map[by][:bx] + "B" + self.render_map[by][bx+1:]
+                self.built_bridge_count = st_num
+
+                # Initiate Cinematic Drone Camera Pan
+                self.camera_pan_active = True
+                self.camera_pan_timer = 0.0
+                self.camera_pan_duration = 2.4
+                self.camera_pan_burst_done = False
+                self.camera_pan_target_col = bx
+                self.camera_pan_target_row = by
+                self.camera_pan_origin_x = self.camera_x
+                self.camera_pan_origin_y = self.camera_y
+
+                t_cx = (bx * TILE_SIZE + TILE_SIZE // 2) - (self.width // 2) / ZOOM
+                t_cy = (by * TILE_SIZE + TILE_SIZE // 2) - (self.height // 2) / ZOOM
+                min_cam_x, max_cam_x = 0, max(0, self.MAP_WIDTH - self.width / ZOOM)
+                min_cam_y, max_cam_y = 0, max(0, self.MAP_HEIGHT - self.height / ZOOM)
+                self.camera_pan_dest_x = max(min_cam_x, min(t_cx, max_cam_x))
+                self.camera_pan_dest_y = max(min_cam_y, min(t_cy, max_cam_y))
+
+                self.quiz_state = 7  # State 7: Camera Pan sequence
+                print(f"🏗️ Aqueduct Bridge Segment {st_num}/5 materialized at ({bx}, {by})! Camera panning...")
+                return
+
+        if self.quiz_station_index < 5:
+            self.quiz_station_index += 1
+            self.current_question_index += 1
+            self.quiz_state = 0
+            print(f"✅ Advanced to Quiz Station {self.quiz_station_index}")
+        else:
+            self.current_question_index += 1
+            if self.is_puzzle_hybrid_mode:
+                # In Map 9 Hybrid mode, completing question 5 activates the Grand Sun Temple Altar Jigsaw!
+                self.quiz_state = 8
+                self.init_sun_relic_puzzle()
+                print("🏛️ All 5 Map 9 Stations Solved! Grand Sun Temple Altar Puzzle Opened!")
+            else:
+                self.quiz_state = 5
 
     # ============================================================
     # TRIGGER CLICK
@@ -1591,28 +1699,26 @@ class Quarter3:
         import random
         from db.save_system import save_student_progress
         
-        # State 1: Multiple Choice Answer Selection
+        # State 1: Multiple Choice Answer Selection (No icons)
         if self.quiz_state == 1:
-            box_w, box_h = 780, 540
+            box_w, box_h = 580, 380
             box_x = (self.width - box_w) // 2
             box_y = (self.height - box_h) // 2
             q_data = self.quiz_questions[self.current_question_index]
 
-            # Multiple Choice 2x2 Elemental Cards Selection with 50:50 Wizard Hint
-            card_w = 355
-            card_h = 85
-            for i in range(min(4, len(q_data["choices"]))):
-                # Skip already eliminated choices
+            button_w, button_h = 500, 44
+            button_x = box_x + (box_w - button_w) // 2
+            button_y_start = box_y + 130
+            spacing = 52
+
+            for i, choice in enumerate(q_data["choices"][:4]):
                 if i in self.eliminated_choices:
                     continue
 
-                col = i % 2
-                row = i // 2
-                cx = box_x + 25 + col * 375
-                cy = box_y + 325 + row * 95
-                card_rect = pygame.Rect(cx, cy, card_w, card_h)
+                b_y = button_y_start + i * spacing
+                btn_rect = pygame.Rect(button_x, b_y, button_w, button_h)
 
-                if card_rect.collidepoint(pos):
+                if btn_rect.collidepoint(pos):
                     if i == q_data["correct"]:
                         self.current_correct_phrase = random.choice(self.correct_phrases)
                         self.quiz_state = 3
@@ -1624,12 +1730,20 @@ class Quarter3:
                     else:
                         # 50:50 Wizard Hint: eliminate the clicked wrong choice and give gentle encouragement
                         self.eliminated_choices.add(i)
-                        self.wrong_feedback_msg = "Almost there! Let's eliminate that choice. Pick again! ⭐"
+                        self.wrong_feedback_msg = "Almost there! Try picking again! ⭐"
                         if hasattr(self, 'first_attempt_correct') and (self.current_question_index + 1) in self.first_attempt_correct:
                             self.first_attempt_correct[self.current_question_index + 1] = False
+                        
+                        self.station_attempts[self.quiz_station_index] = self.station_attempts.get(self.quiz_station_index, 0) + 1
+                        if self.station_attempts[self.quiz_station_index] < 2:
+                            self.quiz_state = 2
+                            print(f"❌ Incorrect choice selected: {q_data['choices'][i]} (Attempt 1 of 2)")
+                        else:
+                            self.quiz_state = 4
+                            print(f"❌ Incorrect choice on 2nd try! Out of tries. Station {self.quiz_station_index} cleared for progression.")
+                        
                         if self.snap_sound:
                             self.snap_sound.play()
-                        print(f"❌ Incorrect choice eliminated: {q_data['choices'][i]} (Active: {self.eliminated_choices})")
                     save_student_progress(self.main_menu)
                     break
                     
@@ -1650,100 +1764,18 @@ class Quarter3:
             box_y = (self.height - box_h) // 2
             btn_rect = pygame.Rect(box_x + (box_w - 220) // 2, box_y + 180, 220, 46)
             if btn_rect.collidepoint(pos):
-                self.eliminated_choices.clear()
-                self.wrong_feedback_msg = ""
-                
-                # Map 7 Reward: Load Cargo onto Explorer's Caravan
-                if self.is_caravan_mode and self.quiz_station_index in self.station_cargo_rewards:
-                    reward = self.station_cargo_rewards[self.quiz_station_index]
-                    self.caravan_cargo.append(reward)
-                    self.caravan_upgrade_banner_text = f"📦 CARAVAN UPGRADE: {reward['name']} Loaded!"
-                    self.caravan_upgrade_banner_sub = f"⚡ Speed Rush Activated! {reward['desc']}"
-                    self.caravan_upgrade_banner_timer = 4.0
-                    self.speed_boost_timer = 5.0  # 5 seconds of lightning sprint!
-                    
-                    # Spawn celebration sparkles and music notes
-                    for _ in range(20):
-                        self.caravan_sparkles.append({
-                            "x": self.caravan_x + random.randint(0, 32),
-                            "y": self.caravan_y + random.randint(0, 32),
-                            "vx": random.uniform(-2.5, 2.5),
-                            "vy": random.uniform(-3.5, -0.5),
-                            "color": random.choice([(255, 255, 255), (251, 191, 36), (56, 189, 248), (239, 68, 68), (34, 197, 94)]),
-                            "life": random.uniform(0.8, 1.5),
-                            "rad": random.randint(3, 6)
-                        })
-                    print(f"🐪 Caravan Upgraded! Loaded {reward['name']} (Total Cargo: {len(self.caravan_cargo)}/5)")
+                self.advance_station_progress()
+                save_student_progress(self.main_menu)
 
-                # Map 9 Reward: Unlock Sacred Math Keystone
-                elif self.is_puzzle_hybrid_mode and self.quiz_station_index in self.citadel_keystones:
-                    st_num = self.quiz_station_index
-                    keystone = self.citadel_keystones[st_num]
-                    self.citadel_collected_keystones.append(keystone)
-                    self.citadel_banner_text = f"🏛️ SUN KEYSTONE {st_num}/5 UNLOCKED!"
-                    self.citadel_banner_sub = f"✨ {keystone['name']} ({keystone['math']}) slotted into Citadel Altar!"
-                    self.citadel_banner_timer = 4.0
-                    self.speed_boost_timer = 5.0
-
-                    for _ in range(25):
-                        self.caravan_sparkles.append({
-                            "x": self.player_x + random.randint(0, 32),
-                            "y": self.player_y + random.randint(0, 32),
-                            "vx": random.uniform(-3, 3),
-                            "vy": random.uniform(-4, 0),
-                            "color": keystone["color"],
-                            "life": random.uniform(1.0, 1.8),
-                            "rad": random.randint(3, 7)
-                        })
-                    print(f"🏛️ Citadel Keystone {st_num} Acquired: {keystone['name']}")
-
-                elif self.is_relic_hunt_mode:
-                    self.speed_boost_timer = 6.0
-
-                # In-World Bridge Construction and Camera Pan for Map 8
-                st_num = self.quiz_station_index
-                if hasattr(self, 'bridge_tiles') and self.bridge_tiles and st_num <= len(self.bridge_tiles):
-                    bx, by = self.bridge_tiles[st_num - 1]
-                    if by < len(self.game_map) and bx < len(self.game_map[by]):
-                        self.game_map[by] = self.game_map[by][:bx] + "B" + self.game_map[by][bx+1:]
-                        self.render_map[by] = self.render_map[by][:bx] + "B" + self.render_map[by][bx+1:]
-                        self.built_bridge_count = st_num
-                        
-                        # Initiate Cinematic Drone Camera Pan
-                        self.camera_pan_active = True
-                        self.camera_pan_timer = 0.0
-                        self.camera_pan_duration = 2.4
-                        self.camera_pan_burst_done = False
-                        self.camera_pan_target_col = bx
-                        self.camera_pan_target_row = by
-                        self.camera_pan_origin_x = self.camera_x
-                        self.camera_pan_origin_y = self.camera_y
-                        
-                        t_cx = (bx * TILE_SIZE + TILE_SIZE // 2) - (self.width // 2) / ZOOM
-                        t_cy = (by * TILE_SIZE + TILE_SIZE // 2) - (self.height // 2) / ZOOM
-                        min_cam_x, max_cam_x = 0, max(0, self.MAP_WIDTH - self.width / ZOOM)
-                        min_cam_y, max_cam_y = 0, max(0, self.MAP_HEIGHT - self.height / ZOOM)
-                        self.camera_pan_dest_x = max(min_cam_x, min(t_cx, max_cam_x))
-                        self.camera_pan_dest_y = max(min_cam_y, min(t_cy, max_cam_y))
-                        
-                        self.quiz_state = 7  # State 7: Camera Pan sequence
-                        print(f"🏗️ Aqueduct Bridge Segment {st_num}/5 materialized at ({bx}, {by})! Camera panning...")
-                        return
-
-                if self.quiz_station_index < 5:
-                    self.quiz_station_index += 1
-                    self.current_question_index += 1
-                    self.quiz_state = 0
-                    print(f"✅ Advanced to Quiz Station {self.quiz_station_index}")
-                else:
-                    self.current_question_index += 1
-                    if self.is_puzzle_hybrid_mode:
-                        # In Map 9 Hybrid mode, completing question 5 activates the Grand Sun Temple Altar Jigsaw!
-                        self.quiz_state = 8
-                        self.init_sun_relic_puzzle()
-                        print("🏛️ All 5 Map 9 Stations Solved! Grand Sun Temple Altar Puzzle Opened!")
-                    else:
-                        self.quiz_state = 5
+        # State 4: Out of tries reveal screen click -> Guaranteed progression!
+        elif self.quiz_state == 4:
+            box_w, box_h = 620, 290
+            box_x = (self.width - box_w) // 2
+            box_y = (self.height - box_h) // 2
+            btn_rect = pygame.Rect(box_x + (box_w - 220) // 2, box_y + 190, 220, 46)
+            if btn_rect.collidepoint(pos):
+                self.advance_station_progress()
+                save_student_progress(self.main_menu)
 
         # State 9: Station Hands-On Mini-Puzzle Click Handling
         elif self.quiz_state == 9:
@@ -2107,28 +2139,52 @@ class Quarter3:
     # UPDATE PLAYER MOVEMENT
     # ============================================================
     def update_player_movement(self):
-        if self.caravan_riding or self.quiz_state in [1, 2, 3, 5, 8, 9] or (hasattr(self, 'player_block_timer') and self.player_block_timer > 0):
+        if self.caravan_riding or self.quiz_state in [1, 2, 3, 4, 5, 8, 9] or (hasattr(self, 'player_block_timer') and self.player_block_timer > 0):
             self.anim_frame = 0
             return
 
         vx, vy = 0, 0
-        current_speed = SPEED * (1.65 if self.speed_boost_timer > 0 else 1.0)
+        base_speed = SPEED * (1.65 if self.speed_boost_timer > 0 else 1.0)
 
-        if self.hand_detected:
+        # 1. Keyboard Controls (Arrow keys / WASD) with optional Shift Sprint
+        keys = pygame.key.get_pressed()
+        is_sprinting = keys[pygame.K_LSHIFT] or keys[pygame.K_RSHIFT]
+        move_speed = (base_speed * 1.35) if is_sprinting else base_speed
+
+        if keys[pygame.K_LEFT] or keys[pygame.K_a]:
+            vx = -move_speed
+            self.player_dir = "left"
+        elif keys[pygame.K_RIGHT] or keys[pygame.K_d]:
+            vx = move_speed
+            self.player_dir = "right"
+
+        if keys[pygame.K_UP] or keys[pygame.K_w]:
+            vy = -move_speed
+            self.player_dir = "up"
+        elif keys[pygame.K_DOWN] or keys[pygame.K_s]:
+            vy = move_speed
+            self.player_dir = "down"
+
+        # 2. Hand Gesture Controls (if keyboard is not actively moving)
+        if vx == 0 and vy == 0 and self.hand_detected:
             center_x, center_y = self.width // 2, self.height // 2
             cursor_x, cursor_y = self.cursor_pos
             dx = cursor_x - center_x
             dy = cursor_y - center_y
 
-            if abs(dx) > 60:
-                vx = current_speed if dx > 0 else -current_speed
+            # Dynamic speed scaling: faster when hand is stretched further out
+            dist_factor = 1.3 if (abs(dx) > 160 or abs(dy) > 160) else 1.0
+            g_speed = base_speed * dist_factor
+
+            if abs(dx) > 45:
+                vx = g_speed if dx > 0 else -g_speed
                 if dx > 0:
                     self.player_dir = "right"
                 elif dx < 0:
                     self.player_dir = "left"
 
-            if abs(dy) > 60:
-                vy = current_speed if dy > 0 else -current_speed
+            if abs(dy) > 45:
+                vy = g_speed if dy > 0 else -g_speed
                 if dy > 0:
                     self.player_dir = "down"
                 elif dy < 0:
@@ -2145,7 +2201,7 @@ class Quarter3:
         if vx != 0 or vy != 0:
             self.player_trail.append((self.player_x, self.player_y, self.player_dir))
             self.anim_timer += 1
-            if self.anim_timer >= 8:
+            if self.anim_timer >= (5 if self.speed_boost_timer > 0 else 8):
                 self.anim_timer = 0
                 self.anim_frame = (self.anim_frame + 1) % 2
         else:
@@ -2319,6 +2375,9 @@ class Quarter3:
             if self.caravan_upgrade_banner_text and self.caravan_upgrade_banner_timer > 0:
                 self.draw_caravan_upgrade_banner()
 
+        # Draw Active Objective NPC Indicator and Off-Screen Compass Pointer
+        self.draw_offscreen_compass_pointer()
+
         # Draw quiz dialog overlays if opened
         if self.quiz_state == 1:
             self.draw_quiz_dialog()
@@ -2326,6 +2385,8 @@ class Quarter3:
             self.draw_wrong_dialog()
         elif self.quiz_state == 3:
             self.draw_correct_dialog()
+        elif self.quiz_state == 4:
+            self.draw_out_of_tries_dialog()
         elif self.quiz_state == 5:
             self.draw_final_dialog()
         elif self.quiz_state == 8:
@@ -3293,12 +3354,12 @@ class Quarter3:
             self.screen.blit(h_surf, (vis_rect.centerx - h_surf.get_width() // 2, vis_rect.bottom - 26))
 
     # ============================================================
-    # QUIZ DIALOGUE DRAWING METHODS
+    # QUIZ DIALOGUE DRAWING METHODS (Clean & Icon-Free)
     # ============================================================
     def draw_quiz_dialog(self):
         self.screen.blit(self.dialog_dim_overlay, (0, 0))
 
-        box_w, box_h = 780, 540
+        box_w, box_h = 580, 380
         box_x = (self.width - box_w) // 2
         box_y = (self.height - box_h) // 2
 
@@ -3306,124 +3367,76 @@ class Quarter3:
         dialog_rect = pygame.Rect(box_x, box_y, box_w, box_h)
         pygame.draw.rect(self.screen, (15, 23, 42), dialog_rect, border_radius=16)
         pygame.draw.rect(self.screen, (245, 158, 11), dialog_rect, 3, border_radius=16)
+        pygame.draw.rect(self.screen, (251, 191, 36), dialog_rect.inflate(-6, -6), 1, border_radius=12)
 
-        # Header Bar: Avatar + Station Title + Mode Switcher + Star Progress Bar
-        header_rect = pygame.Rect(box_x + 15, box_y + 12, box_w - 30, 42)
+        # Header ribbon
+        header_surf = pygame.Surface((box_w - 36, 40), pygame.SRCALPHA)
+        header_surf.fill((30, 41, 59, 230))
+        self.screen.blit(header_surf, (box_x + 18, box_y + 12))
+        pygame.draw.rect(self.screen, (245, 158, 11), (box_x + 18, box_y + 12, box_w - 36, 40), 1, border_radius=8)
 
-        # Mascot Thumbnail Frame
-        avatar_rect = pygame.Rect(header_rect.left + 5, header_rect.top - 2, 44, 44)
-        pygame.draw.circle(self.screen, (30, 41, 59), avatar_rect.center, 22)
-        pygame.draw.circle(self.screen, (251, 191, 36), avatar_rect.center, 22, 2)
-
-        # Draw Mascot Frame
-        if hasattr(self, 'station_npcs') and self.quiz_station_index in self.station_npcs:
-            mascot_data = self.station_npcs[self.quiz_station_index]
-            m_frame = mascot_data["frames"][mascot_data["anim_frame"]]
-            scaled_m = pygame.transform.scale(m_frame, (32, 32))
-            self.screen.blit(scaled_m, (avatar_rect.centerx - 16, avatar_rect.centery - 16))
-
-        # Station Title
         q_data = self.quiz_questions[self.current_question_index]
-        st_title = q_data.get("title", f"CHALLENGE {self.quiz_station_index}")
+        st_title = q_data.get("title", f"Challenge {self.quiz_station_index}")
         speaker_name = self.station_npcs.get(self.quiz_station_index, {}).get("name", "Guardian")
-        title_surf = self.dialog_header_font.render(f"{speaker_name} • {st_title}", True, (255, 215, 0))
-        self.screen.blit(title_surf, (avatar_rect.right + 12, header_rect.top + 8))
+        speaker_surf = self.dialog_header_font.render(f"{speaker_name} • {st_title}", True, (255, 215, 0))
+        self.screen.blit(speaker_surf, (box_x + 30, box_y + 18))
 
-        # Question Prompt Box (Top Center)
-        q_box_rect = pygame.Rect(box_x + 25, box_y + 60, box_w - 50, 72)
-        pygame.draw.rect(self.screen, (30, 41, 59), q_box_rect, border_radius=10)
-        pygame.draw.rect(self.screen, (71, 85, 105), q_box_rect, 1, border_radius=10)
+        # Station progress pill (Top Right)
+        st_pill = pygame.Rect(box_x + box_w - 140, box_y + 16, 120, 30)
+        pygame.draw.rect(self.screen, (15, 23, 42), st_pill, border_radius=6)
+        pygame.draw.rect(self.screen, (245, 158, 11), st_pill, 1, border_radius=6)
+        st_txt = self.dialog_stat_font.render(f"STATION {self.quiz_station_index}/5", True, (254, 240, 138))
+        self.screen.blit(st_txt, st_txt.get_rect(center=st_pill.center))
 
-        wrapped_q = self.wrap_text(q_data["question"], self.dialog_q_font, q_box_rect.width - 24)
-        y_text = q_box_rect.top + 10
+        # Question Prompt
+        wrapped_q = self.wrap_text(q_data["question"], self.dialog_q_font, box_w - 50)
+        y_text = box_y + 62
         for line in wrapped_q:
             txt_surf = self.dialog_q_font.render(line, True, (255, 255, 255))
-            self.screen.blit(txt_surf, (q_box_rect.left + 12, y_text))
+            self.screen.blit(txt_surf, (box_x + 25, y_text))
             y_text += 22
 
-        # Smart CRA Auto-Visualizer (Middle Center)
-        vis_rect = pygame.Rect(box_x + 25, box_y + 138, box_w - 50, 175)
-        self.draw_auto_visualizer(q_data, vis_rect)
-
-        # -----------------------------------------------------------------
-        # MULTIPLE CHOICE 2x2 ELEMENTAL GEMSTONE CARDS
-        # -----------------------------------------------------------------
-        # Optional Friendly 50:50 Wizard Hint feedback bubble if a choice was eliminated
+        # 50:50 Hint feedback bubble if a choice was eliminated
         if self.wrong_feedback_msg:
             fb_surf = self.dialog_hint_font.render(self.wrong_feedback_msg, True, (252, 211, 77))
-            self.screen.blit(fb_surf, (box_x + 30, box_y + 314))
+            self.screen.blit(fb_surf, (box_x + 25, y_text + 4))
 
-        # 2x2 Vibrant RPG Elemental Gemstone Cards
-        card_w = 355
-        card_h = 85
-        card_configs = [
-            {"badge": "A", "icon_key": "elem_earth", "name": "Emerald Earth", "base_bg": (6, 78, 59), "hover_bg": (16, 185, 129), "border": (52, 211, 153), "glow": (16, 185, 129)},
-            {"badge": "B", "icon_key": "elem_ice", "name": "Sapphire Sky", "base_bg": (30, 58, 138), "hover_bg": (59, 130, 246), "border": (96, 165, 250), "glow": (59, 130, 246)},
-            {"badge": "C", "icon_key": "elem_sun", "name": "Solar Gold", "base_bg": (120, 53, 15), "hover_bg": (245, 158, 11), "border": (251, 191, 36), "glow": (245, 158, 11)},
-            {"badge": "D", "icon_key": "elem_fire", "name": "Ruby Flame", "base_bg": (127, 29, 29), "hover_bg": (239, 68, 68), "border": (248, 113, 113), "glow": (239, 68, 68)}
-        ]
+        # Clean vertical stacked choice buttons (No icons)
+        button_w, button_h = 500, 44
+        button_x = box_x + (box_w - button_w) // 2
+        button_y_start = box_y + 130
+        spacing = 52
 
         for i, choice_text in enumerate(q_data["choices"][:4]):
-            col = i % 2
-            row = i // 2
-            cx = box_x + 25 + col * 375
-            cy = box_y + 325 + row * 95
-
-            cfg = card_configs[i]
-            base_rect = pygame.Rect(cx, cy, card_w, card_h)
+            b_y = button_y_start + i * spacing
+            btn_rect = pygame.Rect(button_x, b_y, button_w, button_h)
             is_elim = i in self.eliminated_choices
-            is_hov = base_rect.collidepoint(self.cursor_pos) and not is_elim
+            is_hov = btn_rect.collidepoint(self.cursor_pos) and not is_elim
 
             if is_elim:
-                # 50:50 Eliminated Card Appearance
-                pygame.draw.rect(self.screen, (20, 25, 35), base_rect, border_radius=14)
-                pygame.draw.rect(self.screen, (60, 65, 75), base_rect, 1, border_radius=14)
+                bg_color = (20, 25, 35)
+                text_color = (100, 110, 120)
+                border_color = (50, 55, 65)
+            elif is_hov:
+                bg_color = (255, 215, 0)
+                text_color = (15, 23, 42)
+                border_color = (255, 255, 255)
+            else:
+                bg_color = (30, 41, 59)
+                text_color = (255, 255, 255)
+                border_color = (71, 85, 105)
 
-                badge_w = 46
-                badge_rect = pygame.Rect(base_rect.left + 10, base_rect.centery - 20, badge_w, 40)
-                pygame.draw.rect(self.screen, (15, 20, 28), badge_rect, border_radius=10)
-                self.render_icon("cross", badge_rect.center, (22, 22))
+            pygame.draw.rect(self.screen, bg_color, btn_rect, border_radius=10)
+            pygame.draw.rect(self.screen, border_color, btn_rect, 2, border_radius=10)
 
-                c_surf = self.dialog_choice_font.render(choice_text, True, (100, 110, 120))
-                self.screen.blit(c_surf, (badge_rect.right + 12, base_rect.centery - c_surf.get_height() // 2))
-                continue
-
-            # Active Card Hover expansion & glow
-            draw_rect = base_rect.inflate(4, 4) if is_hov else base_rect
-            bg_color = cfg["hover_bg"] if is_hov else cfg["base_bg"]
-
-            if is_hov:
-                glow_rect = draw_rect.inflate(6, 6)
-                pygame.draw.rect(self.screen, cfg["glow"], glow_rect, 2, border_radius=16)
-
-            pygame.draw.rect(self.screen, bg_color, draw_rect, border_radius=14)
-            pygame.draw.rect(self.screen, cfg["border"], draw_rect, 3 if is_hov else 2, border_radius=14)
-
-            badge_w = 46
-            badge_rect = pygame.Rect(draw_rect.left + 10, draw_rect.centery - 20, badge_w, 40)
-            pygame.draw.rect(self.screen, (15, 23, 42), badge_rect, border_radius=10)
-            pygame.draw.rect(self.screen, cfg["border"], badge_rect, 2, border_radius=10)
-
-            b_surf = self.dialog_badge_font.render(f"{cfg['badge']}", True, (255, 255, 255))
-            self.screen.blit(b_surf, (badge_rect.centerx - b_surf.get_width() // 2, badge_rect.top + 3))
-            self.render_icon(cfg["icon_key"], (badge_rect.centerx, badge_rect.bottom - 12), (16, 16))
-
-            clean_text = choice_text
-            if choice_text.startswith(f"{cfg['badge']}. "):
-                clean_text = choice_text[3:]
-            elif choice_text.startswith(f"{cfg['badge']}: "):
-                clean_text = choice_text[3:]
-
-            text_color = (255, 255, 255)
-            c_surf = self.dialog_choice_font.render(clean_text, True, text_color)
-            text_x = badge_rect.right + 12
-            text_y = draw_rect.centery - c_surf.get_height() // 2
-            self.screen.blit(c_surf, (text_x, text_y))
+            c_surf = self.dialog_choice_font.render(choice_text, True, text_color)
+            c_rect = c_surf.get_rect(center=btn_rect.center)
+            self.screen.blit(c_surf, c_rect)
 
     def draw_wrong_dialog(self):
         self.screen.blit(self.wrong_dialog_dim_overlay, (0, 0))
 
-        box_w, box_h = 600, 290
+        box_w, box_h = 580, 260
         box_x = (self.width - box_w) // 2
         box_y = (self.height - box_h) // 2
 
@@ -3433,14 +3446,17 @@ class Quarter3:
 
         speaker_name = self.station_npcs.get(self.quiz_station_index, {}).get("name", "Guardian")
         speaker_surf = self.dialog_speaker_font.render(speaker_name, True, (239, 68, 68))
-        self.render_icon("cross", (box_x + 36, box_y + 32), (24, 24))
-        self.screen.blit(speaker_surf, (box_x + 55, box_y + 20))
+        self.screen.blit(speaker_surf, (box_x + 25, box_y + 20))
 
-        msg = "Almost there! Let's count again and try one more time! 💪"
-        msg_surf = self.dialog_msg_font.render(msg, True, (255, 255, 255))
-        self.screen.blit(msg_surf, (box_x + 25, box_y + 85))
+        msg1 = self.dialog_msg_font.render("Hmm, that is not correct.", True, (255, 255, 255))
+        msg2 = self.dialog_hint_font.render("You have 1 try remaining! Think carefully and try again. ⭐", True, (253, 230, 138))
+        self.screen.blit(msg1, (box_x + 25, box_y + 75))
+        self.screen.blit(msg2, (box_x + 25, box_y + 110))
 
-        btn_rect = pygame.Rect(box_x + (box_w - 220) // 2, box_y + 190, 220, 46)
+        button_w, button_h = 220, 46
+        button_x = box_x + (box_w - button_w) // 2
+        button_y = box_y + 180
+        btn_rect = pygame.Rect(button_x, button_y, button_w, button_h)
         is_hov = btn_rect.collidepoint(self.cursor_pos)
         bg_c = (220, 38, 38) if is_hov else (153, 27, 27)
 
@@ -3451,10 +3467,63 @@ class Quarter3:
         c_rect = c_surf.get_rect(center=btn_rect.center)
         self.screen.blit(c_surf, c_rect)
 
+    def draw_out_of_tries_dialog(self):
+        self.screen.blit(self.dialog_dim_overlay, (0, 0))
+
+        box_w, box_h = 600, 270
+        box_x = (self.width - box_w) // 2
+        box_y = (self.height - box_h) // 2
+
+        dialog_rect = pygame.Rect(box_x, box_y, box_w, box_h)
+        pygame.draw.rect(self.screen, (15, 23, 42), dialog_rect, border_radius=14)
+        pygame.draw.rect(self.screen, (245, 158, 11), dialog_rect, 3, border_radius=14)
+
+        speaker_name = self.station_npcs.get(self.quiz_station_index, {}).get("name", "Guardian")
+        speaker_surf = self.dialog_speaker_font.render(speaker_name, True, (245, 158, 11))
+        self.screen.blit(speaker_surf, (box_x + 25, box_y + 20))
+
+        q_data = self.quiz_questions[self.current_question_index]
+        if "correct" in q_data and "choices" in q_data:
+            correct_choice_text = q_data["choices"][q_data["correct"]]
+        elif "ident_answers" in q_data and q_data["ident_answers"]:
+            correct_choice_text = q_data["ident_answers"][0]
+        else:
+            correct_choice_text = "See solution above"
+
+        msg1 = self.dialog_msg_font.render(f"Out of tries! The correct answer was: {correct_choice_text}", True, (255, 255, 255))
+        
+        if self.is_caravan_mode:
+            reward_text = "You still received the Caravan Cargo so your quest can continue!"
+        elif self.is_puzzle_hybrid_mode:
+            reward_text = "You still received the Sun Keystone so your quest can continue!"
+        elif hasattr(self, 'bridge_tiles') and self.bridge_tiles:
+            reward_text = "You still received the Bridge piece so your quest can continue!"
+        else:
+            reward_text = "You completed this challenge so your quest can continue!"
+            
+        msg2 = self.dialog_hint_font.render(reward_text, True, (253, 230, 138))
+        self.screen.blit(msg1, (box_x + 25, box_y + 70))
+        self.screen.blit(msg2, (box_x + 25, box_y + 105))
+
+        button_w, button_h = 220, 46
+        button_x = box_x + (box_w - button_w) // 2
+        button_y = box_y + 180
+        btn_rect = pygame.Rect(button_x, button_y, button_w, button_h)
+
+        is_hovered = btn_rect.collidepoint(self.cursor_pos)
+        bg_color = (245, 158, 11) if is_hovered else (30, 41, 59)
+
+        pygame.draw.rect(self.screen, bg_color, btn_rect, border_radius=12)
+        pygame.draw.rect(self.screen, (255, 255, 255), btn_rect, 2, border_radius=12)
+
+        c_surf = self.dialog_btn_font.render("Continue", True, (255, 255, 255))
+        c_rect = c_surf.get_rect(center=btn_rect.center)
+        self.screen.blit(c_surf, c_rect)
+
     def draw_correct_dialog(self):
         self.screen.blit(self.dialog_dim_overlay, (0, 0))
 
-        box_w, box_h = 600, 280
+        box_w, box_h = 580, 260
         box_x = (self.width - box_w) // 2
         box_y = (self.height - box_h) // 2
 
@@ -3464,15 +3533,14 @@ class Quarter3:
 
         speaker_name = self.station_npcs.get(self.quiz_station_index, {}).get("name", "Guardian")
         speaker_surf = self.dialog_speaker_font.render(speaker_name, True, (22, 163, 74))
-        self.render_icon("star_gold", (box_x + 36, box_y + 32), (24, 24))
-        self.screen.blit(speaker_surf, (box_x + 55, box_y + 20))
+        self.screen.blit(speaker_surf, (box_x + 25, box_y + 20))
 
         msg_surf = self.dialog_msg_font.render(self.current_correct_phrase, True, (255, 255, 255))
-        self.screen.blit(msg_surf, (box_x + 25, box_y + 80))
+        self.screen.blit(msg_surf, (box_x + 25, box_y + 75))
 
         button_w, button_h = 220, 46
         button_x = box_x + (box_w - button_w) // 2
-        button_y = box_y + 180
+        button_y = box_y + 175
         btn_rect = pygame.Rect(button_x, button_y, button_w, button_h)
 
         is_hovered = btn_rect.collidepoint(self.cursor_pos)
@@ -3488,7 +3556,7 @@ class Quarter3:
     def draw_final_dialog(self):
         self.screen.blit(self.dialog_dim_overlay, (0, 0))
 
-        box_w, box_h = 640, 340
+        box_w, box_h = 620, 320
         box_x = (self.width - box_w) // 2
         box_y = (self.height - box_h) // 2
 
@@ -3498,9 +3566,8 @@ class Quarter3:
 
         speaker_name = self.station_npcs.get(self.quiz_station_index, {}).get("name", "Guardian")
         speaker_surf = self.dialog_speaker_font.render(speaker_name, True, (218, 165, 32))
-        self.render_icon("crown", (box_x + 36, box_y + 32), (24, 24))
-        self.screen.blit(speaker_surf, (box_x + 55, box_y + 20))
-        pygame.draw.line(self.screen, (218, 165, 32), (box_x + 25, box_y + 48), (box_x + 25 + speaker_surf.get_width() + 35, box_y + 48), 2)
+        self.screen.blit(speaker_surf, (box_x + 25, box_y + 20))
+        pygame.draw.line(self.screen, (218, 165, 32), (box_x + 25, box_y + 48), (box_x + 25 + speaker_surf.get_width() + 10, box_y + 48), 2)
 
         speech_lines = [
             "Outstanding, young mathematician! You solved all my challenges.",
@@ -3516,7 +3583,7 @@ class Quarter3:
 
         button_w, button_h = 240, 46
         button_x = box_x + (box_w - button_w) // 2
-        button_y = box_y + 245
+        button_y = box_y + 235
         btn_rect = pygame.Rect(button_x, button_y, button_w, button_h)
 
         is_hovered = btn_rect.collidepoint(self.cursor_pos)
@@ -4204,6 +4271,107 @@ class Quarter3:
         if self.dragged_slab:
             self.screen.blit(self.dragged_slab["surface"], (self.dragged_slab["x"], self.dragged_slab["y"]))
             pygame.draw.rect(self.screen, (255, 255, 255), (self.dragged_slab["x"], self.dragged_slab["y"], self.dragged_slab["slot_w"], self.dragged_slab["slot_h"]), 3, border_radius=12)
+
+    def get_ui_font(self, size, bold=False):
+        """Returns a high-legibility system font for UI elements"""
+        return pygame.font.SysFont(["Segoe UI", "Tahoma", "Verdana", "Calibri", "Arial", "Comic Sans MS"], size, bold=bold)
+
+    def draw_offscreen_compass_pointer(self):
+        """Draw Active Objective NPC Indicator and Off-Screen Compass Pointer for Quarter 3"""
+        import math
+        
+        # 1. Target determination for Active Station NPC
+        if self.quiz_state == 0 and hasattr(self, 'quiz_stations') and self.quiz_station_index in self.quiz_stations:
+            st_x, st_y = self.quiz_stations[self.quiz_station_index]
+            npc_name = self.station_npcs.get(self.quiz_station_index, {}).get("name", f"Station {self.quiz_station_index}")
+            
+            screen_npc_x = (st_x * TILE_SIZE - self.camera_x) * ZOOM
+            screen_npc_y = (st_y * TILE_SIZE - self.camera_y) * ZOOM
+
+            # On-Screen Floating Objective Badge (Always visible over active target NPC)
+            bob = math.sin(self.frame_counter * 0.15) * 3 * ZOOM
+            badge_x = screen_npc_x + (TILE_SIZE * ZOOM) / 2 - 8 * ZOOM
+            badge_y = screen_npc_y - 20 * ZOOM + bob
+
+            badge_rect = pygame.Rect(badge_x, badge_y, 16 * ZOOM, 16 * ZOOM)
+            pygame.draw.rect(self.screen, (255, 215, 0), badge_rect, border_radius=4)
+            pygame.draw.rect(self.screen, (0, 0, 0), badge_rect, 1, border_radius=4)
+
+            excl_font = pygame.font.SysFont("Comic Sans MS", int(14 * ZOOM), bold=True)
+            excl_surf = excl_font.render("!", True, (0, 0, 0))
+            excl_rect = excl_surf.get_rect(center=badge_rect.center)
+            self.screen.blit(excl_surf, excl_rect)
+
+            # Small pill name tag over active NPC
+            name_font = self.get_ui_font(int(10 * ZOOM), bold=True)
+            name_surf = name_font.render(f"{npc_name}", True, (255, 235, 120))
+            tag_w = name_surf.get_width() + 10
+            tag_h = name_surf.get_height() + 4
+            tag_x = screen_npc_x + (TILE_SIZE * ZOOM) / 2 - tag_w / 2
+            tag_y = badge_y - tag_h - 2
+
+            tag_bg = pygame.Surface((tag_w, tag_h), pygame.SRCALPHA)
+            tag_bg.fill((15, 23, 42, 210))
+            self.screen.blit(tag_bg, (tag_x, tag_y))
+            pygame.draw.rect(self.screen, (255, 215, 0), (tag_x, tag_y, tag_w, tag_h), 1, border_radius=4)
+            self.screen.blit(name_surf, (tag_x + 5, tag_y + 2))
+
+            # Off-Screen Directional Compass Pointer
+            is_on_screen = (40 <= screen_npc_x <= self.width - 60 and 40 <= screen_npc_y <= self.height - 110)
+            if not is_on_screen:
+                player_screen_x = (self.player_x - self.camera_x) * ZOOM
+                player_screen_y = (self.player_y - self.camera_y) * ZOOM
+
+                dx = screen_npc_x - player_screen_x
+                dy = screen_npc_y - player_screen_y
+                dist_tiles = int(math.hypot(self.player_x - st_x * TILE_SIZE, self.player_y - st_y * TILE_SIZE) // TILE_SIZE)
+
+                angle = math.atan2(dy, dx)
+                margin = 55
+                clamp_x = max(margin, min(self.width - margin, player_screen_x + math.cos(angle) * 180))
+                clamp_y = max(margin, min(self.height - 100, player_screen_y + math.sin(angle) * 180))
+
+                # Draw glowing radar pointer pill
+                ptr_font = self.get_ui_font(12, bold=True)
+                ptr_text = f">> {npc_name} ({dist_tiles}m)"
+                ptr_surf = ptr_font.render(ptr_text, True, (15, 23, 42))
+                pw = ptr_surf.get_width() + 16
+                ph = 26
+
+                ptr_rect = pygame.Rect(clamp_x - pw // 2, clamp_y - ph // 2, pw, ph)
+                pygame.draw.rect(self.screen, (255, 215, 0), ptr_rect, border_radius=8)
+                pygame.draw.rect(self.screen, (255, 255, 255), ptr_rect, 2, border_radius=8)
+                self.screen.blit(ptr_surf, (ptr_rect.x + 8, ptr_rect.y + 4))
+
+        # 2. Exit Portal Compass Pointer (When stage is completed)
+        if self.quiz_state == 6 and self.portals:
+            exit_p = self.portals[0]
+            portal_cx = exit_p.get_center_x()
+            portal_cy = exit_p.get_center_y()
+            screen_p_x = (portal_cx - self.camera_x) * ZOOM
+            screen_p_y = (portal_cy - self.camera_y) * ZOOM
+            is_on_screen = (40 <= screen_p_x <= self.width - 60 and 40 <= screen_p_y <= self.height - 110)
+            if not is_on_screen:
+                player_screen_x = (self.player_x - self.camera_x) * ZOOM
+                player_screen_y = (self.player_y - self.camera_y) * ZOOM
+                dx = screen_p_x - player_screen_x
+                dy = screen_p_y - player_screen_y
+                dist_tiles = int(math.hypot(self.player_x - portal_cx, self.player_y - portal_cy) // TILE_SIZE)
+                angle = math.atan2(dy, dx)
+                margin = 55
+                clamp_x = max(margin, min(self.width - margin, player_screen_x + math.cos(angle) * 180))
+                clamp_y = max(margin, min(self.height - 100, player_screen_y + math.sin(angle) * 180))
+
+                ptr_font = self.get_ui_font(12, bold=True)
+                ptr_text = f">> Exit Portal ({dist_tiles}m)"
+                ptr_surf = ptr_font.render(ptr_text, True, (15, 23, 42))
+                pw = ptr_surf.get_width() + 16
+                ph = 26
+
+                ptr_rect = pygame.Rect(clamp_x - pw // 2, clamp_y - ph // 2, pw, ph)
+                pygame.draw.rect(self.screen, (74, 222, 128), ptr_rect, border_radius=8)
+                pygame.draw.rect(self.screen, (255, 255, 255), ptr_rect, 2, border_radius=8)
+                self.screen.blit(ptr_surf, (ptr_rect.x + 8, ptr_rect.y + 4))
 
     # ============================================================
     # CLEANUP

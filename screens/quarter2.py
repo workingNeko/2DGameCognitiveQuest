@@ -23,7 +23,7 @@ except ImportError:
 # ============================================================
 TILE_SIZE = 32
 FPS = 60
-SPEED = 4
+SPEED = 4.5
 
 # Camera zoom settings - PERMANENT ZOOM
 ZOOM = 1.50  # Fixed zoom level
@@ -237,11 +237,11 @@ class Quarter2:
             self.station_npc_info = {
                 1: {
                     "name": "Aling Nena",
-                    "title": "Aling Nena - Kakanin & Unit Fractions (1/4 Slices)",
+                    "title": "Aling Nena - Bibingka & Unit Fractions (1/4 Slices)",
                     "dialog_title": "Aling Nena's Fresh Bibingka Fraction Challenge",
-                    "wrong_encouragement": "Aling Nena - Tingnan Uli ang Hati (Try Again)",
-                    "correct_praise": "Aling Nena - Tamang Bahagi! (Delicious Slices)",
-                    "target_math": "1 Slice out of 4 Equal Slices = 1/4 (One-fourth / Sangkapat)",
+                    "wrong_encouragement": "Aling Nena - Check the Slices (Try Again)",
+                    "correct_praise": "Aling Nena - Correct Fraction! (Delicious Slices)",
+                    "target_math": "1 Slice out of 4 Equal Slices = 1/4 (One-fourth)",
                     "frames": [],
                     "anim_frame": 0,
                     "anim_timer": 0
@@ -250,8 +250,8 @@ class Quarter2:
                     "name": "Kuya Jun",
                     "title": "Kuya Jun - Equal Sharing & Division (20 ÷ 4)",
                     "dialog_title": "Kuya Jun's Mango Harvest Division Challenge",
-                    "wrong_encouragement": "Kuya Jun - Bilangin Uli sa Bayong (Try Again)",
-                    "correct_praise": "Kuya Jun - Pantay na Pamamahagi! (Equal Sharing)",
+                    "wrong_encouragement": "Kuya Jun - Count the Baskets (Try Again)",
+                    "correct_praise": "Kuya Jun - Equal Sharing Mastered!",
                     "target_math": "20 Mangoes ÷ 4 Baskets = 5 Mangoes per Basket",
                     "frames": [],
                     "anim_frame": 0,
@@ -261,8 +261,8 @@ class Quarter2:
                     "name": "Mang Berto",
                     "title": "Mang Berto - 3D Geometric Solids (Salakot Cone)",
                     "dialog_title": "Mang Berto's Traditional Shape Crafting Challenge",
-                    "wrong_encouragement": "Mang Berto - Suriin ang Hugis (Check the Faces)",
-                    "correct_praise": "Mang Berto - Eksaktong Hugis! (Master Craft)",
+                    "wrong_encouragement": "Mang Berto - Inspect the Shape Faces (Try Again)",
+                    "correct_praise": "Mang Berto - Exact Geometric Shape!",
                     "target_math": "Salakot Hat = Cone (1 Flat Circular Base + 1 Vertex)",
                     "frames": [],
                     "anim_frame": 0,
@@ -272,8 +272,8 @@ class Quarter2:
                     "name": "Kapitan Dan",
                     "title": "Kapitan Dan - Analog Clock Time Reading (8:30 AM)",
                     "dialog_title": "Kapitan Dan's Fiesta Schedule Clock Challenge",
-                    "wrong_encouragement": "Kapitan Dan - Tingnan ang mga Kamay ng Orasan",
-                    "correct_praise": "Kapitan Dan - Sakto sa Oras! (On Time)",
+                    "wrong_encouragement": "Kapitan Dan - Check the Clock Hands (Try Again)",
+                    "correct_praise": "Kapitan Dan - Exactly On Time!",
                     "target_math": "8:30 AM = Hour Hand between 8 & 9, Minute Hand at 6",
                     "frames": [],
                     "anim_frame": 0,
@@ -283,8 +283,8 @@ class Quarter2:
                     "name": "Tito Dante",
                     "title": "Tito Dante - Garden Perimeter & Measurement",
                     "dialog_title": "Tito Dante's Bamboo Garden Perimeter Challenge",
-                    "wrong_encouragement": "Tito Dante - Sukatin ang Lahat ng Gilid (Add Sides)",
-                    "correct_praise": "Tito Dante - Sakto ang Sukat! (Fence Complete)",
+                    "wrong_encouragement": "Tito Dante - Measure All Outer Sides (Try Again)",
+                    "correct_praise": "Tito Dante - Garden Perimeter Complete!",
                     "target_math": "Perimeter = 5m + 3m + 5m + 3m = 16 Meters Total",
                     "frames": [],
                     "anim_frame": 0,
@@ -295,21 +295,21 @@ class Quarter2:
             self.station_npc_info = {
                 1: {
                     "name": "Tindero Tomas",
-                    "title": "Tindero Tomas - Sari-Sari Store & Sukli (Change)",
-                    "dialog_title": "Tindero Tomas' Sari-Sari Store Sukli Challenge",
-                    "wrong_encouragement": "Tomas - Bilangin Uli ang Sukli (Try Again)",
-                    "correct_praise": "Tomas - Sakto ang Sukli! (Exact Change)",
-                    "target_math": "₱50 Bill - ₱35 Purchase = ₱15 Sukli",
+                    "title": "Tindero Tomas - Sari-Sari Store & Change (₱50 - ₱35)",
+                    "dialog_title": "Tindero Tomas' Sari-Sari Store Change Challenge",
+                    "wrong_encouragement": "Tomas - Count the Change (Try Again)",
+                    "correct_praise": "Tomas - Exact Change! (Well Done)",
+                    "target_math": "₱50 Bill - ₱35 Purchase = ₱15 Change",
                     "frames": [],
                     "anim_frame": 0,
                     "anim_timer": 0
                 },
                 2: {
                     "name": "Manong Sorbetero",
-                    "title": "Manong Sorbetero - Barya at Pera (Coin Combinations)",
+                    "title": "Manong Sorbetero - Philippine Coins (₱25 Combinations)",
                     "dialog_title": "Manong Sorbetero's ₱25 Sorbetes Coin Challenge",
-                    "wrong_encouragement": "Sorbetero - Kulang pa ang Barya (Try Again)",
-                    "correct_praise": "Sorbetero - Tamang Halaga! (Delicious Reward)",
+                    "wrong_encouragement": "Sorbetero - Count the Coins (Try Again)",
+                    "correct_praise": "Sorbetero - Exact Payment! (Delicious Reward)",
                     "target_math": "₱25 Cone = One ₱20 Coin + One ₱5 Coin",
                     "frames": [],
                     "anim_frame": 0,
@@ -317,10 +317,10 @@ class Quarter2:
                 },
                 3: {
                     "name": "Kuya Drayber",
-                    "title": "Kuya Drayber - \"Bayad Po!\" Fare & Multiplication",
+                    "title": "Kuya Drayber - Jeepney Passenger Fare & Multiplication",
                     "dialog_title": "Kuya Drayber's Jeepney Passenger Fare Challenge",
-                    "wrong_encouragement": "Drayber - Kulang pa sa Pamasahe (Try Again)",
-                    "correct_praise": "Drayber - Abot ang Bayad! (Full Pasada)",
+                    "wrong_encouragement": "Kuya Drayber - Check the Fare (Try Again)",
+                    "correct_praise": "Kuya Drayber - Full Fare Collected!",
                     "target_math": "3 Students × ₱12 Fare = ₱36 Total Payment",
                     "frames": [],
                     "anim_frame": 0,
@@ -328,10 +328,10 @@ class Quarter2:
                 },
                 4: {
                     "name": "Ate Maya",
-                    "title": "Ate Maya - Palengke Timbangan (Grams & Kilograms)",
+                    "title": "Ate Maya - Market Fruit Scale (Grams & Kilograms)",
                     "dialog_title": "Ate Maya's Market Fruit Scale Challenge",
-                    "wrong_encouragement": "Maya - Timbangin Uli! (Check the Scale)",
-                    "correct_praise": "Maya - Sakto ang Kilo! (Sweet Harvest)",
+                    "wrong_encouragement": "Ate Maya - Weigh the Fruit (Try Again)",
+                    "correct_praise": "Ate Maya - Exact Weight Scale! (Sweet Harvest)",
                     "target_math": "4 Mangoes × 500g = 2,000g = 2 Kilograms (2kg)",
                     "frames": [],
                     "anim_frame": 0,
@@ -341,9 +341,9 @@ class Quarter2:
                     "name": "Lola Rosa",
                     "title": "Lola Rosa - Fiesta Budgeting & Money Comparison",
                     "dialog_title": "Lola Rosa's Fiesta Parol Budget Challenge",
-                    "wrong_encouragement": "Lola Rosa - Kwentahing Muli (Check Your Budget)",
-                    "correct_praise": "Lola Rosa - Kasya ang Badyet! (Fiesta Unlocked)",
-                    "target_math": "₱350 Budget > ₱300 Total Cost (Kasya ang Pera!)",
+                    "wrong_encouragement": "Lola Rosa - Check Your Budget (Try Again)",
+                    "correct_praise": "Lola Rosa - Budget is Enough! (Fiesta Unlocked)",
+                    "target_math": "₱350 Budget > ₱300 Total Cost (Budget is Sufficient!)",
                     "frames": [],
                     "anim_frame": 0,
                     "anim_timer": 0
@@ -522,19 +522,20 @@ class Quarter2:
             print(f"🏪 Barangay Characters spawned at Quiz Stations 1-5")
 
         # Quiz state variables
-        self.quiz_state = 0  # 0: waiting proximity, 1: dialog Q, 2: wrong try again, 3: correct phrase transition, 5: final speech, 6: quiz complete
+        self.quiz_state = 0  # 0: waiting proximity, 1: dialog Q, 2: wrong try again, 3: correct phrase transition, 4: out of tries reveal, 5: final speech, 6: quiz complete
         self.quiz_station_index = 1  # current station (1-5)
         self.current_question_index = 0
         self.first_attempt_correct = {1: True, 2: True, 3: True, 4: True, 5: True}
+        self.station_attempts = {1: 0, 2: 0, 3: 0, 4: 0, 5: 0}
         self.selected_choice_index = -1  # choice highlighted
         self.npc_knight_dir = self.station_directions.get(1, "right")
 
         # Correct answer random responses
         self.current_correct_phrase = ""
         self.correct_phrases = [
-            "Magaling! Sakto ang kwenta sa baryo!",
-            "Napakahusay! Byahe tayo sa susunod na tindahan!",
-            "Ang galing magkwenta! Tuloy ang Pista sa Nayon!"
+            "Great job! Your math calculation is accurate!",
+            "Awesome! Let's head to the next barrio stall!",
+            "Well done! The Barrio Fiesta continues!"
         ]
 
         # Questions List (DepEd Grade 2 Curriculum: Customized per Map)
@@ -2376,27 +2377,25 @@ class Quarter2:
         import random
         from db.save_system import save_student_progress
         
-        # State 1: 2x2 Choice Selection
+        # State 1: Choice Button Selection (No icons)
         if self.quiz_state == 1:
-            box_w, box_h = 760, 520
+            box_w, box_h = 580, 380
             box_x = (self.width - box_w) // 2
             box_y = (self.height - box_h) // 2
-            
             q_data = self.quiz_questions[self.current_question_index]
-            card_w = 345
-            card_h = 80
             
-            for i in range(min(4, len(q_data["choices"]))):
+            button_w, button_h = 500, 44
+            button_x = box_x + (box_w - button_w) // 2
+            button_y_start = box_y + 130
+            spacing = 52
+            
+            for i, choice in enumerate(q_data["choices"][:4]):
                 if i in self.eliminated_choices:
                     continue
+                b_y = button_y_start + i * spacing
+                btn_rect = pygame.Rect(button_x, b_y, button_w, button_h)
 
-                col = i % 2
-                row = i // 2
-                cx = box_x + 25 + col * 365
-                cy = box_y + 325 + row * 88
-                card_rect = pygame.Rect(cx, cy, card_w, card_h)
-
-                if card_rect.collidepoint(pos):
+                if btn_rect.collidepoint(pos):
                     if i == q_data["correct"]:
                         self.current_correct_phrase = random.choice(self.correct_phrases)
                         self.quiz_state = 3
@@ -2422,23 +2421,33 @@ class Quarter2:
                         # 50:50 Wizard Hint: eliminate clicked choice with gentle encouragement
                         self.eliminated_choices.add(i)
                         info = self.station_npc_info.get(self.quiz_station_index, {})
-                        speaker = info.get("name", "Tindero")
-                        self.wrong_feedback_msg = f"{speaker}: Halos nakuha mo na! Subukang pumili muli!"
+                        speaker = info.get("name", "Guardian")
+                        self.wrong_feedback_msg = f"{speaker}: Almost there! Try picking again!"
                         if hasattr(self, 'first_attempt_correct') and (self.current_question_index + 1) in self.first_attempt_correct:
                             self.first_attempt_correct[self.current_question_index + 1] = False
+                        
+                        self.station_attempts[self.quiz_station_index] = self.station_attempts.get(self.quiz_station_index, 0) + 1
+                        if self.station_attempts[self.quiz_station_index] < 2:
+                            # 1st wrong attempt: Give player 1 more try
+                            self.quiz_state = 2
+                            print(f"❌ Incorrect choice selected: {q_data['choices'][i]} (Attempt 1 of 2)")
+                        else:
+                            # 2nd wrong attempt: Out of tries! Recorded as wrong, but award progression item
+                            self.quiz_state = 4
+                            print(f"❌ Incorrect choice on 2nd try! Out of tries. Station {self.quiz_station_index} cleared for progression.")
+                        
                         if self.snap_sound:
                             self.snap_sound.play()
-                        print(f"❌ Incorrect choice eliminated: {q_data['choices'][i]} (Active: {self.eliminated_choices})")
                     
                     save_student_progress(self.main_menu)
                     break
                     
-        # State 2: Wrong answer retry screen click fallback
+        # State 2: Wrong answer retry screen click (1 try remaining)
         elif self.quiz_state == 2:
-            box_w, box_h = 500, 240
+            box_w, box_h = 520, 250
             box_x = (self.width - box_w) // 2
             box_y = (self.height - box_h) // 2
-            btn_rect = pygame.Rect(box_x + (box_w - 200) // 2, box_y + 140, 200, 42)
+            btn_rect = pygame.Rect(box_x + (box_w - 220) // 2, box_y + 160, 220, 44)
             if btn_rect.collidepoint(pos):
                 self.quiz_state = 1
                 save_student_progress(self.main_menu)
@@ -2472,6 +2481,38 @@ class Quarter2:
                     self.current_question_index = 5
                     self.quiz_state = 5
                 
+                save_student_progress(self.main_menu)
+
+        # State 4: Out of tries reveal screen click -> Guaranteed progression!
+        elif self.quiz_state == 4:
+            box_w, box_h = 580, 270
+            box_x = (self.width - box_w) // 2
+            box_y = (self.height - box_h) // 2
+            btn_rect = pygame.Rect(box_x + (box_w - 240) // 2, box_y + 190, 240, 44)
+            if btn_rect.collidepoint(pos):
+                self.eliminated_choices.clear()
+                self.wrong_feedback_msg = ""
+                self.speed_boost_timer = 2.0
+                cleared_info = self.station_npc_info.get(self.quiz_station_index, {})
+                cleared_name = cleared_info.get("name", f"Station {self.quiz_station_index}")
+                self.banner_text = f"STALL CLEARED: {cleared_name.upper()}!"
+                self.banner_sub = "Festive Sprint active! Proceed to the next barrio stall!"
+                self.banner_timer = 2.0
+
+                current_st = self.quiz_station_index
+                if self.map_name == "map5.txt":
+                    self.kubo_pieces_collected = current_st
+                    self.trigger_kubo_pan_sequence(current_st)
+
+                if self.quiz_station_index < 5:
+                    self.quiz_station_index += 1
+                    self.current_question_index = self.quiz_station_index - 1
+                    self.quiz_state = 0
+                    print(f"🎯 Proceeding to Station {self.quiz_station_index}")
+                else:
+                    self.current_question_index = 5
+                    self.quiz_state = 5
+
                 save_student_progress(self.main_menu)
                 
         # State 5: Final speech click -> Unlock Grand Fiesta Portal & Warp Transition!
@@ -2574,7 +2615,7 @@ class Quarter2:
         overlay.fill((10, 15, 29, 175))
         self.screen.blit(overlay, (0, 0))
 
-        box_w, box_h = 760, 520
+        box_w, box_h = 580, 380
         box_x = (self.width - box_w) // 2
         box_y = (self.height - box_h) // 2
 
@@ -2606,92 +2647,51 @@ class Quarter2:
         st_txt = self.dialog_stat_font.render(f"STATION {self.quiz_station_index}/5", True, (254, 240, 138))
         self.screen.blit(st_txt, st_txt.get_rect(center=st_pill.center))
 
-        # Question Prompt Box
-        q_box_rect = pygame.Rect(box_x + 22, box_y + 58, box_w - 44, 66)
-        pygame.draw.rect(self.screen, (30, 41, 59), q_box_rect, border_radius=10)
-        pygame.draw.rect(self.screen, (71, 85, 105), q_box_rect, 1, border_radius=10)
-
+        # Question Prompt
         q_data = self.quiz_questions[self.current_question_index]
-        wrapped_q = self.wrap_text(q_data["question"], self.dialog_q_font, q_box_rect.width - 24)
-        y_text = q_box_rect.top + 8
+        wrapped_q = self.wrap_text(q_data["question"], self.dialog_q_font, box_w - 50)
+        y_text = box_y + 62
         for line in wrapped_q:
             txt_surf = self.dialog_q_font.render(line, True, (255, 255, 255))
-            self.screen.blit(txt_surf, (q_box_rect.left + 12, y_text))
+            self.screen.blit(txt_surf, (box_x + 25, y_text))
             y_text += 22
 
-        # Visual Mathematical Model Engine (Philippine Currency & Scale)
-        vis_rect = pygame.Rect(box_x + 22, box_y + 130, box_w - 44, 180)
-        self.draw_money_visualizer(q_data, vis_rect)
-
-        # 50:50 Wizard Hint feedback bubble if a choice was eliminated
+        # 50:50 Hint feedback bubble if a choice was eliminated
         if self.wrong_feedback_msg:
             fb_surf = self.dialog_hint_font.render(self.wrong_feedback_msg, True, (252, 211, 77))
-            self.screen.blit(fb_surf, (box_x + 26, box_y + 314))
+            self.screen.blit(fb_surf, (box_x + 25, y_text + 4))
 
-        # 2x2 Vibrant Choice Cards with Letter Pills
-        card_w = 345
-        card_h = 80
-        card_configs = [
-            {"badge": "A", "base_bg": (6, 78, 59), "hover_bg": (16, 185, 129), "border": (52, 211, 153), "glow": (16, 185, 129)},
-            {"badge": "B", "base_bg": (30, 58, 138), "hover_bg": (59, 130, 246), "border": (96, 165, 250), "glow": (59, 130, 246)},
-            {"badge": "C", "base_bg": (120, 53, 15), "hover_bg": (245, 158, 11), "border": (251, 191, 36), "glow": (245, 158, 11)},
-            {"badge": "D", "base_bg": (127, 29, 29), "hover_bg": (239, 68, 68), "border": (248, 113, 113), "glow": (239, 68, 68)}
-        ]
+        # Clean vertical stacked choice buttons (No icons)
+        button_w, button_h = 500, 44
+        button_x = box_x + (box_w - button_w) // 2
+        button_y_start = box_y + 130
+        spacing = 52
 
         for i, choice in enumerate(q_data["choices"][:4]):
-            col = i % 2
-            row = i // 2
-            cx = box_x + 25 + col * 365
-            cy = box_y + 325 + row * 88
-
-            cfg = card_configs[i]
-            base_rect = pygame.Rect(cx, cy, card_w, card_h)
+            b_y = button_y_start + i * spacing
+            btn_rect = pygame.Rect(button_x, b_y, button_w, button_h)
             is_elim = i in self.eliminated_choices
-            is_hov = base_rect.collidepoint(self.cursor_pos) and not is_elim
+            is_hov = btn_rect.collidepoint(self.cursor_pos) and not is_elim
 
             if is_elim:
-                pygame.draw.rect(self.screen, (20, 25, 35), base_rect, border_radius=12)
-                pygame.draw.rect(self.screen, (60, 65, 75), base_rect, 1, border_radius=12)
-                
-                # Cross badge
-                badge_rect = pygame.Rect(base_rect.left + 10, base_rect.centery - 18, 36, 36)
-                pygame.draw.rect(self.screen, (15, 20, 28), badge_rect, border_radius=8)
-                cross_txt = self.dialog_badge_font.render("X", True, (239, 68, 68))
-                self.screen.blit(cross_txt, cross_txt.get_rect(center=badge_rect.center))
-                
-                c_surf = self.dialog_choice_font.render(choice, True, (100, 110, 120))
-                self.screen.blit(c_surf, (badge_rect.right + 12, base_rect.centery - c_surf.get_height() // 2))
-                continue
+                bg_color = (20, 25, 35)
+                text_color = (100, 110, 120)
+                border_color = (50, 55, 65)
+            elif is_hov:
+                bg_color = (255, 215, 0)
+                text_color = (15, 23, 42)
+                border_color = (255, 255, 255)
+            else:
+                bg_color = (30, 41, 59)
+                text_color = (255, 255, 255)
+                border_color = (71, 85, 105)
 
-            draw_rect = base_rect.inflate(4, 4) if is_hov else base_rect
-            bg_color = cfg["hover_bg"] if is_hov else cfg["base_bg"]
+            pygame.draw.rect(self.screen, bg_color, btn_rect, border_radius=10)
+            pygame.draw.rect(self.screen, border_color, btn_rect, 2, border_radius=10)
 
-            if is_hov:
-                glow_rect = draw_rect.inflate(6, 6)
-                pygame.draw.rect(self.screen, cfg["glow"], glow_rect, 2, border_radius=14)
-
-            pygame.draw.rect(self.screen, bg_color, draw_rect, border_radius=12)
-            pygame.draw.rect(self.screen, cfg["border"], draw_rect, 2, border_radius=12)
-
-            # Letter Badge
-            badge_rect = pygame.Rect(draw_rect.left + 10, draw_rect.centery - 18, 36, 36)
-            pygame.draw.rect(self.screen, (15, 23, 42), badge_rect, border_radius=8)
-            pygame.draw.rect(self.screen, cfg["border"], badge_rect, 1, border_radius=8)
-            
-            b_surf = self.dialog_badge_font.render(cfg["badge"], True, (255, 255, 255))
-            self.screen.blit(b_surf, b_surf.get_rect(center=badge_rect.center))
-
-            clean_choice = choice
-            if len(choice) > 3 and choice[1:3] in [". ", ": "]:
-                clean_choice = choice[3:]
-
-            # Wrap choice if needed
-            wrapped_c = self.wrap_text(clean_choice, self.dialog_choice_font, card_w - 65)
-            c_y = draw_rect.centery - (len(wrapped_c) * 18) // 2
-            for c_line in wrapped_c:
-                c_surf = self.dialog_choice_font.render(c_line, True, (255, 255, 255))
-                self.screen.blit(c_surf, (badge_rect.right + 10, c_y))
-                c_y += 18
+            c_surf = self.dialog_choice_font.render(choice, True, text_color)
+            c_rect = c_surf.get_rect(center=btn_rect.center)
+            self.screen.blit(c_surf, c_rect)
 
     def draw_wrong_dialog(self):
         overlay = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
@@ -2710,12 +2710,14 @@ class Quarter2:
         pygame.draw.rect(self.screen, (248, 113, 113), dialog_rect.inflate(-6, -6), 1, border_radius=10)
 
         info = self.station_npc_info.get(self.quiz_station_index, {})
-        w_title = info.get("wrong_encouragement", "Barangay - Subukan Muli")
+        w_title = info.get("wrong_encouragement", "Barrio Stall - Try Again")
         speaker_surf = self.dialog_header_font.render(w_title, True, (248, 113, 113))
         self.screen.blit(speaker_surf, (box_x + 32, box_y + 18))
 
-        msg_surf = self.dialog_q_font.render("Halos nakuha mo na! Subukang bilangin muli ang barya at pera!", True, (255, 255, 255))
-        self.screen.blit(msg_surf, (box_x + 30, box_y + 75))
+        msg_surf1 = self.dialog_q_font.render("That choice is not correct.", True, (255, 255, 255))
+        msg_surf2 = self.dialog_hint_font.render("You have 1 try remaining! Think carefully and try again. ⭐", True, (254, 240, 138))
+        self.screen.blit(msg_surf1, (box_x + 30, box_y + 68))
+        self.screen.blit(msg_surf2, (box_x + 30, box_y + 98))
 
         button_w, button_h = 220, 44
         button_x = box_x + (box_w - button_w) // 2
@@ -2729,7 +2731,52 @@ class Quarter2:
         pygame.draw.rect(self.screen, bg_color, btn_rect, border_radius=10)
         pygame.draw.rect(self.screen, border_color, btn_rect, 2, border_radius=10)
 
-        c_surf = self.dialog_header_font.render("Subukan Muli", True, (255, 255, 255))
+        c_surf = self.dialog_header_font.render("Try Again", True, (255, 255, 255))
+        self.screen.blit(c_surf, c_surf.get_rect(center=btn_rect.center))
+
+    def draw_out_of_tries_dialog(self):
+        overlay = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
+        overlay.fill((10, 15, 29, 175))
+        self.screen.blit(overlay, (0, 0))
+
+        box_w, box_h = 580, 270
+        box_x = (self.width - box_w) // 2
+        box_y = (self.height - box_h) // 2
+
+        pygame.draw.rect(self.screen, (0, 0, 0, 150), (box_x + 4, box_y + 4, box_w, box_h), border_radius=14)
+
+        dialog_rect = pygame.Rect(box_x, box_y, box_w, box_h)
+        pygame.draw.rect(self.screen, (15, 23, 42), dialog_rect, border_radius=14)
+        pygame.draw.rect(self.screen, (245, 158, 11), dialog_rect, 3, border_radius=14)
+        pygame.draw.rect(self.screen, (251, 191, 36), dialog_rect.inflate(-6, -6), 1, border_radius=10)
+
+        info = self.station_npc_info.get(self.quiz_station_index, {})
+        speaker_name = info.get("name", f"Station {self.quiz_station_index}")
+        speaker_surf = self.dialog_header_font.render(f"{speaker_name} • Out of Tries", True, (245, 158, 11))
+        self.screen.blit(speaker_surf, (box_x + 30, box_y + 18))
+
+        q_data = self.quiz_questions[self.current_question_index]
+        correct_choice_text = q_data["choices"][q_data["correct"]]
+
+        msg1 = self.dialog_q_font.render(f"Out of tries! The correct answer was: {correct_choice_text}", True, (255, 255, 255))
+        reward_text = "You still received the Bahay Kubo piece so your quest can continue!" if self.map_name == "map5.txt" else "You completed this stall challenge so your quest can continue!"
+        msg2 = self.dialog_hint_font.render(reward_text, True, (254, 240, 138))
+        self.screen.blit(msg1, (box_x + 30, box_y + 68))
+        self.screen.blit(msg2, (box_x + 30, box_y + 110))
+
+        button_w, button_h = 240, 44
+        button_x = box_x + (box_w - button_w) // 2
+        button_y = box_y + 190
+        btn_rect = pygame.Rect(button_x, button_y, button_w, button_h)
+
+        is_hovered = btn_rect.collidepoint(self.cursor_pos)
+        bg_color = (245, 158, 11) if is_hovered else (30, 41, 59)
+        border_color = (255, 255, 255) if is_hovered else (245, 158, 11)
+
+        pygame.draw.rect(self.screen, bg_color, btn_rect, border_radius=10)
+        pygame.draw.rect(self.screen, border_color, btn_rect, 2, border_radius=10)
+
+        c_surf = self.dialog_header_font.render("Continue Fiesta >>", True, (255, 255, 255))
         self.screen.blit(c_surf, c_surf.get_rect(center=btn_rect.center))
 
     def draw_correct_dialog(self):
@@ -2749,7 +2796,7 @@ class Quarter2:
         pygame.draw.rect(self.screen, (74, 222, 128), dialog_rect.inflate(-6, -6), 1, border_radius=10)
 
         info = self.station_npc_info.get(self.quiz_station_index, {})
-        c_title = info.get("correct_praise", "Ang Galing! (Tamang Sagot)")
+        c_title = info.get("correct_praise", "Well Done! (Correct Answer)")
         speaker_surf = self.dialog_header_font.render(c_title, True, (74, 222, 128))
         self.screen.blit(speaker_surf, (box_x + 32, box_y + 18))
 
@@ -2773,7 +2820,7 @@ class Quarter2:
         pygame.draw.rect(self.screen, bg_color, btn_rect, border_radius=10)
         pygame.draw.rect(self.screen, border_color, btn_rect, 2, border_radius=10)
 
-        c_surf = self.dialog_header_font.render("Tuloy ang Pista >>", True, (255, 255, 255))
+        c_surf = self.dialog_header_font.render("Continue Fiesta >>", True, (255, 255, 255))
         self.screen.blit(c_surf, c_surf.get_rect(center=btn_rect.center))
 
     def draw_victory_speech(self):
@@ -2797,8 +2844,8 @@ class Quarter2:
         self.screen.blit(speaker_surf, (box_x + 30, box_y + 18))
 
         speech_lines = [
-            "Maligayang Pagbati, young adventurer! You have mastered Philippine Money,",
-            "Sari-sari Sukli, Jeepney Fare Multiplication, and Market Scale Weight!",
+            "Congratulations, young adventurer! You have mastered Philippine Money,",
+            "Sari-sari change, Jeepney fare multiplication, and Market scale weights!",
             "The Grand Fiesta Exit Portal is now fully open.",
             "Step into the portal at the end of the street to return to town!"
         ]
@@ -2822,7 +2869,7 @@ class Quarter2:
         pygame.draw.rect(self.screen, bg_color, btn_rect, border_radius=10)
         pygame.draw.rect(self.screen, border_color, btn_rect, 2, border_radius=10)
 
-        c_surf = self.dialog_header_font.render("Pumasok sa Portal >>", True, text_color)
+        c_surf = self.dialog_header_font.render("Enter Portal >>", True, text_color)
         self.screen.blit(c_surf, c_surf.get_rect(center=btn_rect.center))
 
     def draw_final_dialog(self):
@@ -3080,28 +3127,52 @@ class Quarter2:
     # UPDATE PLAYER MOVEMENT (Sprint Boost & Particle Trails)
     # ============================================================
     def update_player_movement(self):
-        if (hasattr(self, 'camera_pan_active') and self.camera_pan_active) or self.quiz_state in [1, 2, 3, 5] or (hasattr(self, 'player_block_timer') and self.player_block_timer > 0):
+        if (hasattr(self, 'camera_pan_active') and self.camera_pan_active) or self.quiz_state in [1, 2, 3, 4, 5] or (hasattr(self, 'player_block_timer') and self.player_block_timer > 0):
             self.anim_frame = 0
             return
 
-        current_speed = 4 if self.speed_boost_timer > 0 else SPEED
+        current_speed = (SPEED * 1.4) if self.speed_boost_timer > 0 else SPEED
         vx, vy = 0, 0
 
-        if self.hand_detected:
+        # 1. Keyboard Controls (Arrow keys / WASD) with optional Shift Sprint
+        keys = pygame.key.get_pressed()
+        is_sprinting = keys[pygame.K_LSHIFT] or keys[pygame.K_RSHIFT]
+        move_speed = current_speed * 1.35 if is_sprinting else current_speed
+
+        if keys[pygame.K_LEFT] or keys[pygame.K_a]:
+            vx = -move_speed
+            self.player_dir = "left"
+        elif keys[pygame.K_RIGHT] or keys[pygame.K_d]:
+            vx = move_speed
+            self.player_dir = "right"
+
+        if keys[pygame.K_UP] or keys[pygame.K_w]:
+            vy = -move_speed
+            self.player_dir = "up"
+        elif keys[pygame.K_DOWN] or keys[pygame.K_s]:
+            vy = move_speed
+            self.player_dir = "down"
+
+        # 2. Hand Gesture Controls (if keyboard is not actively moving)
+        if vx == 0 and vy == 0 and self.hand_detected:
             center_x, center_y = self.width // 2, self.height // 2
             cursor_x, cursor_y = self.cursor_pos
             dx = cursor_x - center_x
             dy = cursor_y - center_y
 
-            if abs(dx) > 60:
-                vx = current_speed if dx > 0 else -current_speed
+            # Dynamic speed scaling: faster when hand is stretched further out
+            dist_factor = 1.3 if (abs(dx) > 160 or abs(dy) > 160) else 1.0
+            g_speed = current_speed * dist_factor
+
+            if abs(dx) > 45:
+                vx = g_speed if dx > 0 else -g_speed
                 if dx > 0:
                     self.player_dir = "right"
                 elif dx < 0:
                     self.player_dir = "left"
 
-            if abs(dy) > 60:
-                vy = current_speed if dy > 0 else -current_speed
+            if abs(dy) > 45:
+                vy = g_speed if dy > 0 else -g_speed
                 if dy > 0:
                     self.player_dir = "down"
                 elif dy < 0:
@@ -3138,7 +3209,7 @@ class Quarter2:
 
         if vx != 0 or vy != 0:
             self.anim_timer += 1
-            if self.anim_timer >= (6 if self.speed_boost_timer > 0 else 10):
+            if self.anim_timer >= (5 if self.speed_boost_timer > 0 else 8):
                 self.anim_timer = 0
                 self.anim_frame = (self.anim_frame + 1) % 2
         else:
@@ -3508,6 +3579,8 @@ class Quarter2:
             self.draw_wrong_dialog()
         elif self.quiz_state == 3:
             self.draw_correct_dialog()
+        elif self.quiz_state == 4:
+            self.draw_out_of_tries_dialog()
         elif self.quiz_state == 5:
             self.draw_victory_speech()
 

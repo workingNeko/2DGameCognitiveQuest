@@ -105,6 +105,12 @@ def gather_quarter_data(q, quarter_name):
         # JSON keys must be string
         data["first_attempt_correct"] = {str(k): v for k, v in q.first_attempt_correct.items()}
         
+    # Store attempt counts per station
+    if hasattr(q, 'station_attempts') and q.station_attempts:
+        data["station_attempts"] = {str(k): v for k, v in q.station_attempts.items()}
+    elif hasattr(q, 'question_attempts') and q.question_attempts:
+        data["station_attempts"] = {str(k): v for k, v in q.question_attempts.items()}
+        
     # Quarter 1 specific Shape NPCs answered state
     if hasattr(q, 'shape_npcs') and q.shape_npcs:
         shape_data = {}
@@ -198,6 +204,14 @@ def apply_student_progress(main_menu, save_data):
             if "first_attempt_correct" in q_data and hasattr(q, 'first_attempt_correct'):
                 correct_dict = q_data["first_attempt_correct"]
                 q.first_attempt_correct = {int(k): v for k, v in correct_dict.items()}
+                
+            # Restore station/question attempts tracking
+            if "station_attempts" in q_data:
+                att_dict = q_data["station_attempts"]
+                if hasattr(q, 'station_attempts'):
+                    q.station_attempts = {int(k): v for k, v in att_dict.items()}
+                if hasattr(q, 'question_attempts'):
+                    q.question_attempts = {int(k): v for k, v in att_dict.items()}
                 
             # Quarter 1 specific Shape NPC answered states
             if current_screen == "quarter1" and "shape_npcs" in q_data and hasattr(q, 'shape_npcs'):
