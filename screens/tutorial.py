@@ -9,7 +9,7 @@ import numpy as np
 
 TILE_SIZE = 32
 ZOOM = 1.50
-SPEED = 4.5
+SPEED = 4
 
 class TutorialScreen:
     def __init__(self, screen, main_menu):
