@@ -362,7 +362,7 @@ class TutorialScreen:
                     else:
                         self.quiz_attempts += 1
                         self.eliminated_choice = i
-                        self.wrong_feedback_msg = "Almost! You have 1 try remaining. Pick again! ⭐"
+                        self.wrong_feedback_msg = "Almost! You have 1 try remaining. Pick again!"
                         self.quiz_state = 2 if self.quiz_attempts < 2 else 3
                         print("❌ Wrong Answer in Tutorial Quiz -> Showing 2-Attempt Mechanics!")
                     return
@@ -612,13 +612,13 @@ class TutorialScreen:
 
             # Text instructions
             if self.phase == 1:
-                t1 = self.dialog_btn_font.render("🖐️ STEERING DEMO", True, (255, 215, 0))
+                t1 = self.dialog_btn_font.render("STEERING DEMO", True, (255, 215, 0))
                 t2 = self.ui_font.render("Move hand away from center", True, (255, 255, 255))
-                t3 = self.ui_font.render("towards the Guide NPC ➡️", True, (203, 213, 225))
+                t3 = self.ui_font.render("towards the Guide NPC >>", True, (203, 213, 225))
             else:
-                t1 = self.dialog_btn_font.render("🌀 PORTAL UNLOCKED", True, (74, 222, 128))
+                t1 = self.dialog_btn_font.render("PORTAL UNLOCKED", True, (74, 222, 128))
                 t2 = self.ui_font.render("Walk into the glowing Exit Portal", True, (255, 255, 255))
-                t3 = self.ui_font.render("to enter Stage Select ➡️", True, (203, 213, 225))
+                t3 = self.ui_font.render("to enter Stage Select >>", True, (203, 213, 225))
 
             self.screen.blit(t1, (card_x + 14, card_y + 12))
             self.screen.blit(t2, (card_x + 14, card_y + 44))
@@ -640,8 +640,7 @@ class TutorialScreen:
             pygame.draw.line(self.screen, border_col, (sub_cx - 10, sub_cy), (int(animated_hand_x), sub_cy), 2)
             pygame.draw.circle(self.screen, (255, 255, 255), (int(animated_hand_x), sub_cy), 10)
             pygame.draw.circle(self.screen, border_col, (int(animated_hand_x), sub_cy), 10, 2)
-            h_lbl = self.ui_font.render("🖐️", True, (0, 0, 0))
-            self.screen.blit(h_lbl, h_lbl.get_rect(center=(int(animated_hand_x), sub_cy)))
+            pygame.draw.circle(self.screen, (239, 68, 68), (int(animated_hand_x), sub_cy), 3)
 
     def draw_quiz_gesture_demo(self):
         """Draws an animated demonstration over Choice B showing how to hold a fist to click"""
@@ -671,7 +670,7 @@ class TutorialScreen:
             self.screen.blit(d_surf, d_rect)
             pygame.draw.rect(self.screen, (251, 191, 36), d_rect, 2, border_radius=10)
 
-            t1 = self.ui_font.render("✊ HOW TO SELECT:", True, (255, 215, 0))
+            t1 = self.ui_font.render("HOW TO SELECT:", True, (255, 215, 0))
             t2 = self.ui_font.render("Hold Fist (0.9s)", True, (255, 255, 255))
             self.screen.blit(t1, (demo_card_x + 10, demo_card_y + 10))
             self.screen.blit(t2, (demo_card_x + 10, demo_card_y + 32))
@@ -683,14 +682,12 @@ class TutorialScreen:
             pygame.draw.rect(self.screen, (255, 215, 0), (demo_card_x + 10, demo_card_y + 58, fill_w, 16), border_radius=6)
             pygame.draw.rect(self.screen, (255, 255, 255), p_bar_rect, 1, border_radius=6)
 
-        # Draw animated pulsing fist icon right on Choice B
+        # Draw animated pulsing hold circle right on Choice B
         hold_charge = min(1.0, cycle * 1.3)
         pygame.draw.circle(self.screen, (255, 255, 255), (btn_center_x, btn_center_y), 18, 2)
         if hold_charge > 0.1:
             pygame.draw.circle(self.screen, (255, 215, 0), (btn_center_x, btn_center_y), int(18 * hold_charge))
-        icon_txt = "✊" if hold_charge > 0.2 else "🖐️"
-        f_surf = self.ui_font.render(icon_txt, True, (0, 0, 0) if hold_charge > 0.5 else (255, 255, 255))
-        self.screen.blit(f_surf, f_surf.get_rect(center=(btn_center_x, btn_center_y)))
+        pygame.draw.circle(self.screen, (239, 68, 68), (btn_center_x, btn_center_y), 4)
 
     # ============================================================
     # TOP VISUAL GAMEPLAY BANNER
@@ -705,13 +702,13 @@ class TutorialScreen:
         pygame.draw.rect(self.screen, (245, 158, 11), banner_rect, 2, border_radius=14)
 
         if self.phase == 1:
-            txt = "🖐️ Move your hand in front of the camera to walk close to the Guide NPC!"
+            txt = "Move your hand in front of the camera to walk close to the Guide NPC!"
             color = (255, 215, 0)
         elif self.phase == 3:
-            txt = "⭐ Select your choice by holding a FIST (0.9s) over the answer!"
+            txt = "Select your choice by holding a FIST (0.9s) over the answer!"
             color = (251, 191, 36)
         else:
-            txt = "🌀 Exit Portal open! Walk into the glowing portal to start your adventure!"
+            txt = "Exit Portal open! Walk into the glowing portal to start your adventure!"
             color = (74, 222, 128)
 
         msg_surf = self.banner_font.render(txt, True, color)
@@ -795,7 +792,7 @@ class TutorialScreen:
         self.screen.blit(speaker, (box_x + 25, box_y + 20))
 
         m1 = self.dialog_q_font.render("Hmm, that is not correct.", True, (255, 255, 255))
-        m2 = self.dialog_choice_font.render("You have 1 try remaining! Think carefully and try again. ⭐", True, (253, 230, 138))
+        m2 = self.dialog_choice_font.render("You have 1 try remaining! Think carefully and try again.", True, (253, 230, 138))
         self.screen.blit(m1, (box_x + 25, box_y + 75))
         self.screen.blit(m2, (box_x + 25, box_y + 110))
 
@@ -824,7 +821,7 @@ class TutorialScreen:
         self.screen.blit(speaker, (box_x + 25, box_y + 20))
 
         m1 = self.dialog_q_font.render("Outstanding! That is correct!", True, (255, 255, 255))
-        m2 = self.dialog_choice_font.render("The Exit Portal has been unlocked. Step through to begin! ⭐", True, (253, 230, 138))
+        m2 = self.dialog_choice_font.render("The Exit Portal has been unlocked. Step through to begin!", True, (253, 230, 138))
         self.screen.blit(m1, (box_x + 25, box_y + 75))
         self.screen.blit(m2, (box_x + 25, box_y + 110))
 

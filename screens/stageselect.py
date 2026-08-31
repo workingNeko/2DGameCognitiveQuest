@@ -2181,8 +2181,8 @@ class StageSelect:
                 f"NPCs: {npc_text}",
                 f"Hand: {'YES' if self.hand_detected else 'NO'}",
                 f"Gesture: {self.current_gesture}",
-                f"Left Portal → Quarter 1 | Up Portal → Quarter 4",
-                f"Right Portal → Quarter 3 | Down Portal → Quarter 2",
+                f"Left Portal >> Quarter 1 | Up Portal >> Quarter 4",
+                f"Right Portal >> Quarter 3 | Down Portal >> Quarter 2",
                 f"Press ESC to return to menu"
             ]
 

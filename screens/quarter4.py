@@ -1535,7 +1535,7 @@ class Quarter4:
 
             info_lines = [
                 f"Map: {self.map_name}",
-                f"Goal: Reach the {self.goal_portal_direction} portal → Return to town",
+                f"Goal: Reach the {self.goal_portal_direction} portal >> Return to town",
                 f"Position: ({self.player_x // TILE_SIZE}, {self.player_y // TILE_SIZE})",
                 f"Portals: {len(self.portals)}",
                 f"NPCs: {npc_text}",
@@ -2326,7 +2326,7 @@ class Quarter4:
         r_hov = retry_rect.collidepoint(self.cursor_pos)
         pygame.draw.rect(self.screen, (245, 158, 11) if r_hov else (30, 41, 59), retry_rect, border_radius=10)
         pygame.draw.rect(self.screen, (255, 255, 255), retry_rect, 2, border_radius=10)
-        r_txt = btn_font.render("Retry Quarter 🔄", True, (15, 23, 42) if r_hov else (255, 255, 255))
+        r_txt = btn_font.render("Retry Quarter", True, (15, 23, 42) if r_hov else (255, 255, 255))
         self.screen.blit(r_txt, r_txt.get_rect(center=retry_rect.center))
 
         # Button 2: Return to Stage Select
@@ -2334,7 +2334,7 @@ class Quarter4:
         e_hov = exit_rect.collidepoint(self.cursor_pos)
         pygame.draw.rect(self.screen, (220, 38, 38) if e_hov else (30, 41, 59), exit_rect, border_radius=10)
         pygame.draw.rect(self.screen, (255, 255, 255), exit_rect, 2, border_radius=10)
-        e_txt = btn_font.render("Stage Select 🗺️", True, (255, 255, 255))
+        e_txt = btn_font.render("Stage Select", True, (255, 255, 255))
         self.screen.blit(e_txt, e_txt.get_rect(center=exit_rect.center))
 
     # ============================================================

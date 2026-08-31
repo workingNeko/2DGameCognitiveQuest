@@ -1030,7 +1030,7 @@ class MainMenu:
                 info_bg.fill((0, 0, 0))
                 info_bg.set_alpha(180)
                 self.screen.blit(info_bg, (self.w // 2 - 200, self.student_info_y))
-                student_text = self.small_font.render(f"✓ Selected: {student_name}", True, (255, 215, 0))
+                student_text = self.small_font.render(f"Selected Student: {student_name}", True, (255, 215, 0))
                 self.screen.blit(student_text, (self.w // 2 - student_text.get_width() // 2, self.student_info_y + 5))
 
             # ERROR MESSAGE (commented out for testing)

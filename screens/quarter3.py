@@ -385,7 +385,7 @@ class Quarter3:
         self.quiz_questions = [
             {
                 "station": 1,
-                "title": "🍎 MULTIPLICATION ARRAYS",
+                "title": "MULTIPLICATION ARRAYS",
                 "question": "Farmer Ben arranged golden apples into 3 equal rows with 4 apples in each row. What is the total product of 3 × 4?",
                 "q_type": "multiple_choice",
                 "choices": ["A. 7 apples", "B. 10 apples", "C. 12 apples", "D. 15 apples"],
@@ -397,7 +397,7 @@ class Quarter3:
             },
             {
                 "station": 2,
-                "title": "🥥 REPEATED ADDITION",
+                "title": "REPEATED ADDITION",
                 "question": "Which repeated addition sentence matches 4 groups with 2 coconuts in each group?",
                 "q_type": "multiple_choice",
                 "choices": ["A. 4 + 4", "B. 2 + 2 + 2 + 2", "C. 4 + 2", "D. 2 + 4 + 2"],
@@ -409,7 +409,7 @@ class Quarter3:
             },
             {
                 "station": 3,
-                "title": "🎁 EQUAL SHARING DIVISION",
+                "title": "EQUAL SHARING DIVISION",
                 "question": "You gathered 10 gold coins to share equally between 2 treasure chests. How many coins belong in each chest (10 ÷ 2)?",
                 "q_type": "multiple_choice",
                 "choices": ["A. 3 coins", "B. 4 coins", "C. 5 coins", "D. 8 coins"],
@@ -421,7 +421,7 @@ class Quarter3:
             },
             {
                 "station": 4,
-                "title": "🍕 UNIT FRACTIONS (ONE-HALF)",
+                "title": "UNIT FRACTIONS (ONE-HALF)",
                 "question": "The Sacred Sun Disk is divided into 2 equal parts. What unit fraction represents 1 shaded part out of 2?",
                 "q_type": "multiple_choice",
                 "choices": ["A. 1/4 (One-Fourth)", "B. 1/3 (One-Third)", "C. 1/2 (One-Half)", "D. 2/2 (Whole)"],
@@ -433,7 +433,7 @@ class Quarter3:
             },
             {
                 "station": 5,
-                "title": "🍫 UNIT FRACTIONS (ONE-THIRD)",
+                "title": "UNIT FRACTIONS (ONE-THIRD)",
                 "question": "The golden ingot bar is divided into 3 equal segments. What unit fraction represents 1 shaded segment out of 3?",
                 "q_type": "multiple_choice",
                 "choices": ["A. 1/3 (One-Third)", "B. 1/2 (One-Half)", "C. 1/4 (One-Fourth)", "D. 3/1"],
@@ -535,7 +535,7 @@ class Quarter3:
         self.relic_banner_timer = 0.0
 
         # ============================================================
-        # 🏛️ CITADEL OF THE SUN: KEYSTONE ALTAR SYSTEM (MAP 9 GAMEPLAY)
+        # CITADEL OF THE SUN: KEYSTONE ALTAR SYSTEM (MAP 9 GAMEPLAY)
         # ============================================================
         self.citadel_keystones = {
             1: {"num": 1, "roman": "I", "name": "Apple Array Scepter", "math": "3 × 4", "color": (239, 68, 68), "icon": "apple"},
@@ -550,7 +550,7 @@ class Quarter3:
         self.citadel_banner_timer = 0.0
 
         # ============================================================
-        # 🧩 MAP 9 INTERACTIVE MINI-PUZZLES STATE
+        # MAP 9 INTERACTIVE MINI-PUZZLES STATE
         # ============================================================
         self.mini_puzzle_active = False
         self.mini_puzzle_station = 1
@@ -577,7 +577,7 @@ class Quarter3:
         print(f"   Portals loaded: {len(self.portals)}")
 
     # ============================================================
-    # ⚡ RASPBERRY PI HIGH-PERFORMANCE PRE-CACHING (60 FPS)
+    # RASPBERRY PI HIGH-PERFORMANCE PRE-CACHING (60 FPS)
     # ============================================================
     def init_cached_surfaces(self):
         """Pre-renders static backdrop, pre-scales all tiles/sprites, and pre-allocates overlays for 60 FPS on Raspberry Pi"""
@@ -754,12 +754,12 @@ class Quarter3:
                 station_num = idx + 1
                 mapped_questions.append({
                     "station": station_num,
-                    "title": f"⭐ CHALLENGE {station_num}",
+                    "title": f" CHALLENGE {station_num}",
                     "question": prompt,
                     "q_type": "multiple_choice",
                     "choices": choices,
                     "correct": correct_idx,
-                    "hint": row.get("hint") or "Examine the choices carefully and select the best answer below! ⭐"
+                    "hint": row.get("hint") or "Examine the choices carefully and select the best answer below! "
                 })
 
             if mapped_questions:
@@ -809,7 +809,7 @@ class Quarter3:
                 assessment_id=assessment_id
             )
             if success:
-                print(f"🎉 Successfully saved Quarter 3 Game Result to Database for Student DB ID {student_db_id}!")
+                print(f"Successfully saved Quarter 3 Game Result to Database for Student DB ID {student_db_id}!")
                 print(f"   Score: {score}/{total_questions} ({percentage}%)")
             else:
                 print("⚠️ Failed to save Quarter 3 game results via Database API.")
@@ -1560,7 +1560,7 @@ class Quarter3:
         clean_input = self.ident_input_text.strip().lower().replace(" ", "")
 
         if not clean_input:
-            self.wrong_feedback_msg = "Please type or tap an answer using the keypad first! ⭐"
+            self.wrong_feedback_msg = "Please type or tap an answer using the keypad first! "
             return
 
         is_correct = False
@@ -1609,8 +1609,8 @@ class Quarter3:
         if self.is_caravan_mode and self.quiz_station_index in self.station_cargo_rewards:
             reward = self.station_cargo_rewards[self.quiz_station_index]
             self.caravan_cargo.append(reward)
-            self.caravan_upgrade_banner_text = f"📦 CARAVAN UPGRADE: {reward['name']} Loaded!"
-            self.caravan_upgrade_banner_sub = f"⚡ Speed Rush Activated! {reward['desc']}"
+            self.caravan_upgrade_banner_text = f"CARAVAN UPGRADE: {reward['name']} Loaded!"
+            self.caravan_upgrade_banner_sub = f"Speed Rush Activated! {reward['desc']}"
             self.caravan_upgrade_banner_timer = 4.0
             self.speed_boost_timer = 5.0  # 5 seconds of lightning sprint!
 
@@ -1632,8 +1632,8 @@ class Quarter3:
             st_num = self.quiz_station_index
             keystone = self.citadel_keystones[st_num]
             self.citadel_collected_keystones.append(keystone)
-            self.citadel_banner_text = f"🏛️ SUN KEYSTONE {st_num}/5 UNLOCKED!"
-            self.citadel_banner_sub = f"✨ {keystone['name']} ({keystone['math']}) slotted into Citadel Altar!"
+            self.citadel_banner_text = f"SUN KEYSTONE {st_num}/5 UNLOCKED!"
+            self.citadel_banner_sub = f"{keystone['name']} ({keystone['math']}) slotted into Citadel Altar!"
             self.citadel_banner_timer = 4.0
             self.speed_boost_timer = 5.0
 
@@ -1647,7 +1647,7 @@ class Quarter3:
                     "life": random.uniform(1.0, 1.8),
                     "rad": random.randint(3, 7)
                 })
-            print(f"🏛️ Citadel Keystone {st_num} Acquired: {keystone['name']}")
+            print(f"Citadel Keystone {st_num} Acquired: {keystone['name']}")
 
         elif self.is_relic_hunt_mode:
             self.speed_boost_timer = 6.0
@@ -1693,7 +1693,7 @@ class Quarter3:
                 # In Map 9 Hybrid mode, completing question 5 activates the Grand Sun Temple Altar Jigsaw!
                 self.quiz_state = 8
                 self.init_sun_relic_puzzle()
-                print("🏛️ All 5 Map 9 Stations Solved! Grand Sun Temple Altar Puzzle Opened!")
+                print("All 5 Map 9 Stations Solved! Grand Sun Temple Altar Puzzle Opened!")
             else:
                 self.quiz_state = 5
 
@@ -1753,7 +1753,7 @@ class Quarter3:
                     else:
                         # 50:50 Wizard Hint: eliminate the clicked wrong choice and give gentle encouragement
                         self.eliminated_choices.add(i)
-                        self.wrong_feedback_msg = "Almost there! Try picking again! ⭐"
+                        self.wrong_feedback_msg = "Almost there! Try picking again! "
                         if hasattr(self, 'first_attempt_correct') and (self.current_question_index + 1) in self.first_attempt_correct:
                             self.first_attempt_correct[self.current_question_index + 1] = False
                         
@@ -1821,7 +1821,7 @@ class Quarter3:
                             slab["is_placed"] = True
                             if self.snap_sound:
                                 self.snap_sound.play()
-                            print(f"🧩 Slab {slab['index']} ({slab['config']['math']}) clicked into altar!")
+                            print(f"Slab {slab['index']} ({slab['config']['math']}) clicked into altar!")
                             if all(s["is_placed"] for s in self.sun_relic_slabs):
                                 self.sun_relic_solved = True
                                 self.sun_relic_solved_time = pygame.time.get_ticks()
@@ -1851,10 +1851,10 @@ class Quarter3:
                 self.caravan_ride_path = self.find_path(start_tile, goal_tile)
                 self.caravan_ride_index = 0
                 self.caravan_riding = True
-                self.caravan_upgrade_banner_text = "👑 ROYAL EXPEDITION COMPLETE! 🌟"
-                self.caravan_upgrade_banner_sub = "Caravan carrying player to the Portal! 🚀"
+                self.caravan_upgrade_banner_text = "ROYAL EXPEDITION COMPLETE! "
+                self.caravan_upgrade_banner_sub = "Caravan carrying player to the Portal! "
                 self.caravan_upgrade_banner_timer = 999.0
-                print(f"🚀 Caravan Ride Started! Path length: {len(self.caravan_ride_path)} tiles to {goal_tile}")
+                print(f" Caravan Ride Started! Path length: {len(self.caravan_ride_path)} tiles to {goal_tile}")
 
     # ============================================================
     # UPDATE
@@ -2023,7 +2023,7 @@ class Quarter3:
                         self.quiz_state = 6
                         self.quiz_station_index = 6
                         self.clear_portal_overlapping_tiles()
-                        self.relic_banner_text = "☀️ GOLDEN CAUSEWAY COMPLETE!"
+                        self.relic_banner_text = "GOLDEN CAUSEWAY COMPLETE!"
                         self.relic_banner_sub = "The bridge is open! Cross to the Eastern Sun Portal Sanctum!"
                         self.relic_banner_timer = 5.0
                     else:
@@ -2080,7 +2080,7 @@ class Quarter3:
                 "y": self.caravan_y - 6,
                 "vx": random.uniform(-0.6, 0.6),
                 "vy": -1.2,
-                "char": random.choice(["🎵", "🎶", "✨", "💖", "⭐"]),
+                "char": random.choice(["🎵", "🎶", "✨", "💖", ""]),
                 "color": random.choice([(255, 215, 0), (244, 114, 182), (56, 189, 248), (34, 197, 94)]),
                 "life": 1.2
             })
@@ -2483,7 +2483,7 @@ class Quarter3:
 
             info_lines = [
                 f"Map: {self.map_name}",
-                f"Goal: Reach the {self.goal_portal_direction} portal → Return to town",
+                f"Goal: Reach the {self.goal_portal_direction} portal >> Return to town",
                 f"Position: ({self.player_x // TILE_SIZE}, {self.player_y // TILE_SIZE})",
                 f"Portals: {len(self.portals)}",
                 f"NPCs: {npc_text}",
@@ -2513,7 +2513,7 @@ class Quarter3:
             # Stage 1: Multiplication Array (3 Rows × 4 Apples = 12)
             self.relic_target_count = 12
             self.relic_item_type = "apple"
-            self.relic_quest_title = "STAGE 1 • 🍎 THE GOLDEN ORCHARD TRIAL"
+            self.relic_quest_title = "STAGE 1 • THE GOLDEN ORCHARD TRIAL"
             self.relic_quest_math = "3 Rows × 4 Apples = 12 Total Apples"
             self.relic_quest_hint = "Gather all 12 Golden Apples and bring them to Shrine 1!"
             coords = [(46, 18), (45, 18), (44, 18), (43, 18), (42, 18), (41, 18), (40, 18), (39, 18), (38, 18), (37, 18), (36, 18), (35, 18)]
@@ -2523,7 +2523,7 @@ class Quarter3:
             # Stage 2: Repeated Addition (4 Groups of 2 = 8)
             self.relic_target_count = 8
             self.relic_item_type = "coconut"
-            self.relic_quest_title = "STAGE 2 • 🥥 THE REPEATED ADDITION TRAIL"
+            self.relic_quest_title = "STAGE 2 • THE REPEATED ADDITION TRAIL"
             self.relic_quest_math = "4 Groups of 2 Coconuts = 2 + 2 + 2 + 2 = 8"
             self.relic_quest_hint = "Gather 8 Coconuts along the oasis path and deliver to Shrine 2!"
             coords = [(32, 18), (30, 18), (28, 18), (26, 18), (23, 18), (21, 18), (19, 18), (17, 18)]
@@ -2533,7 +2533,7 @@ class Quarter3:
             # Stage 3: Equal Sharing Division (10 Coins ÷ 2 Chests = 5)
             self.relic_target_count = 10
             self.relic_item_type = "coin"
-            self.relic_quest_title = "STAGE 3 • 🎁 EQUAL SHARING DIVISION"
+            self.relic_quest_title = "STAGE 3 • EQUAL SHARING DIVISION"
             self.relic_quest_math = "10 Scarab Coins ÷ 2 Chests = 5 Coins Each"
             self.relic_quest_hint = "Collect all 10 Golden Coins to split between the 2 Shrine Chests!"
             coords = [(14, 17), (14, 16), (13, 15), (11, 15), (10, 15), (9, 14), (9, 12), (9, 11), (7, 11), (5, 11)]
@@ -2543,7 +2543,7 @@ class Quarter3:
             # Stage 4: Unit Fraction One-Half (1 / 2)
             self.relic_target_count = 2
             self.relic_item_type = "sun_disk"
-            self.relic_quest_title = "STAGE 4 • 🍕 SACRED UNIT FRACTION (ONE-HALF)"
+            self.relic_quest_title = "STAGE 4 • SACRED UNIT FRACTION (ONE-HALF)"
             self.relic_quest_math = "2 Halves (1/2 + 1/2) = 1 Whole Solar Disk"
             self.relic_quest_hint = "Gather both 2 Sun Disk Halves (1/2 each) and deliver to Shrine 4!"
             coords = [(3, 10), (4, 7)]
@@ -2553,7 +2553,7 @@ class Quarter3:
             # Stage 5: Unit Fraction One-Third (1 / 3)
             self.relic_target_count = 3
             self.relic_item_type = "ingot"
-            self.relic_quest_title = "STAGE 5 • 🍫 SACRED UNIT FRACTION (ONE-THIRD)"
+            self.relic_quest_title = "STAGE 5 • SACRED UNIT FRACTION (ONE-THIRD)"
             self.relic_quest_math = "3 Segments (1/3 + 1/3 + 1/3) = 1 Whole Ingot Bar"
             self.relic_quest_hint = "Gather all 3 Ingot Segments (1/3 each) and deliver to Shrine 5!"
             coords = [(4, 3), (14, 3), (24, 3)]
@@ -2573,7 +2573,7 @@ class Quarter3:
                 "collected": False
             })
 
-        self.relic_banner_text = f"✨ {self.relic_quest_title}"
+        self.relic_banner_text = f"{self.relic_quest_title}"
         self.relic_banner_sub = self.relic_quest_math
         self.relic_banner_timer = 4.0
         print(f"🏺 Relic Stage {stage_num} spawned with {len(self.relic_items)} items!")
@@ -2625,7 +2625,7 @@ class Quarter3:
 
                     if self.relic_collected_count >= self.relic_target_count:
                         self.relic_stage_complete = True
-                        self.relic_banner_text = "✨ ALL SUPPLIES GATHERED! ✨"
+                        self.relic_banner_text = "ALL SUPPLIES GATHERED! ✨"
                         self.relic_banner_sub = f"Deliver them to Guardian {self.quiz_station_index}'s Shrine Altar!"
                         self.relic_banner_timer = 4.0
 
@@ -2720,7 +2720,7 @@ class Quarter3:
         self.screen.blit(q_surf, (hud_x + 120, hud_y + 10))
 
         math_c = (52, 211, 153) if self.relic_stage_complete else (253, 230, 138)
-        m_surf = self.dialog_hint_font.render(f"💡 {self.relic_quest_math}", True, math_c)
+        m_surf = self.dialog_hint_font.render(f"{self.relic_quest_math}", True, math_c)
         self.screen.blit(m_surf, (hud_x + 120, hud_y + 36))
 
         # Right Side: Inventory Progress Bar & Counter
@@ -3086,7 +3086,7 @@ class Quarter3:
         pygame.draw.rect(self.screen, border_col, (hud_x, hud_y, hud_w, hud_h), 2, border_radius=12)
         
         # Header Title
-        status_txt = "🏛️ SUN CITADEL ALTAR (5/5 READY!)" if c_count == 5 else f"🏛️ SUN CITADEL KEYSTONES ({c_count}/5)"
+        status_txt = "SUN CITADEL ALTAR (5/5 READY!)" if c_count == 5 else f"SUN CITADEL KEYSTONES ({c_count}/5)"
         h_surf = self.dialog_stat_font.render(status_txt, True, (255, 215, 0) if c_count < 5 else (34, 197, 94))
         self.screen.blit(h_surf, (hud_x + (hud_w - h_surf.get_width()) // 2, hud_y + 6))
         
@@ -3238,7 +3238,7 @@ class Quarter3:
                     pygame.draw.circle(self.screen, (248, 113, 113), (ax - 3, ay - 3), max(2, r_rad // 3))
                     pygame.draw.circle(self.screen, (34, 197, 94), (ax + 2, ay - r_rad), 3)
 
-            lbl = self.dialog_stat_font.render(f"🍎 Visual Model: {rows} Rows with {cols} Apples in Each Row", True, (253, 230, 138))
+            lbl = self.dialog_stat_font.render(f"Visual Model: {rows} Rows with {cols} Apples in Each Row", True, (253, 230, 138))
             self.screen.blit(lbl, (vis_rect.centerx - lbl.get_width() // 2, vis_rect.bottom - 24))
 
         # 2. Repeated Addition / Groups (Dynamic group count & items extracted from text)
@@ -3263,7 +3263,7 @@ class Quarter3:
                     pygame.draw.circle(self.screen, (67, 56, 202), (cx, cy), 8)
                     pygame.draw.circle(self.screen, (129, 140, 248), (cx - 2, cy - 2), 3)
 
-            lbl = self.dialog_stat_font.render(f"🥥 Visual Model: {groups} Groups with {items_per_group} Coconuts in Each Group", True, (253, 230, 138))
+            lbl = self.dialog_stat_font.render(f"Visual Model: {groups} Groups with {items_per_group} Coconuts in Each Group", True, (253, 230, 138))
             self.screen.blit(lbl, (vis_rect.centerx - lbl.get_width() // 2, vis_rect.bottom - 24))
 
         # 3. Equal Sharing Division (Dynamic total & chests extracted from text)
@@ -3274,7 +3274,7 @@ class Quarter3:
 
             # Draw central gold coin supply pool above chests
             coin_pool_y = vis_rect.centery - 42
-            p_lbl = self.dialog_hint_font.render(f"✨ Total: {total} Gold Coins to Divide", True, (254, 240, 138))
+            p_lbl = self.dialog_hint_font.render(f"Total: {total} Gold Coins to Divide", True, (254, 240, 138))
             self.screen.blit(p_lbl, (vis_rect.centerx - p_lbl.get_width() // 2, coin_pool_y - 18))
 
             draw_pool_coins = min(12, total)
@@ -3295,10 +3295,10 @@ class Quarter3:
                 pygame.draw.rect(self.screen, (30, 41, 59), ch_rect, border_radius=8)
                 pygame.draw.rect(self.screen, (245, 158, 11), ch_rect, 2, border_radius=8)
                 
-                c_lbl = self.dialog_stat_font.render(f"🎁 Chest {ch_i+1}", True, (253, 230, 138))
+                c_lbl = self.dialog_stat_font.render(f"Chest {ch_i+1}", True, (253, 230, 138))
                 self.screen.blit(c_lbl, (cx + chest_w // 2 - c_lbl.get_width() // 2, cy + 12))
 
-            lbl = self.dialog_stat_font.render(f"🎁 Visual Model: Share {total} Gold Coins Equally between {chests} Chests", True, (253, 230, 138))
+            lbl = self.dialog_stat_font.render(f"Visual Model: Share {total} Gold Coins Equally between {chests} Chests", True, (253, 230, 138))
             self.screen.blit(lbl, (vis_rect.centerx - lbl.get_width() // 2, vis_rect.bottom - 24))
 
         # 4. Fraction Circle (Dynamic slices & shaded parts extracted from text)
@@ -3332,7 +3332,7 @@ class Quarter3:
                     py = cy + radius * 0.55 * math.sin(mid_a)
                     pygame.draw.circle(self.screen, (220, 38, 38), (int(px), int(py)), 4)
 
-            lbl = self.dialog_stat_font.render(f"🍕 Visual Model: {shaded} Shaded Part out of {slices} Equal Parts", True, (253, 230, 138))
+            lbl = self.dialog_stat_font.render(f"Visual Model: {shaded} Shaded Part out of {slices} Equal Parts", True, (253, 230, 138))
             self.screen.blit(lbl, (vis_rect.centerx - lbl.get_width() // 2, vis_rect.bottom - 24))
 
         # 5. Fraction Bar (Dynamic segments & shaded parts extracted from text)
@@ -3359,19 +3359,19 @@ class Quarter3:
                 txt_surf = self.dialog_hint_font.render(txt, True, (255, 255, 255))
                 self.screen.blit(txt_surf, txt_surf.get_rect(center=seg_rect.center))
 
-            lbl = self.dialog_stat_font.render(f"🍫 Visual Model: {shaded} Shaded Segment out of {segments} Equal Segments", True, (253, 230, 138))
+            lbl = self.dialog_stat_font.render(f"Visual Model: {shaded} Shaded Segment out of {segments} Equal Segments", True, (253, 230, 138))
             self.screen.blit(lbl, (vis_rect.centerx - lbl.get_width() // 2, vis_rect.bottom - 24))
 
         # 6. General Fallback (Non-math / General Knowledge / Science / English)
         else:
-            hint_txt = q_data.get("hint", "Examine the choices carefully and select the best answer below! ⭐")
+            hint_txt = q_data.get("hint", "Examine the choices carefully and select the best answer below! ")
             # Stylized Challenge Crest
             pygame.draw.circle(self.screen, (30, 41, 59), (vis_rect.centerx, vis_rect.centery - 18), 24)
             pygame.draw.circle(self.screen, (245, 158, 11), (vis_rect.centerx, vis_rect.centery - 18), 24, 2)
-            c_icon = self.dialog_speaker_font.render("🏆", True, (255, 215, 0))
+            c_icon = self.dialog_speaker_font.render("", True, (255, 215, 0))
             self.screen.blit(c_icon, c_icon.get_rect(center=(vis_rect.centerx, vis_rect.centery - 18)))
             
-            h_surf = self.dialog_hint_font.render(f"💡 {hint_txt}", True, (253, 230, 138))
+            h_surf = self.dialog_hint_font.render(f"{hint_txt}", True, (253, 230, 138))
             self.screen.blit(h_surf, (vis_rect.centerx - h_surf.get_width() // 2, vis_rect.bottom - 26))
 
     # ============================================================
@@ -3470,7 +3470,7 @@ class Quarter3:
         self.screen.blit(speaker_surf, (box_x + 25, box_y + 20))
 
         msg1 = self.dialog_msg_font.render("Hmm, that is not correct.", True, (255, 255, 255))
-        msg2 = self.dialog_hint_font.render("You have 1 try remaining! Think carefully and try again. ⭐", True, (253, 230, 138))
+        msg2 = self.dialog_hint_font.render("You have 1 try remaining! Think carefully and try again. ", True, (253, 230, 138))
         self.screen.blit(msg1, (box_x + 25, box_y + 75))
         self.screen.blit(msg2, (box_x + 25, box_y + 110))
 
@@ -3751,7 +3751,7 @@ class Quarter3:
         self.sun_relic_solved = False
         self.sun_relic_solved_time = 0
         self.dragged_slab = None
-        print("🏛️ Sun Relic Altar Jigsaw initialized with 5 Mathematical Slabs!")
+        print("Sun Relic Altar Jigsaw initialized with 5 Mathematical Slabs!")
 
     def update_sun_relic_puzzle(self, dt):
         if self.sun_relic_solved:
@@ -3760,7 +3760,7 @@ class Quarter3:
                     self.sun_relic_active = False
                     self.quiz_state = 6  # Open Goal Exit Portal!
                     self.clear_portal_overlapping_tiles()
-                    print("🌟 Sun Relic Altar Restored! Goal Exit Portal Unlocked!")
+                    print(" Sun Relic Altar Restored! Goal Exit Portal Unlocked!")
             return
 
         # Gesture fist drag & drop
@@ -3782,7 +3782,7 @@ class Quarter3:
                 self.release_dragged_slab()
 
     # ============================================================
-    # 🧩 MAP 9 INTERACTIVE STATION MINI-PUZZLES
+    # MAP 9 INTERACTIVE STATION MINI-PUZZLES
     # ============================================================
     def init_station_mini_puzzle(self, station_num):
         """Initializes the hands-on concrete manipulative puzzle for Station 1-5 in Map 9"""
@@ -3801,8 +3801,8 @@ class Quarter3:
         box_y = (self.height - box_h) // 2
 
         if station_num == 1:
-            # 🍎 Station 1: 3x4 Multiplication Array Builder
-            self.mini_puzzle_title = "🧩 PUZZLE 1 • 🍎 BUILD THE 3 × 4 ARRAY"
+            # Station 1: 3x4 Multiplication Array Builder
+            self.mini_puzzle_title = "PUZZLE 1 • BUILD THE 3 × 4 ARRAY"
             self.mini_puzzle_sub = "Click or drag 12 Golden Apples to fill the 3 rows of 4 grid!"
             self.mini_puzzle_math_target = "3 Rows × 4 Apples = 12 Total Apples"
             self.mini_puzzle_type = "array"
@@ -3834,8 +3834,8 @@ class Quarter3:
                 })
 
         elif station_num == 2:
-            # 🥥 Station 2: Repeated Addition 4 Groups of 2 Coconuts
-            self.mini_puzzle_title = "🧩 PUZZLE 2 • 🥥 GROUP THE COCONUTS (2 + 2 + 2 + 2)"
+            # Station 2: Repeated Addition 4 Groups of 2 Coconuts
+            self.mini_puzzle_title = "PUZZLE 2 • GROUP THE COCONUTS (2 + 2 + 2 + 2)"
             self.mini_puzzle_sub = "Place 2 Coconuts into each of the 4 Oasis Baskets!"
             self.mini_puzzle_math_target = "4 Groups of 2 = 2 + 2 + 2 + 2 = 8 Coconuts"
             self.mini_puzzle_type = "groups"
@@ -3864,8 +3864,8 @@ class Quarter3:
                 })
 
         elif station_num == 3:
-            # 🎁 Station 3: Equal Sharing Division (10 Coins ÷ 2 Chests)
-            self.mini_puzzle_title = "🧩 PUZZLE 3 • 🎁 EQUAL SHARING DIVISION (10 ÷ 2)"
+            # Station 3: Equal Sharing Division (10 Coins ÷ 2 Chests)
+            self.mini_puzzle_title = "PUZZLE 3 • EQUAL SHARING DIVISION (10 ÷ 2)"
             self.mini_puzzle_sub = "Share 10 Scarab Coins equally between the 2 Golden Chests (5 each)!"
             self.mini_puzzle_math_target = "10 Coins ÷ 2 Chests = 5 Coins Each"
             self.mini_puzzle_type = "sharing"
@@ -3895,8 +3895,8 @@ class Quarter3:
                 })
 
         elif station_num == 4:
-            # 🍕 Station 4: Unit Fraction (1 / 2) Solar Disk
-            self.mini_puzzle_title = "🧩 PUZZLE 4 • 🍕 UNIT FRACTION (ONE-HALF = 1/2)"
+            # Station 4: Unit Fraction (1 / 2) Solar Disk
+            self.mini_puzzle_title = "PUZZLE 4 • UNIT FRACTION (ONE-HALF = 1/2)"
             self.mini_puzzle_sub = "Slot 1 shaded half out of 2 equal parts into the Solar Keystone!"
             self.mini_puzzle_math_target = "1 Part out of 2 Equal Parts = 1/2"
             self.mini_puzzle_type = "fraction_half"
@@ -3921,8 +3921,8 @@ class Quarter3:
             })
 
         elif station_num == 5:
-            # 🍫 Station 5: Unit Fraction (1 / 3) Ingot Bar
-            self.mini_puzzle_title = "🧩 PUZZLE 5 • 🍫 UNIT FRACTION (ONE-THIRD = 1/3)"
+            # Station 5: Unit Fraction (1 / 3) Ingot Bar
+            self.mini_puzzle_title = "PUZZLE 5 • UNIT FRACTION (ONE-THIRD = 1/3)"
             self.mini_puzzle_sub = "Slot the 3 equal segments (1/3 each) to assemble the Whole Ingot Bar!"
             self.mini_puzzle_math_target = "3 Segments (1/3 + 1/3 + 1/3) = 1 Whole Bar"
             self.mini_puzzle_type = "fraction_third"
@@ -4107,7 +4107,7 @@ class Quarter3:
                 self.mini_puzzle_solved_time = pygame.time.get_ticks()
                 if self.success_sound:
                     self.success_sound.play()
-                print(f"🎉 Station {self.mini_puzzle_station} Mini-Puzzle Solved!")
+                print(f"Station {self.mini_puzzle_station} Mini-Puzzle Solved!")
 
     def draw_station_mini_puzzle(self):
         """Renders the hands-on concrete mathematical manipulative puzzle overlay (60 FPS Pre-Cached)"""
@@ -4137,7 +4137,7 @@ class Quarter3:
             is_hov = quick_btn.collidepoint(self.cursor_pos)
             pygame.draw.rect(self.screen, (30, 41, 59) if not is_hov else (217, 119, 6), quick_btn, border_radius=10)
             pygame.draw.rect(self.screen, (245, 158, 11), quick_btn, 2, border_radius=10)
-            q_txt = self.dialog_stat_font.render("✨ Auto-Assemble", True, (255, 255, 255))
+            q_txt = self.dialog_stat_font.render("Auto-Assemble", True, (255, 255, 255))
             self.screen.blit(q_txt, q_txt.get_rect(center=quick_btn.center))
 
         # Draw Sockets / Containers
@@ -4175,7 +4175,7 @@ class Quarter3:
             is_hov = btn_rect.collidepoint(self.cursor_pos)
             pygame.draw.rect(self.screen, (22, 163, 74) if is_hov else (16, 185, 129), btn_rect, border_radius=12)
             pygame.draw.rect(self.screen, (255, 255, 255), btn_rect, 2, border_radius=12)
-            p_txt = self.dialog_btn_font.render("🎉 Solved! Take Question Challenge →", True, (255, 255, 255))
+            p_txt = self.dialog_btn_font.render("Solved! Take Question Challenge >>", True, (255, 255, 255))
             self.screen.blit(p_txt, p_txt.get_rect(center=btn_rect.center))
 
     def render_mini_puzzle_item(self, item, is_dragged=False):
@@ -4222,18 +4222,18 @@ class Quarter3:
             slab["is_placed"] = True
             if self.snap_sound:
                 self.snap_sound.play()
-            print(f"🧩 Slab {slab['index']} ({slab['config']['math']}) magnetically slotted!")
+            print(f"Slab {slab['index']} ({slab['config']['math']}) magnetically slotted!")
             
             if all(s["is_placed"] for s in self.sun_relic_slabs):
                 self.sun_relic_solved = True
                 self.sun_relic_solved_time = pygame.time.get_ticks()
                 if self.success_sound:
                     self.success_sound.play()
-                print("🎉 All 5 Sun Relic Slabs assembled into the Temple Altar!")
+                print("All 5 Sun Relic Slabs assembled into the Temple Altar!")
         else:
             slab["x"] = slab["deck_x"]
             slab["y"] = slab["deck_y"]
-            print(f"🧩 Slab {slab['index']} returned to deck.")
+            print(f"Slab {slab['index']} returned to deck.")
         self.dragged_slab = None
 
     def draw_sun_relic_puzzle(self):
@@ -4249,11 +4249,11 @@ class Quarter3:
         pygame.draw.rect(self.screen, border_c, (box_x, box_y, box_w, box_h), 3, border_radius=16)
         
         # Header
-        h_title = "👑 SUN TEMPLE RELIC ALTAR (5/5 ASSEMBLED!)" if self.sun_relic_solved else "🏛️ THE SACRED SUN RELIC ALTAR"
+        h_title = "SUN TEMPLE RELIC ALTAR (5/5 ASSEMBLED!)" if self.sun_relic_solved else "THE SACRED SUN RELIC ALTAR"
         h_surf = self.dialog_header_font.render(h_title, True, (255, 215, 0) if not self.sun_relic_solved else (34, 197, 94))
         self.screen.blit(h_surf, (box_x + (box_w - h_surf.get_width()) // 2, box_y + 16))
         
-        sub_title = "Assemble the 5 Sacred Math Slabs into the Sun Altar to open the Portal!" if not self.sun_relic_solved else "✨ The Ancient Sun Disc is fully restored! Portal activated!"
+        sub_title = "Assemble the 5 Sacred Math Slabs into the Sun Altar to open the Portal!" if not self.sun_relic_solved else "The Ancient Sun Disc is fully restored! Portal activated!"
         sub_surf = self.dialog_hint_font.render(sub_title, True, (253, 230, 138))
         self.screen.blit(sub_surf, (box_x + (box_w - sub_surf.get_width()) // 2, box_y + 48))
         
@@ -4466,7 +4466,7 @@ class Quarter3:
         r_hov = retry_rect.collidepoint(self.cursor_pos)
         pygame.draw.rect(self.screen, (245, 158, 11) if r_hov else (30, 41, 59), retry_rect, border_radius=10)
         pygame.draw.rect(self.screen, (255, 255, 255), retry_rect, 2, border_radius=10)
-        r_txt = btn_font.render("Retry Quarter 🔄", True, (15, 23, 42) if r_hov else (255, 255, 255))
+        r_txt = btn_font.render("Retry Quarter ", True, (15, 23, 42) if r_hov else (255, 255, 255))
         self.screen.blit(r_txt, r_txt.get_rect(center=retry_rect.center))
 
         # Button 2: Return to Stage Select
@@ -4474,7 +4474,7 @@ class Quarter3:
         e_hov = exit_rect.collidepoint(self.cursor_pos)
         pygame.draw.rect(self.screen, (220, 38, 38) if e_hov else (30, 41, 59), exit_rect, border_radius=10)
         pygame.draw.rect(self.screen, (255, 255, 255), exit_rect, 2, border_radius=10)
-        e_txt = btn_font.render("Stage Select 🗺️", True, (255, 255, 255))
+        e_txt = btn_font.render("Stage Select ", True, (255, 255, 255))
         self.screen.blit(e_txt, e_txt.get_rect(center=exit_rect.center))
 
     # ============================================================

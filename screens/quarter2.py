@@ -1016,7 +1016,7 @@ class Quarter2:
             t_val = m_font.render("₱36", True, (251, 191, 36))
             self.screen.blit(t_val, (tot_rect.x + (tot_rect.w - t_val.get_width()) // 2, tot_rect.y + 28))
 
-            lbl = self.dialog_stat_font.render("Rate Model: 3 Passengers × ₱12 = ₱12 + ₱12 + ₱12 = ₱36", True, (253, 230, 138))
+            lbl = self.dialog_stat_font.render("Rate Model: 3 Passengers x ₱12 = ₱12 + ₱12 + ₱12 = ₱36", True, (253, 230, 138))
             self.screen.blit(lbl, (vis_rect.centerx - lbl.get_width() // 2, vis_rect.bottom - 22))
 
         # Station 4: Ate Maya Palengke Timbangan (Mass in g & kg)
@@ -1057,7 +1057,7 @@ class Quarter2:
                 g_lbl = self.dialog_stat_font.render("500g", True, (254, 240, 138))
                 self.screen.blit(g_lbl, (mx + (m_rect.w - g_lbl.get_width()) // 2, my + 28))
 
-            lbl = self.dialog_stat_font.render("Metric Mass Model: 4 Mangoes × 500g = 2,000g = 2 Kilograms (2kg)", True, (253, 230, 138))
+            lbl = self.dialog_stat_font.render("Metric Mass Model: 4 Mangoes x 500g = 2,000g = 2 Kilograms (2kg)", True, (253, 230, 138))
             self.screen.blit(lbl, (vis_rect.centerx - lbl.get_width() // 2, vis_rect.bottom - 22))
 
         # Station 5: Lola Rosa Fiesta Budget Comparison (> < =)
@@ -1129,7 +1129,7 @@ class Quarter2:
             lbl = self.dialog_stat_font.render("Unit Fraction Model: 1 part out of 4 equal parts = 1/4 (One-fourth / Sangkapat)", True, (253, 230, 138))
             self.screen.blit(lbl, (vis_rect.centerx - lbl.get_width() // 2, vis_rect.bottom - 22))
 
-        # Station 2 (Map 5): Kuya Jun's Mango Harvest Division (20 ÷ 4 = 5)
+        # Station 2 (Map 5): Kuya Jun's Mango Harvest Division (20 / 4 = 5)
         elif v_type == "mango_division" or "division" in q_text or "basket" in q_text or "bayong" in q_text:
             start_x = vis_rect.left + 35
             b_w = 100
@@ -1150,7 +1150,7 @@ class Quarter2:
                     pygame.draw.ellipse(self.screen, (251, 191, 36), (mx, my, 18, 12))
                     pygame.draw.circle(self.screen, (34, 197, 94), (mx + 14, my + 2), 2)
                     
-            lbl = self.dialog_stat_font.render("Division Model: 20 Mangoes ÷ 4 Baskets = 5 Mangoes in Each Basket (5+5+5+5=20)", True, (253, 230, 138))
+            lbl = self.dialog_stat_font.render("Division Model: 20 Mangoes / 4 Baskets = 5 Mangoes in Each Basket (5+5+5+5=20)", True, (253, 230, 138))
             self.screen.blit(lbl, (vis_rect.centerx - lbl.get_width() // 2, vis_rect.bottom - 22))
 
         # Station 3 (Map 5): Mang Berto's 3D Geometric Solids (Salakot Cone)
@@ -2752,7 +2752,7 @@ class Quarter2:
         self.screen.blit(speaker_surf, (box_x + 32, box_y + 18))
 
         msg_surf1 = self.dialog_q_font.render("That choice is not correct.", True, (255, 255, 255))
-        msg_surf2 = self.dialog_hint_font.render("You have 1 try remaining! Think carefully and try again. ⭐", True, (254, 240, 138))
+        msg_surf2 = self.dialog_hint_font.render("You have 1 try remaining! Think carefully and try again.", True, (254, 240, 138))
         self.screen.blit(msg_surf1, (box_x + 30, box_y + 68))
         self.screen.blit(msg_surf2, (box_x + 30, box_y + 98))
 
@@ -3133,7 +3133,7 @@ class Quarter2:
         pygame.draw.rect(self.screen, (34, 197, 94), (card_x, card_y, card_w, card_h), 2, border_radius=12)
         pygame.draw.rect(self.screen, (255, 215, 0), (card_x + 3, card_y + 3, card_w - 6, card_h - 6), 1, border_radius=10)
 
-        h_txt = self.dialog_header_font.render(f"🎉 BAHAY KUBO PIECE {piece_idx}/5 ASSEMBLED! 🎉", True, (255, 215, 0))
+        h_txt = self.dialog_header_font.render(f"BAHAY KUBO PIECE {piece_idx}/5 ASSEMBLED!", True, (255, 215, 0))
         self.screen.blit(h_txt, h_txt.get_rect(center=(card_x + card_w // 2, card_y + 24)))
 
         t_txt = self.dialog_choice_font.render(p_info.get("title", ""), True, (74, 222, 128))
@@ -3670,7 +3670,7 @@ class Quarter2:
                 self.screen.blit(obj1_surf, (box_x + 16, box_y + 32))
 
                 if self.map_name == "map5.txt":
-                    obj2 = f"🏡 Bahay Kubo: {self.kubo_pieces_collected}/5 Pieces Built (Portal Locked)"
+                    obj2 = f"Bahay Kubo: {self.kubo_pieces_collected}/5 Pieces Built (Portal Locked)"
                     obj2_surf = item_font.render(obj2, True, (254, 240, 138) if self.kubo_pieces_collected > 0 else (148, 163, 184))
                 else:
                     cleared_count = max(0, self.quiz_station_index - 1)
@@ -3678,7 +3678,7 @@ class Quarter2:
                     obj2_surf = item_font.render(obj2, True, (148, 163, 184) if cleared_count == 0 else (74, 222, 128))
                 self.screen.blit(obj2_surf, (box_x + 16, box_y + 54))
             else:
-                obj1 = "🏡 BAHAY KUBO FULLY CONSTRUCTED!" if self.map_name == "map5.txt" else "ALL BARANGAY CHALLENGES CLEARED!"
+                obj1 = "BAHAY KUBO FULLY CONSTRUCTED!" if self.map_name == "map5.txt" else "ALL BARANGAY CHALLENGES CLEARED!"
                 obj1_surf = item_font.render(obj1, True, (74, 222, 128))
                 self.screen.blit(obj1_surf, (box_x + 16, box_y + 32))
 
@@ -3799,7 +3799,7 @@ class Quarter2:
         r_hov = retry_rect.collidepoint(self.cursor_pos)
         pygame.draw.rect(self.screen, (245, 158, 11) if r_hov else (30, 41, 59), retry_rect, border_radius=10)
         pygame.draw.rect(self.screen, (255, 255, 255), retry_rect, 2, border_radius=10)
-        r_txt = btn_font.render("Retry Quarter 🔄", True, (15, 23, 42) if r_hov else (255, 255, 255))
+        r_txt = btn_font.render("Retry Quarter", True, (15, 23, 42) if r_hov else (255, 255, 255))
         self.screen.blit(r_txt, r_txt.get_rect(center=retry_rect.center))
 
         # Button 2: Return to Stage Select
@@ -3807,7 +3807,7 @@ class Quarter2:
         e_hov = exit_rect.collidepoint(self.cursor_pos)
         pygame.draw.rect(self.screen, (220, 38, 38) if e_hov else (30, 41, 59), exit_rect, border_radius=10)
         pygame.draw.rect(self.screen, (255, 255, 255), exit_rect, 2, border_radius=10)
-        e_txt = btn_font.render("Stage Select 🗺️", True, (255, 255, 255))
+        e_txt = btn_font.render("Stage Select", True, (255, 255, 255))
         self.screen.blit(e_txt, e_txt.get_rect(center=exit_rect.center))
 
     # ============================================================
