@@ -20,6 +20,7 @@ import time
 from ui.button import Button
 from screens.stageselect import StageSelect
 from screens.studentselect import StudentSelect
+from screens.tutorial import TutorialScreen
 from screens.quarter1 import Quarter1
 from screens.quarter2 import Quarter2
 from screens.quarter3 import Quarter3
@@ -212,6 +213,7 @@ class MainMenu:
         self.current_screen = "menu"
         self.stage_select = None
         self.student_select = None
+        self.tutorial = None
         self.quarter1 = None
         self.quarter2 = None
         self.quarter3 = None
@@ -404,6 +406,9 @@ class MainMenu:
         elif self.current_screen == "student_select" and self.student_select:
             self.student_select.trigger_click(pos)
             return
+        elif self.current_screen == "tutorial" and self.tutorial:
+            self.tutorial.trigger_click(pos)
+            return
         elif self.current_screen == "quarter1" and self.quarter1:
             self.quarter1.trigger_click(pos)
             return
@@ -453,12 +458,13 @@ class MainMenu:
                 delete_student_progress(self.student_id)
                 self.popup_state = None
                 
-                # Refresh main menu buttons to default "START ACTIVITY"
+                # Refresh main menu buttons
                 self.setup_buttons()
                 
-                # Start fresh Stage Select screen
-                self.current_screen = "stage_select"
-                self.stage_select = StageSelect(self.screen, self)
+                # Start Tutorial for new activity
+                print("🎓 Starting New Activity: Launching Tutorial Screen...")
+                self.current_screen = "tutorial"
+                self.tutorial = TutorialScreen(self.screen, self)
             elif self.popup_state == "confirm_menu":
                 from db.save_system import show_saving_and_exit
                 show_saving_and_exit(self)
@@ -655,6 +661,14 @@ class MainMenu:
             self.show_no_student_message = True
             self.no_student_timer = pygame.time.get_ticks() + 2000
             return
+
+        from db.save_system import is_tutorial_completed
+        if not is_tutorial_completed(self.student_id):
+            print("🎓 New player detected! Launching Tutorial Screen...")
+            self.current_screen = "tutorial"
+            self.tutorial = TutorialScreen(self.screen, self)
+            return
+
         self.current_screen = "stage_select"
         self.stage_select = StageSelect(self.screen, self)
 
@@ -741,6 +755,18 @@ class MainMenu:
                 if not self.popup_state:
                     self.student_select.update()
 
+        elif self.current_screen == "tutorial" and self.tutorial:
+            self.update_gesture()
+            if self.tutorial:
+                self.tutorial.update_gesture(
+                    self.cursor_pos,
+                    self.fist_start_time,
+                    self.CLICK_HOLD_TIME,
+                    self.current_gesture
+                )
+                if not self.popup_state:
+                    self.tutorial.update()
+
         elif self.current_screen == "quarter1" and self.quarter1:
             self.update_gesture()
             if self.quarter1:
@@ -816,6 +842,11 @@ class MainMenu:
             if result == "back":
                 self.current_screen = "menu"
                 self.student_select = None
+        elif self.current_screen == "tutorial" and self.tutorial:
+            result = self.tutorial.handle_event(event)
+            if result == "back":
+                self.current_screen = "menu"
+                self.tutorial = None
         elif self.current_screen == "quarter1" and self.quarter1:
             result = self.quarter1.handle_event(event)
             if result == "back":
@@ -1028,6 +1059,11 @@ class MainMenu:
 
         elif self.current_screen == "student_select" and self.student_select:
             self.student_select.draw()
+            self.draw_camera_feed()
+            self.draw_cursor()
+
+        elif self.current_screen == "tutorial" and self.tutorial:
+            self.tutorial.draw()
             self.draw_camera_feed()
             self.draw_cursor()
 

@@ -1739,49 +1739,29 @@ class StageSelect:
         vx, vy = 0, 0
         current_speed = SPEED
 
-        # 1. Keyboard Controls (Arrow keys / WASD) with optional Shift Sprint
-        keys = pygame.key.get_pressed()
-        is_sprinting = keys[pygame.K_LSHIFT] or keys[pygame.K_RSHIFT]
-        move_speed = current_speed * 1.35 if is_sprinting else current_speed
+        # Hand Gesture / Cursor Directional Controls (Pure Gesture Navigation)
+        center_x, center_y = self.width // 2, self.height // 2
+        cursor_x, cursor_y = self.cursor_pos
+        dx = cursor_x - center_x
+        dy = cursor_y - center_y
 
-        if keys[pygame.K_LEFT] or keys[pygame.K_a]:
-            vx = -move_speed
-            self.player_dir = "left"
-        elif keys[pygame.K_RIGHT] or keys[pygame.K_d]:
-            vx = move_speed
-            self.player_dir = "right"
+        # Dynamic speed scaling: faster when hand is stretched further out
+        dist_factor = 1.3 if (abs(dx) > 160 or abs(dy) > 160) else 1.0
+        g_speed = current_speed * dist_factor
 
-        if keys[pygame.K_UP] or keys[pygame.K_w]:
-            vy = -move_speed
-            self.player_dir = "up"
-        elif keys[pygame.K_DOWN] or keys[pygame.K_s]:
-            vy = move_speed
-            self.player_dir = "down"
+        if abs(dx) > 45:
+            vx = g_speed if dx > 0 else -g_speed
+            if dx > 0:
+                self.player_dir = "right"
+            elif dx < 0:
+                self.player_dir = "left"
 
-        # 2. Hand Gesture Controls (if keyboard is not actively moving)
-        if vx == 0 and vy == 0 and self.hand_detected:
-            center_x, center_y = self.width // 2, self.height // 2
-            cursor_x, cursor_y = self.cursor_pos
-            dx = cursor_x - center_x
-            dy = cursor_y - center_y
-
-            # Dynamic speed scaling: faster when hand is stretched further out
-            dist_factor = 1.3 if (abs(dx) > 160 or abs(dy) > 160) else 1.0
-            g_speed = current_speed * dist_factor
-
-            if abs(dx) > 45:
-                vx = g_speed if dx > 0 else -g_speed
-                if dx > 0:
-                    self.player_dir = "right"
-                elif dx < 0:
-                    self.player_dir = "left"
-
-            if abs(dy) > 45:
-                vy = g_speed if dy > 0 else -g_speed
-                if dy > 0:
-                    self.player_dir = "down"
-                elif dy < 0:
-                    self.player_dir = "up"
+        if abs(dy) > 45:
+            vy = g_speed if dy > 0 else -g_speed
+            if dy > 0:
+                self.player_dir = "down"
+            elif dy < 0:
+                self.player_dir = "up"
 
         # Collision move
         new_x = self.player_x + vx

@@ -12,6 +12,36 @@ def check_save_exists(student_id):
         return False
     return os.path.exists(get_save_path(student_id))
 
+def is_tutorial_completed(student_id):
+    """Check if the given student has completed the controls/gameplay tutorial"""
+    if not student_id:
+        return False
+    save_data = load_student_progress(student_id)
+    if not save_data:
+        return False
+    return bool(save_data.get("tutorial_completed", False))
+
+def set_tutorial_completed(main_menu, student_id, completed=True):
+    """Marks tutorial as completed and saves the status to student's profile"""
+    if not student_id:
+        return
+    if hasattr(main_menu, 'tutorial_completed'):
+        main_menu.tutorial_completed = completed
+    save_data = load_student_progress(student_id) or {}
+    save_data["student_id"] = student_id
+    if main_menu and getattr(main_menu, 'selected_student', None):
+        save_data["selected_student"] = main_menu.selected_student
+    save_data["tutorial_completed"] = completed
+    save_data["timestamp"] = time.time()
+    
+    path = get_save_path(student_id)
+    try:
+        with open(path, "w") as f:
+            json.dump(save_data, f, indent=4)
+        print(f"🎓 Tutorial completed status saved for student {student_id}: {completed}")
+    except Exception as e:
+        print(f"⚠️ Error saving tutorial status: {e}")
+
 def delete_student_progress(student_id):
     if not student_id:
         return
@@ -35,6 +65,7 @@ def save_student_progress(main_menu):
         "student_id": student_id,
         "selected_student": main_menu.selected_student,
         "current_screen": main_menu.current_screen,
+        "tutorial_completed": getattr(main_menu, 'tutorial_completed', True if check_save_exists(student_id) else False),
         "timestamp": time.time()
     }
     
