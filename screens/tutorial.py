@@ -406,13 +406,18 @@ class TutorialScreen:
                 scaled_t = pygame.transform.scale(t_surf, (int(TILE_SIZE * ZOOM), int(TILE_SIZE * ZOOM)))
                 self.screen.blit(scaled_t, (sx, sy))
 
-        # 2. Render Exit Portal
-        p_sx = (self.portal_tile_x * TILE_SIZE - self.camera_x) * ZOOM
-        p_sy = (self.portal_tile_y * TILE_SIZE - self.camera_y) * ZOOM
-        if self.portal_frames:
-            p_frame = self.portal_frames[self.portal_anim_frame]
-            scaled_p = pygame.transform.scale(p_frame, (int(TILE_SIZE * 2 * ZOOM), int(TILE_SIZE * 2 * ZOOM)))
-            self.screen.blit(scaled_p, (p_sx - 16 * ZOOM, p_sy - 16 * ZOOM))
+        # 2. Render Exit Portal (Only appears after question is answered)
+        if self.phase == 4:
+            p_sx = (self.portal_tile_x * TILE_SIZE - self.camera_x) * ZOOM
+            p_sy = (self.portal_tile_y * TILE_SIZE - self.camera_y) * ZOOM
+            if self.portal_frames:
+                p_frame = self.portal_frames[self.portal_anim_frame]
+                scaled_p = pygame.transform.scale(p_frame, (int(TILE_SIZE * 2 * ZOOM), int(TILE_SIZE * 2 * ZOOM)))
+                self.screen.blit(scaled_p, (p_sx - 16 * ZOOM, p_sy - 16 * ZOOM))
+
+                # Glowing portal magic aura ring
+                ring_radius = int((24 + math.sin(pygame.time.get_ticks() * 0.006) * 4) * ZOOM)
+                pygame.draw.circle(self.screen, (74, 222, 128), (int(p_sx + 16 * ZOOM), int(p_sy + 16 * ZOOM)), ring_radius, 2)
 
         # 3. Render Guide NPC
         npc_sx = (self.npc_tile_x * TILE_SIZE - self.camera_x) * ZOOM
