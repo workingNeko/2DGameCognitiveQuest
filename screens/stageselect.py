@@ -1084,7 +1084,7 @@ class StageSelect:
                     self.locked_portal_banner_msg = "🔒 Talk to Bromen first to unlock Quarter 4!"
                     self.locked_portal_banner_timer = 2.5
                     return False
-                map_name = "map10.txt"
+                map_name = "map11.txt"
                 print(f"🎮 Entering Quarter 4 - {map_name}")
                 save_ss_state()
                 self.main_menu.current_screen = "quarter4"
@@ -1271,7 +1271,7 @@ class StageSelect:
                     self.locked_portal_banner_msg = "🔒 Talk to Bromen first to unlock Quarter 4!"
                     self.locked_portal_banner_timer = 1.0
                 else:
-                    map_name = "map10.txt"
+                    map_name = "map11.txt"
                     print(f"🎮 Entering Quarter 4 - {map_name}")
                     self.main_menu.current_screen = "quarter4"
                     self.main_menu.quarter4 = Quarter4(self.screen, self.main_menu, map_name)
@@ -1600,7 +1600,7 @@ class StageSelect:
                             self.locked_portal_banner_timer = 2.0
                     elif portal.direction == 'down':
                         if self.bromen_dialogue_state >= 2 or self.player_following_target == 'bromen':
-                            map_name = "map10.txt"
+                            map_name = "map11.txt"
                             print(f"🎮 Auto-entering Quarter 4 - {map_name}")
                             self.main_menu.current_screen = "quarter4"
                             self.main_menu.quarter4 = Quarter4(self.screen, self.main_menu, map_name)
