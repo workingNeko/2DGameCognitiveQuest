@@ -1066,7 +1066,7 @@ class StageSelect:
                     self.locked_portal_banner_msg = "🔒 Talk to the Skeleton first to unlock Quarter 3!"
                     self.locked_portal_banner_timer = 2.5
                     return False
-                map_name = random.choice(["map7.txt", "map8.txt", "map9.txt"])
+                map_name = "map7.txt"
                 print(f"🎮 Entering Quarter 3 - {map_name}")
                 save_ss_state()
                 self.main_menu.current_screen = "quarter3"
@@ -1261,7 +1261,7 @@ class StageSelect:
                     self.locked_portal_banner_msg = "🔒 Talk to the Skeleton first to unlock Quarter 3!"
                     self.locked_portal_banner_timer = 1.0
                 else:
-                    map_name = random.choice(["map7.txt", "map8.txt", "map9.txt"])
+                    map_name = "map7.txt"
                     print(f"🎮 Entering Quarter 3 - {map_name}")
                     self.main_menu.current_screen = "quarter3"
                     self.main_menu.quarter3 = Quarter3(self.screen, self.main_menu, map_name)
@@ -1578,7 +1578,7 @@ class StageSelect:
                             self.locked_portal_banner_timer = 2.0
                     elif portal.direction == 'right':
                         if self.skeleton_dialogue_state >= 2 or self.player_following_target == 'skeleton':
-                            map_name = random.choice(["map7.txt", "map8.txt", "map9.txt"])
+                            map_name = "map7.txt"
                             print(f"🎮 Auto-entering Quarter 3 - {map_name}")
                             self.main_menu.current_screen = "quarter3"
                             self.main_menu.quarter3 = Quarter3(self.screen, self.main_menu, map_name)

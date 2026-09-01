@@ -27,15 +27,18 @@ class LeaderboardScreen:
             self.bg_image = None
 
         # Fonts
-        self.title_font = pygame.font.SysFont(["Segoe UI", "Tahoma", "Comic Sans MS", "Arial"], 38, bold=True)
-        self.subtitle_font = pygame.font.SysFont(["Segoe UI", "Tahoma", "Calibri", "Arial"], 16)
-        self.tab_font = pygame.font.SysFont(["Segoe UI", "Tahoma", "Calibri", "Arial"], 16, bold=True)
-        self.header_font = pygame.font.SysFont(["Segoe UI", "Tahoma", "Calibri", "Arial"], 15, bold=True)
-        self.row_name_font = pygame.font.SysFont(["Segoe UI", "Tahoma", "Calibri", "Arial"], 17, bold=True)
+        self.title_font = pygame.font.SysFont(["Segoe UI", "Tahoma", "Comic Sans MS", "Arial"], 34, bold=True)
+        self.subtitle_font = pygame.font.SysFont(["Segoe UI", "Tahoma", "Calibri", "Arial"], 15)
+        self.spotlight_title_font = pygame.font.SysFont(["Segoe UI", "Tahoma", "Calibri", "Arial"], 13, bold=True)
+        self.spotlight_name_font = pygame.font.SysFont(["Segoe UI", "Tahoma", "Calibri", "Arial"], 18, bold=True)
+        self.spotlight_meta_font = pygame.font.SysFont(["Segoe UI", "Tahoma", "Calibri", "Arial"], 14)
+        self.tab_font = pygame.font.SysFont(["Segoe UI", "Tahoma", "Calibri", "Arial"], 15, bold=True)
+        self.header_font = pygame.font.SysFont(["Segoe UI", "Tahoma", "Calibri", "Arial"], 14, bold=True)
+        self.row_name_font = pygame.font.SysFont(["Segoe UI", "Tahoma", "Calibri", "Arial"], 16, bold=True)
         self.row_meta_font = pygame.font.SysFont(["Segoe UI", "Tahoma", "Calibri", "Arial"], 14)
-        self.score_font = pygame.font.SysFont(["Segoe UI", "Tahoma", "Calibri", "Arial"], 18, bold=True)
+        self.score_font = pygame.font.SysFont(["Segoe UI", "Tahoma", "Calibri", "Arial"], 17, bold=True)
         self.badge_font = pygame.font.SysFont(["Segoe UI", "Tahoma", "Calibri", "Arial"], 13, bold=True)
-        self.btn_font = pygame.font.SysFont(["Segoe UI", "Tahoma", "Calibri", "Arial"], 16, bold=True)
+        self.btn_font = pygame.font.SysFont(["Segoe UI", "Tahoma", "Calibri", "Arial"], 15, bold=True)
 
         # Tab Selection: 0 = OVERALL, 1 = Q1, 2 = Q2, 3 = Q3, 4 = Q4
         self.active_tab = 0
@@ -48,20 +51,21 @@ class LeaderboardScreen:
         ]
 
         # Top Action Buttons
-        self.back_btn_rect = pygame.Rect(30, 24, 130, 44)
-        self.refresh_btn_rect = pygame.Rect(self.width - 160, 24, 130, 44)
+        self.back_btn_rect = pygame.Rect(30, 18, 124, 42)
+        self.refresh_btn_rect = pygame.Rect(self.width - 154, 18, 124, 42)
 
         # Scroll & Data State
         self.scroll_offset = 0
-        self.row_height = 64
+        self.row_height = 58
         self.max_visible_rows = 6
         self.leaderboard_data = []
         self.filtered_data = []
+        self.highest_student = None
         self.is_loading = False
-        self.status_message = "Syncing with live system..."
+        self.status_message = "Syncing with live database..."
         self.status_timer = time.time() + 2.0
 
-        # Load initial leaderboard data
+        # Load initial leaderboard data from live database
         self.refresh_data()
 
     def update_gesture(self, cursor_pos, fist_start_time, click_hold_time, current_gesture):
@@ -72,15 +76,21 @@ class LeaderboardScreen:
         self.current_gesture = current_gesture
 
     def refresh_data(self):
-        """Fetch and filter leaderboard data from system."""
+        """Fetch and filter leaderboard and highest recent grade data from live database."""
         self.is_loading = True
         try:
+            # Query live database for rankings and highest grade
             self.leaderboard_data = db.get_leaderboard_data()
+            self.highest_student = db.get_highest_grade_student()
             self.apply_filter()
-            self.status_message = f"Live rankings updated ({len(self.leaderboard_data)} students)"
-            self.status_timer = time.time() + 2.5
+            
+            top_name = self.highest_student.get("name", "Student") if self.highest_student else "None"
+            top_score = self.highest_student.get("score", 0) if self.highest_student else 0
+            self.status_message = f"Live DB Synced: Top Grade - {top_name} ({top_score:.0f}%)"
+            self.status_timer = time.time() + 3.0
+            print(f"[LEADERBOARD] Leaderboard updated from live database! Highest Grade: {top_name} ({top_score}%)")
         except Exception as e:
-            print(f"⚠️ Leaderboard data fetch error: {e}")
+            print(f"[LEADERBOARD ERROR] Leaderboard data fetch error: {e}")
             self.status_message = "Loaded offline save data"
             self.status_timer = time.time() + 2.5
         finally:
@@ -138,9 +148,9 @@ class LeaderboardScreen:
 
         # 3. Tab buttons
         tab_start_x = (self.width - (len(self.tabs) * 190 + (len(self.tabs) - 1) * 10)) // 2
-        tab_y = 90
+        tab_y = 142
         tab_w = 190
-        tab_h = 38
+        tab_h = 36
         
         for i, tab in enumerate(self.tabs):
             t_rect = pygame.Rect(tab_start_x + i * (tab_w + 10), tab_y, tab_w, tab_h)
@@ -151,10 +161,10 @@ class LeaderboardScreen:
                 return
 
         # 4. Scroll buttons
-        table_w = min(1060, self.width - 80)
+        table_w = min(1080, self.width - 80)
         table_x = (self.width - table_w) // 2
-        table_y = 145
-        table_h = self.height - table_y - 45
+        table_y = 186
+        table_h = self.height - table_y - 25
 
         up_btn = pygame.Rect(table_x + table_w - 44, table_y + 12, 36, 36)
         down_btn = pygame.Rect(table_x + table_w - 44, table_y + table_h - 48, 36, 36)
@@ -193,7 +203,7 @@ class LeaderboardScreen:
         pass
 
     def draw(self):
-        """Render the complete Hall of Fame & Leaderboard screen."""
+        """Render the complete Hall of Fame & Leaderboard screen with live top student highlight."""
         now = pygame.time.get_ticks()
 
         # 1. Background
@@ -202,17 +212,17 @@ class LeaderboardScreen:
         else:
             self.screen.fill((15, 23, 42))
 
-        # Dark overlay
+        # Dark translucent overlay
         dim = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
-        dim.fill((10, 15, 29, 210))
+        dim.fill((10, 15, 29, 215))
         self.screen.blit(dim, (0, 0))
 
         # 2. Header & Title
         title_surf = self.title_font.render("COGNITIVE QUEST • HALL OF FAME", True, (255, 215, 0))
-        self.screen.blit(title_surf, title_surf.get_rect(center=(self.width // 2, 42)))
+        self.screen.blit(title_surf, title_surf.get_rect(center=(self.width // 2, 28)))
 
         subtitle_surf = self.subtitle_font.render("DepEd MATATAG Grade 2 Mathematics Official Student Rankings", True, (203, 213, 225))
-        self.screen.blit(subtitle_surf, subtitle_surf.get_rect(center=(self.width // 2, 70)))
+        self.screen.blit(subtitle_surf, subtitle_surf.get_rect(center=(self.width // 2, 54)))
 
         # 3. Top Action Buttons
         # Back Button
@@ -232,11 +242,79 @@ class LeaderboardScreen:
         # Status toast
         if time.time() < self.status_timer:
             stat_surf = self.subtitle_font.render(self.status_message, True, (74, 222, 128))
-            self.screen.blit(stat_surf, (self.width - stat_surf.get_width() - 170, 36))
+            self.screen.blit(stat_surf, (self.width - stat_surf.get_width() - 170, 28))
 
-        # 4. Tab Bar
+        # 4. HIGHEST GRADE STUDENT SPOTLIGHT BANNER ("Recent Grades" from Database)
+        spotlight_w = min(1080, self.width - 80)
+        spotlight_x = (self.width - spotlight_w) // 2
+        spotlight_y = 74
+        spotlight_h = 56
+
+        # Card container
+        spotlight_surf = pygame.Surface((spotlight_w, spotlight_h), pygame.SRCALPHA)
+        spotlight_surf.fill((20, 29, 50, 240))
+        self.screen.blit(spotlight_surf, (spotlight_x, spotlight_y))
+        
+        # Subtle pulsing gold border
+        pulse = (math.sin(now * 0.005) + 1) / 2
+        border_col = (int(245 * (0.8 + 0.2 * pulse)), int(158 * (0.8 + 0.2 * pulse)), 11)
+        pygame.draw.rect(self.screen, border_col, (spotlight_x, spotlight_y, spotlight_w, spotlight_h), 2, border_radius=12)
+
+        if self.highest_student:
+            top_name = self.highest_student.get("name", "Student")
+            top_score = self.highest_student.get("score", 100.0)
+            top_ass = self.highest_student.get("assessment_title", "Recent Assessment")
+            top_grade_lvl = self.highest_student.get("grade_level", "Grade 2")
+            top_section = self.highest_student.get("section", "A")
+            top_avatar_col = self.highest_student.get("avatar_color", "#6366f1")
+
+            # Crown / Star Ribbon Badge (Left)
+            crown_badge_rect = pygame.Rect(spotlight_x + 14, spotlight_y + 11, 210, 34)
+            pygame.draw.rect(self.screen, (245, 158, 11), crown_badge_rect, border_radius=8)
+            crown_txt = self.spotlight_title_font.render("HIGHEST RECENT GRADE", True, (15, 23, 42))
+            self.screen.blit(crown_txt, crown_txt.get_rect(center=crown_badge_rect.center))
+
+            # Avatar Circle
+            try:
+                av_rgb = pygame.Color(top_avatar_col)
+            except Exception:
+                av_rgb = (99, 102, 241)
+            av_center = (spotlight_x + 252, spotlight_y + 28)
+            pygame.draw.circle(self.screen, av_rgb, av_center, 18)
+            pygame.draw.circle(self.screen, (255, 215, 0), av_center, 18, 2)
+            
+            top_initial = top_name[0].upper() if top_name else "S"
+            top_ini_surf = self.badge_font.render(top_initial, True, (255, 255, 255))
+            self.screen.blit(top_ini_surf, top_ini_surf.get_rect(center=av_center))
+
+            # Student Name
+            name_surf = self.spotlight_name_font.render(top_name, True, (255, 255, 255))
+            self.screen.blit(name_surf, (spotlight_x + 280, spotlight_y + 11))
+
+            # Grade & Section
+            meta_txt = f"{top_grade_lvl} • Section {top_section}"
+            meta_surf = self.spotlight_meta_font.render(meta_txt, True, (148, 163, 184))
+            self.screen.blit(meta_surf, (spotlight_x + 280, spotlight_y + 32))
+
+            # Assessment & Score Tag (Right)
+            score_badge_rect = pygame.Rect(spotlight_x + spotlight_w - 240, spotlight_y + 11, 226, 34)
+            pygame.draw.rect(self.screen, (30, 58, 138), score_badge_rect, border_radius=8)
+            pygame.draw.rect(self.screen, (56, 189, 248), score_badge_rect, 1, border_radius=8)
+            
+            score_tag_surf = self.score_font.render(f"{top_score:.1f}% Score", True, (74, 222, 128))
+            self.screen.blit(score_tag_surf, (score_badge_rect.x + 12, score_badge_rect.y + 6))
+
+            # Assessment title tag
+            ass_txt = top_ass if len(top_ass) <= 30 else top_ass[:28] + "..."
+            ass_surf = self.spotlight_meta_font.render(ass_txt, True, (203, 213, 225))
+            self.screen.blit(ass_surf, (spotlight_x + spotlight_w - 250 - ass_surf.get_width(), spotlight_y + 18))
+        else:
+            no_rec_surf = self.row_meta_font.render("Awaiting evaluation and recent grades from live database...", True, (148, 163, 184))
+            self.screen.blit(no_rec_surf, no_rec_surf.get_rect(center=(spotlight_x + spotlight_w // 2, spotlight_y + spotlight_h // 2)))
+
+        # 5. Tab Bar
         tab_start_x = (self.width - (len(self.tabs) * 190 + (len(self.tabs) - 1) * 10)) // 2
-        tab_y = 92
+        tab_y = 140
         tab_w = 190
         tab_h = 36
 
@@ -257,11 +335,11 @@ class LeaderboardScreen:
             t_surf = self.tab_font.render(tab["label"], True, txt_col)
             self.screen.blit(t_surf, t_surf.get_rect(center=t_rect.center))
 
-        # 5. Main Leaderboard Card Box
+        # 6. Main Leaderboard Card Box
         table_w = min(1080, self.width - 80)
         table_x = (self.width - table_w) // 2
-        table_y = 142
-        table_h = self.height - table_y - 40
+        table_y = 186
+        table_h = self.height - table_y - 25
 
         # Card Background
         card_surf = pygame.Surface((table_w, table_h), pygame.SRCALPHA)
@@ -288,7 +366,7 @@ class LeaderboardScreen:
         self.screen.blit(self.header_font.render("ACCURACY", True, (148, 163, 184)), (col_acc_x, table_y + 14))
         self.screen.blit(self.header_font.render("TOTAL POINTS", True, (251, 191, 36)), (col_score_x, table_y + 14))
 
-        # 6. Render Student Rows
+        # 7. Render Student Rows
         active_student_id = str(getattr(self.main_menu, 'student_id', '') or '')
         content_y_start = table_y + 48
 
@@ -298,22 +376,22 @@ class LeaderboardScreen:
         visible_entries = self.filtered_data[self.scroll_offset : self.scroll_offset + self.max_visible_rows]
 
         if not visible_entries:
-            empty_txt = self.row_name_font.render("No student evaluation records found yet.", True, (148, 163, 184))
+            empty_txt = self.row_name_font.render("No student evaluation records found yet in database.", True, (148, 163, 184))
             self.screen.blit(empty_txt, empty_txt.get_rect(center=(table_x + table_w // 2, table_y + table_h // 2)))
         else:
             for r_idx, entry in enumerate(visible_entries):
                 row_y = content_y_start + r_idx * self.row_height
                 row_rect = pygame.Rect(table_x + 10, row_y, table_w - 60, self.row_height - 6)
 
-                # Check if this row is the currently logged-in student
+                # Check if this row is the currently selected student
                 is_current_player = (active_student_id and str(entry.get("student_id", "")) == active_student_id)
                 row_hov = row_rect.collidepoint(self.cursor_pos)
 
                 # Row background
                 if is_current_player:
                     pygame.draw.rect(self.screen, (30, 58, 138), row_rect, border_radius=10)
-                    pulse = (math.sin(now * 0.006) + 1) / 2
-                    p_col = (255, 215, 0) if pulse > 0.4 else (56, 189, 248)
+                    row_pulse = (math.sin(now * 0.006) + 1) / 2
+                    p_col = (255, 215, 0) if row_pulse > 0.4 else (56, 189, 248)
                     pygame.draw.rect(self.screen, p_col, row_rect, 2, border_radius=10)
                 elif row_hov:
                     pygame.draw.rect(self.screen, (51, 65, 85), row_rect, border_radius=10)
@@ -344,28 +422,28 @@ class LeaderboardScreen:
                     av_rgb = pygame.Color(av_col_hex)
                 except Exception:
                     av_rgb = (99, 102, 241)
-                pygame.draw.circle(self.screen, av_rgb, (col_name_x + 14, row_y + 27), 16)
+                pygame.draw.circle(self.screen, av_rgb, (col_name_x + 14, row_y + 26), 16)
                 
                 # Initial letter
                 s_name = entry.get("name", "Student")
                 initial = s_name[0].upper() if s_name else "S"
                 ini_surf = self.badge_font.render(initial, True, (255, 255, 255))
-                self.screen.blit(ini_surf, ini_surf.get_rect(center=(col_name_x + 14, row_y + 27)))
+                self.screen.blit(ini_surf, ini_surf.get_rect(center=(col_name_x + 14, row_y + 26)))
 
                 name_txt = s_name
                 if is_current_player:
                     name_txt += " (YOU)"
                 name_surf = self.row_name_font.render(name_txt, True, (255, 215, 0) if is_current_player else (255, 255, 255))
-                self.screen.blit(name_surf, (col_name_x + 40, row_y + 16))
+                self.screen.blit(name_surf, (col_name_x + 40, row_y + 15))
 
                 # Grade & Section
                 gr_txt = f"{entry.get('grade_level', 'Grade 2')} - {entry.get('section', 'A')}"
                 gr_surf = self.row_meta_font.render(gr_txt, True, (148, 163, 184))
-                self.screen.blit(gr_surf, (col_grade_x, row_y + 18))
+                self.screen.blit(gr_surf, (col_grade_x, row_y + 17))
 
                 # Progress Pills (Q1, Q2, Q3, Q4)
                 for qn in range(1, 5):
-                    q_box = pygame.Rect(col_prog_x + (qn - 1) * 44, row_y + 14, 38, 26)
+                    q_box = pygame.Rect(col_prog_x + (qn - 1) * 44, row_y + 13, 38, 26)
                     qd = entry.get("quarters", {}).get(qn)
                     q_done = qd and (qd.get("completed", False) or qd.get("score", 0) > 0)
 
@@ -386,18 +464,18 @@ class LeaderboardScreen:
                 acc_txt = f"{acc_val:.1f}%" if acc_val > 0 else "0.0%"
                 acc_col = (74, 222, 128) if acc_val >= 80 else ((251, 191, 36) if acc_val >= 60 else (248, 113, 113))
                 acc_surf = self.score_font.render(acc_txt, True, acc_col)
-                self.screen.blit(acc_surf, (col_acc_x, row_y + 16))
+                self.screen.blit(acc_surf, (col_acc_x, row_y + 15))
 
                 # Total Score Badge
                 pts_val = entry.get("display_score", 0)
-                pts_box = pygame.Rect(col_score_x, row_y + 10, 100, 34)
+                pts_box = pygame.Rect(col_score_x, row_y + 9, 100, 34)
                 pygame.draw.rect(self.screen, (30, 41, 59), pts_box, border_radius=8)
                 pygame.draw.rect(self.screen, (245, 158, 11), pts_box, 1, border_radius=8)
 
                 pts_surf = self.score_font.render(f"{pts_val} pts", True, (255, 215, 0))
                 self.screen.blit(pts_surf, pts_surf.get_rect(center=pts_box.center))
 
-        # 7. Scroll Buttons
+        # 8. Scroll Buttons
         max_scroll = max(0, len(self.filtered_data) - self.max_visible_rows)
         if max_scroll > 0:
             up_btn = pygame.Rect(table_x + table_w - 42, table_y + 48, 34, 34)

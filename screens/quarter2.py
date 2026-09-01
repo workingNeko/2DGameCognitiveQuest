@@ -739,7 +739,7 @@ class Quarter2:
             total_questions = min(5, len(self.quiz_questions))
             correct_answers = sum(1 for k, v in self.first_attempt_correct.items() if k <= total_questions and v)
             percentage = (correct_answers / float(total_questions)) * 100.0 if total_questions > 0 else 0.0
-            score = float(correct_answers)
+            score = int(correct_answers * 20)  # 20 points per question -> 100 max points
 
             assessment_id = db.get_assessment_id(quarter=2)
             if assessment_id:

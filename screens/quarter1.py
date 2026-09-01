@@ -772,7 +772,7 @@ class Quarter1:
             total_questions = 5
             correct_answers = sum(1 for v in self.first_attempt_correct.values() if v)
             percentage = (correct_answers / float(total_questions)) * 100.0
-            score = float(correct_answers)
+            score = int(correct_answers * 20)  # 20 points per question -> 100 max points
 
             # Try to fetch assessment_id for Quarter 1 Quiz from Vercel
             assessment_id = db.get_assessment_id(quarter=1)

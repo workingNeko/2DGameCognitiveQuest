@@ -789,7 +789,7 @@ class Quarter3:
             total_questions = min(5, len(self.quiz_questions))
             correct_answers = sum(1 for k, v in self.first_attempt_correct.items() if k <= total_questions and v)
             percentage = (correct_answers / float(total_questions)) * 100.0 if total_questions > 0 else 0.0
-            score = float(correct_answers)
+            score = int(correct_answers * 20)  # 20 points per question -> 100 max points
 
             assessment_id = db.get_assessment_id(quarter=3)
             if assessment_id:
@@ -1076,7 +1076,8 @@ class Quarter3:
         pass
 
     def load_station_shape_npcs(self):
-        """Load 8-frame animations for 5 shape NPCs assigned to stations 1-5"""
+        """Load 8-frame animations for 5 Number Guardian NPCs assigned to stations 1-5"""
+        scaled_size = (int(TILE_SIZE * ZOOM), int(TILE_SIZE * ZOOM))
         def load_frames(folder_path, prefix):
             frames = []
             for i in range(8):
@@ -1085,22 +1086,22 @@ class Quarter3:
                 try:
                     if os.path.exists(path):
                         img = pygame.image.load(path).convert_alpha()
-                        scaled = pygame.transform.scale(img, (TILE_SIZE, TILE_SIZE))
+                        scaled = pygame.transform.smoothscale(img, scaled_size)
                         frames.append(scaled)
                 except Exception as e:
                     print(f"⚠️ Error loading frame {path}: {e}")
             if not frames:
-                placeholder = pygame.Surface((TILE_SIZE, TILE_SIZE))
+                placeholder = pygame.Surface(scaled_size, pygame.SRCALPHA)
                 placeholder.fill((255, 180, 0))
                 frames.append(placeholder)
             return frames
 
         self.station_npcs = {
-            1: {"name": "Number 1 Guardian", "frames": load_frames(self.NPC_PATH_NUM1, "number1npc"), "anim_frame": 0, "anim_timer": 0},
-            2: {"name": "Number 2 Guardian", "frames": load_frames(self.NPC_PATH_NUM2, "number2npc"), "anim_frame": 0, "anim_timer": 0},
-            3: {"name": "Number 3 Guardian", "frames": load_frames(self.NPC_PATH_NUM3, "number3npc"), "anim_frame": 0, "anim_timer": 0},
-            4: {"name": "Number 4 Guardian", "frames": load_frames(self.NPC_PATH_NUM4, "number4npc"), "anim_frame": 0, "anim_timer": 0},
-            5: {"name": "Number 5 Guardian", "frames": load_frames(self.NPC_PATH_NUM5, "number5npc"), "anim_frame": 0, "anim_timer": 0},
+            1: {"name": "Number 1 Guardian", "frames": load_frames(self.NPC_PATH_NUM1, "number1npc"), "anim_frame": 0, "anim_timer": 0, "color": (255, 71, 87)},
+            2: {"name": "Number 2 Guardian", "frames": load_frames(self.NPC_PATH_NUM2, "number2npc"), "anim_frame": 0, "anim_timer": 0, "color": (255, 159, 26)},
+            3: {"name": "Number 3 Guardian", "frames": load_frames(self.NPC_PATH_NUM3, "number3npc"), "anim_frame": 0, "anim_timer": 0, "color": (46, 213, 115)},
+            4: {"name": "Number 4 Guardian", "frames": load_frames(self.NPC_PATH_NUM4, "number4npc"), "anim_frame": 0, "anim_timer": 0, "color": (30, 144, 255)},
+            5: {"name": "Number 5 Guardian", "frames": load_frames(self.NPC_PATH_NUM5, "number5npc"), "anim_frame": 0, "anim_timer": 0, "color": (168, 85, 247)},
         }
         print("✅ Loaded 5 Animated Number Character Station NPCs (Number 1-5)")
 
@@ -1722,24 +1723,28 @@ class Quarter3:
         import random
         from db.save_system import save_student_progress
         
-        # State 1: Multiple Choice Answer Selection (No icons)
+        # State 1: Multiple Choice Answer Selection (2x2 Grid)
         if self.quiz_state == 1:
-            box_w, box_h = 580, 380
+            box_w, box_h = 780, 510
             box_x = (self.width - box_w) // 2
             box_y = (self.height - box_h) // 2
             q_data = self.quiz_questions[self.current_question_index]
 
-            button_w, button_h = 500, 44
-            button_x = box_x + (box_w - button_w) // 2
-            button_y_start = box_y + 130
-            spacing = 52
+            gap_x = 16
+            gap_y = 10
+            btn_w = (box_w - 40 - gap_x) // 2
+            btn_h = 46
+            start_btn_y = box_y + 300
 
             for i, choice in enumerate(q_data["choices"][:4]):
                 if i in self.eliminated_choices:
                     continue
 
-                b_y = button_y_start + i * spacing
-                btn_rect = pygame.Rect(button_x, b_y, button_w, button_h)
+                col = i % 2
+                row = i // 2
+                bx = box_x + 20 + col * (btn_w + gap_x)
+                by = start_btn_y + row * (btn_h + gap_y)
+                btn_rect = pygame.Rect(bx, by, btn_w, btn_h)
 
                 if btn_rect.collidepoint(pos):
                     if i == q_data["correct"]:
@@ -3380,57 +3385,66 @@ class Quarter3:
     def draw_quiz_dialog(self):
         self.screen.blit(self.dialog_dim_overlay, (0, 0))
 
-        box_w, box_h = 580, 380
+        box_w, box_h = 780, 510
         box_x = (self.width - box_w) // 2
         box_y = (self.height - box_h) // 2
 
-        # Outer Parchment Box
+        # Outer Parchment / Citadel Frame
         dialog_rect = pygame.Rect(box_x, box_y, box_w, box_h)
-        pygame.draw.rect(self.screen, (15, 23, 42), dialog_rect, border_radius=16)
-        pygame.draw.rect(self.screen, (245, 158, 11), dialog_rect, 3, border_radius=16)
-        pygame.draw.rect(self.screen, (251, 191, 36), dialog_rect.inflate(-6, -6), 1, border_radius=12)
+        pygame.draw.rect(self.screen, (15, 23, 42), dialog_rect, border_radius=18)
+        pygame.draw.rect(self.screen, (245, 158, 11), dialog_rect, 3, border_radius=18)
+        pygame.draw.rect(self.screen, (251, 191, 36), dialog_rect.inflate(-6, -6), 1, border_radius=14)
 
         # Header ribbon
-        header_surf = pygame.Surface((box_w - 36, 40), pygame.SRCALPHA)
+        header_surf = pygame.Surface((box_w - 32, 50), pygame.SRCALPHA)
         header_surf.fill((30, 41, 59, 230))
-        self.screen.blit(header_surf, (box_x + 18, box_y + 12))
-        pygame.draw.rect(self.screen, (245, 158, 11), (box_x + 18, box_y + 12, box_w - 36, 40), 1, border_radius=8)
+        self.screen.blit(header_surf, (box_x + 16, box_y + 12))
+        pygame.draw.rect(self.screen, (245, 158, 11), (box_x + 16, box_y + 12, box_w - 32, 50), 1, border_radius=10)
 
         q_data = self.quiz_questions[self.current_question_index]
         st_title = q_data.get("title", f"Challenge {self.quiz_station_index}")
-        speaker_name = self.station_npcs.get(self.quiz_station_index, {}).get("name", "Guardian")
+        g_data = self.station_npcs.get(self.quiz_station_index, {})
+        speaker_name = g_data.get("name", "Guardian")
         speaker_surf = self.dialog_header_font.render(f"{speaker_name} • {st_title}", True, (255, 215, 0))
-        self.screen.blit(speaker_surf, (box_x + 30, box_y + 18))
+        self.screen.blit(speaker_surf, (box_x + 30, box_y + 24))
 
         # Station progress pill (Top Right)
-        st_pill = pygame.Rect(box_x + box_w - 140, box_y + 16, 120, 30)
-        pygame.draw.rect(self.screen, (15, 23, 42), st_pill, border_radius=6)
-        pygame.draw.rect(self.screen, (245, 158, 11), st_pill, 1, border_radius=6)
+        st_pill = pygame.Rect(box_x + box_w - 170, box_y + 20, 142, 32)
+        pygame.draw.rect(self.screen, (15, 23, 42), st_pill, border_radius=8)
+        pygame.draw.rect(self.screen, (245, 158, 11), st_pill, 1, border_radius=8)
         st_txt = self.dialog_stat_font.render(f"STATION {self.quiz_station_index}/5", True, (254, 240, 138))
         self.screen.blit(st_txt, st_txt.get_rect(center=st_pill.center))
 
-        # Question Prompt
-        wrapped_q = self.wrap_text(q_data["question"], self.dialog_q_font, box_w - 50)
-        y_text = box_y + 62
-        for line in wrapped_q:
+        # Question Prompt Card
+        prompt_rect = pygame.Rect(box_x + 20, box_y + 70, box_w - 40, 56)
+        pygame.draw.rect(self.screen, (20, 29, 47), prompt_rect, border_radius=10)
+        pygame.draw.rect(self.screen, (51, 65, 85), prompt_rect, 1, border_radius=10)
+
+        wrapped_q = self.wrap_text(q_data["question"], self.dialog_q_font, box_w - 60)
+        y_text = box_y + 76
+        for line in wrapped_q[:2]:
             txt_surf = self.dialog_q_font.render(line, True, (255, 255, 255))
-            self.screen.blit(txt_surf, (box_x + 25, y_text))
+            self.screen.blit(txt_surf, (box_x + 32, y_text))
             y_text += 22
 
-        # 50:50 Hint feedback bubble if a choice was eliminated
-        if self.wrong_feedback_msg:
-            fb_surf = self.dialog_hint_font.render(self.wrong_feedback_msg, True, (252, 211, 77))
-            self.screen.blit(fb_surf, (box_x + 25, y_text + 4))
+        # CRA Auto-Visualizer Panel
+        vis_rect = pygame.Rect(box_x + 20, box_y + 134, box_w - 40, 156)
+        self.draw_auto_visualizer(q_data, vis_rect)
 
-        # Clean vertical stacked choice buttons (No icons)
-        button_w, button_h = 500, 44
-        button_x = box_x + (box_w - button_w) // 2
-        button_y_start = box_y + 130
-        spacing = 52
+        # 2x2 Grid Choice Buttons (Clean Text, No Icons)
+        gap_x = 16
+        gap_y = 10
+        btn_w = (box_w - 40 - gap_x) // 2
+        btn_h = 46
+        start_btn_y = box_y + 300
 
         for i, choice_text in enumerate(q_data["choices"][:4]):
-            b_y = button_y_start + i * spacing
-            btn_rect = pygame.Rect(button_x, b_y, button_w, button_h)
+            col = i % 2
+            row = i // 2
+            bx = box_x + 20 + col * (btn_w + gap_x)
+            by = start_btn_y + row * (btn_h + gap_y)
+            btn_rect = pygame.Rect(bx, by, btn_w, btn_h)
+
             is_elim = i in self.eliminated_choices
             is_hov = btn_rect.collidepoint(self.cursor_pos) and not is_elim
 
@@ -3439,7 +3453,7 @@ class Quarter3:
                 text_color = (100, 110, 120)
                 border_color = (50, 55, 65)
             elif is_hov:
-                bg_color = (255, 215, 0)
+                bg_color = (245, 158, 11)
                 text_color = (15, 23, 42)
                 border_color = (255, 255, 255)
             else:
@@ -3448,11 +3462,21 @@ class Quarter3:
                 border_color = (71, 85, 105)
 
             pygame.draw.rect(self.screen, bg_color, btn_rect, border_radius=10)
-            pygame.draw.rect(self.screen, border_color, btn_rect, 2, border_radius=10)
+            pygame.draw.rect(self.screen, border_color, btn_rect, 2 if is_hov else 1, border_radius=10)
 
+            # Render Choice Text
             c_surf = self.dialog_choice_font.render(choice_text, True, text_color)
             c_rect = c_surf.get_rect(center=btn_rect.center)
             self.screen.blit(c_surf, c_rect)
+
+        # Bottom Hint / Feedback Strip
+        if self.wrong_feedback_msg:
+            fb_surf = self.dialog_hint_font.render(self.wrong_feedback_msg, True, (252, 211, 77))
+            self.screen.blit(fb_surf, (box_x + 32, box_y + 420))
+        else:
+            hint_t = q_data.get("hint", "Examine the CRA visual model above and choose the correct answer.")
+            h_surf = self.dialog_hint_font.render(hint_t, True, (253, 230, 138))
+            self.screen.blit(h_surf, (box_x + 32, box_y + 420))
 
     def draw_wrong_dialog(self):
         self.screen.blit(self.wrong_dialog_dim_overlay, (0, 0))

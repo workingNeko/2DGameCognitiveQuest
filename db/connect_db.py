@@ -40,6 +40,8 @@ class Database:
             req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
             with urllib.request.urlopen(req, timeout=8) as response:
                 data = json.loads(response.read().decode('utf-8'))
+                # If online, flush any pending offline sync queue
+                self.sync_offline_results()
                 return data
         except Exception as e:
             print(f"[API ERROR] Failed to fetch students from Vercel: {e}")
@@ -123,27 +125,106 @@ class Database:
             print(f"[API ERROR] Failed to fetch assessment_id: {e}")
             return None
 
-    def save_game_result(self, student_id, score, total_questions, correct_answers, percentage, feedback, grade_level, assessment_id=None):
-        """Post game result to Vercel API."""
-        url = f"{BASE_URL}/game-results"
+    def queue_offline_result(self, payload):
+        """Save un-synced game result to local persistent queue for automatic retry."""
+        import os
+        os.makedirs("db", exist_ok=True)
+        q_path = os.path.join("db", "pending_sync.json")
+        pending = []
+        if os.path.exists(q_path):
+            try:
+                with open(q_path, "r", encoding="utf-8") as f:
+                    pending = json.load(f)
+            except Exception:
+                pending = []
+        pending.append(payload)
         try:
-            # We send both camelCase (Next.js/Drizzle standard) and snake_case fields to be safe
-            payload = {
-                "studentId": student_id,
-                "student_id": student_id,
-                "assessmentId": assessment_id,
-                "assessment_id": assessment_id,
-                "gradeLevel": grade_level,
-                "grade_level": grade_level,
-                "score": score,
-                "totalQuestions": total_questions,
-                "total_questions": total_questions,
-                "correctAnswers": correct_answers,
-                "correct_answers": correct_answers,
-                "percentage": percentage,
-                "feedback": feedback
-            }
-            
+            with open(q_path, "w", encoding="utf-8") as f:
+                json.dump(pending, f, indent=4)
+            print(f"[OFFLINE QUEUE] Saved game result to local offline queue (pending sync count: {len(pending)})")
+        except Exception as e:
+            print(f"[OFFLINE QUEUE ERROR] Failed to write offline queue: {e}")
+
+    def sync_offline_results(self):
+        """Flush any pending offline game results to the live Vercel database."""
+        import os
+        q_path = os.path.join("db", "pending_sync.json")
+        if not os.path.exists(q_path):
+            return 0
+        try:
+            with open(q_path, "r", encoding="utf-8") as f:
+                pending = json.load(f)
+        except Exception:
+            return 0
+
+        if not pending or not isinstance(pending, list):
+            return 0
+
+        remaining = []
+        synced_count = 0
+        for item in pending:
+            try:
+                url = f"{BASE_URL}/game-results"
+                data = json.dumps(item).encode('utf-8')
+                req = urllib.request.Request(
+                    url,
+                    data=data,
+                    headers={'Content-Type': 'application/json', 'User-Agent': 'Mozilla/5.0'},
+                    method='POST'
+                )
+                with urllib.request.urlopen(req, timeout=5) as resp:
+                    if resp.status in [200, 201]:
+                        synced_count += 1
+                        print(f"[SYNC SUCCESS] Flushed offline evaluation for student #{item.get('studentId')}")
+                    else:
+                        remaining.append(item)
+            except Exception:
+                # Network still offline / failed -> keep for next retry
+                remaining.append(item)
+
+        if remaining:
+            try:
+                with open(q_path, "w", encoding="utf-8") as f:
+                    json.dump(remaining, f, indent=4)
+            except Exception:
+                pass
+        else:
+            try:
+                os.remove(q_path)
+                print("[SYNC COMPLETE] All offline records successfully synced to live database!")
+            except Exception:
+                pass
+
+        return synced_count
+
+    def save_game_result(self, student_id, score, total_questions, correct_answers, percentage, feedback, grade_level, assessment_id=None):
+        """Post game result to Vercel API, or automatically queue for offline sync if disconnected."""
+        url = f"{BASE_URL}/game-results"
+        # Convert student_id to integer if possible for relational foreign key in DB
+        numeric_student_id = student_id
+        if isinstance(student_id, str) and student_id.isdigit():
+            numeric_student_id = int(student_id)
+
+        # Ensure valid assessment ID (fallback to 1 if None)
+        ass_id = assessment_id if assessment_id is not None else 1
+
+        payload = {
+            "studentId": numeric_student_id,
+            "student_id": numeric_student_id,
+            "assessmentId": ass_id,
+            "assessment_id": ass_id,
+            "gradeLevel": grade_level,
+            "grade_level": grade_level,
+            "score": score,
+            "totalQuestions": total_questions,
+            "total_questions": total_questions,
+            "correctAnswers": correct_answers,
+            "correct_answers": correct_answers,
+            "percentage": percentage,
+            "feedback": feedback
+        }
+
+        try:
             data = json.dumps(payload).encode('utf-8')
             req = urllib.request.Request(
                 url, 
@@ -158,10 +239,25 @@ class Database:
             with urllib.request.urlopen(req, timeout=8) as response:
                 res_body = response.read().decode('utf-8')
                 print(f"[API SUCCESS] Game result saved to Vercel. Response: {res_body}")
+                # Try flushing any other previously pending results as well
+                self.sync_offline_results()
                 return True
         except Exception as e:
-            print(f"[API ERROR] Failed to save game result to Vercel: {e}")
+            print(f"[API ERROR / OFFLINE] Network unavailable ({e}). Queuing result offline...")
+            self.queue_offline_result(payload)
             return False
+
+    def get_grades(self):
+        """Fetch all recorded grades (recent grades) from Vercel API."""
+        url = f"{BASE_URL}/grades"
+        try:
+            req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+            with urllib.request.urlopen(req, timeout=8) as response:
+                data = json.loads(response.read().decode('utf-8'))
+                return data if isinstance(data, list) else []
+        except Exception as e:
+            print(f"[API ERROR] Failed to fetch grades from Vercel: {e}")
+            return []
 
     def get_game_results(self):
         """Fetch all recorded game results from Vercel API."""
@@ -175,47 +271,192 @@ class Database:
             print(f"[API ERROR] Failed to fetch game results from Vercel: {e}")
             return []
 
-    def get_leaderboard_data(self):
+    def get_highest_grade_student(self):
         """
-        Aggregate and rank student performance across all Quarters
-        combining live Vercel API data and local progress saves.
+        Identify the student with the highest grade based on the database
+        'recent grades' and evaluation records.
         """
         import os
 
-        # 1. Fetch Students
-        students_api = self.get_students() or []
+        students = self.get_students() or []
+        grades = self.get_grades()
+        game_results = self.get_game_results()
+
+        student_names = {}
+        student_details = {}
+        for s in students:
+            db_id = s.get("id")
+            c_id = str(s.get("studentId") or "")
+            name = s.get("fullName") or f"{s.get('first_name', '')} {s.get('last_name', '')}".strip()
+            if db_id is not None:
+                student_names[db_id] = name
+                student_details[db_id] = s
+            if c_id:
+                student_names[c_id] = name
+                student_details[c_id] = s
+
+        highest = None
+        max_score = -1.0
+
+        # 1. Process Live Grades table ("recent grades")
+        for g in grades:
+            s_id = g.get("studentId")
+            s_name = g.get("studentName") or student_names.get(s_id) or student_names.get(str(s_id)) or f"Student #{s_id}"
+            score = float(g.get("score") or g.get("pointsEarned") or 0.0)
+            ass_title = g.get("assessmentTitle") or "Math Assessment"
+            created = g.get("createdAt", "")
+            
+            details = student_details.get(s_id) or student_details.get(str(s_id)) or {}
+            grade_lvl = details.get("gradeLevel") or "Grade 2"
+            section = details.get("section") or "A"
+            av_col = details.get("avatarColor") or "#6366f1"
+
+            if score > max_score:
+                max_score = score
+                highest = {
+                    "name": s_name,
+                    "student_id": s_id,
+                    "score": score,
+                    "percentage": score,
+                    "assessment_title": ass_title,
+                    "grade_level": grade_lvl,
+                    "section": section,
+                    "avatar_color": av_col,
+                    "created_at": created
+                }
+
+        # 2. Check Game Results if higher score or no grades
+        for gr in game_results:
+            s_id = gr.get("studentId")
+            s_name = gr.get("studentName") or student_names.get(s_id) or student_names.get(str(s_id)) or f"Student #{s_id}"
+            pct = float(gr.get("percentage") or gr.get("score") or 0.0)
+            fb = gr.get("feedback") or "Quarter Quiz"
+            created = gr.get("createdAt", "")
+
+            details = student_details.get(s_id) or student_details.get(str(s_id)) or {}
+            grade_lvl = gr.get("gradeLevel") or details.get("gradeLevel") or "Grade 2"
+            section = details.get("section") or "A"
+            av_col = details.get("avatarColor") or "#6366f1"
+
+            if pct > max_score:
+                max_score = pct
+                highest = {
+                    "name": s_name,
+                    "student_id": s_id,
+                    "score": pct,
+                    "percentage": pct,
+                    "assessment_title": fb,
+                    "grade_level": grade_lvl,
+                    "section": section,
+                    "avatar_color": av_col,
+                    "created_at": created
+                }
+
+        # 3. Offline/Local fallback
+        if not highest:
+            saves_dir = os.path.join("db", "saves")
+            if os.path.exists(saves_dir):
+                for fname in os.listdir(saves_dir):
+                    if fname.endswith(".json"):
+                        try:
+                            with open(os.path.join(saves_dir, fname), "r", encoding="utf-8") as f:
+                                sdata = json.load(f)
+                                sel = sdata.get("selected_student") or {}
+                                s_name = sel.get("fullName") or f"{sel.get('first_name', '')} {sel.get('last_name', '')}".strip() or "Student"
+                                qd = sdata.get("quarter_data") or {}
+                                correct = sum(1 for v in qd.get("first_attempt_correct", {}).values() if v)
+                                total = len(qd.get("first_attempt_correct", {})) or 5
+                                pct = (correct / total * 100) if total > 0 else 0
+                                if pct > max_score:
+                                    max_score = pct
+                                    highest = {
+                                        "name": s_name,
+                                        "student_id": sel.get("id") or sdata.get("student_id"),
+                                        "score": pct,
+                                        "percentage": pct,
+                                        "assessment_title": f"{qd.get('quarter_name', 'Stage').upper()} Quiz",
+                                        "grade_level": sel.get("level") or "Grade 2",
+                                        "section": "A",
+                                        "avatar_color": "#38bdf8",
+                                        "created_at": ""
+                                    }
+                        except Exception:
+                            pass
+
+        return highest
+
+    def get_leaderboard_data(self):
+        """
+        Aggregate and rank student performance across all Quarters
+        combining live Vercel API data (students, grades, game results) and local progress saves.
+        Strictly restricts the roster to registered students in the live database.
+        """
+        import os
+
+        # 1. Fetch Students from Live API
+        students_api = self.get_students()
         student_map = {}
         alias_map = {}
 
-        for s in students_api:
-            s_db_id = str(s.get("id") or "")
-            s_custom_id = str(s.get("studentId") or "")
-            
-            primary_key = s_db_id if s_db_id else s_custom_id
-            if not primary_key:
-                continue
+        if students_api:
+            for s in students_api:
+                s_db_id = str(s.get("id") or "")
+                s_custom_id = str(s.get("studentId") or "")
                 
-            student_entry = {
-                "id": s.get("id", primary_key),
-                "student_id": s_custom_id or primary_key,
-                "name": s.get("fullName") or f"{s.get('first_name', '')} {s.get('last_name', '')}".strip() or f"Student #{primary_key}",
-                "grade_level": s.get("gradeLevel") or s.get("grade_level") or "Grade 2",
-                "section": s.get("section") or "A",
-                "avatar_color": s.get("avatarColor") or "#6366f1",
-                "quarters": {1: None, 2: None, 3: None, 4: None},
-                "total_score": 0,
-                "total_correct": 0,
-                "total_questions": 0,
-                "quarters_completed": 0,
-                "average_percentage": 0.0
-            }
-            student_map[primary_key] = student_entry
-            if s_db_id:
-                alias_map[s_db_id] = primary_key
-            if s_custom_id:
-                alias_map[s_custom_id] = primary_key
+                primary_key = s_db_id if s_db_id else s_custom_id
+                if not primary_key:
+                    continue
+                    
+                student_entry = {
+                    "id": s.get("id", primary_key),
+                    "student_id": s_custom_id or primary_key,
+                    "name": s.get("fullName") or f"{s.get('first_name', '')} {s.get('last_name', '')}".strip() or f"Student #{primary_key}",
+                    "grade_level": s.get("gradeLevel") or s.get("grade_level") or "Grade 2",
+                    "section": s.get("section") or "A",
+                    "avatar_color": s.get("avatarColor") or "#6366f1",
+                    "quarters": {1: None, 2: None, 3: None, 4: None},
+                    "total_score": 0,
+                    "total_correct": 0,
+                    "total_questions": 0,
+                    "quarters_completed": 0,
+                    "average_percentage": 0.0
+                }
+                student_map[primary_key] = student_entry
+                if s_db_id:
+                    alias_map[s_db_id] = primary_key
+                if s_custom_id:
+                    alias_map[s_custom_id] = primary_key
+        else:
+            # Fallback ONLY if API is completely offline / unreachable
+            saves_dir = os.path.join("db", "saves")
+            if os.path.exists(saves_dir):
+                for fname in os.listdir(saves_dir):
+                    if fname.endswith(".json"):
+                        try:
+                            with open(os.path.join(saves_dir, fname), "r", encoding="utf-8") as f:
+                                sdata = json.load(f)
+                                raw_id = str(sdata.get("student_id") or fname[:-5])
+                                sel = sdata.get("selected_student") or {}
+                                s_name = sel.get("fullName") or f"{sel.get('first_name', '')} {sel.get('last_name', '')}".strip() or f"Student #{raw_id}"
+                                student_map[raw_id] = {
+                                    "id": sel.get("id", raw_id),
+                                    "student_id": raw_id,
+                                    "name": s_name,
+                                    "grade_level": sel.get("grade_level") or sel.get("level") or "Grade 2",
+                                    "section": sel.get("section") or "A",
+                                    "avatar_color": "#38bdf8",
+                                    "quarters": {1: None, 2: None, 3: None, 4: None},
+                                    "total_score": 0,
+                                    "total_correct": 0,
+                                    "total_questions": 0,
+                                    "quarters_completed": 0,
+                                    "average_percentage": 0.0
+                                }
+                                alias_map[raw_id] = raw_id
+                        except Exception:
+                            pass
 
-        # 2. Check local saves for any offline/local student profiles
+        # 2. Check local saves for quarter progress of registered students
         saves_dir = os.path.join("db", "saves")
         if os.path.exists(saves_dir):
             for fname in os.listdir(saves_dir):
@@ -226,83 +467,88 @@ class Database:
                             sdata = json.load(f)
                             raw_id = str(sdata.get("student_id") or fname[:-5])
                             sel = sdata.get("selected_student") or {}
-                            s_id = alias_map.get(raw_id) or alias_map.get(str(sel.get("id", ""))) or alias_map.get(str(sel.get("studentId", ""))) or raw_id
+                            s_id = alias_map.get(raw_id) or alias_map.get(str(sel.get("id", ""))) or alias_map.get(str(sel.get("studentId", "")))
                             
-                            if s_id not in student_map:
-                                name = sel.get("fullName") or f"{sel.get('first_name', '')} {sel.get('last_name', '')}".strip() or f"Student #{s_id}"
-                                student_map[s_id] = {
-                                    "id": sel.get("id", s_id),
-                                    "student_id": s_id,
-                                    "name": name,
-                                    "grade_level": sel.get("grade_level") or sel.get("gradeLevel") or "Grade 2",
-                                    "section": sel.get("section") or "A",
-                                    "avatar_color": sel.get("avatarColor") or "#38bdf8",
-                                    "quarters": {1: None, 2: None, 3: None, 4: None},
-                                    "total_score": 0,
-                                    "total_correct": 0,
-                                    "total_questions": 0,
-                                    "quarters_completed": 0,
-                                    "average_percentage": 0.0
-                                }
-                                alias_map[raw_id] = s_id
-                            
-                            # Parse local quarter completion
-                            q_data = sdata.get("quarter_data") or {}
-                            q_type = q_data.get("quarter_type")
-                            if q_type:
-                                q_num = 1
-                                if "2" in q_type: q_num = 2
-                                elif "3" in q_type: q_num = 3
-                                elif "4" in q_type: q_num = 4
-                                
-                                score = q_data.get("score", 0)
-                                correct = q_data.get("correct_answers", 0)
-                                total = q_data.get("total_questions", 5)
-                                pct = (correct / total * 100) if total > 0 else 0
-                                student_map[s_id]["quarters"][q_num] = {
-                                    "score": score,
-                                    "correct": correct,
-                                    "total": total,
-                                    "percentage": pct,
-                                    "completed": bool(q_data.get("completed", False))
-                                }
+                            if s_id and s_id in student_map:
+                                # Parse local quarter completion
+                                q_data = sdata.get("quarter_data") or {}
+                                q_name = q_data.get("quarter_name") or ""
+                                if q_name:
+                                    q_num = 1
+                                    if "2" in q_name: q_num = 2
+                                    elif "3" in q_name: q_num = 3
+                                    elif "4" in q_name: q_num = 4
+                                    
+                                    correct_dict = q_data.get("first_attempt_correct", {})
+                                    correct = sum(1 for v in correct_dict.values() if v)
+                                    total = len(correct_dict) if len(correct_dict) > 0 else 5
+                                    pct = (correct / total * 100) if total > 0 else 0
+                                    score = correct * 20  # 20 pts per question -> 100 max
+                                    
+                                    student_map[s_id]["quarters"][q_num] = {
+                                        "score": score,
+                                        "correct": correct,
+                                        "total": total,
+                                        "percentage": pct,
+                                        "completed": bool(q_data.get("completed", False) or correct > 0)
+                                    }
                     except Exception as e:
-                        print(f"⚠️ Error reading local save {fname}: {e}")
+                        print(f"[SAVE ERROR] Error reading local save {fname}: {e}")
 
-        # 3. Fetch Game Results from Vercel API and overlay/aggregate
+        # 3. Fetch Live Grades and Game Results from Vercel API
+        api_grades = self.get_grades()
+        for g in api_grades:
+            raw_id = str(g.get("studentId") or g.get("student_id") or "")
+            if not raw_id:
+                continue
+            st_id = alias_map.get(raw_id)
+            if not st_id or st_id not in student_map:
+                continue
+
+            # Map assessment title to quarter
+            q_num = 1
+            title = str(g.get("assessmentTitle", "")).upper()
+            if "UNIT 2" in title or "Q2" in title or "QUARTER 2" in title: q_num = 2
+            elif "UNIT 3" in title or "Q3" in title or "QUARTER 3" in title: q_num = 3
+            elif "UNIT 4" in title or "Q4" in title or "QUARTER 4" in title: q_num = 4
+
+            score = int(g.get("pointsEarned") or g.get("score") or 0)
+            pct = float(g.get("score") or 100.0)
+
+            existing = student_map[st_id]["quarters"][q_num]
+            if not existing or score > existing.get("score", 0):
+                student_map[st_id]["quarters"][q_num] = {
+                    "score": score,
+                    "correct": int(score // 20) if score <= 100 else 5,
+                    "total": 5,
+                    "percentage": pct,
+                    "completed": True
+                }
+
         api_results = self.get_game_results()
         for res in api_results:
             raw_id = str(res.get("studentId") or res.get("student_id") or "")
             if not raw_id:
                 continue
-            st_id = alias_map.get(raw_id, raw_id)
-            if st_id not in student_map:
-                student_map[st_id] = {
-                    "id": st_id,
-                    "student_id": st_id,
-                    "name": f"Student #{st_id}",
-                    "grade_level": res.get("gradeLevel") or "Grade 2",
-                    "section": "A",
-                    "avatar_color": "#6366f1",
-                    "quarters": {1: None, 2: None, 3: None, 4: None},
-                    "total_score": 0,
-                    "total_correct": 0,
-                    "total_questions": 0,
-                    "quarters_completed": 0,
-                    "average_percentage": 0.0
-                }
+            st_id = alias_map.get(raw_id)
+            if not st_id or st_id not in student_map:
+                continue
 
-            # Determine Quarter from assessmentId, feedback, or title
             q_num = 1
             fb = str(res.get("feedback", "")).upper()
             if "QUARTER 2" in fb or "Q2" in fb: q_num = 2
             elif "QUARTER 3" in fb or "Q3" in fb: q_num = 3
             elif "QUARTER 4" in fb or "Q4" in fb: q_num = 4
 
-            score = int(res.get("score") or 0)
-            correct = int(res.get("correctAnswers") or res.get("correct_answers") or score)
+            raw_score = int(res.get("score") or 0)
+            correct = int(res.get("correctAnswers") or res.get("correct_answers") or raw_score)
             total = int(res.get("totalQuestions") or res.get("total_questions") or 5)
             pct = float(res.get("percentage") or ((correct / total * 100) if total > 0 else 0))
+
+            # Normalize score: if raw_score was stored as raw question count (<= 5), scale to standard 100-point stage score
+            score = raw_score
+            if total > 0 and score <= total and score <= 5:
+                score = int(correct * (100 // total))
 
             existing = student_map[st_id]["quarters"][q_num]
             if not existing or score > existing.get("score", 0):
