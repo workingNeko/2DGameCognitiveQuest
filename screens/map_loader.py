@@ -83,10 +83,8 @@ class MapLoader:
         self.npc_positions = {}
         self.player_start = None
 
-        # NPC markers to look for - using 'O' for oldman as in stage select
-        npc_markers = ['O', 'S', 'K']
-        if self.current_map_name == "map.txt":
-            npc_markers.append('B')
+        # NPC markers to look for - 'O' for Oldman/Omen, 'B' for Bromen, 'S' for Skeleton, 'K' for Knight
+        npc_markers = ['O', 'S', 'K', 'B']
 
         for y, row in enumerate(self.game_map):
             for x, char in enumerate(row):
@@ -145,12 +143,15 @@ class MapLoader:
                         else:
                             row_list[x] = 'G'
                     elif char in ['B', 'K']:
-                        row_list[x] = '7'
-                    elif char == 'O':
-                        if self.current_map_name and self.current_map_name.lower() in ["map1.txt", "map2.txt", "map3.txt", "map10.txt", "map11.txt", "map12.txt"]:
-                            row_list[x] = 'G'
+                        if self.current_map_name == "map.txt":
+                            row_list[x] = '7'
                         else:
+                            row_list[x] = 'G'
+                    elif char == 'O':
+                        if self.current_map_name == "map.txt":
                             row_list[x] = '6'
+                        else:
+                            row_list[x] = 'G'
                     elif char in ['S', 'N']:
                         row_list[x] = 'G'
                     modified = True

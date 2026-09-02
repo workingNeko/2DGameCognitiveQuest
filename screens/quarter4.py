@@ -234,10 +234,15 @@ class Quarter4:
         self.npc_bromen_tile_y = 0
         self.npc_bromen_found = False
         self.bromen_dialogue_state = 0  # 0: idle, 1: not enough, 2: ready, 3: completed
+        self.bromen_proximity_cooldown_end = 0  # Cooldown timestamp for proximity check
         self.key_puzzle_active = False
         self.key_puzzle_solved = False
         self.emblem_puzzle_active = False
         self.emblem_puzzle_solved = False
+        self.award_anim_active = False
+        self.award_anim_start_time = 0
+        self.award_key_index = 1
+        self.award_key_sprite = None
         self.load_key_puzzle_assets()
         self.load_puzzle_sounds()
 
@@ -1100,9 +1105,10 @@ class Quarter4:
             btn_rect = pygame.Rect(box_x + (box_w - 200) // 2, box_y + 140, 200, 42)
             if btn_rect.collidepoint(pos):
                 self.quiz_state = 0
+                self.trigger_award_animation(self.quiz_station_index)
                 save_student_progress(self.main_menu)
 
-        # State 4: Out of tries reveal screen click (Player gets emblem and continues)
+        # State 4: Out of tries reveal screen click (Player gets key and continues)
         elif self.quiz_state == 4:
             box_w, box_h = 560, 260
             box_x = (self.width - box_w) // 2
@@ -1110,6 +1116,7 @@ class Quarter4:
             btn_rect = pygame.Rect(box_x + (box_w - 200) // 2, box_y + 195, 200, 42)
             if btn_rect.collidepoint(pos):
                 self.quiz_state = 0
+                self.trigger_award_animation(self.quiz_station_index)
                 save_student_progress(self.main_menu)
                 
         # State 5: Final speech click
@@ -1128,8 +1135,8 @@ class Quarter4:
             if hasattr(self, 'bromen_btn_rect') and self.bromen_btn_rect.collidepoint(pos):
                 if self.bromen_dialogue_state == 1:
                     self.bromen_dialogue_state = 0
-                    # Push back player to prevent instant trigger loop
-                    self.player_x -= SPEED * 8
+                    # Disable Bromen proximity check for 5 seconds so player can freely relocate
+                    self.bromen_proximity_cooldown_end = pygame.time.get_ticks() + 5000
                 else:
                     self.bromen_dialogue_state = 0
                     self.key_puzzle_active = True
@@ -1202,7 +1209,12 @@ class Quarter4:
                         break
 
         # Proximity check for Bromen (Final obstacle) - Only activates once all objectives are completed
-        if self.quiz_state == 0 and not (self.key_puzzle_active or self.emblem_puzzle_active) and self.bromen_dialogue_state == 0 and self.npc_bromen_found:
+        now = pygame.time.get_ticks()
+        if (self.quiz_state == 0 and 
+            not (self.key_puzzle_active or self.emblem_puzzle_active) and 
+            self.bromen_dialogue_state == 0 and 
+            self.npc_bromen_found and 
+            now >= getattr(self, 'bromen_proximity_cooldown_end', 0)):
             import math
             player_center_x = self.player_x + TILE_SIZE // 2
             player_center_y = self.player_y + TILE_SIZE // 2
@@ -1502,6 +1514,9 @@ class Quarter4:
             self.draw_key_puzzle()
 
         self.draw_ui()
+
+        # Draw Golden Key award animation (flies down to Objectives HUD)
+        self.draw_key_award_animation()
 
         # Draw 10-Minute Stage Timer HUD
         self.draw_stage_timer_hud()
@@ -1901,9 +1916,148 @@ class Quarter4:
         c_rect = c_surf.get_rect(center=btn_rect.center)
         self.screen.blit(c_surf, c_rect)
 
+    def generate_plain_key_surface(self, width, height):
+        surf = pygame.Surface((width, height), pygame.SRCALPHA)
+        surf.fill((0, 0, 0, 0))
+        
+        gold_fill = (250, 204, 21)
+        gold_border = (180, 83, 9)
+        
+        w, h = width, height
+        ring_r = int(w * 0.38)
+        ring_center = (w // 2, int(h * 0.22))
+        
+        # Outer Ring
+        pygame.draw.circle(surf, gold_border, ring_center, ring_r)
+        pygame.draw.circle(surf, gold_fill, ring_center, ring_r - 3)
+        # Inner Ring Cutout
+        inner_r = int(ring_r * 0.48)
+        pygame.draw.circle(surf, gold_border, ring_center, inner_r)
+        pygame.draw.circle(surf, (0, 0, 0, 0), ring_center, inner_r - 2)
+        
+        # Stem
+        stem_w = int(w * 0.16)
+        stem_top = ring_center[1] + int(ring_r * 0.6)
+        stem_bottom = int(h * 0.88)
+        stem_rect = pygame.Rect(w // 2 - stem_w // 2, stem_top, stem_w, stem_bottom - stem_top)
+        pygame.draw.rect(surf, gold_border, (stem_rect.x - 2, stem_rect.y, stem_rect.w + 4, stem_rect.h + 2), border_radius=3)
+        pygame.draw.rect(surf, gold_fill, stem_rect, border_radius=2)
+        
+        # Teeth
+        tooth_w = int(w * 0.28)
+        tooth_h = int(h * 0.08)
+        pygame.draw.rect(surf, gold_border, (w // 2, stem_bottom - tooth_h * 2 - 2, tooth_w + 2, tooth_h + 4), border_radius=2)
+        pygame.draw.rect(surf, gold_fill, (w // 2, stem_bottom - tooth_h * 2, tooth_w, tooth_h), border_radius=2)
+        
+        pygame.draw.rect(surf, gold_border, (w // 2, stem_bottom - tooth_h + 2, tooth_w - 4 + 2, tooth_h - 2 + 4), border_radius=2)
+        pygame.draw.rect(surf, gold_fill, (w // 2, stem_bottom - tooth_h + 4, tooth_w - 4, tooth_h - 2), border_radius=2)
+        
+        return surf
+
+    def trigger_award_animation(self, key_idx=None):
+        self.award_anim_active = True
+        self.award_anim_start_time = pygame.time.get_ticks()
+        self.award_key_index = key_idx if key_idx is not None else self.quiz_station_index
+        if hasattr(self, 'sound_snap') and self.sound_snap:
+            try:
+                self.sound_snap.play()
+            except Exception:
+                pass
+        elif hasattr(self, 'sound_correct') and self.sound_correct:
+            try:
+                self.sound_correct.play()
+            except Exception:
+                pass
+
+    def draw_key_award_animation(self):
+        # Draw Golden Key award animation (flies down to bottom-center Water Temple Objectives HUD)
+        if not self.award_anim_active:
+            return
+
+        elapsed = (pygame.time.get_ticks() - self.award_anim_start_time) / 1000.0
+        if elapsed < 0:
+            return
+
+        if elapsed > 1.3:
+            self.award_anim_active = False
+            return
+
+        # Sprite to draw: Golden Key
+        sprite_to_draw = getattr(self, 'award_key_sprite', None)
+        if sprite_to_draw is None:
+            sprite_to_draw = getattr(self, 'puzzle_key_img', None)
+
+        key_num = getattr(self, 'award_key_index', self.quiz_station_index)
+        total_keys = len(self.answered_stations)
+        banner_text = f"NEW GOLDEN KEY #{key_num} COLLECTED! ({total_keys}/6)"
+
+        # Target bottom center Objectives HUD position
+        box_w, box_h = 370, 85
+        target_x = self.width // 2
+        target_y = self.height - box_h // 2 - 15
+
+        if elapsed <= 0.4:
+            # Phase 1: Pop up in center of screen with scale up effect
+            scale = min(1.3, 1.3 * (elapsed / 0.4))
+            alpha = 255
+            x = self.width // 2
+            y = self.height // 2 - 20
+        else:
+            # Phase 2: Glide smoothly down to Objectives HUD box and fade into it
+            t = min(1.0, (elapsed - 0.4) / 0.9)
+            ease_t = t * t * (3 - 2 * t)
+            scale = 1.3 * (1.0 - t * 0.75)
+            alpha = int(255 * (1.0 - t * 0.9))
+            x = self.width // 2
+            start_y = self.height // 2 - 20
+            y = start_y + ease_t * (target_y - start_y)
+
+        # Draw Golden Aura / Glow behind the key
+        if sprite_to_draw:
+            base_w, base_h = 95, 210
+            w = int(base_w * scale)
+            h = int(base_h * scale)
+            if w > 0 and h > 0:
+                try:
+                    glow_radius = int(max(w, h) * 0.6)
+                    if glow_radius > 0:
+                        glow_surf = pygame.Surface((glow_radius * 2, glow_radius * 2), pygame.SRCALPHA)
+                        glow_alpha = int(min(170, alpha * 0.65))
+                        pygame.draw.circle(glow_surf, (250, 204, 21, glow_alpha), (glow_radius, glow_radius), glow_radius)
+                        pygame.draw.circle(glow_surf, (255, 255, 255, min(220, glow_alpha + 40)), (glow_radius, glow_radius), int(glow_radius * 0.45))
+                        self.screen.blit(glow_surf, (x - glow_radius, y - glow_radius))
+
+                    scaled_key = pygame.transform.smoothscale(sprite_to_draw, (w, h))
+                    if alpha < 255:
+                        scaled_key.set_alpha(alpha)
+                    self.screen.blit(scaled_key, (x - w // 2, y - h // 2))
+                except Exception as e:
+                    print(f"Error drawing award key: {e}")
+
+        # Draw Banner Pill during initial reveal (Phase 1)
+        if elapsed <= 0.5:
+            banner_alpha = 255 if elapsed <= 0.4 else int(255 * (1.0 - (elapsed - 0.4) / 0.1))
+            award_font = pygame.font.SysFont("Comic Sans MS", 18, bold=True)
+            text_surf = award_font.render(banner_text, True, (255, 215, 0))
+            
+            bw = text_surf.get_width() + 24
+            bh = text_surf.get_height() + 14
+            bg_surf = pygame.Surface((bw, bh), pygame.SRCALPHA)
+            bg_surf.fill((15, 23, 42, int(banner_alpha * 0.85)))
+            pygame.draw.rect(bg_surf, (255, 215, 0, banner_alpha), (0, 0, bw, bh), 2, border_radius=12)
+            
+            bx = x - bw // 2
+            by = y - (int(210 * scale) // 2) - bh - 10
+            self.screen.blit(bg_surf, (bx, by))
+            
+            if banner_alpha < 255:
+                text_surf.set_alpha(banner_alpha)
+            self.screen.blit(text_surf, (bx + 12, by + 7))
+
     def load_key_puzzle_assets(self):
         self.puzzle_block_img = None
         self.puzzle_key_img = None
+        self.award_key_sprite = None
         
         doorkeys_dir = os.path.join(self.OBJECTS_PATH, "quarter4tiles", "Doorkeys")
         block_path = os.path.join(doorkeys_dir, "block_hires.png")
@@ -1923,10 +2077,14 @@ class Quarter4:
             
         if os.path.exists(key_path):
             try:
-                k_img = pygame.image.load(key_path).convert_alpha()
-                self.puzzle_key_img = pygame.transform.smoothscale(k_img, (44, 90))
+                raw_k = pygame.image.load(key_path).convert_alpha()
+                self.award_key_sprite = raw_k
+                self.puzzle_key_img = pygame.transform.smoothscale(raw_k, (44, 90))
             except Exception as e:
                 print(f"Error loading key image: {e}")
+
+        if self.award_key_sprite is None:
+            self.award_key_sprite = self.generate_plain_key_surface(100, 220)
 
     # Legacy alias
     def load_emblem_puzzle_assets(self):
