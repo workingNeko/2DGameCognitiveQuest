@@ -1643,7 +1643,7 @@ class Quarter4:
             if (self.key_puzzle_active or self.emblem_puzzle_active) and not (self.key_puzzle_solved or self.emblem_puzzle_solved):
                 for piece in self.key_puzzle_pieces:
                     if not piece["is_placed"]:
-                        piece_rect = pygame.Rect(piece["x"], piece["y"], 50, 95)
+                        piece_rect = pygame.Rect(piece["x"], piece["y"], 48, 92)
                         if piece_rect.collidepoint(event.pos):
                             self.dragged_key = piece
                             self.drag_offset_x = piece["x"] - event.pos[0]
@@ -1653,31 +1653,28 @@ class Quarter4:
         elif event.type == pygame.MOUSEBUTTONUP and event.button == 1:
             if (self.key_puzzle_active or self.emblem_puzzle_active) and self.dragged_key:
                 now = pygame.time.get_ticks()
-                key_center_x = self.dragged_key["x"] + 22
-                key_center_y = self.dragged_key["y"] + 45
+                key_center_x = self.dragged_key["x"] + 24
+                key_center_y = self.dragged_key["y"] + 46
                 
                 target_slot = None
                 for slot in self.key_puzzle_slots:
                     if not slot["is_filled"]:
                         dist = math.hypot(key_center_x - slot["target_x"], key_center_y - slot["target_y"])
-                        if dist < 50:
+                        if dist < 55:
                             target_slot = slot
                             break
                             
                 if target_slot:
-                    self.dragged_key["x"] = target_slot["target_x"] - 22
-                    self.dragged_key["y"] = target_slot["target_y"] - 45
+                    self.dragged_key["x"] = target_slot["target_x"] - 19
+                    self.dragged_key["y"] = target_slot["target_y"] - 54
                     self.dragged_key["is_placed"] = True
                     self.dragged_key["slot_id"] = target_slot["id"]
-                    self.dragged_key["turning"] = True
-                    self.dragged_key["turn_start_time"] = now
+                    self.dragged_key["inserting"] = True
+                    self.dragged_key["insert_start_time"] = now
+                    self.dragged_key["turning"] = False
+                    self.dragged_key["turn_angle"] = 0.0
                     target_slot["is_filled"] = True
                     target_slot["key_id"] = self.dragged_key["id"]
-                    if self.sound_snap:
-                        try:
-                            self.sound_snap.play()
-                        except Exception:
-                            pass
                 else:
                     self.dragged_key["x"] = self.dragged_key["deck_x"]
                     self.dragged_key["y"] = self.dragged_key["deck_y"]
@@ -2079,9 +2076,21 @@ class Quarter4:
             try:
                 raw_k = pygame.image.load(key_path).convert_alpha()
                 self.award_key_sprite = raw_k
-                self.puzzle_key_img = pygame.transform.smoothscale(raw_k, (44, 90))
+                self.puzzle_key_img = pygame.transform.smoothscale(raw_k, (44, 105))
             except Exception as e:
                 print(f"Error loading key image: {e}")
+
+        # Load inserted key handle sprite (only handle is visible when inserted into keyhole)
+        self.puzzle_key_handle_img = None
+        handle_path = os.path.join(doorkeys_dir, "key_handle_hires.png")
+        if not os.path.exists(handle_path):
+            handle_path = os.path.join(doorkeys_dir, "key_handle.png")
+        if os.path.exists(handle_path):
+            try:
+                raw_h = pygame.image.load(handle_path).convert_alpha()
+                self.puzzle_key_handle_img = pygame.transform.smoothscale(raw_h, (76, 76))
+            except Exception as e:
+                print(f"Error loading key handle image: {e}")
 
         if self.award_key_sprite is None:
             self.award_key_sprite = self.generate_plain_key_surface(100, 220)
@@ -2110,6 +2119,8 @@ class Quarter4:
         self.dragged_emblem = None
         self.key_puzzle_solved = False
         self.key_puzzle_solved_time = 0
+        self.all_placed_start_time = 0
+        self.keys_turning_started = False
         
         box_w, box_h = 820, 560
         box_x = (self.width - box_w) // 2
@@ -2119,10 +2130,10 @@ class Quarter4:
         block_y = box_y + 45
         block_w, block_h = 470, 470
         
-        # 6 Keyhole slots (2 rows of 3 columns) on block face
+        # 6 Keyhole slots (2 rows of 3 columns) precisely aligned to the front-view brass keyholes
         slot_rel = [
-            (0.295, 0.350), (0.500, 0.350), (0.705, 0.350),
-            (0.295, 0.650), (0.500, 0.650), (0.705, 0.650)
+            (0.285, 0.347), (0.500, 0.348), (0.708, 0.347),
+            (0.285, 0.663), (0.499, 0.663), (0.708, 0.664)
         ]
         
         for idx, (rx, ry) in enumerate(slot_rel):
@@ -2205,19 +2216,40 @@ class Quarter4:
             
         now = pygame.time.get_ticks()
         
-        # Update key turning animations
+        # Update key insertion and turning animations for each placed key
         for piece in self.key_puzzle_pieces:
-            if piece.get("turning", False):
+            if piece.get("inserting", False):
+                elapsed = now - piece["insert_start_time"]
+                progress = min(1.0, elapsed / 350.0)
+                piece["insert_progress"] = progress
+                if progress >= 1.0:
+                    piece["inserting"] = False
+                    piece["turning"] = True
+                    piece["turn_start_time"] = now
+                    piece["turn_angle"] = 0.0
+                    if self.sound_snap:
+                        try:
+                            self.sound_snap.play()
+                        except Exception:
+                            pass
+            elif piece.get("turning", False):
                 elapsed = now - piece["turn_start_time"]
-                progress = min(1.0, elapsed / 400.0)
+                progress = min(1.0, elapsed / 450.0)
                 ease = 1.0 - (1.0 - progress) * (1.0 - progress)
+                piece["turn_progress"] = ease
                 piece["turn_angle"] = 90.0 * ease
                 if progress >= 1.0:
                     piece["turning"] = False
+                    piece["turn_progress"] = 1.0
                     piece["turn_angle"] = 90.0
+                    if self.sound_snap:
+                        try:
+                            self.sound_snap.play()
+                        except Exception:
+                            pass
             
-        # Check if all 6 keys are placed and finished turning
-        if len(self.key_puzzle_pieces) == 6 and all(p["is_placed"] and not p.get("turning", False) for p in self.key_puzzle_pieces):
+        # Check if all 6 keys are placed, inserted, and turned
+        if len(self.key_puzzle_pieces) == 6 and all(p.get("is_placed", False) and not p.get("inserting", False) and not p.get("turning", False) for p in self.key_puzzle_pieces):
             if self.key_puzzle_solved_time == 0:
                 self.key_puzzle_solved_time = now
                 if self.sound_correct:
@@ -2241,7 +2273,7 @@ class Quarter4:
             if not self.dragged_key:
                 for piece in self.key_puzzle_pieces:
                     if not piece["is_placed"]:
-                        piece_rect = pygame.Rect(piece["x"], piece["y"], 50, 95)
+                        piece_rect = pygame.Rect(piece["x"], piece["y"], 48, 92)
                         if piece_rect.collidepoint(self.cursor_pos):
                             self.dragged_key = piece
                             self.drag_offset_x = piece["x"] - self.cursor_pos[0]
@@ -2252,31 +2284,29 @@ class Quarter4:
                 self.dragged_key["y"] = self.cursor_pos[1] + self.drag_offset_y
         else:
             if self.dragged_key:
-                key_center_x = self.dragged_key["x"] + 22
-                key_center_y = self.dragged_key["y"] + 45
+                key_center_x = self.dragged_key["x"] + 24
+                key_center_y = self.dragged_key["y"] + 46
                 
                 target_slot = None
                 for slot in self.key_puzzle_slots:
                     if not slot["is_filled"]:
                         dist = math.hypot(key_center_x - slot["target_x"], key_center_y - slot["target_y"])
-                        if dist < 50:
+                        if dist < 55:
                             target_slot = slot
                             break
                             
                 if target_slot:
-                    self.dragged_key["x"] = target_slot["target_x"] - 22
-                    self.dragged_key["y"] = target_slot["target_y"] - 45
+                    self.dragged_key["x"] = target_slot["target_x"] - 19
+                    self.dragged_key["y"] = target_slot["target_y"] - 54
                     self.dragged_key["is_placed"] = True
                     self.dragged_key["slot_id"] = target_slot["id"]
-                    self.dragged_key["turning"] = True
-                    self.dragged_key["turn_start_time"] = now
+                    self.dragged_key["inserting"] = True
+                    self.dragged_key["insert_start_time"] = now
+                    self.dragged_key["turning"] = False
+                    self.dragged_key["turn_angle"] = 0.0
+                    self.dragged_key["turn_progress"] = 0.0
                     target_slot["is_filled"] = True
                     target_slot["key_id"] = self.dragged_key["id"]
-                    if self.sound_snap:
-                        try:
-                            self.sound_snap.play()
-                        except Exception:
-                            pass
                 else:
                     self.dragged_key["x"] = self.dragged_key["deck_x"]
                     self.dragged_key["y"] = self.dragged_key["deck_y"]
@@ -2318,66 +2348,114 @@ class Quarter4:
             pygame.draw.rect(self.screen, (40, 45, 55), (block_x, block_y, block_w, block_h), border_radius=10)
         pygame.draw.rect(self.screen, (120, 135, 155), (block_x, block_y, block_w, block_h), 2, border_radius=10)
         
-        # Draw slot indicator auras on empty slots
+        # Draw slot indicator glowing rune auras on empty slots
         for slot in self.key_puzzle_slots:
             sx = slot["target_x"]
             sy = slot["target_y"]
             if not slot["is_filled"]:
                 pulse = int(math.sin(self.frame_counter * 0.12) * 3)
-                pygame.draw.circle(self.screen, (250, 204, 21, 120), (sx, sy), 30 + pulse, 2)
+                pygame.draw.circle(self.screen, (0, 220, 255, 140), (sx, sy), 26 + pulse, 2)
+                pygame.draw.circle(self.screen, (250, 204, 21, 50), (sx, sy), 16)
             else:
-                pygame.draw.circle(self.screen, (56, 232, 198, 160), (sx, sy), 32, 2)
+                pygame.draw.circle(self.screen, (56, 232, 198, 180), (sx, sy), 28, 2)
                 
         # Draw Key Rack / Tray
         deck_x = box_x + 525
         deck_y = box_y + 45
         deck_w = 265
         deck_h = 470
-        pygame.draw.rect(self.screen, (20, 30, 45), (deck_x, deck_y, deck_w, deck_h), border_radius=12)
+        
+        deck_surf = pygame.Surface((deck_w, deck_h), pygame.SRCALPHA)
+        deck_surf.fill((16, 28, 44, 235))
+        self.screen.blit(deck_surf, (deck_x, deck_y))
         pygame.draw.rect(self.screen, (218, 165, 32), (deck_x, deck_y, deck_w, deck_h), 2, border_radius=12)
         
-        label_font = pygame.font.SysFont("Comic Sans MS", 13, bold=True)
-        placed_count = sum(1 for p in self.key_puzzle_pieces if p["is_placed"])
-        deck_lbl = label_font.render(f"GOLDEN KEYS ({placed_count}/6 INSERTED)", True, (255, 215, 0))
-        self.screen.blit(deck_lbl, (deck_x + (deck_w - deck_lbl.get_width()) // 2, deck_y + 15))
+        # Pedestals for keys in deck
+        for i in range(6):
+            row = i // 2
+            col = i % 2
+            px = deck_x + 38 + col * 105
+            py = deck_y + 50 + row * 125
+            ped_surf = pygame.Surface((56, 100), pygame.SRCALPHA)
+            ped_surf.fill((10, 18, 30, 180))
+            pygame.draw.rect(ped_surf, (50, 75, 100, 120), (0, 0, 56, 100), 1, border_radius=8)
+            self.screen.blit(ped_surf, (px - 4, py - 4))
         
+        label_font = pygame.font.SysFont("Comic Sans MS", 13, bold=True)
         hint_font = pygame.font.SysFont("Comic Sans MS", 11)
-        hint_txt = hint_font.render("Drag keys into the 6 keyholes", True, (180, 200, 220))
+        placed_count = sum(1 for p in self.key_puzzle_pieces if p["is_placed"])
+        
+        if placed_count < 6:
+            deck_lbl = label_font.render(f"GOLDEN KEYS ({placed_count}/6 INSERTED)", True, (255, 215, 0))
+            hint_txt = hint_font.render("Drag each key to insert & turn in keyholes", True, (180, 220, 240))
+        else:
+            deck_lbl = label_font.render("ALL 6 KEYS INSERTED & TURNED!", True, (56, 232, 198))
+            hint_txt = hint_font.render("Ancient Lock Mechanism Disengaged!", True, (255, 215, 0))
+
+        self.screen.blit(deck_lbl, (deck_x + (deck_w - deck_lbl.get_width()) // 2, deck_y + 15))
         self.screen.blit(hint_txt, (deck_x + (deck_w - hint_txt.get_width()) // 2, deck_y + 36))
         
-        # Draw unplaced keys
+        # Draw unplaced keys (full key with shaft and bit)
         for piece in self.key_puzzle_pieces:
             if not piece["is_placed"] and piece != self.dragged_key:
                 if self.puzzle_key_img:
                     self.screen.blit(self.puzzle_key_img, (piece["x"], piece["y"]))
                     
-        # Draw placed keys (with smooth rotation animation)
+        # Draw placed keys (sliding into keyhole during insert, then edge-on vertical line turning into horizontal clover handle)
+        handle_sprite = getattr(self, 'puzzle_key_handle_img', None)
+        if handle_sprite is None:
+            handle_sprite = getattr(self, 'puzzle_key_img', None)
+
         for piece in self.key_puzzle_pieces:
             if piece["is_placed"]:
-                if self.puzzle_key_img:
-                    slot_id = piece.get("slot_id")
-                    if slot_id is not None and slot_id < len(self.key_puzzle_slots):
-                        sx = self.key_puzzle_slots[slot_id]["target_x"]
-                        sy = self.key_puzzle_slots[slot_id]["target_y"]
+                slot_id = piece.get("slot_id")
+                if slot_id is not None and slot_id < len(self.key_puzzle_slots):
+                    sx = self.key_puzzle_slots[slot_id]["target_x"]
+                    sy = self.key_puzzle_slots[slot_id]["target_y"]
+                    
+                    if piece.get("inserting", False):
+                        # Visible sliding insertion: key shaft enters keyhole
+                        t = piece.get("insert_progress", 0.0)
+                        key_w, key_h = 38, 108
+                        start_y = sy - key_h + 10
+                        end_y = sy - 20
+                        curr_y = start_y + t * (end_y - start_y)
+                        
+                        clip_rect = pygame.Rect(sx - key_w // 2 - 10, sy - key_h - 20, key_w + 20, int(sy - (sy - key_h - 20) + 15))
+                        prev_clip = self.screen.get_clip()
+                        self.screen.set_clip(clip_rect)
+                        
+                        if self.puzzle_key_img:
+                            self.screen.blit(self.puzzle_key_img, (sx - key_w // 2, int(curr_y)))
+                            
+                        self.screen.set_clip(prev_clip)
+                    else:
+                        # Key is inserted: starts as a thin vertical line (facing back / edge-on), then turns horizontally!
                         angle = piece.get("turn_angle", 0.0)
+                        turn_prog = piece.get("turn_progress", 1.0 if not piece.get("turning", False) else 0.0)
+                        if handle_sprite:
+                            yaw_rad = math.radians(90.0 * (1.0 - turn_prog))
+                            scale_x = max(0.16, math.cos(yaw_rad))
+                            cur_w = max(12, int(76 * scale_x))
+                            cur_h = 76
+                            
+                            scaled_handle = pygame.transform.smoothscale(handle_sprite, (cur_w, cur_h))
+                            rotated_surf = pygame.transform.rotozoom(scaled_handle, -angle, 1.0)
+                            rot_rect = rotated_surf.get_rect(center=(sx, sy))
+                            self.screen.blit(rotated_surf, rot_rect)
                         
-                        # Rotate key centered on socket
-                        rotated_surf = pygame.transform.rotozoom(self.puzzle_key_img, -angle, 1.0)
-                        rot_rect = rotated_surf.get_rect(center=(sx, sy))
-                        self.screen.blit(rotated_surf, rot_rect)
-                        
-        # Draw dragged key
+        # Draw dragged key with golden glow
         if self.dragged_key and self.puzzle_key_img:
-            glow_surf = pygame.Surface((60, 110), pygame.SRCALPHA)
-            glow_surf.fill((255, 215, 0, 80))
-            self.screen.blit(glow_surf, (self.dragged_key["x"] - 8, self.dragged_key["y"] - 10))
+            glow_surf = pygame.Surface((64, 108), pygame.SRCALPHA)
+            glow_surf.fill((255, 215, 0, 90))
+            self.screen.blit(glow_surf, (self.dragged_key["x"] - 8, self.dragged_key["y"] - 8))
             self.screen.blit(self.puzzle_key_img, (self.dragged_key["x"], self.dragged_key["y"]))
-            pygame.draw.rect(self.screen, (250, 204, 21), (self.dragged_key["x"] - 2, self.dragged_key["y"] - 2, 48, 94), 2, border_radius=6)
+            pygame.draw.rect(self.screen, (250, 204, 21), (self.dragged_key["x"] - 2, self.dragged_key["y"] - 2, 52, 96), 2, border_radius=6)
             
         # Draw Solved Banner when all 6 keys are turned
         if self.key_puzzle_solved_time > 0:
             sol_surf = pygame.Surface((500, 70), pygame.SRCALPHA)
-            sol_surf.fill((16, 185, 129, 230))
+            sol_surf.fill((16, 185, 129, 235))
             sol_rect = pygame.Rect(box_x + (box_w - 500) // 2, box_y + (box_h - 70) // 2, 500, 70)
             self.screen.blit(sol_surf, sol_rect)
             pygame.draw.rect(self.screen, (255, 255, 255), sol_rect, 3, border_radius=12)
@@ -2397,7 +2475,6 @@ class Quarter4:
         btn_font = pygame.font.SysFont("Comic Sans MS", 13, bold=True)
         btn_txt = btn_font.render("Reset Keys", True, t_color)
         self.screen.blit(btn_txt, btn_txt.get_rect(center=reset_rect.center))
-        
         self.reset_btn_rect = reset_rect
 
     # Legacy alias
