@@ -10,35 +10,16 @@
         "level": "Grade 2",
         "gender": "male"
     },
-    "current_screen": "quarter4",
+    "current_screen": "stage_select",
     "tutorial_completed": true,
-    "timestamp": 1788316666.7273002,
-    "quarter_data": {
-        "quarter_name": "quarter4",
-        "map_name": "map11.txt",
-        "player_x": 699.1999999999994,
-        "player_y": 290.0,
-        "player_dir": "down",
-        "quiz_state": 0,
-        "quiz_station_index": 5,
-        "current_question_index": 4,
-        "stage_time_remaining": 481.17000000000263,
-        "completed": false,
-        "first_attempt_correct": {
-            "1": false,
-            "2": true,
-            "3": true,
-            "4": false,
-            "5": true,
-            "6": true
-        },
-        "station_attempts": {
-            "1": 1,
-            "2": 0,
-            "3": 0,
-            "4": 1,
-            "5": 0,
-            "6": 0
-        }
+    "timestamp": 1788408366.9207618,
+    "stage_select": {
+        "player_x": 832,
+        "player_y": 416,
+        "oldman_dialogue_state": 0,
+        "knight_dialogue_state": 0,
+        "skeleton_dialogue_state": 0,
+        "bromen_dialogue_state": 0,
+        "player_following_target": null
     }
 }

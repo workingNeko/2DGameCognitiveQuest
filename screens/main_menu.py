@@ -17,6 +17,8 @@ import mediapipe as mp
 import numpy as np
 import os
 import time
+import math
+import threading
 from ui.button import Button
 from screens.stageselect import StageSelect
 from screens.studentselect import StudentSelect
@@ -69,6 +71,17 @@ class MainMenu:
             print(f"⚠️ Camera init exception: {e}")
             self.cap = None
 
+        # Threaded Camera & MediaPipe Background Worker (60 FPS Unlocked)
+        self.camera_running = True
+        self.camera_lock = threading.Lock()
+        self.latest_raw_frame = None
+        self.latest_hand_landmarks = None
+        self.latest_hand_detected = False
+
+        if self.cap is not None:
+            self.camera_thread = threading.Thread(target=self._camera_worker, daemon=True)
+            self.camera_thread.start()
+
         # Gesture state
         self.current_gesture = "NO HAND"
         self.cursor_pos = (self.w // 2, self.h // 2)
@@ -81,9 +94,10 @@ class MainMenu:
         self.click_ready = False
         self.popup_state = None
 
-        # Cursor smoothing - USING WRIST (landmark 0) for stability
+        # Cursor smoothing & jitter suppression
         self.cursor_x = float(self.w // 2)
         self.cursor_y = float(self.h // 2)
+        self.target_history = []
 
         # Store last cursor position for when hand is lost
         self.last_cursor_x = self.w // 2
@@ -236,107 +250,156 @@ class MainMenu:
     # SIMPLE FIST DETECTION (USING FINGER TIPS)
     # ==========================================
 
-    def is_fist(self, hand_landmarks):
-        """Calibrated robust fist detection using Euclidean distance to wrist (landmark 0)"""
-        import math
-        wrist = hand_landmarks.landmark[0]
-        
-        # Calculate distance from wrist to finger PIP joints (middle knuckles: 6, 10, 14, 18)
-        # and finger tips (8, 12, 16, 20)
-        knuckle_dists = [
-            math.hypot(hand_landmarks.landmark[6].x - wrist.x, hand_landmarks.landmark[6].y - wrist.y),
-            math.hypot(hand_landmarks.landmark[10].x - wrist.x, hand_landmarks.landmark[10].y - wrist.y),
-            math.hypot(hand_landmarks.landmark[14].x - wrist.x, hand_landmarks.landmark[14].y - wrist.y),
-            math.hypot(hand_landmarks.landmark[18].x - wrist.x, hand_landmarks.landmark[18].y - wrist.y)
-        ]
-        
-        tip_dists = [
-            math.hypot(hand_landmarks.landmark[8].x - wrist.x, hand_landmarks.landmark[8].y - wrist.y),
-            math.hypot(hand_landmarks.landmark[12].x - wrist.x, hand_landmarks.landmark[12].y - wrist.y),
-            math.hypot(hand_landmarks.landmark[16].x - wrist.x, hand_landmarks.landmark[16].y - wrist.y),
-            math.hypot(hand_landmarks.landmark[20].x - wrist.x, hand_landmarks.landmark[20].y - wrist.y)
-        ]
-        
-        # A finger is truly folded/closed if its tip is closer to the wrist than its middle knuckle
-        closed_fingers = [tip_dists[i] < knuckle_dists[i] * 1.05 for i in range(4)]
-        
-        # Require at least 3 fingers to be folded into the palm
-        return sum(closed_fingers) >= 3
+    def is_fist(self, hand_data):
+        """Detect closed fist (all fingers folded into palm)"""
+        if hand_data is None:
+            return False
+        try:
+            if isinstance(hand_data, list):
+                wrist = hand_data[0]
+                knuckle_dists = [math.hypot(hand_data[k][0] - wrist[0], hand_data[k][1] - wrist[1]) for k in [6, 10, 14, 18]]
+                tip_dists = [math.hypot(hand_data[t][0] - wrist[0], hand_data[t][1] - wrist[1]) for t in [8, 12, 16, 20]]
+            else:
+                wrist = hand_data.landmark[0]
+                knuckle_dists = [math.hypot(hand_data.landmark[k].x - wrist.x, hand_data.landmark[k].y - wrist.y) for k in [6, 10, 14, 18]]
+                tip_dists = [math.hypot(hand_data.landmark[t].x - wrist.x, hand_data.landmark[t].y - wrist.y) for t in [8, 12, 16, 20]]
 
-    def is_peace_sign(self, hand_landmarks):
+            # A finger is truly folded/closed if its tip is closer to the wrist than its middle knuckle
+            closed_fingers = [tip_dists[i] < knuckle_dists[i] * 1.05 for i in range(4)]
+            return sum(closed_fingers) >= 3
+        except Exception:
+            return False
+
+    def is_peace_sign(self, hand_data):
         """Detect peace sign / digit 2 (index and middle fingers open, ring and pinky closed)"""
-        import math
-        wrist = hand_landmarks.landmark[0]
-        
-        # Knuckles (6, 10, 14, 18) and tips (8, 12, 16, 20)
-        knuckle_dists = [
-            math.hypot(hand_landmarks.landmark[6].x - wrist.x, hand_landmarks.landmark[6].y - wrist.y),
-            math.hypot(hand_landmarks.landmark[10].x - wrist.x, hand_landmarks.landmark[10].y - wrist.y),
-            math.hypot(hand_landmarks.landmark[14].x - wrist.x, hand_landmarks.landmark[14].y - wrist.y),
-            math.hypot(hand_landmarks.landmark[18].x - wrist.x, hand_landmarks.landmark[18].y - wrist.y)
-        ]
-        
-        tip_dists = [
-            math.hypot(hand_landmarks.landmark[8].x - wrist.x, hand_landmarks.landmark[8].y - wrist.y),
-            math.hypot(hand_landmarks.landmark[12].x - wrist.x, hand_landmarks.landmark[12].y - wrist.y),
-            math.hypot(hand_landmarks.landmark[16].x - wrist.x, hand_landmarks.landmark[16].y - wrist.y),
-            math.hypot(hand_landmarks.landmark[20].x - wrist.x, hand_landmarks.landmark[20].y - wrist.y)
-        ]
-        
-        # A finger is closed if its tip is closer to the wrist than its middle knuckle
-        closed_fingers = [tip_dists[i] < knuckle_dists[i] * 1.05 for i in range(4)]
-        
-        # Index and Middle open, Ring and Pinky closed
-        return (not closed_fingers[0]) and (not closed_fingers[1]) and closed_fingers[2] and closed_fingers[3]
+        if hand_data is None:
+            return False
+        try:
+            if isinstance(hand_data, list):
+                wrist = hand_data[0]
+                knuckle_dists = [math.hypot(hand_data[k][0] - wrist[0], hand_data[k][1] - wrist[1]) for k in [6, 10, 14, 18]]
+                tip_dists = [math.hypot(hand_data[t][0] - wrist[0], hand_data[t][1] - wrist[1]) for t in [8, 12, 16, 20]]
+            else:
+                wrist = hand_data.landmark[0]
+                knuckle_dists = [math.hypot(hand_data.landmark[k].x - wrist.x, hand_data.landmark[k].y - wrist.y) for k in [6, 10, 14, 18]]
+                tip_dists = [math.hypot(hand_data.landmark[t].x - wrist.x, hand_data.landmark[t].y - wrist.y) for t in [8, 12, 16, 20]]
+
+            # Index and Middle open, Ring and Pinky closed
+            closed_fingers = [tip_dists[i] < knuckle_dists[i] * 1.05 for i in range(4)]
+            return (not closed_fingers[0]) and (not closed_fingers[1]) and closed_fingers[2] and closed_fingers[3]
+        except Exception:
+            return False
+
+    def _camera_worker(self):
+        """Asynchronous background worker for camera frame grabbing and MediaPipe ML inference (60 FPS Locked)"""
+        while self.camera_running and self.cap is not None and self.cap.isOpened():
+            try:
+                ret, img = self.cap.read()
+                if not ret or img is None:
+                    time.sleep(0.01)
+                    continue
+
+                img = cv2.flip(img, 1)
+                rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+                preview = cv2.resize(img, self.camera_size)
+
+                results = self.hands.process(rgb)
+                coords = None
+                if results and results.multi_hand_landmarks:
+                    try:
+                        coords = [(float(lm.x), float(lm.y)) for lm in results.multi_hand_landmarks[0].landmark]
+                    except Exception:
+                        coords = None
+
+                with self.camera_lock:
+                    self.latest_raw_frame = preview
+                    self.latest_hand_coords = coords
+                    self.latest_hand_detected = (coords is not None and len(coords) == 21)
+
+            except Exception:
+                pass
+            time.sleep(0.005)
 
     def update_gesture(self):
-        """Update gesture detection - USING WRIST FOR CURSOR (landmark 0)"""
+        """Update gesture detection - Instant read from threaded worker (0ms latency, 60 FPS)"""
         if self.cap is None or not self.cap.isOpened():
             mouse_x, mouse_y = pygame.mouse.get_pos()
             self.cursor_pos = (mouse_x, mouse_y)
             return
 
-        ret, img = self.cap.read()
-        if not ret:
-            mouse_x, mouse_y = pygame.mouse.get_pos()
-            self.cursor_pos = (mouse_x, mouse_y)
-            return
+        try:
+            with self.camera_lock:
+                img_preview = self.latest_raw_frame
+                hand_coords = getattr(self, 'latest_hand_coords', None)
+                hand_detected = getattr(self, 'latest_hand_detected', False)
 
-        img = cv2.flip(img, 1)
-        rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+            if img_preview is not None:
+                self.camera_frame = img_preview
 
-        # Store camera frame for display
-        self.camera_frame = cv2.resize(img, self.camera_size)
+            if hand_detected and hand_coords and len(hand_coords) == 21:
+                self.last_hand_time = time.time()
 
-        results = self.hands.process(rgb)
+                # 1. Use Stable Palm Center (blend between wrist 0 and middle MCP 9)
+                wrist = hand_coords[0]
+                knuckle = hand_coords[9]
+                palm_x = wrist[0] * 0.35 + knuckle[0] * 0.65
+                palm_y = wrist[1] * 0.35 + knuckle[1] * 0.65
 
-        hand_detected = False
+                # Map palm position to screen coordinates with slight edge padding
+                raw_target_x = float(np.interp(palm_x, [0.12, 0.88], [0, self.w]))
+                raw_target_y = float(np.interp(palm_y, [0.12, 0.88], [0, self.h]))
 
-        if results.multi_hand_landmarks:
-            hand_detected = True
-            self.last_hand_time = time.time()
+                # 2. Rolling 3-frame filter to reject high-frequency sensor noise outliers
+                if not hasattr(self, 'target_history'):
+                    self.target_history = []
+                self.target_history.append((raw_target_x, raw_target_y))
+                if len(self.target_history) > 3:
+                    self.target_history.pop(0)
 
-            for hand_landmarks in results.multi_hand_landmarks:
-                # USE WRIST (landmark 0) FOR CURSOR - THIS WON'T MOVE WHEN YOU MAKE A FIST!
-                wrist = hand_landmarks.landmark[0]
+                target_x = sum(p[0] for p in self.target_history) / len(self.target_history)
+                target_y = sum(p[1] for p in self.target_history) / len(self.target_history)
 
-                # Map wrist position to screen coordinates
-                target_x = np.interp(wrist.x, [0.1, 0.9], [0, self.w])
-                target_y = np.interp(wrist.y, [0.1, 0.9], [0, self.h])
+                # 3. Distance from current smoothed cursor
+                dx = target_x - self.cursor_x
+                dy = target_y - self.cursor_y
+                dist = math.hypot(dx, dy)
 
-                # Smooth cursor movement
-                smooth = .50
-                self.cursor_x = self.cursor_x * (1 - smooth) + target_x * smooth
-                self.cursor_y = self.cursor_y * (1 - smooth) + target_y * smooth
-                self.cursor_pos = (int(self.cursor_x), int(self.cursor_y))
+                # Detect gestures first so we can stabilize the cursor during clicks
+                fist_detected = self.is_fist(hand_coords)
+                peace_detected = self.is_peace_sign(hand_coords)
+
+                # 4. Adaptive Jitter Deadzone & Silk-Smooth Interpolation
+                if fist_detected:
+                    # Click Stabilization: when holding a fist, lock cursor still to prevent drifting off buttons!
+                    if dist < 12.0:
+                        smooth = 0.0  # Rock-solid lock on target
+                    else:
+                        smooth = 0.06
+                elif dist < 4.5:
+                    # Deadzone: eliminate camera micro-tremors completely when hand is held steady
+                    smooth = 0.0
+                elif dist < 15.0:
+                    # Precision aim zone (hovering over buttons): silk-smooth interpolation
+                    smooth = 0.12
+                elif dist < 50.0:
+                    # Normal movement: fluid and natural
+                    smooth = 0.28
+                else:
+                    # Fast swipe: immediate responsive tracking
+                    smooth = 0.52
+
+                if smooth > 0.0:
+                    self.cursor_x = self.cursor_x * (1 - smooth) + target_x * smooth
+                    self.cursor_y = self.cursor_y * (1 - smooth) + target_y * smooth
+
+                # Clamp cursor within window
+                self.cursor_x = max(0.0, min(float(self.w), self.cursor_x))
+                self.cursor_y = max(0.0, min(float(self.h), self.cursor_y))
+                self.cursor_pos = (int(round(self.cursor_x)), int(round(self.cursor_y)))
 
                 # Store last position for grace period
                 self.last_cursor_x = self.cursor_x
                 self.last_cursor_y = self.cursor_y
-
-                # Detect if fist is closed (using finger tips)
-                fist_detected = self.is_fist(hand_landmarks)
-                peace_detected = self.is_peace_sign(hand_landmarks)
 
                 if fist_detected:
                     if self.fist_start_time == 0:
@@ -374,23 +437,23 @@ class MainMenu:
 
                 self.current_gesture = "FIST" if fist_detected else ("PEACE" if peace_detected else "OPEN")
 
-        # HAND GRACE PERIOD - keep cursor position for a while after hand is lost
-        if not hand_detected:
-            elapsed = time.time() - self.last_hand_time
-            if elapsed < self.HAND_GRACE:
-                # Keep last cursor position
-                self.cursor_pos = (int(self.last_cursor_x), int(self.last_cursor_y))
-                self.current_gesture = "NO HAND (GRACE)"
+            # HAND GRACE PERIOD - keep cursor position for a while after hand is lost
             else:
-                self.current_gesture = "NO HAND"
-                self.fist_start_time = 0
-                self.peace_start_time = 0
-                self.click_ready = False
+                elapsed = time.time() - self.last_hand_time
+                if elapsed < self.HAND_GRACE:
+                    # Keep last cursor position
+                    self.cursor_pos = (int(self.last_cursor_x), int(self.last_cursor_y))
+                    self.current_gesture = "NO HAND (GRACE)"
+                else:
+                    self.current_gesture = "NO HAND"
+                    self.fist_start_time = 0
+                    self.peace_start_time = 0
+                    self.click_ready = False
+        except Exception:
+            pass
 
     # ==========================================
     # CLICK HANDLER
-    # ==========================================
-
     def trigger_click(self):
         """Handle click at cursor position"""
         pos = self.cursor_pos
@@ -727,6 +790,7 @@ class MainMenu:
 
     def exit_game(self):
         print("🚪 EXIT clicked!")
+        self.camera_running = False
         from db.save_system import save_student_progress
         save_student_progress(self)
         
