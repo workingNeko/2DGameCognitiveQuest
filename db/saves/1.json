@@ -10,68 +10,25 @@
         "level": "Grade 2",
         "gender": "male"
     },
-    "current_screen": "quarter1",
+    "current_screen": "menu",
     "tutorial_completed": true,
     "completed_quarters": {
         "quarter1": {
             "completed": true,
-            "score": 100,
-            "percentage": 100.0,
+            "score": 20,
+            "percentage": 20.0,
             "total_questions": 5,
-            "timestamp": 1788543053.404555
+            "timestamp": 1788546370.3470387
         }
     },
-    "timestamp": 1788543053.404555,
+    "timestamp": 1788546478.501607,
     "stage_select": {
-        "player_x": 225.37999999999704,
-        "player_y": 416,
-        "oldman_dialogue_state": 2,
-        "knight_dialogue_state": 0,
+        "player_x": 804.8199999999998,
+        "player_y": 659.5400000000012,
+        "oldman_dialogue_state": 0,
+        "knight_dialogue_state": 2,
         "skeleton_dialogue_state": 0,
         "bromen_dialogue_state": 0,
         "player_following_target": false
-    },
-    "quarter_data": {
-        "quarter_name": "quarter1",
-        "map_name": "map1.txt",
-        "player_x": 666.1000000000131,
-        "player_y": 579.52,
-        "player_dir": "down",
-        "quiz_state": 0,
-        "quiz_station_index": 1,
-        "current_question_index": 1,
-        "stage_time_remaining": 574.811999999992,
-        "completed": false,
-        "first_attempt_correct": {
-            "1": false,
-            "2": false,
-            "3": true,
-            "4": true,
-            "5": true
-        },
-        "station_attempts": {
-            "1": 2,
-            "2": 2,
-            "3": 0,
-            "4": 0,
-            "5": 0
-        },
-        "shape_npcs": {
-            "4": {
-                "answered": false
-            },
-            "5": {
-                "answered": false
-            },
-            "3": {
-                "answered": false
-            },
-            "2": {
-                "answered": true
-            },
-            "1": {
-                "answered": true
-            }
-        }
     }
 }
