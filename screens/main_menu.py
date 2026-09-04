@@ -445,6 +445,10 @@ class MainMenu:
                     self.fist_start_time = 0
                     self.peace_start_time = 0
                     self.click_ready = False
+                    if pygame.mouse.get_focused():
+                        m_pos = pygame.mouse.get_pos()
+                        self.cursor_pos = m_pos
+                        self.cursor_x, self.cursor_y = float(m_pos[0]), float(m_pos[1])
         except Exception:
             pass
 
@@ -1154,6 +1158,10 @@ class MainMenu:
             elif event.key == pygame.K_RIGHTBRACKET:
                 self.audio_manager.set_music_volume(self.audio_manager.music_volume + 0.1)
                 return
+            elif event.key == pygame.K_c:
+                self.show_camera_overlay = not getattr(self, 'show_camera_overlay', False)
+                print(f"📷 Webcam preview box toggled: {self.show_camera_overlay}")
+                return
 
         # If popup is active, intercept clicks and key events!
         if self.popup_state:
@@ -1220,56 +1228,73 @@ class MainMenu:
     # ==========================================
 
     def draw_camera_feed(self):
-        if not getattr(self, 'show_camera_overlay', False):
-            return
+        # Always draw the real-time Gesture Status HUD badge!
+        self.draw_gesture_hud()
 
-        if self.camera_frame is not None:
+        # Only draw live raw video stream when camera preview is enabled (toggle with C key)
+        if getattr(self, 'show_camera_overlay', False) and self.camera_frame is not None:
             camera_frame_rgb = cv2.cvtColor(self.camera_frame, cv2.COLOR_BGR2RGB)
             camera_surface = pygame.surfarray.make_surface(np.swapaxes(camera_frame_rgb, 0, 1))
             camera_surface = pygame.transform.scale(camera_surface, (120, 90))
 
             camera_x = self.w - 130
-            camera_y = 10
+            camera_y = 52
 
-            pygame.draw.rect(self.screen, (255, 255, 255), (camera_x - 2, camera_y - 2, 124, 94), 3, border_radius=5)
+            pygame.draw.rect(self.screen, (255, 255, 255), (camera_x - 2, camera_y - 2, 124, 94), 2, border_radius=6)
             self.screen.blit(camera_surface, (camera_x, camera_y))
 
-            # Show gesture and progress
-            if self.fist_start_time > 0:
-                hold_time = time.time() - self.fist_start_time
-                progress = min(100, (hold_time / self.CLICK_HOLD_TIME) * 100)
+    def draw_gesture_hud(self):
+        """Always renders a sleek real-time Gesture Status badge so the student always sees hand/gesture status."""
+        hud_font = pygame.font.SysFont("Comic Sans MS", 12, bold=True)
 
-                bar_width = 100
-                bar_height = 8
-                bar_x = camera_x + 10
-                bar_y = camera_y + 90 - 15
-                pygame.draw.rect(self.screen, (100, 100, 100), (bar_x, bar_y, bar_width, bar_height))
-                pygame.draw.rect(self.screen, (0, 255, 0), (bar_x, bar_y, int(bar_width * progress / 100), bar_height))
+        if self.current_gesture == "FIST":
+            hold_time = time.time() - self.fist_start_time if self.fist_start_time > 0 else 0
+            pct = min(100, int((hold_time / self.CLICK_HOLD_TIME) * 100))
+            label = f"✊ FIST: HOLD {pct}%"
+            border_col = (250, 204, 21)   # Yellow
+            text_col = (254, 240, 138)
+            fill_pct = pct / 100.0
+        elif self.current_gesture == "PEACE":
+            hold_time = time.time() - getattr(self, 'peace_start_time', 0) if getattr(self, 'peace_start_time', 0) > 0 else 0
+            pct = min(100, int((hold_time / self.CLICK_HOLD_TIME) * 100))
+            label = f"✌️ PEACE: CONFIRM {pct}%"
+            border_col = (34, 197, 94)    # Emerald green
+            text_col = (187, 247, 208)
+            fill_pct = pct / 100.0
+        elif self.current_gesture == "OPEN":
+            label = "🖐️ HAND: OPEN"
+            border_col = (56, 189, 248)   # Cyan
+            text_col = (224, 242, 254)
+            fill_pct = 0.0
+        elif "GRACE" in self.current_gesture:
+            label = "🖐️ HOLDING..."
+            border_col = (148, 163, 184)
+            text_col = (241, 245, 249)
+            fill_pct = 0.0
+        else:
+            label = "👆 MOUSE / SEEKING HAND"
+            border_col = (100, 116, 139)  # Slate
+            text_col = (203, 213, 225)
+            fill_pct = 0.0
 
-                text = self.small_font.render(f"HOLD {int(progress)}%", True, (255, 255, 0))
-                text_x = camera_x + (120 - text.get_width()) // 2
-                text_y = camera_y + 90 - 35
-                self.screen.blit(text, (text_x, text_y))
-            elif getattr(self, 'peace_start_time', 0) > 0:
-                hold_time = time.time() - self.peace_start_time
-                progress = min(100, (hold_time / self.CLICK_HOLD_TIME) * 100)
+        pill_w = 184
+        pill_h = 32
+        pill_x = self.w - pill_w - 12
+        pill_y = 10
 
-                bar_width = 100
-                bar_height = 8
-                bar_x = camera_x + 10
-                bar_y = camera_y + 90 - 15
-                pygame.draw.rect(self.screen, (100, 100, 100), (bar_x, bar_y, bar_width, bar_height))
-                pygame.draw.rect(self.screen, (34, 197, 94), (bar_x, bar_y, int(bar_width * progress / 100), bar_height))
+        # Semi-transparent background with progress indicator
+        pill_surf = pygame.Surface((pill_w, pill_h), pygame.SRCALPHA)
+        pill_surf.fill((15, 23, 42, 225))
+        if fill_pct > 0:
+            fill_w = int((pill_w - 4) * fill_pct)
+            r, g, b = border_col
+            pygame.draw.rect(pill_surf, (r, g, b, 80), (2, 2, fill_w, pill_h - 4), border_radius=6)
+        pygame.draw.rect(pill_surf, border_col, (0, 0, pill_w, pill_h), 2, border_radius=8)
+        self.screen.blit(pill_surf, (pill_x, pill_y))
 
-                text = self.small_font.render(f"CONFIRM {int(progress)}%", True, (34, 197, 94))
-                text_x = camera_x + (120 - text.get_width()) // 2
-                text_y = camera_y + 90 - 35
-                self.screen.blit(text, (text_x, text_y))
-
-            gesture_text = self.small_font.render(self.current_gesture, True, (0, 255, 0))
-            text_x = camera_x + (120 - gesture_text.get_width()) // 2
-            text_y = camera_y + 5
-            self.screen.blit(gesture_text, (text_x, text_y))
+        # Text label
+        txt_surf = hud_font.render(label, True, text_col)
+        self.screen.blit(txt_surf, txt_surf.get_rect(center=(pill_x + pill_w // 2, pill_y + pill_h // 2 - 1)))
 
     def draw_cursor(self):
         if self.current_gesture != "NO HAND":
@@ -1295,6 +1320,16 @@ class MainMenu:
                 color = (255, 255, 255)  # White normally
                 pygame.draw.circle(self.screen, color, self.cursor_pos, 15, 2)
                 pygame.draw.circle(self.screen, (255, 100, 100), self.cursor_pos, 4)
+        else:
+            # Clean, always-visible mouse / targeting cursor so cursor never disappears!
+            pygame.draw.circle(self.screen, (255, 255, 255), self.cursor_pos, 13, 2)
+            pygame.draw.circle(self.screen, (56, 189, 248), self.cursor_pos, 4)
+            # Subtle crosshair pings
+            cx, cy = self.cursor_pos
+            pygame.draw.line(self.screen, (255, 255, 255), (cx - 17, cy), (cx - 13, cy), 2)
+            pygame.draw.line(self.screen, (255, 255, 255), (cx + 13, cy), (cx + 17, cy), 2)
+            pygame.draw.line(self.screen, (255, 255, 255), (cx, cy - 17), (cx, cy - 13), 2)
+            pygame.draw.line(self.screen, (255, 255, 255), (cx, cy + 13), (cx, cy + 17), 2)
 
     def draw(self):
         if self.current_screen == "menu":

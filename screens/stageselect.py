@@ -980,7 +980,30 @@ class StageSelect:
                 self.render_map[y] = ''.join(row_list)
 
     # ============================================================
-    # COLLISION - MODIFIED to use npc_positions_data
+    # QUARTER PROGRESSION & UNLOCK STATUS
+    # ============================================================
+    def is_quarter_completed(self, qid):
+        """Returns True if the specified quarter is recorded as completed."""
+        if not hasattr(self, 'completed_quarters') or not self.completed_quarters:
+            from db.save_system import get_completed_quarters
+            student_id = getattr(self.main_menu, 'student_id', None)
+            self.completed_quarters = get_completed_quarters(student_id)
+        return self.completed_quarters.get(qid, {}).get("completed", False)
+
+    def is_quarter_unlocked(self, qid):
+        """Sequential gating: Q1 is open; Q2 requires Q1; Q3 requires Q2; Q4 requires Q3."""
+        if qid == "quarter1":
+            return True
+        elif qid == "quarter2":
+            return self.is_quarter_completed("quarter1")
+        elif qid == "quarter3":
+            return self.is_quarter_completed("quarter2")
+        elif qid == "quarter4":
+            return self.is_quarter_completed("quarter3")
+        return False
+
+    # ============================================================
+    # COLLISION - MODIFIED to use npc_positions_data & Sequential Path Gating
     # ============================================================
     def can_move(self, nx, ny):
         col = int(nx // TILE_SIZE)
@@ -994,6 +1017,31 @@ class StageSelect:
         # Check if tile is walkable
         if tile not in self.WALKABLE_TILES:
             return False
+
+        # Sequential Corridor Barriers:
+        # 1. South Corridor to Quarter 2 (Row >= 16 in cols 25-27)
+        if col in (25, 26, 27) and row >= 16:
+            if not self.is_quarter_unlocked("quarter2"):
+                if self.locked_portal_banner_timer <= 0:
+                    self.locked_portal_banner_msg = "🔒 Complete Quarter 1 to unlock the path to Quarter 2!"
+                    self.locked_portal_banner_timer = 2.5
+                return False
+
+        # 2. East Corridor to Quarter 3 (Col >= 28 in rows 12-14)
+        if row in (12, 13, 14) and col >= 28:
+            if not self.is_quarter_unlocked("quarter3"):
+                if self.locked_portal_banner_timer <= 0:
+                    self.locked_portal_banner_msg = "🔒 Complete Quarter 2 to unlock the path to Quarter 3!"
+                    self.locked_portal_banner_timer = 2.5
+                return False
+
+        # 3. North Corridor to Quarter 4 (Row <= 11 in cols 25-27)
+        if col in (25, 26, 27) and row <= 11:
+            if not self.is_quarter_unlocked("quarter4"):
+                if self.locked_portal_banner_timer <= 0:
+                    self.locked_portal_banner_msg = "🔒 Complete Quarter 3 to unlock the path to Quarter 4!"
+                    self.locked_portal_banner_timer = 2.5
+                return False
 
         # Check if any NPC is at this position (obstacle)
         npc_positions = []
@@ -1055,6 +1103,11 @@ class StageSelect:
                 return True
             # Check if it's an up portal (goes to Quarter2)
             elif current_portal.direction == 'up':
+                if not self.is_quarter_unlocked('quarter2'):
+                    print("🔒 Quarter 2 Locked! Complete Quarter 1 first.")
+                    self.locked_portal_banner_msg = "🔒 Complete Quarter 1 to unlock Quarter 2!"
+                    self.locked_portal_banner_timer = 2.5
+                    return False
                 if self.knight_dialogue_state == 0:
                     print("🔒 Quarter 2 Portal Locked! Talk to the Knight first.")
                     self.locked_portal_banner_msg = "🔒 Talk to the Knight first to unlock Quarter 2!"
@@ -1073,6 +1126,11 @@ class StageSelect:
                 return True
             # Check if it's a right portal (goes to Quarter3)
             elif current_portal.direction == 'right':
+                if not self.is_quarter_unlocked('quarter3'):
+                    print("🔒 Quarter 3 Locked! Complete Quarter 2 first.")
+                    self.locked_portal_banner_msg = "🔒 Complete Quarter 2 to unlock Quarter 3!"
+                    self.locked_portal_banner_timer = 2.5
+                    return False
                 if self.skeleton_dialogue_state == 0:
                     print("🔒 Quarter 3 Portal Locked! Talk to the Skeleton first.")
                     self.locked_portal_banner_msg = "🔒 Talk to the Skeleton first to unlock Quarter 3!"
@@ -1091,6 +1149,11 @@ class StageSelect:
                 return True
             # Check if it's a down portal (goes to Quarter4)
             elif current_portal.direction == 'down':
+                if not self.is_quarter_unlocked('quarter4'):
+                    print("🔒 Quarter 4 Locked! Complete Quarter 3 first.")
+                    self.locked_portal_banner_msg = "🔒 Complete Quarter 3 to unlock Quarter 4!"
+                    self.locked_portal_banner_timer = 2.5
+                    return False
                 if self.bromen_dialogue_state == 0:
                     print("🔒 Quarter 4 Portal Locked! Talk to Bromen first.")
                     self.locked_portal_banner_msg = "🔒 Talk to Bromen first to unlock Quarter 4!"
@@ -1281,9 +1344,12 @@ class StageSelect:
                     self.main_menu.quarter1 = Quarter1(self.screen, self.main_menu, map_name)
                     self.main_menu.stage_select = None
             elif current_portal.direction == 'up':
-                if self.knight_dialogue_state == 0:
+                if not self.is_quarter_unlocked('quarter2'):
+                    self.locked_portal_banner_msg = "🔒 Complete Quarter 1 to unlock Quarter 2!"
+                    self.locked_portal_banner_timer = 2.0
+                elif self.knight_dialogue_state == 0:
                     self.locked_portal_banner_msg = "🔒 Talk to the Knight first to unlock Quarter 2!"
-                    self.locked_portal_banner_timer = 1.0
+                    self.locked_portal_banner_timer = 1.5
                 else:
                     map_name = "map5.txt"
                     print(f"🎮 Entering Quarter 2 - {map_name}")
@@ -1291,9 +1357,12 @@ class StageSelect:
                     self.main_menu.quarter2 = Quarter2(self.screen, self.main_menu, map_name)
                     self.main_menu.stage_select = None
             elif current_portal.direction == 'right':
-                if self.skeleton_dialogue_state == 0:
+                if not self.is_quarter_unlocked('quarter3'):
+                    self.locked_portal_banner_msg = "🔒 Complete Quarter 2 to unlock Quarter 3!"
+                    self.locked_portal_banner_timer = 2.0
+                elif self.skeleton_dialogue_state == 0:
                     self.locked_portal_banner_msg = "🔒 Talk to the Skeleton first to unlock Quarter 3!"
-                    self.locked_portal_banner_timer = 1.0
+                    self.locked_portal_banner_timer = 1.5
                 else:
                     map_name = "map7.txt"
                     print(f"🎮 Entering Quarter 3 - {map_name}")
@@ -1301,9 +1370,12 @@ class StageSelect:
                     self.main_menu.quarter3 = Quarter3(self.screen, self.main_menu, map_name)
                     self.main_menu.stage_select = None
             elif current_portal.direction == 'down':
-                if self.bromen_dialogue_state == 0:
+                if not self.is_quarter_unlocked('quarter4'):
+                    self.locked_portal_banner_msg = "🔒 Complete Quarter 3 to unlock Quarter 4!"
+                    self.locked_portal_banner_timer = 2.0
+                elif self.bromen_dialogue_state == 0:
                     self.locked_portal_banner_msg = "🔒 Talk to Bromen first to unlock Quarter 4!"
-                    self.locked_portal_banner_timer = 1.0
+                    self.locked_portal_banner_timer = 1.5
                 else:
                     map_name = "map11.txt"
                     print(f"🎮 Entering Quarter 4 - {map_name}")
@@ -1374,16 +1446,21 @@ class StageSelect:
                 bromen_center_y = self.npc_bromen_y + TILE_SIZE // 2
                 dist = math.hypot(player_center_x - bromen_center_x, player_center_y - bromen_center_y)
                 if dist < TILE_SIZE * 2.5:
-                    self.bromen_dialogue_state = 1
-                    self.bromen_dialogue_index = 0
-                    
-                    # Face each other
-                    dx = self.npc_bromen_x - self.player_x
-                    dy = self.npc_bromen_y - self.player_y
-                    if abs(dx) > abs(dy):
-                        self.player_dir = "left" if dx < 0 else "right"
+                    if not self.is_quarter_unlocked('quarter4'):
+                        if self.locked_portal_banner_timer <= 0:
+                            self.locked_portal_banner_msg = "🔒 Complete Quarter 3 to unlock Quarter 4!"
+                            self.locked_portal_banner_timer = 2.0
                     else:
-                        self.player_dir = "up" if dy < 0 else "down"
+                        self.bromen_dialogue_state = 1
+                        self.bromen_dialogue_index = 0
+                        
+                        # Face each other
+                        dx = self.npc_bromen_x - self.player_x
+                        dy = self.npc_bromen_y - self.player_y
+                        if abs(dx) > abs(dy):
+                            self.player_dir = "left" if dx < 0 else "right"
+                        else:
+                            self.player_dir = "up" if dy < 0 else "down"
 
         # Update Bromen walking to north portal (y <= 0)
         if self.bromen_dialogue_state == 2:
@@ -1490,24 +1567,29 @@ class StageSelect:
                 skeleton_center_y = self.npc_skeleton_y + TILE_SIZE // 2
                 dist = math.hypot(player_center_x - skeleton_center_x, player_center_y - skeleton_center_y)
                 if dist < TILE_SIZE * 2.5:
-                    self.skeleton_dialogue_state = 1
-                    self.skeleton_dialogue_index = 0
-                    
-                    # Face the Skeleton
-                    dx = self.npc_skeleton_x - self.player_x
-                    dy = self.npc_skeleton_y - self.player_y
-                    if abs(dx) > abs(dy):
-                        self.player_dir = "left" if dx < 0 else "right"
+                    if not self.is_quarter_unlocked('quarter3'):
+                        if self.locked_portal_banner_timer <= 0:
+                            self.locked_portal_banner_msg = "🔒 Complete Quarter 2 to unlock Quarter 3!"
+                            self.locked_portal_banner_timer = 2.0
                     else:
-                        self.player_dir = "up" if dy < 0 else "down"
+                        self.skeleton_dialogue_state = 1
+                        self.skeleton_dialogue_index = 0
                         
-                    # Face the Player
-                    dx_sk = self.player_x - self.npc_skeleton_x
-                    dy_sk = self.player_y - self.npc_skeleton_y
-                    if abs(dx_sk) > abs(dy_sk):
-                        self.npc_skeleton_dir = "right" if dx_sk > 0 else "left"
-                    else:
-                        self.npc_skeleton_dir = "down" if dy_sk > 0 else "up"
+                        # Face the Skeleton
+                        dx = self.npc_skeleton_x - self.player_x
+                        dy = self.npc_skeleton_y - self.player_y
+                        if abs(dx) > abs(dy):
+                            self.player_dir = "left" if dx < 0 else "right"
+                        else:
+                            self.player_dir = "up" if dy < 0 else "down"
+                            
+                        # Face the Player
+                        dx_sk = self.player_x - self.npc_skeleton_x
+                        dy_sk = self.player_y - self.npc_skeleton_y
+                        if abs(dx_sk) > abs(dy_sk):
+                            self.npc_skeleton_dir = "right" if dx_sk > 0 else "left"
+                        else:
+                            self.npc_skeleton_dir = "down" if dy_sk > 0 else "up"
                 else:
                     self.npc_skeleton_dir = "down"
 
@@ -1559,24 +1641,29 @@ class StageSelect:
                 knight_center_y = self.npc_knight_y + TILE_SIZE // 2
                 dist = math.hypot(player_center_x - knight_center_x, player_center_y - knight_center_y)
                 if dist < TILE_SIZE * 2.5:
-                    self.knight_dialogue_state = 1
-                    self.knight_dialogue_index = 0
-                    
-                    # Face the Knight
-                    dx = self.npc_knight_x - self.player_x
-                    dy = self.npc_knight_y - self.player_y
-                    if abs(dx) > abs(dy):
-                        self.player_dir = "left" if dx < 0 else "right"
+                    if not self.is_quarter_unlocked('quarter2'):
+                        if self.locked_portal_banner_timer <= 0:
+                            self.locked_portal_banner_msg = "🔒 Complete Quarter 1 to unlock Quarter 2!"
+                            self.locked_portal_banner_timer = 2.0
                     else:
-                        self.player_dir = "up" if dy < 0 else "down"
+                        self.knight_dialogue_state = 1
+                        self.knight_dialogue_index = 0
                         
-                    # Face the Player
-                    dx_kn = self.player_x - self.npc_knight_x
-                    dy_kn = self.player_y - self.npc_knight_y
-                    if abs(dx_kn) > abs(dy_kn):
-                        self.npc_knight_dir = "right" if dx_kn > 0 else "left"
-                    else:
-                        self.npc_knight_dir = "down" if dy_kn > 0 else "up"
+                        # Face the Knight
+                        dx = self.npc_knight_x - self.player_x
+                        dy = self.npc_knight_y - self.player_y
+                        if abs(dx) > abs(dy):
+                            self.player_dir = "left" if dx < 0 else "right"
+                        else:
+                            self.player_dir = "up" if dy < 0 else "down"
+                            
+                        # Face the Player
+                        dx_kn = self.player_x - self.npc_knight_x
+                        dy_kn = self.player_y - self.npc_knight_y
+                        if abs(dx_kn) > abs(dy_kn):
+                            self.npc_knight_dir = "right" if dx_kn > 0 else "left"
+                        else:
+                            self.npc_knight_dir = "down" if dy_kn > 0 else "up"
                 else:
                     self.npc_knight_dir = "down"
 
@@ -1635,7 +1722,11 @@ class StageSelect:
                             self.locked_portal_banner_msg = "🔒 Talk to the Old Man first to unlock Quarter 1!"
                             self.locked_portal_banner_timer = 2.0
                     elif portal.direction == 'right':
-                        if self.skeleton_dialogue_state >= 2 or self.player_following_target == 'skeleton':
+                        if not self.is_quarter_unlocked('quarter3'):
+                            if self.locked_portal_banner_timer <= 0:
+                                self.locked_portal_banner_msg = "🔒 Complete Quarter 2 to unlock Quarter 3!"
+                                self.locked_portal_banner_timer = 2.0
+                        elif self.skeleton_dialogue_state >= 2 or self.player_following_target == 'skeleton':
                             if hasattr(self.main_menu, 'audio_manager'):
                                 self.main_menu.audio_manager.play_sfx("portal_warp")
                             map_name = "map7.txt"
@@ -1648,7 +1739,11 @@ class StageSelect:
                             self.locked_portal_banner_msg = "🔒 Talk to the Skeleton first to unlock Quarter 3!"
                             self.locked_portal_banner_timer = 2.0
                     elif portal.direction == 'up':
-                        if self.knight_dialogue_state >= 2 or self.player_following_target == 'knight':
+                        if not self.is_quarter_unlocked('quarter2'):
+                            if self.locked_portal_banner_timer <= 0:
+                                self.locked_portal_banner_msg = "🔒 Complete Quarter 1 to unlock Quarter 2!"
+                                self.locked_portal_banner_timer = 2.0
+                        elif self.knight_dialogue_state >= 2 or self.player_following_target == 'knight':
                             if hasattr(self.main_menu, 'audio_manager'):
                                 self.main_menu.audio_manager.play_sfx("portal_warp")
                             map_name = "map5.txt"
@@ -1661,7 +1756,11 @@ class StageSelect:
                             self.locked_portal_banner_msg = "🔒 Talk to the Knight first to unlock Quarter 2!"
                             self.locked_portal_banner_timer = 2.0
                     elif portal.direction == 'down':
-                        if self.bromen_dialogue_state >= 2 or self.player_following_target == 'bromen':
+                        if not self.is_quarter_unlocked('quarter4'):
+                            if self.locked_portal_banner_timer <= 0:
+                                self.locked_portal_banner_msg = "🔒 Complete Quarter 3 to unlock Quarter 4!"
+                                self.locked_portal_banner_timer = 2.0
+                        elif self.bromen_dialogue_state >= 2 or self.player_following_target == 'bromen':
                             if hasattr(self.main_menu, 'audio_manager'):
                                 self.main_menu.audio_manager.play_sfx("portal_warp")
                             map_name = "map11.txt"
@@ -1846,6 +1945,83 @@ class StageSelect:
             self.anim_frame = 0
 
     # ============================================================
+    # DRAW CORRIDOR FORCEFIELDS / BARRIERS FOR LOCKED QUARTERS
+    # ============================================================
+    def draw_corridor_barriers(self):
+        """Renders animated glowing magical forcefields and lock badges across locked corridors."""
+        pulse = 0.6 + 0.4 * math.sin(self.frame_counter * 0.1)
+        font = pygame.font.SysFont("Comic Sans MS", max(10, int(10 * ZOOM)), bold=True)
+
+        barriers = []
+        # Quarter 2 (South corridor): row 16, cols 25, 26, 27
+        if not self.is_quarter_unlocked('quarter2'):
+            barriers.append({
+                'world_x': 25 * TILE_SIZE,
+                'world_y': 16 * TILE_SIZE,
+                'width_tiles': 3,
+                'height_tiles': 1,
+                'label': "🔒 LOCKED: Need Q1",
+                'color': (239, 68, 68)
+            })
+
+        # Quarter 3 (East corridor): col 28, rows 12, 13, 14
+        if not self.is_quarter_unlocked('quarter3'):
+            barriers.append({
+                'world_x': 28 * TILE_SIZE,
+                'world_y': 12 * TILE_SIZE,
+                'width_tiles': 1,
+                'height_tiles': 3,
+                'label': "🔒 LOCKED: Need Q2",
+                'color': (239, 68, 68)
+            })
+
+        # Quarter 4 (North corridor): row 11, cols 25, 26, 27
+        if not self.is_quarter_unlocked('quarter4'):
+            barriers.append({
+                'world_x': 25 * TILE_SIZE,
+                'world_y': 11 * TILE_SIZE,
+                'width_tiles': 3,
+                'height_tiles': 1,
+                'label': "🔒 LOCKED: Need Q3",
+                'color': (239, 68, 68)
+            })
+
+        for b in barriers:
+            bx = (b['world_x'] - self.camera_x) * ZOOM
+            by = (b['world_y'] - self.camera_y) * ZOOM
+            bw = int(b['width_tiles'] * TILE_SIZE * ZOOM)
+            bh = int(b['height_tiles'] * TILE_SIZE * ZOOM)
+
+            # Only draw if on screen
+            if -bw <= bx <= self.width + bw and -bh <= by <= self.height + bh:
+                # Glowing translucent forcefield surface
+                alpha_surface = pygame.Surface((bw, bh), pygame.SRCALPHA)
+                alpha_val = int(115 + 75 * pulse)
+                r, g, bl = b['color']
+                alpha_surface.fill((r, g, bl, alpha_val))
+
+                # Energy beam pulse in the center
+                if b['width_tiles'] > b['height_tiles']:
+                    pygame.draw.line(alpha_surface, (255, 255, 255, 210), (0, bh // 2), (bw, bh // 2), 2)
+                else:
+                    pygame.draw.line(alpha_surface, (255, 255, 255, 210), (bw // 2, 0), (bw // 2, bh), 2)
+                self.screen.blit(alpha_surface, (bx, by))
+
+                # Glowing border
+                pygame.draw.rect(self.screen, (255, 120, 120), (bx, by, bw, bh), 2, border_radius=4)
+
+                # Floating lock badge in center of barrier
+                badge_w, badge_h = int(135 * ZOOM), int(22 * ZOOM)
+                center_x = bx + bw / 2
+                center_y = by + bh / 2
+                badge_rect = pygame.Rect(center_x - badge_w // 2, center_y - badge_h // 2, badge_w, badge_h)
+                pygame.draw.rect(self.screen, (15, 23, 42), badge_rect, border_radius=6)
+                pygame.draw.rect(self.screen, (239, 68, 68), badge_rect, 2, border_radius=6)
+
+                lbl_surf = font.render(b['label'], True, (254, 202, 202))
+                self.screen.blit(lbl_surf, lbl_surf.get_rect(center=badge_rect.center))
+
+    # ============================================================
     # DRAW TILE
     # ============================================================
     def draw_tile(self, c, world_x, world_y):
@@ -1932,7 +2108,10 @@ class StageSelect:
         for portal in self.portals:
             portal.draw(self.screen, self.camera_x, self.camera_y, ZOOM, self.width, self.height)
 
-        # Draw Completed Quarter Badges above portals
+        # Draw Corridor Energy Forcefields for Locked Quarters
+        self.draw_corridor_barriers()
+
+        # Draw Portal Status Badges above portals (CLEARED / OPEN / LOCKED)
         DIR_MAP = {
             'left': 'quarter1',
             'up': 'quarter2',
@@ -1941,22 +2120,36 @@ class StageSelect:
         }
         for portal in self.portals:
             qid = DIR_MAP.get(portal.direction)
-            if qid and self.completed_quarters.get(qid, {}).get("completed", False):
+            if qid:
                 sx = (portal.get_center_x() - self.camera_x) * ZOOM
                 sy = (portal.get_world_y() - self.camera_y) * ZOOM
                 bob = math.sin(self.frame_counter * 0.08) * 3
                 
-                badge_w, badge_h = 100, 24
+                badge_w, badge_h = int(105 * ZOOM), int(24 * ZOOM)
                 bx = sx - badge_w // 2
                 by = sy - badge_h - 8 + bob
-                
                 badge_rect = pygame.Rect(bx, by, badge_w, badge_h)
-                pygame.draw.rect(self.screen, (15, 23, 42), badge_rect, border_radius=6)
-                pygame.draw.rect(self.screen, (255, 215, 0), badge_rect, 2, border_radius=6)
                 
                 b_font = pygame.font.SysFont("Comic Sans MS", int(11 * ZOOM), bold=True)
-                b_txt = b_font.render("★ CLEARED", True, (255, 215, 0))
-                self.screen.blit(b_txt, b_txt.get_rect(center=badge_rect.center))
+                
+                if self.is_quarter_completed(qid):
+                    # ★ CLEARED (Gold)
+                    pygame.draw.rect(self.screen, (15, 23, 42), badge_rect, border_radius=6)
+                    pygame.draw.rect(self.screen, (255, 215, 0), badge_rect, 2, border_radius=6)
+                    b_txt = b_font.render("★ CLEARED", True, (255, 215, 0))
+                    self.screen.blit(b_txt, b_txt.get_rect(center=badge_rect.center))
+                elif self.is_quarter_unlocked(qid):
+                    # ▶ OPEN (Emerald green)
+                    pygame.draw.rect(self.screen, (15, 23, 42), badge_rect, border_radius=6)
+                    pygame.draw.rect(self.screen, (34, 197, 94), badge_rect, 2, border_radius=6)
+                    b_txt = b_font.render("▶ OPEN", True, (34, 197, 94))
+                    self.screen.blit(b_txt, b_txt.get_rect(center=badge_rect.center))
+                else:
+                    # 🔒 LOCKED (Ruby red)
+                    pygame.draw.rect(self.screen, (15, 23, 42), badge_rect, border_radius=6)
+                    pygame.draw.rect(self.screen, (239, 68, 68), badge_rect, 2, border_radius=6)
+                    b_txt = b_font.render("🔒 LOCKED", True, (248, 113, 113))
+                    self.screen.blit(b_txt, b_txt.get_rect(center=badge_rect.center))
 
         # Draw NPCs (before player so player is on top)
         # Bromen - Idle, Walking Up, or Quest Exclamation
@@ -1973,8 +2166,8 @@ class StageSelect:
                     self.draw_npc_animated(self.npc_bromen_x, self.npc_bromen_y,
                                            self.npc_bromen_sprites, self.npc_bromen_anim_frame)
                 
-                # Draw quest exclamation mark above Bromen's head if dialogue hasn't started and player is in proximity
-                if self.bromen_dialogue_state == 0:
+                # Draw quest exclamation mark above Bromen's head if dialogue hasn't started and quarter is unlocked
+                if self.bromen_dialogue_state == 0 and self.is_quarter_unlocked('quarter4'):
                     player_center_x = self.player_x + TILE_SIZE // 2
                     player_center_y = self.player_y + TILE_SIZE // 2
                     bro_center_x = self.npc_bromen_x + TILE_SIZE // 2
@@ -2087,8 +2280,8 @@ class StageSelect:
                     self.draw_npc_static(self.npc_skeleton_x, self.npc_skeleton_y,
                                          self.npc_skeleton_sprite)
                 
-                # Draw quest exclamation mark above Skeleton's head if dialogue hasn't started and player is in proximity
-                if self.skeleton_dialogue_state == 0:
+                # Draw quest exclamation mark above Skeleton's head if dialogue hasn't started and quarter is unlocked
+                if self.skeleton_dialogue_state == 0 and self.is_quarter_unlocked('quarter3'):
                     player_center_x = self.player_x + TILE_SIZE // 2
                     player_center_y = self.player_y + TILE_SIZE // 2
                     skel_center_x = self.npc_skeleton_x + TILE_SIZE // 2
@@ -2138,8 +2331,8 @@ class StageSelect:
                     self.draw_npc_static(self.npc_knight_x, self.npc_knight_y,
                                          self.npc_knight_sprite)
                 
-                # Draw quest exclamation mark above Knight's head if dialogue hasn't started and player is in proximity
-                if self.knight_dialogue_state == 0:
+                # Draw quest exclamation mark above Knight's head if dialogue hasn't started and quarter is unlocked
+                if self.knight_dialogue_state == 0 and self.is_quarter_unlocked('quarter2'):
                     player_center_x = self.player_x + TILE_SIZE // 2
                     player_center_y = self.player_y + TILE_SIZE // 2
                     knt_center_x = self.npc_knight_x + TILE_SIZE // 2
@@ -2265,6 +2458,26 @@ class StageSelect:
             s_col = (255, 215, 0) if is_on else (100, 116, 139)
             s_surf = hud_font.render("★", True, s_col)
             self.screen.blit(s_surf, (star_x + i * 18, hud_y + 6))
+
+        # Draw Locked Notification Banner if active
+        if self.locked_portal_banner_timer > 0 and self.locked_portal_banner_msg:
+            banner_font = pygame.font.SysFont("Comic Sans MS", 14, bold=True)
+            msg_surf = banner_font.render(self.locked_portal_banner_msg, True, (254, 242, 242))
+            
+            bw = msg_surf.get_width() + 40
+            bh = 38
+            bx = (self.width - bw) // 2
+            by = 56
+            
+            b_surf = pygame.Surface((bw, bh), pygame.SRCALPHA)
+            b_surf.fill((15, 23, 42, 238))
+            pygame.draw.rect(b_surf, (239, 68, 68), (0, 0, bw, bh), 2, border_radius=8)
+            self.screen.blit(b_surf, (bx, by))
+            
+            # Drop shadow + main banner text
+            sh_surf = banner_font.render(self.locked_portal_banner_msg, True, (0, 0, 0))
+            self.screen.blit(sh_surf, (bx + 21, by + 9))
+            self.screen.blit(msg_surf, (bx + 20, by + 8))
 
         # Reopen Grand Finale Button if all 4 completed
         if is_game_completed(student_id) and not self.grand_finale_active:

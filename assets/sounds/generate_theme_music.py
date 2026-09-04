@@ -302,6 +302,31 @@ def add_percussion(track, start_time, perc_type, pan=0.0, vol=0.4, sample_rate=S
         t = np.linspace(0, dur, n, False)
         hit = (np.sin(2 * np.pi * 850 * t) + 0.3 * np.sin(2 * np.pi * 1350 * t)) * np.exp(-t * 85) * vol
 
+    elif perc_type == 'doumbek_dum':
+        # Punchy low desert doumbek bass strike
+        dur = 0.22
+        n = int(dur * sample_rate)
+        t = np.linspace(0, dur, n, False)
+        freq = 65.0 + 75.0 * np.exp(-t * 24.0)
+        phase = 2 * np.pi * np.cumsum(freq) / sample_rate
+        hit = np.sin(phase) * np.exp(-t * 14.0) * vol * 1.3
+
+    elif perc_type == 'doumbek_tak':
+        # Sharp resonant rim slap
+        dur = 0.08
+        n = int(dur * sample_rate)
+        t = np.linspace(0, dur, n, False)
+        noise = (np.random.rand(n) * 2.0 - 1.0) * 0.35
+        tone = (0.65 * np.sin(2 * np.pi * 1250 * t) + 0.35 * np.sin(2 * np.pi * 2400 * t))
+        hit = (tone + noise) * np.exp(-t * 55.0) * vol
+
+    elif perc_type == 'finger_cymbal':
+        # Shimmering bronze desert zill ring
+        dur = 0.55
+        n = int(dur * sample_rate)
+        t = np.linspace(0, dur, n, False)
+        hit = (0.5 * np.sin(2 * np.pi * 3800 * t) + 0.5 * np.sin(2 * np.pi * 5400 * t)) * np.exp(-t * 8.5) * vol
+
     else:
         dur = 0.05
         n = int(dur * sample_rate)
@@ -497,95 +522,151 @@ def generate_quarter2(output_path):
 
 
 # ======================================================================
-# 3. QUARTER 3: "Oasis Mirage" (Fractions & Sun Temple / Desert Theme)
-# Calm & atmospheric desert oasis: Warm ambient pads, relaxing harp arpeggios,
-# soft wind chimes, and a gentle, soothing desert ney melody.
-# Scale: G Minor / G Dorian (Calm, meditative, shimmering)
+# ======================================================================
+# 3. QUARTER 3: "Caravan of the Golden Dunes" (Fractions & Sun Temple / Desert Theme)
+# Energetic, adventurous, and rhythmic Middle Eastern desert caravan theme:
+# Driving doumbek percussion (Dum-Tak-Tak rhythm), syncopated Kanun/Oud plucked riff,
+# soaring ney flute & desert strings melody, shimmering zills, and deep desert bass.
+# Scale: G Hijaz / G Harmonic Minor (Adventurous, exotic, rhythmic)
 # ======================================================================
 def generate_quarter3(output_path):
-    bpm = 76
+    bpm = 112
     beat_dur = 60.0 / bpm
     bars = 8
     total_duration = bars * 4 * beat_dur
     total_samples = int(total_duration * SAMPLE_RATE)
     track = np.zeros((total_samples, 2), dtype=np.float32)
 
-    # 1. Warm Ambient Desert Pads (Floating, tranquil atmospheric breeze)
+    # 1. Driving Middle Eastern Percussion (Doumbek Dum/Tak, Shakers & Finger Cymbals)
+    for bar in range(bars):
+        b_start = bar * 4.0
+        # Classic Maqsum / Malfuf Doumbek rhythm:
+        # Beat 0: Low resonant Dum
+        add_percussion(track, (b_start + 0.0) * beat_dur, 'doumbek_dum', pan=-0.15, vol=0.55)
+        # Beat 1: Sharp Tak
+        add_percussion(track, (b_start + 1.0) * beat_dur, 'doumbek_tak', pan=0.20, vol=0.45)
+        # Beat 1.5: Syncopated Tak
+        add_percussion(track, (b_start + 1.5) * beat_dur, 'doumbek_tak', pan=-0.20, vol=0.38)
+        # Beat 2.0: Deep Dum
+        add_percussion(track, (b_start + 2.0) * beat_dur, 'doumbek_dum', pan=0.10, vol=0.48)
+        # Beat 3.0: Sharp Tak
+        add_percussion(track, (b_start + 3.0) * beat_dur, 'doumbek_tak', pan=0.22, vol=0.42)
+        # Beat 3.5: Rapid ornament Tak-ka
+        add_percussion(track, (b_start + 3.5) * beat_dur, 'doumbek_tak', pan=-0.18, vol=0.36)
+
+        # Bronze Finger Cymbals (Zills) on downbeats of alternating bars
+        if bar % 2 == 0:
+            add_percussion(track, (b_start + 0.0) * beat_dur, 'finger_cymbal', pan=0.35, vol=0.32)
+        if bar % 4 == 3:
+            add_percussion(track, (b_start + 3.0) * beat_dur, 'finger_cymbal', pan=-0.35, vol=0.35)
+
+    # Crisp continuous desert sand shaker groove (16th notes)
+    for step in range(bars * 16):
+        t = step * (beat_dur * 0.25)
+        pan = -0.25 if step % 2 == 0 else 0.25
+        vol = 0.16 if step % 4 == 0 else (0.12 if step % 2 == 0 else 0.08)
+        add_percussion(track, t, 'shaker', pan=pan, vol=vol)
+
+    # 2. Warm Desert Atmospheric Chords & Strings Underpinning
+    # Chords: Gm -> Cm/G -> Eb -> D7(b9) -> Gm -> Cm -> D7 -> Gm
     ambient_chords = [
-        (0.0, 4.0, ['G3', 'D4', 'F4', 'A4']),      # Gm9
-        (4.0, 4.0, ['G3', 'Bb3', 'D4', 'F4']),     # Gm7
-        (8.0, 4.0, ['Eb3', 'G3', 'Bb3', 'D4']),    # Ebmaj7
-        (12.0, 4.0, ['Eb3', 'Bb3', 'D4', 'F4']),   # Ebmaj9
-        (16.0, 4.0, ['F3', 'A3', 'C4', 'G4']),     # Fadd9
-        (20.0, 4.0, ['F3', 'C4', 'Eb4', 'A4']),    # F7
-        (24.0, 4.0, ['D3', 'F#3', 'A3', 'C4']),    # D7
-        (28.0, 4.0, ['G3', 'D4', 'G4', 'Bb4'])     # Gm
+        (0.0, 4.0, ['G3', 'D4', 'G4', 'Bb4']),       # Gm
+        (4.0, 4.0, ['G3', 'C4', 'Eb4', 'G4']),       # Cm
+        (8.0, 4.0, ['Eb3', 'G3', 'Bb3', 'Eb4']),     # Eb
+        (12.0, 4.0, ['D3', 'F#3', 'A3', 'C4']),      # D7
+        (16.0, 4.0, ['G3', 'D4', 'G4', 'Bb4']),      # Gm
+        (20.0, 4.0, ['C3', 'G3', 'C4', 'Eb4']),      # Cm
+        (24.0, 4.0, ['D3', 'F#3', 'C4', 'Eb4']),     # D7(b9)
+        (28.0, 4.0, ['G2', 'D3', 'G3', 'B3'])        # G Picardy Major / Hijaz resolution
     ]
     for start_beat, dur_beats, chord in ambient_chords:
         for n_name in chord:
-            add_note(track, start_beat * beat_dur, dur_beats * beat_dur * 0.98,
-                     note_to_freq(n_name), 'pad', pan=-0.25, vol=0.18)
-            add_note(track, start_beat * beat_dur, dur_beats * beat_dur * 0.98,
-                     note_to_freq(n_name), 'strings', pan=0.25, vol=0.14)
+            add_note(track, start_beat * beat_dur, dur_beats * beat_dur * 0.96,
+                     note_to_freq(n_name), 'pad', pan=-0.22, vol=0.16)
+            add_note(track, start_beat * beat_dur, dur_beats * beat_dur * 0.94,
+                     note_to_freq(n_name), 'strings', pan=0.22, vol=0.14)
 
-    # 2. Relaxing Desert Harp / Kanun Arpeggios (Meditative oasis water ripples)
-    harp_arpeggios = [
-        ['G3', 'D4', 'A4', 'Bb4', 'D5', 'Bb4', 'A4', 'D4'],
-        ['G3', 'Bb3', 'F4', 'G4', 'D5', 'G4', 'F4', 'Bb3'],
-        ['Eb3', 'Bb3', 'D4', 'G4', 'D5', 'G4', 'D4', 'Bb3'],
-        ['Eb3', 'G3', 'F4', 'G4', 'D5', 'Bb4', 'G4', 'F4'],
-        ['F3', 'C4', 'G4', 'A4', 'C5', 'A4', 'G4', 'C4'],
-        ['F3', 'A3', 'Eb4', 'F4', 'C5', 'A4', 'Eb4', 'A3'],
-        ['D3', 'A3', 'C4', 'F#4', 'A4', 'F#4', 'C4', 'A3'],
-        ['G2', 'D3', 'G3', 'Bb3', 'D4', 'G4', 'Bb4', 'D5']
+    # 3. Rhythmic Desert Bass (Driving, syncopated camel caravan pulse)
+    desert_bass = [
+        # Bar 1 (Gm)
+        (0.0, 'G1'), (1.5, 'G1'), (2.0, 'D2'), (3.0, 'G1'),
+        # Bar 2 (Cm)
+        (4.0, 'C2'), (5.5, 'C2'), (6.0, 'G1'), (7.0, 'Eb2'),
+        # Bar 3 (Eb)
+        (8.0, 'Eb1'), (9.5, 'Eb1'), (10.0, 'Bb1'), (11.0, 'D2'),
+        # Bar 4 (D7)
+        (12.0, 'D2'), (13.5, 'D2'), (14.0, 'A1'), (15.0, 'F#1'),
+        # Bar 5 (Gm)
+        (16.0, 'G1'), (17.5, 'G1'), (18.0, 'D2'), (19.0, 'G1'),
+        # Bar 6 (Cm)
+        (20.0, 'C2'), (21.5, 'C2'), (22.0, 'Eb2'), (23.0, 'C2'),
+        # Bar 7 (D7)
+        (24.0, 'D2'), (25.5, 'D2'), (26.0, 'F#1'), (27.0, 'A1'),
+        # Bar 8 (Gm / G)
+        (28.0, 'G1'), (29.5, 'G1'), (30.0, 'D2'), (31.0, 'G1')
     ]
-    for bar_idx, bar in enumerate(harp_arpeggios):
+    for b_pos, n_name in desert_bass:
+        add_note(track, b_pos * beat_dur, beat_dur * 0.82,
+                 note_to_freq(n_name), 'bass', pan=0.0, vol=0.48)
+
+    # 4. Syncopated Kanun / Plucked Oud Riff (Intricate Arabian arpeggios)
+    kanun_arpeggios = [
+        # Bar 1: G Hijaz riff
+        ['G3', 'D4', 'G4', 'Bb4', 'A4', 'G4', 'F#4', 'G4'],
+        # Bar 2: Cm cadence
+        ['C4', 'Eb4', 'G4', 'C5', 'Bb4', 'Ab4', 'G4', 'Eb4'],
+        # Bar 3: Eb flourish
+        ['Eb3', 'Bb3', 'Eb4', 'G4', 'Bb4', 'G4', 'Eb4', 'G4'],
+        # Bar 4: D Hijaz turnaround
+        ['D3', 'A3', 'D4', 'F#4', 'Ab4', 'F#4', 'Eb4', 'D4'],
+        # Bar 5: G Hijaz ascent
+        ['G3', 'D4', 'G4', 'B4', 'C5', 'D5', 'Eb5', 'D5'],
+        # Bar 6: Cm syncopation
+        ['C4', 'G4', 'C5', 'Eb5', 'D5', 'C5', 'Bb4', 'C5'],
+        # Bar 7: D7 fast ornament
+        ['D4', 'F#4', 'A4', 'C5', 'Eb5', 'D5', 'C5', 'F#4'],
+        # Bar 8: Final G resolution
+        ['G3', 'D4', 'G4', 'B4', 'D5', 'B4', 'G4', 'D4']
+    ]
+    for bar_idx, bar in enumerate(kanun_arpeggios):
         bar_start = bar_idx * 4 * beat_dur
         for step_idx, note_name in enumerate(bar):
             t = bar_start + step_idx * (beat_dur * 0.5)
-            pan = -0.35 if step_idx % 2 == 0 else 0.30
-            add_note(track, t, beat_dur * 1.2, note_to_freq(note_name), 'fm_pluck', pan=pan, vol=0.26)
+            pan = -0.32 if step_idx % 2 == 0 else 0.28
+            # Crisp plucked resonance
+            add_note(track, t, beat_dur * 0.85, note_to_freq(note_name), 'fm_pluck', pan=pan, vol=0.28)
+            add_note(track, t, beat_dur * 0.45, note_to_freq(note_name), 'pizzicato', pan=-pan, vol=0.18)
 
-    # 3. Soothing, Meditative Desert Flute Melody (Calm, peaceful, breathing)
-    calm_melody = [
-        # Bar 1: D5 (2.0), F5 (1.5), G5 (0.5)
-        (0.0, 2.0, 'D5', 0.26), (2.0, 1.5, 'F5', 0.28), (3.5, 0.5, 'G5', 0.24),
-        # Bar 2: A5 (2.5), G5 (1.5)
-        (4.0, 2.5, 'A5', 0.30), (6.5, 1.5, 'G5', 0.26),
-        # Bar 3: Bb5 (2.0), A5 (1.0), F5 (1.0)
-        (8.0, 2.0, 'Bb5', 0.32), (10.0, 1.0, 'A5', 0.28), (11.0, 1.0, 'F5', 0.26),
-        # Bar 4: G5 (3.5 beats held peaceful tone)
-        (12.0, 3.5, 'G5', 0.30),
-        # Bar 5: D5 (1.5), F5 (1.5), A5 (1.0)
-        (16.0, 1.5, 'D5', 0.26), (17.5, 1.5, 'F5', 0.28), (19.0, 1.0, 'A5', 0.30),
-        # Bar 6: C6 (2.0), Bb5 (1.0), A5 (1.0)
-        (20.0, 2.0, 'C6', 0.32), (22.0, 1.0, 'Bb5', 0.28), (23.0, 1.0, 'A5', 0.26),
-        # Bar 7: F#5 (2.0), A5 (1.5), C6 (0.5)
-        (24.0, 2.0, 'F#5', 0.28), (26.0, 1.5, 'A5', 0.30), (27.5, 0.5, 'C6', 0.26),
-        # Bar 8: G5 (3.5 beats calm resting resolution)
-        (28.0, 3.5, 'G5', 0.32)
+    # 5. Soaring Ney Flute & Strings Lead Melody (Exotic, adventurous, heroic)
+    desert_lead = [
+        # Bar 1: (0-4 beats)
+        (0.0, 1.0, 'D5', 0.32), (1.0, 0.5, 'G5', 0.34), (1.5, 1.0, 'A5', 0.36), (2.5, 0.5, 'Bb5', 0.38), (3.0, 1.0, 'A5', 0.34),
+        # Bar 2: (4-8 beats)
+        (4.0, 1.5, 'G5', 0.36), (5.5, 0.5, 'Eb5', 0.32), (6.0, 1.0, 'F5', 0.32), (7.0, 1.0, 'G5', 0.35),
+        # Bar 3: (8-12 beats)
+        (8.0, 1.0, 'Eb5', 0.32), (9.0, 0.5, 'G5', 0.34), (9.5, 1.0, 'Bb5', 0.38), (10.5, 0.5, 'C6', 0.40), (11.0, 1.0, 'Bb5', 0.36),
+        # Bar 4: (12-16 beats) D Hijaz flourish (F# and Ab)
+        (12.0, 1.5, 'A5', 0.38), (13.5, 0.5, 'Ab5', 0.34), (14.0, 1.0, 'F#5', 0.36), (15.0, 1.0, 'D5', 0.32),
+        # Bar 5: (16-20 beats) Heroic octave leap
+        (16.0, 1.0, 'D5', 0.32), (17.0, 1.0, 'G5', 0.36), (18.0, 1.5, 'D6', 0.42), (19.5, 0.5, 'C6', 0.38),
+        # Bar 6: (20-24 beats)
+        (20.0, 1.5, 'Eb6', 0.42), (21.5, 0.5, 'D6', 0.38), (22.0, 1.0, 'C6', 0.36), (23.0, 1.0, 'Bb5', 0.34),
+        # Bar 7: (24-28 beats)
+        (24.0, 1.0, 'C6', 0.38), (25.0, 1.0, 'Bb5', 0.36), (26.0, 1.0, 'A5', 0.36), (27.0, 1.0, 'F#5', 0.34),
+        # Bar 8: (28-32 beats) Grand triumphant resolution on G5
+        (28.0, 3.5, 'G5', 0.42)
     ]
-    for start_beat, dur_beats, note_name, vol in calm_melody:
-        add_note(track, start_beat * beat_dur, dur_beats * beat_dur * 0.96,
-                 note_to_freq(note_name), 'ney', pan=0.15, vol=vol)
+    for start_beat, dur_beats, note_name, vol in desert_lead:
+        # Ney flute lead
+        add_note(track, start_beat * beat_dur, dur_beats * beat_dur * 0.95,
+                 note_to_freq(note_name), 'ney', pan=0.10, vol=vol)
+        # Doubled by desert strings
+        add_note(track, start_beat * beat_dur, dur_beats * beat_dur * 0.90,
+                 note_to_freq(note_name), 'strings', pan=-0.15, vol=vol * 0.70)
 
-    # 4. Soft Wind Chimes
-    wind_chime_times = [0.0, 4.0, 8.0, 12.0, 16.0, 20.0, 24.0, 28.0]
-    for b_pos in wind_chime_times:
-        t = b_pos * beat_dur
-        add_percussion(track, t, 'wind_chime', pan=0.4, vol=0.22)
-        add_percussion(track, t + beat_dur * 0.1, 'wind_chime', pan=-0.4, vol=0.18)
-
-    # 5. Deep, Warm Ambient Oasis Sub-Bass
-    oasis_bass = [
-        (0.0, 'G1'), (8.0, 'Eb1'), (16.0, 'F1'), (24.0, 'D1')
-    ]
-    for b_pos, n_name in oasis_bass:
-        add_note(track, b_pos * beat_dur, 8.0 * beat_dur * 0.95,
-                 note_to_freq(n_name), 'bass', pan=0.0, vol=0.38)
-
-    reverbed = apply_stereo_reverb(track, wet=0.28)
+    reverbed = apply_stereo_reverb(track, wet=0.20)
     save_wav(reverbed, output_path)
+
 
 
 # ======================================================================
