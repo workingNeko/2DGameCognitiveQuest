@@ -63,6 +63,11 @@ class Quarter4:
         self.stage_time_limit = 600.0
         self.stage_time_remaining = 600.0
         self.time_up_dialog_active = False
+        self.timer_warning_played = False
+
+        # Universal In-Stage Pause Menu
+        from core.pause_menu import InGamePauseMenu
+        self.pause_menu = InGamePauseMenu(self.screen, self.width, self.height, self.main_menu, self.return_to_stage_select)
 
         # ============================================================
         # PATHS
@@ -1055,17 +1060,32 @@ class Quarter4:
     # ============================================================
     # RETURN TO STAGE SELECT
     # ============================================================
-    def return_to_stage_select(self):
+    def return_to_stage_select(self, completed=True):
         """Return to the stage select screen"""
         if self.main_menu:
-            self.save_quarter4_game_result()
+            if completed:
+                self.save_quarter4_game_result()
+                try:
+                    total_questions = min(6, len(self.quiz_questions)) if hasattr(self, 'quiz_questions') and self.quiz_questions else 6
+                    correct_answers = sum(1 for k, v in self.first_attempt_correct.items() if k <= total_questions and v)
+                    percentage = (correct_answers / float(total_questions)) * 100.0 if total_questions > 0 else 100.0
+                    score = int(correct_answers * 20)
+                    from db.save_system import mark_quarter_completed
+                    mark_quarter_completed(self.main_menu, "quarter4", score=score, percentage=percentage, total_questions=total_questions)
+                    if hasattr(self.main_menu, 'audio_manager'):
+                        self.main_menu.audio_manager.play_sfx("victory_fanfare")
+                        self.main_menu.audio_manager.play_sfx("portal_warp")
+                except Exception as e:
+                    print(f"⚠️ Error recording Quarter 4 completion: {e}")
+
             self.main_menu.current_screen = "stage_select"
             self.main_menu.quarter4 = None
             # Recreate the stage select to reset position
             from .stageselect import StageSelect
             self.main_menu.stage_select = StageSelect(self.screen, self.main_menu)
             print("🏠 Returning to stage select")
-            self.completed = True
+            if completed:
+                self.completed = True
             
             # Save student progress immediately to record quarter completion
             from db.save_system import save_student_progress
@@ -1149,6 +1169,9 @@ class Quarter4:
     # TRIGGER CLICK
     # ============================================================
     def trigger_click(self, pos):
+        if self.pause_menu.handle_click(pos):
+            return
+
         if getattr(self, 'time_up_dialog_active', False):
             box_w, box_h = 560, 260
             box_x = (self.width - box_w) // 2
@@ -1324,6 +1347,9 @@ class Quarter4:
         dt = min(0.05, max(0.001, self.clock.tick(FPS) / 1000.0))
         self.frame_counter += 1
 
+        if self.pause_menu.is_paused:
+            return
+
         # Update Map 12 water particles
         if getattr(self, 'is_map12', False):
             self.update_particles()
@@ -1331,6 +1357,10 @@ class Quarter4:
         # 10-Minute Stage Timer
         if not getattr(self, 'completed', False) and not self.time_up_dialog_active:
             self.stage_time_remaining = max(0.0, self.stage_time_remaining - dt)
+            if self.stage_time_remaining <= 60.0 and not getattr(self, 'timer_warning_played', False):
+                self.timer_warning_played = True
+                if hasattr(self.main_menu, 'audio_manager'):
+                    self.main_menu.audio_manager.play_sfx("timer_warning")
             if self.stage_time_remaining <= 0.0:
                 self.stage_time_remaining = 0.0
                 self.time_up_dialog_active = True
@@ -1946,6 +1976,11 @@ class Quarter4:
         if self.time_up_dialog_active:
             self.draw_time_up_dialog()
 
+        # In-Game Universal Pause Button & Modal
+        self.pause_menu.draw_button(self.cursor_pos)
+        if self.pause_menu.is_paused:
+            self.pause_menu.draw_modal(self.cursor_pos)
+
     # ============================================================
     # DRAW UI
     # ============================================================
@@ -2089,6 +2124,9 @@ class Quarter4:
     # HANDLE EVENT
     # ============================================================
     def handle_event(self, event):
+        if self.pause_menu.handle_event(event):
+            return "blocked"
+
         if event.type == pygame.KEYDOWN:
             if event.key == pygame.K_ESCAPE:
                 if self.main_menu:

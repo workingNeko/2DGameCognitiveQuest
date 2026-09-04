@@ -1394,55 +1394,47 @@ class MainMenu:
             else:
                 self.show_no_student_message = False
 
-            # DRAW CAMERA FEED & CURSOR
-            self.draw_camera_feed()
-            self.draw_cursor()
-
             # DRAW BUTTONS
             for b in self.buttons:
                 b.draw(self.screen)
 
+            self.draw_camera_feed()
+
         elif self.current_screen == "stage_select" and self.stage_select:
             self.stage_select.draw()
             self.draw_camera_feed()
-            self.draw_cursor()
 
         elif self.current_screen == "student_select" and self.student_select:
             self.student_select.draw()
             self.draw_camera_feed()
-            self.draw_cursor()
 
         elif self.current_screen == "tutorial" and self.tutorial:
             self.tutorial.draw()
             self.draw_camera_feed()
-            self.draw_cursor()
 
         elif self.current_screen == "quarter1" and self.quarter1:
             self.quarter1.draw()
             self.draw_camera_feed()
-            self.draw_cursor()
 
         elif self.current_screen == "quarter2" and self.quarter2:
             self.quarter2.draw()
             self.draw_camera_feed()
-            self.draw_cursor()
 
         elif self.current_screen == "quarter3" and self.quarter3:
             self.quarter3.draw()
             self.draw_camera_feed()
-            self.draw_cursor()
 
         elif self.current_screen == "quarter4" and self.quarter4:
             self.quarter4.draw()
             self.draw_camera_feed()
-            self.draw_cursor()
 
         elif self.current_screen == "leaderboard" and self.leaderboard:
             self.leaderboard.draw()
             self.draw_camera_feed()
-            self.draw_cursor()
 
-        # Draw confirmation pop-up if active
+        # Draw confirmation pop-up if active (above normal screens)
         if self.popup_state:
             self.draw_popup()
-            self.draw_cursor()
+
+        # CURSOR IS ALWAYS DRAWN LAST TO REMAIN AT THE TOPMOST Z-LAYER
+        self.draw_cursor()

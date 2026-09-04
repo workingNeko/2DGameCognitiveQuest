@@ -388,6 +388,37 @@ class AudioManager:
             a_wd = (w_wd * 28000).astype(np.int16)
             self.sfx_cache["wood_snap"] = pygame.sndarray.make_sound(np.column_stack((a_wd, a_wd)))
 
+            # 12. Portal Warp / Teleport (Ascending pitch swirl whoosh)
+            t_prt = np.linspace(0, 0.45, int(sr * 0.45), False)
+            freq_prt = 300 + 1400 * (t_prt / 0.45)**1.5
+            w_prt = (0.7 * np.sin(2 * np.pi * freq_prt * t_prt) +
+                     0.3 * np.sin(2 * np.pi * freq_prt * 1.5 * t_prt))
+            env_prt = np.sin(np.pi * (t_prt / 0.45))
+            a_prt = (w_prt * env_prt * 26000).astype(np.int16)
+            self.sfx_cache["portal_warp"] = pygame.sndarray.make_sound(np.column_stack((a_prt, a_prt)))
+
+            # 13. Timer Warning (Double urgency chime)
+            t_wrn = np.linspace(0, 0.35, int(sr * 0.35), False)
+            w_wrn = (0.6 * np.sin(2 * np.pi * 880 * t_wrn) + 0.4 * np.sin(2 * np.pi * 1760 * t_wrn)) * np.exp(-t_wrn * 15)
+            pip2_idx = int(sr * 0.15)
+            t_pip2 = t_wrn[pip2_idx:] - 0.15
+            w_wrn[pip2_idx:] += (0.6 * np.sin(2 * np.pi * 1046 * t_pip2) + 0.4 * np.sin(2 * np.pi * 2093 * t_pip2)) * np.exp(-t_pip2 * 15)
+            a_wrn = (np.clip(w_wrn, -1.0, 1.0) * 28000).astype(np.int16)
+            self.sfx_cache["timer_warning"] = pygame.sndarray.make_sound(np.column_stack((a_wrn, a_wrn)))
+
+            # 14. Victory Fanfare (Grand ceremonial brass arpeggio: C4, G4, C5, E5, G5, C6)
+            t_fan = np.linspace(0, 1.1, int(sr * 1.1), False)
+            fan_notes = [(0.0, 261.63), (0.12, 392.0), (0.24, 523.25), (0.36, 659.25), (0.48, 783.99), (0.60, 1046.5)]
+            w_fan = np.zeros_like(t_fan)
+            for onset, f in fan_notes:
+                dt_fan = t_fan - onset
+                active = dt_fan >= 0
+                env = np.exp(-dt_fan * (3.5 if onset < 0.60 else 1.8)) * active
+                tone = np.sin(2 * np.pi * f * dt_fan) + 0.3 * np.sin(2 * np.pi * 2 * f * dt_fan)
+                w_fan += tone * env * 0.25
+            a_fan = (np.clip(w_fan, -1.0, 1.0) * 29000).astype(np.int16)
+            self.sfx_cache["victory_fanfare"] = pygame.sndarray.make_sound(np.column_stack((a_fan, a_fan)))
+
         except Exception as e:
             print(f"⚠️ AudioManager: Warning synthesizing core SFX: {e}")
 

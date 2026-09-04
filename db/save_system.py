@@ -53,6 +53,47 @@ def delete_student_progress(student_id):
         except Exception as e:
             print(f"⚠️ Error deleting save file: {e}")
 
+def mark_quarter_completed(main_menu, quarter_name, score=100, percentage=100.0, total_questions=5):
+    """Marks a specific quarter as completed in the student's persistent save data."""
+    student_id = getattr(main_menu, 'student_id', None)
+    if not student_id:
+        return
+    save_data = load_student_progress(student_id) or {}
+    if "completed_quarters" not in save_data:
+        save_data["completed_quarters"] = {}
+    
+    save_data["completed_quarters"][quarter_name] = {
+        "completed": True,
+        "score": score,
+        "percentage": round(percentage, 1),
+        "total_questions": total_questions,
+        "timestamp": time.time()
+    }
+    save_data["timestamp"] = time.time()
+    
+    path = get_save_path(student_id)
+    try:
+        with open(path, "w") as f:
+            json.dump(save_data, f, indent=4)
+        print(f"🌟 Quarter '{quarter_name}' marked as COMPLETED for student {student_id}! ({score} pts, {percentage:.1f}%)")
+    except Exception as e:
+        print(f"⚠️ Error marking quarter completed: {e}")
+
+def get_completed_quarters(student_id):
+    """Returns dict of completed quarters for given student."""
+    if not student_id:
+        return {}
+    save_data = load_student_progress(student_id)
+    if not save_data:
+        return {}
+    return save_data.get("completed_quarters", {})
+
+def is_game_completed(student_id):
+    """Returns True if all 4 Quarters (quarter1, quarter2, quarter3, quarter4) are completed."""
+    completed = get_completed_quarters(student_id)
+    req = ["quarter1", "quarter2", "quarter3", "quarter4"]
+    return all(completed.get(q, {}).get("completed", False) for q in req)
+
 def save_student_progress(main_menu):
     if not main_menu or not getattr(main_menu, 'selected_student', None):
         return False
@@ -61,11 +102,15 @@ def save_student_progress(main_menu):
     if not student_id:
         return False
         
+    existing_save = load_student_progress(student_id) or {}
+    completed_quarters = existing_save.get("completed_quarters", {})
+
     save_data = {
         "student_id": student_id,
         "selected_student": main_menu.selected_student,
         "current_screen": main_menu.current_screen,
         "tutorial_completed": getattr(main_menu, 'tutorial_completed', True if check_save_exists(student_id) else False),
+        "completed_quarters": completed_quarters,
         "timestamp": time.time()
     }
     
@@ -106,6 +151,13 @@ def save_student_progress(main_menu):
         
     if q_data:
         save_data["quarter_data"] = q_data
+        if q_data.get("completed"):
+            save_data["completed_quarters"][q_data["quarter_name"]] = {
+                "completed": True,
+                "score": q_data.get("score", 100),
+                "percentage": q_data.get("percentage", 100.0),
+                "timestamp": time.time()
+            }
         
     path = get_save_path(student_id)
     try:

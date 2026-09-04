@@ -56,6 +56,18 @@ class StageSelect:
         self.locked_portal_banner_msg = ""
         self.locked_portal_banner_timer = 0.0
 
+        # Grand Finale Celebration State
+        self.grand_finale_active = False
+        self.grand_finale_dismissed = False
+        self.grand_finale_fanfare_played = False
+        self.confetti_particles = []
+
+        from db.save_system import get_completed_quarters, is_game_completed
+        student_id = getattr(self.main_menu, 'student_id', None)
+        self.completed_quarters = get_completed_quarters(student_id)
+        if is_game_completed(student_id):
+            self.grand_finale_active = True
+
         # ============================================================
         # PATHS
         # ============================================================
@@ -1192,6 +1204,28 @@ class StageSelect:
     # TRIGGER CLICK (called from main_menu)
     # ============================================================
     def trigger_click(self, pos):
+        # Check Grand Finale modal interaction
+        if self.grand_finale_active:
+            card_w, card_h = 620, 450
+            card_x = (self.width - card_w) // 2
+            card_y = (self.height - card_h) // 2
+            btn_rect = pygame.Rect(card_x + (card_w - 280) // 2, card_y + 375, 280, 44)
+            if btn_rect.collidepoint(pos):
+                self.grand_finale_active = False
+                self.grand_finale_dismissed = True
+                if hasattr(self.main_menu, 'audio_manager'):
+                    self.main_menu.audio_manager.play_sfx("click")
+            return
+
+        from db.save_system import is_game_completed
+        if is_game_completed(getattr(self.main_menu, 'student_id', None)):
+            finale_btn_rect = pygame.Rect(self.width - 170, 12, 150, 36)
+            if finale_btn_rect.collidepoint(pos):
+                self.grand_finale_active = True
+                if hasattr(self.main_menu, 'audio_manager'):
+                    self.main_menu.audio_manager.play_sfx("victory_fanfare")
+                return
+
         if self.oldman_dialogue_state == 1:
             self.oldman_dialogue_index += 1
             if self.oldman_dialogue_index >= len(self.dialogue_lines):
@@ -1283,6 +1317,28 @@ class StageSelect:
     def update(self):
         dt = self.clock.tick(FPS) / 1000.0
         self.frame_counter += 1
+
+        # Update Grand Finale Confetti & Fanfare
+        if self.grand_finale_active:
+            if not self.grand_finale_fanfare_played:
+                self.grand_finale_fanfare_played = True
+                if hasattr(self.main_menu, 'audio_manager'):
+                    self.main_menu.audio_manager.play_sfx("victory_fanfare")
+            if len(self.confetti_particles) < 60:
+                self.confetti_particles.append({
+                    "x": random.randint(0, self.width),
+                    "y": random.randint(-40, 0),
+                    "vx": random.uniform(-1.5, 1.5),
+                    "vy": random.uniform(2.0, 5.0),
+                    "color": random.choice([(255, 215, 0), (59, 130, 246), (34, 197, 94), (239, 68, 68), (168, 85, 247), (236, 72, 153)]),
+                    "size": random.randint(4, 8)
+                })
+            for p in self.confetti_particles:
+                p["x"] += p["vx"]
+                p["y"] += p["vy"]
+                if p["y"] > self.height:
+                    p["y"] = random.randint(-20, 0)
+                    p["x"] = random.randint(0, self.width)
 
         # Update Area Title animation elapsed time
         if self.title_active:
@@ -1567,6 +1623,8 @@ class StageSelect:
                 if port_rect.colliderect(p_rect) or portal.contains_position(self.player_x + TILE_SIZE // 2, self.player_y + TILE_SIZE // 2):
                     if portal.direction == 'left':
                         if self.oldman_dialogue_state >= 2 or self.player_following_target == 'oldman':
+                            if hasattr(self.main_menu, 'audio_manager'):
+                                self.main_menu.audio_manager.play_sfx("portal_warp")
                             map_name = random.choice(["map1.txt", "map2.txt", "map3.txt"])
                             print(f"🎮 Auto-entering Quarter 1 - {map_name}")
                             self.main_menu.current_screen = "quarter1"
@@ -1578,6 +1636,8 @@ class StageSelect:
                             self.locked_portal_banner_timer = 2.0
                     elif portal.direction == 'right':
                         if self.skeleton_dialogue_state >= 2 or self.player_following_target == 'skeleton':
+                            if hasattr(self.main_menu, 'audio_manager'):
+                                self.main_menu.audio_manager.play_sfx("portal_warp")
                             map_name = "map7.txt"
                             print(f"🎮 Auto-entering Quarter 3 - {map_name}")
                             self.main_menu.current_screen = "quarter3"
@@ -1589,6 +1649,8 @@ class StageSelect:
                             self.locked_portal_banner_timer = 2.0
                     elif portal.direction == 'up':
                         if self.knight_dialogue_state >= 2 or self.player_following_target == 'knight':
+                            if hasattr(self.main_menu, 'audio_manager'):
+                                self.main_menu.audio_manager.play_sfx("portal_warp")
                             map_name = "map5.txt"
                             print(f"🎮 Auto-entering Quarter 2 - {map_name}")
                             self.main_menu.current_screen = "quarter2"
@@ -1600,6 +1662,8 @@ class StageSelect:
                             self.locked_portal_banner_timer = 2.0
                     elif portal.direction == 'down':
                         if self.bromen_dialogue_state >= 2 or self.player_following_target == 'bromen':
+                            if hasattr(self.main_menu, 'audio_manager'):
+                                self.main_menu.audio_manager.play_sfx("portal_warp")
                             map_name = "map11.txt"
                             print(f"🎮 Auto-entering Quarter 4 - {map_name}")
                             self.main_menu.current_screen = "quarter4"
@@ -1867,6 +1931,32 @@ class StageSelect:
         # Draw portals
         for portal in self.portals:
             portal.draw(self.screen, self.camera_x, self.camera_y, ZOOM, self.width, self.height)
+
+        # Draw Completed Quarter Badges above portals
+        DIR_MAP = {
+            'left': 'quarter1',
+            'up': 'quarter2',
+            'right': 'quarter3',
+            'down': 'quarter4'
+        }
+        for portal in self.portals:
+            qid = DIR_MAP.get(portal.direction)
+            if qid and self.completed_quarters.get(qid, {}).get("completed", False):
+                sx = (portal.get_center_x() - self.camera_x) * ZOOM
+                sy = (portal.get_world_y() - self.camera_y) * ZOOM
+                bob = math.sin(self.frame_counter * 0.08) * 3
+                
+                badge_w, badge_h = 100, 24
+                bx = sx - badge_w // 2
+                by = sy - badge_h - 8 + bob
+                
+                badge_rect = pygame.Rect(bx, by, badge_w, badge_h)
+                pygame.draw.rect(self.screen, (15, 23, 42), badge_rect, border_radius=6)
+                pygame.draw.rect(self.screen, (255, 215, 0), badge_rect, 2, border_radius=6)
+                
+                b_font = pygame.font.SysFont("Comic Sans MS", int(11 * ZOOM), bold=True)
+                b_txt = b_font.render("★ CLEARED", True, (255, 215, 0))
+                self.screen.blit(b_txt, b_txt.get_rect(center=badge_rect.center))
 
         # Draw NPCs (before player so player is on top)
         # Bromen - Idle, Walking Up, or Quest Exclamation
@@ -2150,15 +2240,45 @@ class StageSelect:
     # DRAW UI
     # ============================================================
     def draw_ui(self):
-        # Draw cursor from main menu (same as main menu)
-        if self.hand_detected:
-            if self.fist_start_time > 0:
-                color = (255, 200, 0)  # Yellow when holding fist
-            else:
-                color = (255, 255, 255)  # White normally
+        # Refresh completed quarters status
+        from db.save_system import get_completed_quarters, is_game_completed
+        student_id = getattr(self.main_menu, 'student_id', None)
+        self.completed_quarters = get_completed_quarters(student_id)
 
-            pygame.draw.circle(self.screen, color, self.cursor_pos, 15, 2)
-            pygame.draw.circle(self.screen, (255, 100, 100), self.cursor_pos, 4)
+        # Draw Top HUD Stage Progress Tracker
+        num_cleared = sum(1 for q in ['quarter1', 'quarter2', 'quarter3', 'quarter4'] if self.completed_quarters.get(q, {}).get("completed", False))
+        hud_w, hud_h = 300, 36
+        hud_x = (self.width - hud_w) // 2
+        hud_y = 12
+        hud_rect = pygame.Rect(hud_x, hud_y, hud_w, hud_h)
+        pygame.draw.rect(self.screen, (15, 23, 42), hud_rect, border_radius=8)
+        pygame.draw.rect(self.screen, (255, 215, 0), hud_rect, 2, border_radius=8)
+
+        hud_font = pygame.font.SysFont("Comic Sans MS", 14, bold=True)
+        t_surf = hud_font.render(f"Quarters Mastered: {num_cleared}/4", True, (241, 245, 249))
+        self.screen.blit(t_surf, (hud_x + 14, hud_y + 7))
+
+        # 4 Golden Stars
+        star_x = hud_x + 205
+        for i in range(4):
+            is_on = i < num_cleared
+            s_col = (255, 215, 0) if is_on else (100, 116, 139)
+            s_surf = hud_font.render("★", True, s_col)
+            self.screen.blit(s_surf, (star_x + i * 18, hud_y + 6))
+
+        # Reopen Grand Finale Button if all 4 completed
+        if is_game_completed(student_id) and not self.grand_finale_active:
+            btn_r = pygame.Rect(self.width - 170, 12, 150, 36)
+            hov = btn_r.collidepoint(self.cursor_pos)
+            bg = (245, 158, 11) if hov else (217, 119, 6)
+            pygame.draw.rect(self.screen, bg, btn_r, border_radius=8)
+            pygame.draw.rect(self.screen, (255, 255, 255), btn_r, 2, border_radius=8)
+            btn_txt = hud_font.render("🏆 Victory Card", True, (255, 255, 255))
+            self.screen.blit(btn_txt, btn_txt.get_rect(center=btn_r.center))
+
+        # Draw Grand Finale Modal if active
+        if self.grand_finale_active:
+            self.draw_grand_finale_popup()
 
         # Info panel
         if self.show_info:
@@ -2270,6 +2390,12 @@ class StageSelect:
     # HANDLE EVENT
     # ============================================================
     def handle_event(self, event):
+        if self.grand_finale_active:
+            if event.type == pygame.KEYDOWN and event.key in [pygame.K_ESCAPE, pygame.K_SPACE, pygame.K_RETURN]:
+                self.grand_finale_active = False
+                self.grand_finale_dismissed = True
+                return "handled"
+
         if event.type == pygame.KEYDOWN:
             if self.oldman_dialogue_state == 1:
                 if event.key in [pygame.K_SPACE, pygame.K_RETURN]:
@@ -2311,6 +2437,81 @@ class StageSelect:
             elif event.key == pygame.K_i:
                 self.show_info = not self.show_info
         return None
+
+    # ============================================================
+    # GRAND FINALE CEREMONY POPUP
+    # ============================================================
+    def draw_grand_finale_popup(self):
+        # 1. Semi-transparent backdrop overlay
+        dim = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
+        dim.fill((0, 0, 0, 205))
+        self.screen.blit(dim, (0, 0))
+
+        # 2. Render Confetti & Celebration Sparkles
+        for p in self.confetti_particles:
+            pygame.draw.circle(self.screen, p["color"], (int(p["x"]), int(p["y"])), p["size"])
+
+        # 3. Centered Victory Modal Card
+        card_w, card_h = 620, 450
+        card_x = (self.width - card_w) // 2
+        card_y = (self.height - card_h) // 2
+        card_rect = pygame.Rect(card_x, card_y, card_w, card_h)
+        pygame.draw.rect(self.screen, (15, 23, 42), card_rect, border_radius=16)
+        pygame.draw.rect(self.screen, (255, 215, 0), card_rect, 4, border_radius=16)
+
+        # Fonts
+        t_font = pygame.font.SysFont("Comic Sans MS", 21, bold=True)
+        sub_font = pygame.font.SysFont("Comic Sans MS", 13)
+        row_font = pygame.font.SysFont("Comic Sans MS", 13, bold=True)
+
+        # Title Header
+        title = t_font.render("🏆 QUEST COMPLETE: GRAND CHAMPION! 🏆", True, (255, 215, 0))
+        self.screen.blit(title, title.get_rect(center=(card_x + card_w // 2, card_y + 35)))
+
+        sub = sub_font.render("Outstanding achievement! You have mastered all 4 Quarters of Cognitive Quest!", True, (226, 232, 240))
+        self.screen.blit(sub, sub.get_rect(center=(card_x + card_w // 2, card_y + 65)))
+
+        # Summary rows for Q1-Q4
+        quarters_info = [
+            ("quarter1", "Quarter 1: Storybook Meadow", "Shapes & Jigsaw Puzzles"),
+            ("quarter2", "Quarter 2: Barangay Geometry", "Patterns & Bahay Kubo"),
+            ("quarter3", "Quarter 3: Oasis Mirage", "Math Explorations & Caravan"),
+            ("quarter4", "Quarter 4: Celestial Clocktower", "Water Temple Chrono Gears"),
+        ]
+
+        row_y = card_y + 95
+        total_pts = 0
+        for qid, title_str, desc_str in quarters_info:
+            qdata = self.completed_quarters.get(qid, {})
+            score = qdata.get("score", 100)
+            pct = qdata.get("percentage", 100.0)
+            total_pts += score
+
+            row_rect = pygame.Rect(card_x + 30, row_y, card_w - 60, 52)
+            pygame.draw.rect(self.screen, (30, 41, 59), row_rect, border_radius=8)
+            pygame.draw.rect(self.screen, (51, 65, 85), row_rect, 1, border_radius=8)
+
+            lbl_surf = row_font.render(f"{title_str}  ({desc_str})", True, (248, 250, 252))
+            self.screen.blit(lbl_surf, (card_x + 45, row_y + 8))
+
+            val_str = f"★ Cleared  |  Score: {score} pts  ({pct:.0f}%)"
+            val_surf = sub_font.render(val_str, True, (255, 215, 0))
+            self.screen.blit(val_surf, (card_x + 45, row_y + 28))
+
+            row_y += 58
+
+        # Total Cumulative Mastery Summary
+        total_txt = row_font.render(f"Cumulative Score: {total_pts} / 400 pts   •   Rank: Cognitive Master 🌟🌟🌟🌟", True, (52, 211, 153))
+        self.screen.blit(total_txt, total_txt.get_rect(center=(card_x + card_w // 2, card_y + 348)))
+
+        # Close / Celebrate Button
+        btn_rect = pygame.Rect(card_x + (card_w - 280) // 2, card_y + 375, 280, 44)
+        hov = btn_rect.collidepoint(self.cursor_pos)
+        bg = (34, 197, 94) if hov else (22, 163, 74)
+        pygame.draw.rect(self.screen, bg, btn_rect, border_radius=10)
+        pygame.draw.rect(self.screen, (134, 239, 172), btn_rect, 2, border_radius=10)
+        btn_lbl = row_font.render("🎉 Celebrate & Explore!", True, (255, 255, 255))
+        self.screen.blit(btn_lbl, btn_lbl.get_rect(center=btn_rect.center))
 
     # ============================================================
     # CLEANUP

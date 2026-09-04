@@ -419,9 +419,6 @@ class StudentSelect:
             pygame.draw.rect(self.screen, (40, 40, 40), msg_rect.inflate(25, 12), border_radius=10)
             self.screen.blit(msg_surface, msg_rect)
 
-        # DRAW GESTURE CURSOR (ADDED)
-        self.draw_cursor()
-
     # =========================================================
     # HANDLE EVENTS
     # =========================================================
