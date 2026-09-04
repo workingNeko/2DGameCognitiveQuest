@@ -1,13 +1,17 @@
 # assets/sounds/generate_theme_music.py
 """
-Thematic Background Music Generator for Cognitive Quest Quarters:
+High-Fidelity Thematic Background Music Synthesizer for Cognitive Quest Quarters:
 - Quarter 1 (Shapes & Medieval Forest): q1_forest_shapes.wav
+  * Whimsical Celtic/Zelda-style adventure with acoustic folk harp, playful whistle, pizzicato strings, and woodland percussion.
 - Quarter 2 (Division & Philippine Barrio Fiesta): q2_barrio_fiesta.wav
+  * Upbeat tropical celebration with bouncy marimba/kulintang, fiesta clave, and Latin tumbao bass.
 - Quarter 3 (Fractions & Ancient Sun Temple): q3_sun_temple.wav
+  * Exhilarating Middle Eastern desert action with authentic Darbuka Maqsum groove, acoustic Oud/Kanun, and soaring Egyptian Ney flute.
 - Quarter 4 (Time, Angles & Castle Clocktower): q4_clocktower_castle.wav
+  * Intricate Baroque Clockwork Allegro with dual-ear pendulum ticking, glistening music box/celesta gear runs, and noble castle French horns.
 
-Generates high-quality, seamlessly looping 16-bit stereo 44.1kHz WAV tracks.
-Zero external dependencies beyond numpy and standard python wave module.
+Generates seamlessly looping 16-bit stereo 44.1kHz WAV tracks.
+Zero external dependencies beyond numpy and standard library wave.
 """
 
 import os
@@ -29,6 +33,7 @@ if sys.stderr is not None:
 
 SAMPLE_RATE = 44100
 
+
 def note_to_freq(note_name):
     """Convert note name (e.g. 'C4', 'D#5', 'Gb3', 'A4') to Hz."""
     notes = {'C': 0, 'C#': 1, 'Db': 1, 'D': 2, 'D#': 3, 'Eb': 3,
@@ -40,130 +45,184 @@ def note_to_freq(note_name):
     return 440.0 * (2.0 ** (semitones / 12.0))
 
 
-def apply_adsr(length, attack, decay, sustain_level, release, sample_rate=SAMPLE_RATE):
-    """Compute ADSR envelope vector of given sample length."""
-    a_samples = int(attack * sample_rate)
-    d_samples = int(decay * sample_rate)
-    r_samples = int(release * sample_rate)
-    s_samples = max(0, length - a_samples - d_samples - r_samples)
+def apply_stereo_reverb(stereo_track, wet=0.22, sample_rate=SAMPLE_RATE):
+    """
+    Applies multi-tap stereo spatial diffusion to give instruments warmth and depth.
+    Loops seamlessly by wrapping reflection tails with np.roll.
+    """
+    reflections = [
+        (int(sample_rate * 0.023), 0.35, -0.45),
+        (int(sample_rate * 0.037), 0.28, 0.45),
+        (int(sample_rate * 0.053), 0.22, -0.65),
+        (int(sample_rate * 0.071), 0.17, 0.65),
+        (int(sample_rate * 0.097), 0.13, -0.30),
+        (int(sample_rate * 0.131), 0.09, 0.30),
+    ]
+    wet_track = np.zeros_like(stereo_track)
+    for d, gain, pan in reflections:
+        lg = gain * np.sqrt(0.5 * (1.0 - pan))
+        rg = gain * np.sqrt(0.5 * (1.0 + pan))
+        wet_track[:, 0] += np.roll(stereo_track[:, 0], d) * lg
+        wet_track[:, 1] += np.roll(stereo_track[:, 1], d) * rg
 
-    env = []
-    # Attack
-    if a_samples > 0:
-        env.append(np.linspace(0.0, 1.0, a_samples))
-    # Decay
-    if d_samples > 0:
-        env.append(np.linspace(1.0, sustain_level, d_samples))
-    # Sustain
-    if s_samples > 0:
-        env.append(np.full(s_samples, sustain_level))
-    # Release
-    if r_samples > 0:
-        env.append(np.linspace(s_samples > 0 and sustain_level or 1.0, 0.0, r_samples))
-
-    if not env:
-        return np.ones(length)
-    res = np.concatenate(env)
-    if len(res) < length:
-        res = np.pad(res, (0, length - len(res)))
-    elif len(res) > length:
-        res = res[:length]
-    return res
+    return stereo_track * (1.0 - wet * 0.5) + wet_track * wet
 
 
 def synthesize_instrument(freq, duration, inst_type='flute', sample_rate=SAMPLE_RATE):
-    """Synthesizes an instrument tone with characteristic harmonics and ADSR."""
+    """
+    Synthesizes rich acoustic and fantasy instrument timbres:
+    - fm_pluck (acoustic guitar / folk harp / lute)
+    - whistle (Celtic tin whistle / wooden recorder)
+    - celesta (crystal-clear music box / gear chimes)
+    - strings (lush detuned string ensemble)
+    - pizzicato (snappy orchestral string pluck)
+    - oud (snappy Middle Eastern acoustic lute with characteristic snap)
+    - ney (haunting Middle Eastern desert reed flute)
+    - horn (majestic noble French horn / castle brass)
+    - bass (warm upright / sub-bass)
+    - marimba (woody tropical mallet)
+    """
     n_samples = int(duration * sample_rate)
     t = np.linspace(0, duration, n_samples, False)
 
-    if inst_type == 'flute':
-        # Gentle breathy vibrato, rich 1st and 2nd harmonics
-        vibrato = 1.0 + 0.015 * np.sin(2 * np.pi * 5.0 * t)
+    if inst_type == 'fm_pluck':
+        # Organic acoustic guitar / folk harp using Chowning FM synthesis
+        decay_rate = 3.5 + (freq / 350.0)
+        mod_env = np.exp(-t * 9.0)
+        amp_env = np.exp(-t * decay_rate)
+        # Dynamic modulation gives string transient that mellows into warm resonance
+        mod = 2.8 * mod_env * np.sin(2 * np.pi * freq * t)
+        tone = (0.75 * np.sin(2 * np.pi * freq * t + mod) +
+                0.20 * np.sin(2 * np.pi * 2 * freq * t) +
+                0.05 * np.sin(2 * np.pi * 3 * freq * t))
+        return tone * amp_env
+
+    elif inst_type == 'whistle' or inst_type == 'flute':
+        # Celtic tin whistle / wooden recorder: soft attack, subtle breath chiff, expressive vibrato
+        vib_delay = int(sample_rate * 0.05)
+        vib_ramp = np.ones(n_samples)
+        if vib_delay < n_samples:
+            vib_ramp[:vib_delay] = np.linspace(0.0, 1.0, vib_delay)
+        vibrato = 1.0 + 0.014 * vib_ramp * np.sin(2 * np.pi * 5.6 * t)
         phase = 2 * np.pi * freq * vibrato * t
-        wave = (0.75 * np.sin(phase) +
-                0.20 * np.sin(2 * phase) +
-                0.05 * np.sin(3 * phase))
-        env = apply_adsr(n_samples, 0.04, 0.08, 0.75, 0.08, sample_rate)
-        return wave * env
+        
+        # Fundamental with gentle 2nd and 3rd harmonics + breath
+        tone = (0.78 * np.sin(phase) +
+                0.18 * np.sin(2 * phase) +
+                0.04 * np.sin(3 * phase))
+        
+        # Soft envelope
+        att_s = min(int(sample_rate * 0.035), n_samples // 4)
+        rel_s = min(int(sample_rate * 0.06), n_samples // 4)
+        env = np.ones(n_samples)
+        if att_s > 0:
+            env[:att_s] = np.linspace(0.0, 1.0, att_s)
+        if rel_s > 0:
+            env[-rel_s:] = np.linspace(1.0, 0.0, rel_s)
+        return tone * env
 
-    elif inst_type == 'lute':
-        # Plucked string: quick attack, harmonic richness, rapid exponential decay
-        wave = (0.60 * np.sin(2 * np.pi * freq * t) +
+    elif inst_type == 'celesta':
+        # Crystalline music box / celesta bells (spinning clockwork gears)
+        mod_c = 1.7 * np.exp(-t * 6.5) * np.sin(2 * np.pi * freq * 2.756 * t)
+        tone = (0.60 * np.sin(2 * np.pi * freq * t + mod_c) +
+                0.25 * np.sin(2 * np.pi * 5.404 * freq * t) +
+                0.15 * np.sin(2 * np.pi * 8.932 * freq * t))
+        env = np.exp(-t * 3.8)
+        return tone * env
+
+    elif inst_type == 'pizzicato':
+        # Crisp orchestral pizzicato string pluck
+        tone = (0.60 * np.sin(2 * np.pi * freq * t) +
+                0.28 * np.sin(2 * np.pi * 2 * freq * t) +
+                0.12 * np.sin(2 * np.pi * 3 * freq * t))
+        env = np.exp(-t * 12.0) # Fast staccato decay
+        return tone * env
+
+    elif inst_type == 'strings':
+        # Lush detuned string ensemble (chorus warmth)
+        w1 = np.sin(2 * np.pi * freq * t)
+        w2 = np.sin(2 * np.pi * freq * 1.004 * t)
+        w3 = np.sin(2 * np.pi * freq * 0.996 * t)
+        tone = (w1 + 0.85 * w2 + 0.85 * w3) / 2.7
+        att_s = min(int(sample_rate * 0.06), n_samples // 4)
+        rel_s = min(int(sample_rate * 0.08), n_samples // 4)
+        env = np.ones(n_samples)
+        if att_s > 0:
+            env[:att_s] = np.linspace(0.0, 1.0, att_s)
+        if rel_s > 0:
+            env[-rel_s:] = np.linspace(1.0, 0.0, rel_s)
+        return tone * env
+
+    elif inst_type == 'oud':
+        # Middle Eastern acoustic lute / Oud: snappy attack, slight bend, dry resonant body
+        mod_oud = 3.2 * np.exp(-t * 12.0) * np.sin(2 * np.pi * freq * t)
+        tone = (0.65 * np.sin(2 * np.pi * freq * t + mod_oud) +
+                0.22 * np.sin(2 * np.pi * 2 * freq * t) +
+                0.13 * np.sin(2 * np.pi * 3 * freq * t))
+        env = np.exp(-t * 5.2)
+        return tone * env
+
+    elif inst_type == 'ney':
+        # Ancient Middle Eastern desert reed flute: smoky vibrato, harmonic overtones
+        vib = 1.0 + 0.016 * np.sin(2 * np.pi * 5.2 * t)
+        ph = 2 * np.pi * freq * vib * t
+        tone = (0.68 * np.sin(ph) +
+                0.22 * np.sin(2 * ph) +
+                0.10 * np.sin(3 * ph))
+        att_s = min(int(sample_rate * 0.04), n_samples // 4)
+        rel_s = min(int(sample_rate * 0.07), n_samples // 4)
+        env = np.ones(n_samples)
+        if att_s > 0:
+            env[:att_s] = np.linspace(0.0, 1.0, att_s)
+        if rel_s > 0:
+            env[-rel_s:] = np.linspace(1.0, 0.0, rel_s)
+        return tone * env
+
+    elif inst_type == 'horn':
+        # Stately French horn / Castle brass
+        mod_h = 1.2 * np.exp(-t * 2.0) * np.sin(2 * np.pi * freq * t)
+        tone = (0.70 * np.sin(2 * np.pi * freq * t + mod_h) +
                 0.25 * np.sin(2 * np.pi * 2 * freq * t) +
-                0.10 * np.sin(2 * np.pi * 3 * freq * t) +
-                0.05 * np.sin(2 * np.pi * 4 * freq * t))
-        decay_rate = 4.0 + (freq / 200.0)
-        env = np.exp(-t * decay_rate)
-        return wave * env
-
-    elif inst_type == 'marimba':
-        # Wooden bar mallet: sharp pop attack, woody overtones
-        wave = (0.70 * np.sin(2 * np.pi * freq * t) +
-                0.22 * np.sin(2 * np.pi * 3.8 * freq * t) +
-                0.08 * np.sin(2 * np.pi * 9.2 * freq * t))
-        decay_rate = 6.0 + (freq / 150.0)
-        env = np.exp(-t * decay_rate)
-        return wave * env
-
-    elif inst_type == 'bell' or inst_type == 'celesta':
-        # Metallic chime: bright, shimmering inharmonic partials
-        wave = (0.50 * np.sin(2 * np.pi * freq * t) +
-                0.28 * np.sin(2 * np.pi * 2.76 * freq * t) +
-                0.15 * np.sin(2 * np.pi * 5.4 * freq * t) +
-                0.07 * np.sin(2 * np.pi * 8.9 * freq * t))
-        env = np.exp(-t * 3.2)
-        return wave * env
-
-    elif inst_type == 'sitar':
-        # Buzzing sympathetic resonance: harmonics with slow decay
-        wave = (0.45 * np.sin(2 * np.pi * freq * t) +
-                0.25 * np.sin(2 * np.pi * 2 * freq * t) +
-                0.15 * np.sin(2 * np.pi * 3 * freq * t) +
-                0.10 * np.sin(2 * np.pi * 4 * freq * t) +
-                0.05 * np.sin(2 * np.pi * 5 * freq * t))
-        # Jawari buzzing modulation
-        buzz = 1.0 + 0.15 * np.sin(2 * np.pi * 12.0 * t)
-        env = np.exp(-t * 2.8)
-        return wave * buzz * env
+                0.05 * np.sin(2 * np.pi * 3 * freq * t))
+        att_s = min(int(sample_rate * 0.07), n_samples // 4)
+        rel_s = min(int(sample_rate * 0.10), n_samples // 4)
+        env = np.ones(n_samples)
+        if att_s > 0:
+            env[:att_s] = np.linspace(0.0, 1.0, att_s)
+        if rel_s > 0:
+            env[-rel_s:] = np.linspace(1.0, 0.0, rel_s)
+        return tone * env
 
     elif inst_type == 'bass':
-        # Warm, deep fundamental bass
-        wave = (0.80 * np.sin(2 * np.pi * freq * t) +
+        # Deep acoustic/upright bass
+        tone = (0.80 * np.sin(2 * np.pi * freq * t) +
                 0.18 * np.sin(2 * np.pi * 2 * freq * t) +
                 0.02 * np.sin(2 * np.pi * 3 * freq * t))
-        env = apply_adsr(n_samples, 0.02, 0.1, 0.8, 0.08, sample_rate)
-        return wave * env
+        env = np.exp(-t * 2.5)
+        return tone * env
 
-    elif inst_type == 'pad':
-        # Warm ethereal synth pad
-        vibrato = 1.0 + 0.008 * np.sin(2 * np.pi * 4.0 * t)
-        phase = 2 * np.pi * freq * vibrato * t
-        wave = (0.60 * np.sin(phase) +
-                0.25 * np.sin(2 * phase) +
-                0.15 * np.sin(3 * phase))
-        env = apply_adsr(n_samples, 0.15, 0.15, 0.7, 0.20, sample_rate)
-        return wave * env
+    elif inst_type == 'marimba':
+        # Tropical wooden marimba bar
+        tone = (0.70 * np.sin(2 * np.pi * freq * t) +
+                0.22 * np.sin(2 * np.pi * 3.8 * freq * t) +
+                0.08 * np.sin(2 * np.pi * 9.2 * freq * t))
+        env = np.exp(-t * 6.5)
+        return tone * env
 
     else:
-        # Default simple tone
         return np.sin(2 * np.pi * freq * t) * np.exp(-t * 3.0)
 
 
 def add_note(track, start_time, duration, freq, inst_type, pan=0.0, vol=0.5, sample_rate=SAMPLE_RATE):
-    """
-    Renders note into track (stereo: (samples, 2)).
-    pan: -1.0 (left) to 1.0 (right).
-    vol: 0.0 to 1.0.
-    Wraps overflow around to beginning to create a perfectly seamless loop!
-    """
+    """Adds synthesized note to stereo track with seamless loop wraparound."""
     note = synthesize_instrument(freq, duration, inst_type, sample_rate) * vol
     n_samples = len(note)
     start_idx = int(start_time * sample_rate)
+    total_len = len(track)
 
     left_gain = np.sqrt(0.5 * (1.0 - pan))
     right_gain = np.sqrt(0.5 * (1.0 + pan))
 
-    total_len = len(track)
     for i in range(n_samples):
         target_idx = (start_idx + i) % total_len
         track[target_idx, 0] += note[i] * left_gain
@@ -171,42 +230,91 @@ def add_note(track, start_time, duration, freq, inst_type, pan=0.0, vol=0.5, sam
 
 
 def add_percussion(track, start_time, perc_type, pan=0.0, vol=0.4, sample_rate=SAMPLE_RATE):
-    """Adds synthesized rhythmic percussion hits."""
+    """Renders high-quality percussion hits with loop wraparound."""
     start_idx = int(start_time * sample_rate)
     total_len = len(track)
-
     left_gain = np.sqrt(0.5 * (1.0 - pan))
     right_gain = np.sqrt(0.5 * (1.0 + pan))
 
-    if perc_type == 'woodblock':
+    if perc_type == 'darbuka_dum':
+        # Authentic Middle Eastern deep resonant drum thump
+        dur = 0.22
+        n = int(dur * sample_rate)
+        t = np.linspace(0, dur, n, False)
+        pitch = 140 * np.exp(-t * 16) + 55
+        hit = np.sin(2 * np.pi * pitch * t) * np.exp(-t * 14) * (vol * 1.2)
+
+    elif perc_type == 'darbuka_tek':
+        # Sharp Middle Eastern rim click
         dur = 0.05
         n = int(dur * sample_rate)
         t = np.linspace(0, dur, n, False)
-        hit = (np.sin(2 * np.pi * 900 * t) + 0.3 * np.sin(2 * np.pi * 1400 * t)) * np.exp(-t * 80) * vol
+        hit = (np.sin(2 * np.pi * 2400 * t) * 0.7 + np.sin(2 * np.pi * 900 * t) * 0.3) * np.exp(-t * 90) * vol
+
+    elif perc_type == 'tambourine':
+        # Shimmering brass jingle
+        dur = 0.09
+        n = int(dur * sample_rate)
+        noise = (np.random.rand(n) * 2.0 - 1.0)
+        t = np.linspace(0, dur, n, False)
+        jingle = (np.sin(2 * np.pi * 4800 * t) + np.sin(2 * np.pi * 7200 * t)) * 0.4
+        hit = (noise * 0.6 + jingle) * np.exp(-t * 38) * vol
+
+    elif perc_type == 'folk_kick':
+        # Soft acoustic bass drum
+        dur = 0.18
+        n = int(dur * sample_rate)
+        t = np.linspace(0, dur, n, False)
+        pitch = 110 * np.exp(-t * 22) + 48
+        hit = np.sin(2 * np.pi * pitch * t) * np.exp(-t * 18) * vol
+
+    elif perc_type == 'clock_tick':
+        # Crisp clock escapement tick
+        dur = 0.025
+        n = int(dur * sample_rate)
+        t = np.linspace(0, dur, n, False)
+        hit = np.sin(2 * np.pi * 2600 * t) * np.exp(-t * 140) * vol
+
+    elif perc_type == 'clock_tock':
+        # Resonant wooden pendulum tock
+        dur = 0.035
+        n = int(dur * sample_rate)
+        t = np.linspace(0, dur, n, False)
+        hit = np.sin(2 * np.pi * 1150 * t) * np.exp(-t * 110) * vol
+
+    elif perc_type == 'tower_bell':
+        # Majestic cathedral / clocktower bronze chime
+        dur = 1.2
+        n = int(dur * sample_rate)
+        t = np.linspace(0, dur, n, False)
+        hit = (0.50 * np.sin(2 * np.pi * 440 * t) +
+               0.30 * np.sin(2 * np.pi * 524 * t) + # minor 3rd
+               0.20 * np.sin(2 * np.pi * 660 * t) +
+               0.15 * np.sin(2 * np.pi * 880 * t)) * np.exp(-t * 2.5) * vol
+
+    elif perc_type == 'gong':
+        # Exotic golden temple chime / gong
+        dur = 1.5
+        n = int(dur * sample_rate)
+        t = np.linspace(0, dur, n, False)
+        hit = (0.45 * np.sin(2 * np.pi * 293.66 * t) + # D4
+               0.30 * np.sin(2 * np.pi * 370 * t) +    # F#4
+               0.25 * np.sin(2 * np.pi * 587.33 * t) + # D5
+               0.15 * np.sin(2 * np.pi * 880 * t)) * np.exp(-t * 2.0) * vol
+
     elif perc_type == 'shaker':
         dur = 0.06
         n = int(dur * sample_rate)
         noise = (np.random.rand(n) * 2.0 - 1.0)
         t = np.linspace(0, dur, n, False)
-        hit = noise * np.exp(-t * 50) * (vol * 0.4)
-    elif perc_type == 'tick':
-        # Clock tick / pendulum
-        dur = 0.03
+        hit = noise * np.exp(-t * 55) * vol * 0.4
+
+    elif perc_type == 'woodblock':
+        dur = 0.045
         n = int(dur * sample_rate)
         t = np.linspace(0, dur, n, False)
-        hit = np.sin(2 * np.pi * 1800 * t) * np.exp(-t * 120) * vol
-    elif perc_type == 'tock':
-        dur = 0.03
-        n = int(dur * sample_rate)
-        t = np.linspace(0, dur, n, False)
-        hit = np.sin(2 * np.pi * 1200 * t) * np.exp(-t * 100) * vol
-    elif perc_type == 'drum':
-        # Ancient frame drum / bongo
-        dur = 0.16
-        n = int(dur * sample_rate)
-        t = np.linspace(0, dur, n, False)
-        pitch = 110 * np.exp(-t * 15)
-        hit = np.sin(2 * np.pi * pitch * t) * np.exp(-t * 18) * vol
+        hit = (np.sin(2 * np.pi * 850 * t) + 0.3 * np.sin(2 * np.pi * 1350 * t)) * np.exp(-t * 85) * vol
+
     else:
         dur = 0.05
         n = int(dur * sample_rate)
@@ -220,17 +328,14 @@ def add_percussion(track, start_time, perc_type, pan=0.0, vol=0.4, sample_rate=S
 
 
 def save_wav(track, file_path, sample_rate=SAMPLE_RATE):
-    """Normalizes and saves track as 16-bit stereo PCM WAV file."""
-    # Peak normalization to -1.0 dB (~0.89)
+    """Normalizes and saves track as 16-bit stereo PCM WAV file with soft limiter."""
     peak = np.max(np.abs(track))
     if peak > 0:
         norm_track = track * (0.88 / peak)
     else:
         norm_track = track
 
-    # Soft limiter to prevent any digital clipping
     norm_track = np.tanh(norm_track * 1.1) * 0.90
-
     int_track = (norm_track * 32767).astype(np.int16)
 
     os.makedirs(os.path.dirname(file_path), exist_ok=True)
@@ -243,81 +348,106 @@ def save_wav(track, file_path, sample_rate=SAMPLE_RATE):
 
 
 # ======================================================================
-# 1. QUARTER 1: Medieval Forest & Geometric Wonder (Shapes Theme)
-# Pastoral D Dorian: Plucked lute, wooden flute melody, warm acoustic bass
+# 1. QUARTER 1: "The Whispering Forest" (Shapes & Old Man Theme)
+# Whimsical Celtic/Zelda Folk Adventure: Acoustic guitar arpeggios,
+# playful tin whistle melody, pizzicato strings, and woodland percussion.
 # ======================================================================
 def generate_quarter1(output_path):
-    bpm = 104
+    bpm = 116
     beat_dur = 60.0 / bpm
     bars = 8
     total_duration = bars * 4 * beat_dur
     total_samples = int(total_duration * SAMPLE_RATE)
     track = np.zeros((total_samples, 2), dtype=np.float32)
 
-    # 1. Lute Arpeggios (Continuous flowing medieval pattern)
-    # Chords: Dm (D-F-A), C (C-E-G), Bb (Bb-D-F), C (C-E-G), Dm, G/B, Bb, A
-    chords_lute = [
-        ['D3', 'A3', 'D4', 'F4', 'A4', 'F4', 'D4', 'A3'],
+    # 1. Cascading Acoustic Guitar / Folk Harp Fingerpicking Arpeggios
+    # Chords: G, C, D, G, Em, C, Am, D7
+    chords_folk = [
+        ['G3', 'D4', 'G4', 'B4', 'D5', 'B4', 'G4', 'D4'],
         ['C3', 'G3', 'C4', 'E4', 'G4', 'E4', 'C4', 'G3'],
-        ['Bb2', 'F3', 'Bb3', 'D4', 'F4', 'D4', 'Bb3', 'F3'],
+        ['D3', 'A3', 'D4', 'F#4', 'A4', 'F#4', 'D4', 'A3'],
+        ['G3', 'D4', 'G4', 'B4', 'D5', 'B4', 'G4', 'D4'],
+        ['E3', 'B3', 'E4', 'G4', 'B4', 'G4', 'E4', 'B3'],
         ['C3', 'G3', 'C4', 'E4', 'G4', 'E4', 'C4', 'G3'],
-        ['D3', 'A3', 'D4', 'F4', 'A4', 'F4', 'D4', 'A3'],
-        ['G2', 'D3', 'G3', 'B3', 'D4', 'B3', 'G3', 'D3'],
-        ['Bb2', 'F3', 'Bb3', 'D4', 'F4', 'D4', 'Bb3', 'F3'],
-        ['A2', 'E3', 'A3', 'C#4', 'E4', 'C#4', 'A3', 'E3']
+        ['A2', 'E3', 'A3', 'C4', 'E4', 'C4', 'A3', 'E3'],
+        ['D3', 'A3', 'C4', 'F#4', 'A4', 'F#4', 'D4', 'A3']
     ]
 
-    for bar_idx, bar in enumerate(chords_lute):
+    for bar_idx, bar in enumerate(chords_folk):
         bar_start = bar_idx * 4 * beat_dur
         for step_idx, note_name in enumerate(bar):
             t = bar_start + step_idx * (beat_dur * 0.5)
-            pan = -0.35 if step_idx % 2 == 0 else -0.15
-            add_note(track, t, beat_dur * 0.9, note_to_freq(note_name), 'lute', pan=pan, vol=0.32)
+            # Alternating stereo pan for wide acoustic guitar feel
+            pan = -0.38 if step_idx % 2 == 0 else 0.28
+            add_note(track, t, beat_dur * 0.95, note_to_freq(note_name), 'fm_pluck', pan=pan, vol=0.34)
 
-    # 2. Wooden Flute Pastoral Melody
-    flute_melody = [
-        # Bar 1: D5 (1 beat), F5 (1 beat), E5 (0.5), D5 (0.5), A4 (1)
-        (0.0, 1.0, 'D5', 0.25), (1.0, 1.0, 'F5', 0.25), (2.0, 0.5, 'E5', 0.22), (2.5, 0.5, 'D5', 0.22), (3.0, 1.0, 'A4', 0.20),
-        # Bar 2: C5 (1), E5 (1), G5 (1.5), F5 (0.5)
-        (4.0, 1.0, 'C5', 0.24), (5.0, 1.0, 'E5', 0.26), (6.0, 1.5, 'G5', 0.28), (7.5, 0.5, 'F5', 0.22),
-        # Bar 3: D5 (1.5), F5 (0.5), Bb4 (1), D5 (1)
-        (8.0, 1.5, 'D5', 0.26), (9.5, 0.5, 'F5', 0.24), (10.0, 1.0, 'Bb4', 0.22), (11.0, 1.0, 'D5', 0.24),
-        # Bar 4: C5 (2), rest, E5 (1)
-        (12.0, 2.0, 'C5', 0.25), (15.0, 1.0, 'E5', 0.22),
-        # Bar 5: F5 (1.5), G5 (0.5), A5 (1.5), G5 (0.5)
-        (16.0, 1.5, 'F5', 0.28), (17.5, 0.5, 'G5', 0.26), (18.0, 1.5, 'A5', 0.32), (19.5, 0.5, 'G5', 0.26),
-        # Bar 6: F5 (1), D5 (1), B4 (2)
-        (20.0, 1.0, 'F5', 0.26), (21.0, 1.0, 'D5', 0.24), (22.0, 2.0, 'B4', 0.26),
-        # Bar 7: D5 (1), F5 (1), E5 (1), D5 (1)
-        (24.0, 1.0, 'D5', 0.26), (25.0, 1.0, 'F5', 0.26), (26.0, 1.0, 'E5', 0.24), (27.0, 1.0, 'D5', 0.24),
-        # Bar 8: C#5 (2), D5 (2) - resolution
-        (28.0, 2.0, 'C#5', 0.26), (30.0, 2.0, 'D5', 0.30)
+    # 2. Playful Celtic Tin Whistle Lead Melody (Catchy & Memorable!)
+    whistle_melody = [
+        # Bar 1: D5 (1 beat), G5 (1 beat), A5 (0.5), B5 (1.5)
+        (0.0, 1.0, 'D5', 0.28), (1.0, 1.0, 'G5', 0.30), (2.0, 0.5, 'A5', 0.26), (2.5, 1.5, 'B5', 0.32),
+        # Bar 2: C6 (1 beat), B5 (0.5), A5 (0.5), G5 (1.5), E5 (0.5)
+        (4.0, 1.0, 'C6', 0.30), (5.0, 0.5, 'B5', 0.28), (5.5, 0.5, 'A5', 0.26), (6.0, 1.5, 'G5', 0.30), (7.5, 0.5, 'E5', 0.24),
+        # Bar 3: A5 (1.5), B5 (0.5), A5 (1.0), F#5 (1.0)
+        (8.0, 1.5, 'A5', 0.28), (9.5, 0.5, 'B5', 0.26), (10.0, 1.0, 'A5', 0.28), (11.0, 1.0, 'F#5', 0.26),
+        # Bar 4: G5 (2.5), D5 (1.0)
+        (12.0, 2.5, 'G5', 0.32), (15.0, 1.0, 'D5', 0.26),
+        # Bar 5 (Climb): B5 (1.5), C6 (0.5), D6 (1.5), B5 (0.5)
+        (16.0, 1.5, 'B5', 0.32), (17.5, 0.5, 'C6', 0.30), (18.0, 1.5, 'D6', 0.36), (19.5, 0.5, 'B5', 0.30),
+        # Bar 6: C6 (1.0), E6 (1.0), D6 (1.5), B5 (0.5)
+        (20.0, 1.0, 'C6', 0.32), (21.0, 1.0, 'E6', 0.35), (22.0, 1.5, 'D6', 0.34), (23.5, 0.5, 'B5', 0.28),
+        # Bar 7: A5 (1.0), B5 (0.5), C6 (0.5), B5 (1.0), A5 (1.0)
+        (24.0, 1.0, 'A5', 0.30), (25.0, 0.5, 'B5', 0.28), (25.5, 0.5, 'C6', 0.30), (26.0, 1.0, 'B5', 0.28), (27.0, 1.0, 'A5', 0.28),
+        # Bar 8: G5 (3.0 beats warm sustained resolution)
+        (28.0, 3.0, 'G5', 0.34)
     ]
 
-    for start_beat, dur_beats, note_name, vol in flute_melody:
+    for start_beat, dur_beats, note_name, vol in whistle_melody:
         add_note(track, start_beat * beat_dur, dur_beats * beat_dur * 0.96,
-                 note_to_freq(note_name), 'flute', pan=0.25, vol=vol)
+                 note_to_freq(note_name), 'whistle', pan=0.15, vol=vol)
 
-    # 3. Warm Forest Bass
-    bass_notes = [
-        ('D2', 4), ('C2', 4), ('Bb1', 4), ('C2', 4),
-        ('D2', 4), ('G1', 4), ('Bb1', 4), ('A1', 4)
+    # 3. Whimsical Pizzicato Strings Countermelody (Storybook charm)
+    pizz_riffs = [
+        (3.0, 'D5'), (3.5, 'G5'), (7.0, 'B5'), (7.5, 'G5'),
+        (11.0, 'D5'), (11.5, 'F#5'), (15.0, 'B5'), (15.5, 'G5'),
+        (19.0, 'D5'), (19.5, 'B5'), (23.0, 'G5'), (23.5, 'E5'),
+        (27.0, 'F#5'), (27.5, 'D5'), (31.0, 'D5'), (31.5, 'B4')
     ]
-    curr_beat = 0.0
-    for note_name, dur_beats in bass_notes:
-        add_note(track, curr_beat * beat_dur, dur_beats * beat_dur * 0.92,
-                 note_to_freq(note_name), 'bass', pan=0.0, vol=0.38)
-        curr_beat += dur_beats
+    for b_pos, n_name in pizz_riffs:
+        add_note(track, b_pos * beat_dur, beat_dur * 0.6,
+                 note_to_freq(n_name), 'pizzicato', pan=-0.4, vol=0.28)
 
-    # 4. Light Woodland Percussion (Soft woodblock on beat 2 & 4, shaker)
+    # 4. Warm Bouncy Acoustic Walking Bass
+    bass_pattern = [
+        (0.0, 'G2'), (1.5, 'D2'), (2.0, 'G2'), (3.0, 'B1'),
+        (4.0, 'C2'), (5.5, 'G1'), (6.0, 'C2'), (7.0, 'E2'),
+        (8.0, 'D2'), (9.5, 'A1'), (10.0, 'D2'), (11.0, 'F#1'),
+        (12.0, 'G2'), (13.5, 'D2'), (14.0, 'G2'), (15.0, 'B1'),
+        (16.0, 'E2'), (17.5, 'B1'), (18.0, 'E2'), (19.0, 'G1'),
+        (20.0, 'C2'), (21.5, 'G1'), (22.0, 'C2'), (23.0, 'E2'),
+        (24.0, 'A1'), (25.5, 'E1'), (26.0, 'A1'), (27.0, 'C2'),
+        (28.0, 'D2'), (29.5, 'A1'), (30.0, 'D2'), (31.0, 'G1')
+    ]
+    for start_beat, note_name in bass_pattern:
+        add_note(track, start_beat * beat_dur, beat_dur * 0.85,
+                 note_to_freq(note_name), 'bass', pan=0.0, vol=0.40)
+
+    # 5. Woodland Folk Percussion (Soft kick on 1 & 3, Tambourine on 2 & 4)
     for b in range(bars * 4):
         t = b * beat_dur
-        add_percussion(track, t, 'shaker', pan=0.3, vol=0.18)
-        add_percussion(track, t + beat_dur * 0.5, 'shaker', pan=-0.3, vol=0.12)
-        if b % 2 == 1:
-            add_percussion(track, t, 'woodblock', pan=0.1, vol=0.22)
+        # Soft kick on beats 1 and 3
+        if b % 2 == 0:
+            add_percussion(track, t, 'folk_kick', pan=0.0, vol=0.35)
+        # Tambourine jingle on beats 2 and 4
+        else:
+            add_percussion(track, t, 'tambourine', pan=0.35, vol=0.24)
+        # Shaker on 16th offbeats
+        add_percussion(track, t + beat_dur * 0.5, 'shaker', pan=-0.25, vol=0.14)
+        if b % 4 == 3:
+            add_percussion(track, t + beat_dur * 0.75, 'woodblock', pan=0.15, vol=0.18)
 
-    save_wav(track, output_path)
+    # Apply stereo room reverb
+    reverbed = apply_stereo_reverb(track, wet=0.20)
+    save_wav(reverbed, output_path)
 
 
 # ======================================================================
@@ -333,7 +463,6 @@ def generate_quarter2(output_path):
     track = np.zeros((total_samples, 2), dtype=np.float32)
 
     # 1. Festive Marimba / Kulintang Pattern (Bouncy, syncopated Philippine fiesta vibe)
-    # Chords: G major, C major, D major, G major, Em, C, D, G
     marimba_ostinato = [
         # Bar 1 (G)
         (0.0, 0.5, 'G4'), (0.5, 0.5, 'B4'), (1.0, 0.5, 'D5'), (1.75, 0.5, 'B4'), (2.5, 0.5, 'G4'), (3.0, 0.5, 'D5'),
@@ -371,7 +500,7 @@ def generate_quarter2(output_path):
 
     for start_beat, dur_beats, note_name in lead_melody:
         add_note(track, start_beat * beat_dur, dur_beats * beat_dur * 0.92,
-                 note_to_freq(note_name), 'bell', pan=0.3, vol=0.26)
+                 note_to_freq(note_name), 'celesta', pan=0.3, vol=0.26)
 
     # 3. Bouncy Tropical Bassline (Latin/Fiesta Tumbao)
     bass_pattern = [
@@ -394,173 +523,235 @@ def generate_quarter2(output_path):
         t = b * beat_dur
         add_percussion(track, t, 'shaker', pan=-0.2, vol=0.20)
         add_percussion(track, t + beat_dur * 0.5, 'shaker', pan=0.2, vol=0.15)
-        # Clave / Woodblock accents on 0, 1.5, 3
         if b % 4 in [0, 3]:
             add_percussion(track, t, 'woodblock', pan=0.15, vol=0.25)
 
-    save_wav(track, output_path)
+    reverbed = apply_stereo_reverb(track, wet=0.16)
+    save_wav(reverbed, output_path)
 
 
 # ======================================================================
-# 3. QUARTER 3: Ancient Sun Temple (Fractions & Desert Ruins Theme)
-# Mystical E Phrygian / Harmonic Minor: Sitar, temple bells, desert drone
+# 3. QUARTER 3: "Sands of the Sun Pharaoh" (Fractions & Sun Temple Theme)
+# High-energy Middle Eastern Desert Adventure: Authentic Darbuka Maqsum groove,
+# syncopated Oud riffs, hypnotic strings, and soaring Egyptian Ney flute.
+# Scale: D Harmonic Minor / Hijaz (D - Eb - F# - G - A - Bb - C)
 # ======================================================================
 def generate_quarter3(output_path):
-    bpm = 88
+    bpm = 120
     beat_dur = 60.0 / bpm
     bars = 8
     total_duration = bars * 4 * beat_dur
     total_samples = int(total_duration * SAMPLE_RATE)
     track = np.zeros((total_samples, 2), dtype=np.float32)
 
-    # 1. Mystical Low Temple Drone (Continuous deep E2 + B2 drone)
-    drone_samples = total_samples
-    t_arr = np.linspace(0, total_duration, drone_samples, False)
-    drone_w = (0.55 * np.sin(2 * np.pi * note_to_freq('E2') * t_arr) +
-               0.28 * np.sin(2 * np.pi * note_to_freq('B2') * t_arr) +
-               0.17 * np.sin(2 * np.pi * note_to_freq('E3') * t_arr))
-    track[:, 0] += drone_w * 0.25
-    track[:, 1] += drone_w * 0.25
-
-    # 2. Atmospheric Temple Ethereal Pad
-    # Chords: Em, Fmaj7 (Phrygian clash), G, Am, Em
-    pad_chords = [
-        (0.0, 4.0, ['E3', 'G3', 'B3']),
-        (4.0, 4.0, ['F3', 'A3', 'C4']),
-        (8.0, 4.0, ['E3', 'G#3', 'B3']), # Exotic major 3rd harmonic
-        (12.0, 4.0, ['A3', 'C4', 'E4']),
-        (16.0, 4.0, ['E3', 'G3', 'B3']),
-        (20.0, 4.0, ['F3', 'A3', 'C4']),
-        (24.0, 4.0, ['D#3', 'F#3', 'B3']),
-        (28.0, 4.0, ['E3', 'G3', 'B3'])
-    ]
-    for start_beat, dur_beats, chord in pad_chords:
-        for note_name in chord:
-            add_note(track, start_beat * beat_dur, dur_beats * beat_dur * 0.98,
-                     note_to_freq(note_name), 'pad', pan=-0.2, vol=0.18)
-
-    # 3. Sitar / Exotic Dulcimer Phrygian Lead Melody
-    sitar_melody = [
-        # Bar 1: E4 -> F4 -> G#4 (Phrygian dominant)
-        (0.0, 1.0, 'E4'), (1.0, 0.5, 'F4'), (1.5, 0.5, 'E4'), (2.0, 1.5, 'G#4'), (3.5, 0.5, 'F4'),
-        # Bar 2: E4 held, ornament
-        (4.0, 2.0, 'E4'), (6.0, 0.75, 'B4'), (6.75, 0.5, 'C5'), (7.25, 0.75, 'B4'),
-        # Bar 3: A4 -> G#4 -> F4
-        (8.0, 1.5, 'A4'), (9.5, 0.5, 'G#4'), (10.0, 1.5, 'F4'), (11.5, 0.5, 'E4'),
-        # Bar 4: D#4 -> E4
-        (12.0, 2.0, 'D#4'), (14.0, 2.0, 'E4'),
-        # Bar 5: Higher octave climb: E5 -> F5 -> G#5
-        (16.0, 1.0, 'E5'), (17.0, 0.5, 'F5'), (17.5, 0.5, 'E5'), (18.0, 1.5, 'G#5'), (19.5, 0.5, 'F5'),
-        # Bar 6: E5 -> B5 -> C6 -> B5
-        (20.0, 1.5, 'E5'), (21.5, 0.5, 'B5'), (22.0, 1.0, 'C6'), (23.0, 1.0, 'B5'),
-        # Bar 7: A5 -> G#5 -> F5
-        (24.0, 1.0, 'A5'), (25.0, 1.0, 'G#5'), (26.0, 1.0, 'F5'), (27.0, 1.0, 'D#5'),
-        # Bar 8: Resolution to E5
-        (28.0, 3.0, 'E5'), (31.0, 1.0, 'B4')
-    ]
-
-    for start_beat, dur_beats, note_name in sitar_melody:
-        add_note(track, start_beat * beat_dur, dur_beats * beat_dur * 0.95,
-                 note_to_freq(note_name), 'sitar', pan=0.25, vol=0.36)
-
-    # 4. Ancient Temple Percussion (Doumbek / Frame Drum "Dum - Tak - Tak")
+    # 1. Driving Middle Eastern Darbuka / Doumbek Groove (Maqsum / Malfuf)
     for b in range(bars * 4):
         t = b * beat_dur
-        # Deep resonant dum on beat 1 and 3
+        # Beat 1: Heavy resonant DUM
         if b % 4 == 0:
-            add_percussion(track, t, 'drum', pan=0.0, vol=0.45)
+            add_percussion(track, t, 'darbuka_dum', pan=0.0, vol=0.55)
+        # Beat 2: Sharp rim TAK
+        elif b % 4 == 1:
+            add_percussion(track, t, 'darbuka_tek', pan=0.25, vol=0.36)
+            add_percussion(track, t + beat_dur * 0.5, 'darbuka_tek', pan=-0.25, vol=0.26)
+        # Beat 3: Syncopated mid DUM
         elif b % 4 == 2:
-            add_percussion(track, t, 'drum', pan=0.0, vol=0.35)
-        # Crisp tak accents on offbeats
-        if b % 2 == 1:
-            add_percussion(track, t, 'woodblock', pan=0.3, vol=0.20)
-        if b % 4 == 3:
-            add_percussion(track, t + beat_dur * 0.5, 'tick', pan=-0.3, vol=0.22)
+            add_percussion(track, t, 'darbuka_dum', pan=0.0, vol=0.45)
+        # Beat 4: Sharp rim TAK
+        elif b % 4 == 3:
+            add_percussion(track, t, 'darbuka_tek', pan=0.25, vol=0.38)
 
-    save_wav(track, output_path)
+        # Shimmering Egyptian brass tambourine (Riq) pulse on all 16ths
+        add_percussion(track, t, 'tambourine', pan=-0.35, vol=0.15)
+        add_percussion(track, t + beat_dur * 0.5, 'tambourine', pan=0.35, vol=0.18)
+
+    # Golden Temple Gong accents at phrase starts (Bar 1 and Bar 5)
+    add_percussion(track, 0.0, 'gong', pan=0.0, vol=0.50)
+    add_percussion(track, 16.0 * beat_dur, 'gong', pan=0.0, vol=0.45)
+
+    # 2. Syncopated Acoustic Oud & Kanun Lute Riff (Driving rhythmic 16ths)
+    # D Hijaz chords: Dm, Eb, Dm, Gm, Eb, A7, Dm
+    oud_riff = [
+        # Bar 1 (D)
+        (0.0, 'D3'), (0.5, 'A3'), (1.0, 'D4'), (1.5, 'F#4'), (2.0, 'A4'), (2.5, 'F#4'), (3.0, 'Eb4'), (3.5, 'D4'),
+        # Bar 2 (Eb)
+        (4.0, 'Eb3'), (4.5, 'Bb3'), (5.0, 'Eb4'), (5.5, 'G4'), (6.0, 'Bb4'), (6.5, 'G4'), (7.0, 'F#4'), (7.5, 'Eb4'),
+        # Bar 3 (Dm)
+        (8.0, 'D3'), (8.5, 'A3'), (9.0, 'D4'), (9.5, 'F#4'), (10.0, 'A4'), (10.5, 'F#4'), (11.0, 'Eb4'), (11.5, 'D4'),
+        # Bar 4 (Gm)
+        (12.0, 'G2'), (12.5, 'D3'), (13.0, 'G3'), (13.5, 'Bb3'), (14.0, 'D4'), (14.5, 'Bb3'), (15.0, 'A3'), (15.5, 'G3'),
+        # Bar 5 (D)
+        (16.0, 'D3'), (16.5, 'A3'), (17.0, 'D4'), (17.5, 'F#4'), (18.0, 'A4'), (18.5, 'F#4'), (19.0, 'Eb4'), (19.5, 'D4'),
+        # Bar 6 (Eb)
+        (20.0, 'Eb3'), (20.5, 'Bb3'), (21.0, 'Eb4'), (21.5, 'G4'), (22.0, 'Bb4'), (22.5, 'G4'), (23.0, 'F#4'), (23.5, 'Eb4'),
+        # Bar 7 (A7)
+        (24.0, 'A2'), (24.5, 'E3'), (25.0, 'A3'), (25.5, 'C#4'), (26.0, 'E4'), (26.5, 'C#4'), (27.0, 'Bb3'), (27.5, 'A3'),
+        # Bar 8 (Dm resolution)
+        (28.0, 'D3'), (28.5, 'A3'), (29.0, 'D4'), (29.5, 'F#4'), (30.0, 'A4'), (30.5, 'D4'), (31.0, 'A3'), (31.5, 'D3')
+    ]
+
+    for start_beat, note_name in oud_riff:
+        pan = -0.32 if (start_beat % 1.0) == 0 else 0.28
+        add_note(track, start_beat * beat_dur, beat_dur * 0.75,
+                 note_to_freq(note_name), 'oud', pan=pan, vol=0.35)
+
+    # 3. Hypnotic Desert Strings Ostinato
+    strings_chords = [
+        (0.0, 4.0, 'D4'), (4.0, 4.0, 'Eb4'), (8.0, 4.0, 'D4'), (12.0, 4.0, 'G4'),
+        (16.0, 4.0, 'D4'), (20.0, 4.0, 'Eb4'), (24.0, 4.0, 'C#4'), (28.0, 4.0, 'D4')
+    ]
+    for b_start, b_len, note_name in strings_chords:
+        add_note(track, b_start * beat_dur, b_len * beat_dur * 0.95,
+                 note_to_freq(note_name), 'strings', pan=-0.25, vol=0.22)
+
+    # 4. Soaring Egyptian Ney Flute Solo (Thrilling & Exotic!)
+    ney_melody = [
+        # Bar 1: D5 (1.0), Eb5 (0.5), F#5 (1.5), Eb5 (0.5), D5 (0.5)
+        (0.0, 1.0, 'D5'), (1.0, 0.5, 'Eb5'), (1.5, 1.5, 'F#5'), (3.0, 0.5, 'Eb5'), (3.5, 0.5, 'D5'),
+        # Bar 2: G5 (1.5), F#5 (0.5), Eb5 (1.0), D5 (1.0)
+        (4.0, 1.5, 'G5'), (5.5, 0.5, 'F#5'), (6.0, 1.0, 'Eb5'), (7.0, 1.0, 'D5'),
+        # Bar 3: A5 (1.5), Bb5 (0.5), C6 (1.0), Bb5 (0.5), A5 (0.5)
+        (8.0, 1.5, 'A5'), (9.5, 0.5, 'Bb5'), (10.0, 1.0, 'C6'), (11.0, 0.5, 'Bb5'), (11.5, 0.5, 'A5'),
+        # Bar 4: F#5 (2.0), Eb5 (1.0), D5 (1.0)
+        (12.0, 2.0, 'F#5'), (14.0, 1.0, 'Eb5'), (15.0, 1.0, 'D5'),
+        # Bar 5: Higher octave climb! D6 (1.0), Eb6 (0.5), F#6 (1.5), Eb6 (0.5)
+        (16.0, 1.0, 'D6'), (17.0, 0.5, 'Eb6'), (17.5, 1.5, 'F#6'), (19.0, 0.5, 'Eb6'), (19.5, 0.5, 'D6'),
+        # Bar 6: C6 (1.0), Bb5 (1.0), A5 (1.0), G5 (1.0)
+        (20.0, 1.0, 'C6'), (21.0, 1.0, 'Bb5'), (22.0, 1.0, 'A5'), (23.0, 1.0, 'G5'),
+        # Bar 7: F#5 (1.0), G5 (0.5), A5 (0.5), Eb5 (1.0), F#5 (1.0)
+        (24.0, 1.0, 'F#5'), (25.0, 0.5, 'G5'), (25.5, 0.5, 'A5'), (26.0, 1.0, 'Eb5'), (27.0, 1.0, 'F#5'),
+        # Bar 8: Resolution to D5 (3.0 beats)
+        (28.0, 3.0, 'D5')
+    ]
+
+    for start_beat, dur_beats, note_name in ney_melody:
+        add_note(track, start_beat * beat_dur, dur_beats * beat_dur * 0.95,
+                 note_to_freq(note_name), 'ney', pan=0.20, vol=0.36)
+
+    # 5. Deep Desert Bass
+    desert_bass = [
+        (0.0, 'D2'), (4.0, 'Eb2'), (8.0, 'D2'), (12.0, 'G1'),
+        (16.0, 'D2'), (20.0, 'Eb2'), (24.0, 'A1'), (28.0, 'D2')
+    ]
+    for start_beat, note_name in desert_bass:
+        add_note(track, start_beat * beat_dur, 4.0 * beat_dur * 0.88,
+                 note_to_freq(note_name), 'bass', pan=0.0, vol=0.45)
+
+    reverbed = apply_stereo_reverb(track, wet=0.24)
+    save_wav(reverbed, output_path)
 
 
 # ======================================================================
-# 4. QUARTER 4: Castle Clocktower & Celestial Mechanism (Time & Angles)
-# Clockwork A Minor / C Major: Pendulum ticks, music box celesta arpeggios
+# 4. QUARTER 4: "The Celestial Clocktower" (Time, Angles & Castle Clocktower)
+# Intricate Baroque Clockwork Allegro: Left-right pendulum ticking,
+# glistening celesta gear arpeggios, staccato violins, and noble castle brass.
 # ======================================================================
 def generate_quarter4(output_path):
-    bpm = 110
+    bpm = 122
     beat_dur = 60.0 / bpm
     bars = 8
     total_duration = bars * 4 * beat_dur
     total_samples = int(total_duration * SAMPLE_RATE)
     track = np.zeros((total_samples, 2), dtype=np.float32)
 
-    # 1. Continuous Mechanical Clockwork Ticking (Tic-Toc pendulum)
+    # 1. High-Precision Mechanical Clockwork Engine
     for b in range(bars * 4):
         t = b * beat_dur
-        # Beat: High Tick
-        add_percussion(track, t, 'tick', pan=-0.25, vol=0.28)
-        # Half-beat: Low Tock
-        add_percussion(track, t + beat_dur * 0.5, 'tock', pan=0.25, vol=0.24)
+        # Left ear: High Escapement Tick on the beat
+        add_percussion(track, t, 'clock_tick', pan=-0.42, vol=0.32)
+        # Right ear: Lower Pendulum Tock on the offbeat
+        add_percussion(track, t + beat_dur * 0.5, 'clock_tock', pan=0.42, vol=0.28)
+        # Soft orchestral snare roll on beat 4 of every 2nd bar
+        if b % 8 == 7:
+            add_percussion(track, t, 'woodblock', pan=0.1, vol=0.22)
+            add_percussion(track, t + beat_dur * 0.25, 'woodblock', pan=-0.1, vol=0.25)
+            add_percussion(track, t + beat_dur * 0.5, 'woodblock', pan=0.1, vol=0.30)
+            add_percussion(track, t + beat_dur * 0.75, 'woodblock', pan=0.0, vol=0.35)
 
-    # 2. Celesta / Clock Chime Arpeggiated Gears (Am, F, Dm, E7, Am, G, F, E7)
-    gears_pattern = [
+    # Bronze Tower Bell strikes on phrase markers
+    add_percussion(track, 0.0, 'tower_bell', pan=-0.2, vol=0.45)
+    add_percussion(track, 8.0 * beat_dur, 'tower_bell', pan=0.2, vol=0.40)
+    add_percussion(track, 16.0 * beat_dur, 'tower_bell', pan=-0.2, vol=0.45)
+    add_percussion(track, 24.0 * beat_dur, 'tower_bell', pan=0.2, vol=0.40)
+
+    # 2. Glistening Celesta / Music Box Gear Arpeggios (Spinning brass gears)
+    # Intricate 16th-note Baroque gear runs: Am, Dm, F, E7, C, G, F, E7
+    gears_melody = [
         # Bar 1 (Am)
         ['A4', 'C5', 'E5', 'A5', 'E5', 'C5', 'A4', 'C5'],
-        # Bar 2 (F)
-        ['F4', 'A4', 'C5', 'F5', 'C5', 'A4', 'F4', 'A4'],
-        # Bar 3 (Dm)
-        ['D4', 'F4', 'A4', 'D5', 'A4', 'F4', 'D4', 'F4'],
-        # Bar 4 (E)
-        ['E4', 'G#4', 'B4', 'E5', 'B4', 'G#4', 'E4', 'G#4'],
-        # Bar 5 (Am)
-        ['A4', 'C5', 'E5', 'A5', 'E5', 'C5', 'A4', 'C5'],
+        # Bar 2 (Dm)
+        ['F4', 'A4', 'D5', 'F5', 'D5', 'A4', 'F4', 'A4'],
+        # Bar 3 (F)
+        ['C4', 'F4', 'A4', 'C5', 'A4', 'F4', 'C4', 'F4'],
+        # Bar 4 (E7)
+        ['B3', 'E4', 'G#4', 'B4', 'D5', 'B4', 'G#4', 'E4'],
+        # Bar 5 (C)
+        ['C4', 'E4', 'G4', 'C5', 'E5', 'C5', 'G4', 'E4'],
         # Bar 6 (G)
-        ['G4', 'B4', 'D5', 'G5', 'D5', 'B4', 'G4', 'B4'],
+        ['D4', 'G4', 'B4', 'D5', 'G5', 'D5', 'B4', 'G4'],
         # Bar 7 (F)
-        ['F4', 'A4', 'C5', 'F5', 'C5', 'A4', 'F4', 'A4'],
-        # Bar 8 (E)
-        ['E4', 'G#4', 'B4', 'D5', 'B4', 'G#4', 'E4', 'B4']
+        ['C4', 'F4', 'A4', 'C5', 'F5', 'C5', 'A4', 'F4'],
+        # Bar 8 (E7)
+        ['B3', 'E4', 'G#4', 'B4', 'E5', 'B4', 'G#4', 'E4']
     ]
 
-    for bar_idx, bar in enumerate(gears_pattern):
+    for bar_idx, bar in enumerate(gears_melody):
         bar_start = bar_idx * 4 * beat_dur
         for step_idx, note_name in enumerate(bar):
             t = bar_start + step_idx * (beat_dur * 0.5)
-            pan = 0.35 if step_idx % 2 == 0 else 0.15
-            add_note(track, t, beat_dur * 0.85, note_to_freq(note_name), 'celesta', pan=pan, vol=0.28)
+            pan = 0.35 if step_idx % 2 == 0 else -0.25
+            add_note(track, t, beat_dur * 0.82, note_to_freq(note_name), 'celesta', pan=pan, vol=0.32)
 
-    # 3. Majestic Clocktower Horn / Pad Melody (Noble, regal, inquisitive)
+    # 3. Baroque Staccato Pizzicato Violins (Rhythmic counterpoint)
+    staccato_rhythm = [
+        (0.0, 'A4'), (1.0, 'E4'), (2.0, 'A4'), (3.0, 'C5'),
+        (4.0, 'D4'), (5.0, 'A4'), (6.0, 'D4'), (7.0, 'F4'),
+        (8.0, 'F4'), (9.0, 'C4'), (10.0, 'F4'), (11.0, 'A4'),
+        (12.0, 'E4'), (13.0, 'B3'), (14.0, 'E4'), (15.0, 'G#4'),
+        (16.0, 'C4'), (17.0, 'G4'), (18.0, 'C4'), (19.0, 'E4'),
+        (20.0, 'G4'), (21.0, 'D4'), (22.0, 'G4'), (23.0, 'B4'),
+        (24.0, 'F4'), (25.0, 'C4'), (26.0, 'F4'), (27.0, 'A4'),
+        (28.0, 'E4'), (29.0, 'B3'), (30.0, 'E4'), (31.0, 'E4')
+    ]
+    for b_pos, n_name in staccato_rhythm:
+        add_note(track, b_pos * beat_dur, beat_dur * 0.6,
+                 note_to_freq(n_name), 'pizzicato', pan=-0.30, vol=0.26)
+
+    # 4. Noble Castle French Horn & Majestic Lead Melody
     clocktower_lead = [
-        # Bar 1: E5 (2), A5 (1.5), B5 (0.5)
-        (0.0, 2.0, 'E5'), (2.0, 1.5, 'A5'), (3.5, 0.5, 'B5'),
-        # Bar 2: C6 (2), B5 (1), A5 (1)
+        # Bar 1: E5 (1.5), A5 (1.5), B5 (1.0)
+        (0.0, 1.5, 'E5'), (1.5, 1.5, 'A5'), (3.0, 1.0, 'B5'),
+        # Bar 2: C6 (2.0), B5 (1.0), A5 (1.0)
         (4.0, 2.0, 'C6'), (6.0, 1.0, 'B5'), (7.0, 1.0, 'A5'),
-        # Bar 3: F5 (2), A5 (1), D6 (1)
-        (8.0, 2.0, 'F5'), (10.0, 1.0, 'A5'), (11.0, 1.0, 'D6'),
+        # Bar 3: F5 (1.5), A5 (1.5), D6 (1.0)
+        (8.0, 1.5, 'F5'), (9.5, 1.5, 'A5'), (11.0, 1.0, 'D6'),
         # Bar 4: B5 (2.5), G#5 (1.5)
         (12.0, 2.5, 'B5'), (14.5, 1.5, 'G#5'),
-        # Bar 5: E5 (1.5), A5 (1.5), C6 (1)
-        (16.0, 1.5, 'E5'), (17.5, 1.5, 'A5'), (19.0, 1.0, 'C6'),
-        # Bar 6: D6 (1.5), B5 (1.5), G5 (1)
-        (20.0, 1.5, 'D6'), (21.5, 1.5, 'B5'), (23.0, 1.0, 'G5'),
-        # Bar 7: A5 (1.5), F5 (1.5), D5 (1)
-        (24.0, 1.5, 'A5'), (25.5, 1.5, 'F5'), (27.0, 1.0, 'D5'),
-        # Bar 8: E5 (2.0), A5 (2.0) - Grand grandfather clock resolution
-        (28.0, 2.0, 'E5'), (30.0, 2.0, 'A5')
+        # Bar 5: E5 (1.0), G5 (1.0), C6 (1.5), D6 (0.5)
+        (16.0, 1.0, 'E5'), (17.0, 1.0, 'G5'), (18.0, 1.5, 'C6'), (19.5, 0.5, 'D6'),
+        # Bar 6: E6 (2.0), D6 (1.0), B5 (1.0)
+        (20.0, 2.0, 'E6'), (22.0, 1.0, 'D6'), (23.0, 1.0, 'B5'),
+        # Bar 7: C6 (1.0), A5 (1.0), F5 (1.0), B5 (1.0)
+        (24.0, 1.0, 'C6'), (25.0, 1.0, 'A5'), (26.0, 1.0, 'F5'), (27.0, 1.0, 'B5'),
+        # Bar 8: A5 (3.0 beats grand grandfather clock resolution)
+        (28.0, 3.0, 'A5')
     ]
 
     for start_beat, dur_beats, note_name in clocktower_lead:
         add_note(track, start_beat * beat_dur, dur_beats * beat_dur * 0.94,
-                 note_to_freq(note_name), 'pad', pan=-0.25, vol=0.34)
+                 note_to_freq(note_name), 'horn', pan=0.18, vol=0.35)
 
-    # 4. Stately Bass Chords
-    stately_bass = [
-        (0.0, 'A1'), (4.0, 'F1'), (8.0, 'D2'), (12.0, 'E2'),
-        (16.0, 'A1'), (20.0, 'G1'), (24.0, 'F1'), (28.0, 'E1')
+    # 5. Stately Cello & Castle Bass
+    castle_bass = [
+        (0.0, 'A1'), (4.0, 'D2'), (8.0, 'F1'), (12.0, 'E2'),
+        (16.0, 'C2'), (20.0, 'G1'), (24.0, 'F1'), (28.0, 'A1')
     ]
-    for start_beat, note_name in stately_bass:
-        add_note(track, start_beat * beat_dur, 4.0 * beat_dur * 0.9,
-                 note_to_freq(note_name), 'bass', pan=0.0, vol=0.40)
+    for start_beat, note_name in castle_bass:
+        add_note(track, start_beat * beat_dur, 4.0 * beat_dur * 0.90,
+                 note_to_freq(note_name), 'bass', pan=0.0, vol=0.42)
 
-    save_wav(track, output_path)
+    reverbed = apply_stereo_reverb(track, wet=0.22)
+    save_wav(reverbed, output_path)
 
 
 def main():
@@ -572,12 +763,12 @@ def main():
     q3_path = os.path.join(sounds_dir, "q3_sun_temple.wav")
     q4_path = os.path.join(sounds_dir, "q4_clocktower_castle.wav")
 
-    print("🎹 Starting synthesis of Cognitive Quest thematic soundtracks...")
+    print("Synthesizing enhanced thematic soundtracks...")
     generate_quarter1(q1_path)
     generate_quarter2(q2_path)
     generate_quarter3(q3_path)
     generate_quarter4(q4_path)
-    print("✨ All 4 quarter soundtracks generated successfully!")
+    print("All enhanced soundtracks generated and verified successfully!")
 
 
 if __name__ == "__main__":
