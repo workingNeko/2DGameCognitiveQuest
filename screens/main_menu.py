@@ -565,6 +565,7 @@ class MainMenu:
         box_w, box_h = 500, 260
         box_x = (self.w - box_w) // 2
         box_y = (self.h - box_h) // 2
+        dialog_rect = pygame.Rect(box_x, box_y, box_w, box_h)
 
         btn_w, btn_h = 160, 42
         yes_rect = pygame.Rect(box_x + 60, box_y + 180, btn_w, btn_h)
@@ -572,6 +573,8 @@ class MainMenu:
 
         if yes_rect.collidepoint(pos):
             print("👍 Confirmation pop-up: YES clicked")
+            if hasattr(self, 'audio_manager'):
+                self.audio_manager.play_sfx("click")
             if self.popup_state == "confirm_exit":
                 self.exit_game()
             elif self.popup_state == "confirm_new_activity":
@@ -591,6 +594,13 @@ class MainMenu:
                 show_saving_and_exit(self)
         elif no_rect.collidepoint(pos):
             print("👎 Confirmation pop-up: NO clicked")
+            if hasattr(self, 'audio_manager'):
+                self.audio_manager.play_sfx("click")
+            self.popup_state = None
+        elif not dialog_rect.collidepoint(pos):
+            # Click outside dialog modal dismisses it
+            if hasattr(self, 'audio_manager'):
+                self.audio_manager.play_sfx("click")
             self.popup_state = None
 
     def draw_audio_popup(self):
@@ -757,12 +767,12 @@ class MainMenu:
 
         # 3. Text
         title_font = pygame.font.SysFont("Comic Sans MS", 24, bold=True)
-        text_font = pygame.font.SysFont("Comic Sans MS", 18)
+        text_font = pygame.font.SysFont("Comic Sans MS", 18, bold=True)
 
         if self.popup_state == "confirm_exit":
-            title_text = "Exit Game"
-            body_text1 = "Are you sure you want to"
-            body_text2 = "exit the game?"
+            title_text = "Quit Game"
+            body_text1 = "Are you sure you want to quit?"
+            body_text2 = ""
         elif self.popup_state == "confirm_new_activity":
             title_text = "Start New Activity"
             body_text1 = "Are you sure to Start a new Activity?"
@@ -781,9 +791,12 @@ class MainMenu:
 
         # Draw Body text
         body_surf1 = text_font.render(body_text1, True, (241, 245, 249))
-        body_surf2 = text_font.render(body_text2, True, (241, 245, 249))
-        self.screen.blit(body_surf1, (box_x + (box_w - body_surf1.get_width()) // 2, box_y + 95))
-        self.screen.blit(body_surf2, (box_x + (box_w - body_surf2.get_width()) // 2, box_y + 125))
+        if body_text2:
+            body_surf2 = text_font.render(body_text2, True, (241, 245, 249))
+            self.screen.blit(body_surf1, (box_x + (box_w - body_surf1.get_width()) // 2, box_y + 95))
+            self.screen.blit(body_surf2, (box_x + (box_w - body_surf2.get_width()) // 2, box_y + 125))
+        else:
+            self.screen.blit(body_surf1, (box_x + (box_w - body_surf1.get_width()) // 2, box_y + 110))
 
         # 4. Buttons
         btn_w, btn_h = 160, 42
@@ -798,7 +811,8 @@ class MainMenu:
         pygame.draw.rect(self.screen, (239, 68, 68), yes_rect, 2, border_radius=6)
         
         btn_font = pygame.font.SysFont("Comic Sans MS", 16, bold=True)
-        yes_text_surf = btn_font.render("Yes, exit" if self.popup_state == "confirm_exit" else ("Yes, restart" if self.popup_state == "confirm_new_activity" else "Yes, return"), True, yes_fg)
+        yes_label = "Yes, quit" if self.popup_state == "confirm_exit" else ("Yes, restart" if self.popup_state == "confirm_new_activity" else "Yes, return")
+        yes_text_surf = btn_font.render(yes_label, True, yes_fg)
         self.screen.blit(yes_text_surf, (yes_rect.x + (btn_w - yes_text_surf.get_width()) // 2, yes_rect.y + (btn_h - yes_text_surf.get_height()) // 2))
 
         # No button hover & draw
@@ -844,7 +858,7 @@ class MainMenu:
             font=self.button_font,
             bg_color=None,
             text_color=(255, 255, 255),
-            action=self.exit_game,
+            action=self.confirm_exit_game,
             image_path=exit_btn_path
         )
         
@@ -1000,6 +1014,12 @@ class MainMenu:
             self.no_student_timer = pygame.time.get_ticks() + 2000
             return
         self.popup_state = "confirm_new_activity"
+
+    def confirm_exit_game(self):
+        print("🚪 ESC / EXIT clicked! Requesting 'Are you sure you want to quit?' confirmation popup...")
+        if hasattr(self, 'audio_manager'):
+            self.audio_manager.play_sfx("click")
+        self.popup_state = "confirm_exit"
 
     def exit_game(self):
         print("🚪 EXIT clicked!")
@@ -1172,6 +1192,15 @@ class MainMenu:
                     self.handle_popup_click(self.cursor_pos)
                 elif event.key == pygame.K_ESCAPE:
                     self.popup_state = None
+                    if hasattr(self, 'audio_manager'):
+                        self.audio_manager.play_sfx("click")
+                elif event.key == pygame.K_y:
+                    if self.popup_state == "confirm_exit":
+                        self.exit_game()
+                elif event.key == pygame.K_n:
+                    self.popup_state = None
+                    if hasattr(self, 'audio_manager'):
+                        self.audio_manager.play_sfx("click")
             return
 
         if self.current_screen == "menu":
@@ -1181,6 +1210,8 @@ class MainMenu:
             elif event.type == pygame.KEYDOWN:
                 if event.key in [pygame.K_SPACE, pygame.K_RETURN]:
                     self.trigger_click()
+                elif event.key == pygame.K_ESCAPE:
+                    self.confirm_exit_game()
         elif self.current_screen == "stage_select" and self.stage_select:
             result = self.stage_select.handle_event(event)
             if result == "back":
