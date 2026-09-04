@@ -154,7 +154,7 @@ class Quarter3:
 
         # Load the specified map
         if not self.map_loader.load_map(map_name):
-            print(f"❌ Failed to load {map_name}")
+            print(f"[FAIL] Failed to load {map_name}")
             self._create_default_map()
         else:
             # Use the loaded map data
@@ -375,7 +375,7 @@ class Quarter3:
                 if c in ['1', '2', '3', '4', '5']:
                     num = int(c)
                     self.quiz_stations[num] = (x, y)
-                    print(f"📍 Quiz Station {num} found at: ({x}, {y})")
+                    print(f"[LOC] Quiz Station {num} found at: ({x}, {y})")
 
         # Correct answer random responses
         self.current_correct_phrase = ""
@@ -392,7 +392,7 @@ class Quarter3:
             {
                 "station": 1,
                 "title": "MULTIPLICATION ARRAYS",
-                "question": "Farmer Ben arranged golden apples into 3 equal rows with 4 apples in each row. What is the total product of 3 × 4?",
+                "question": "Farmer Ben arranged golden apples into 3 equal rows with 4 apples in each row. What is the total product of 3 x 4?",
                 "q_type": "multiple_choice",
                 "choices": ["A. 7 apples", "B. 10 apples", "C. 12 apples", "D. 15 apples"],
                 "correct": 2,  # C. 12
@@ -416,7 +416,7 @@ class Quarter3:
             {
                 "station": 3,
                 "title": "EQUAL SHARING DIVISION",
-                "question": "You gathered 10 gold coins to share equally between 2 treasure chests. How many coins belong in each chest (10 ÷ 2)?",
+                "question": "You gathered 10 gold coins to share equally between 2 treasure chests. How many coins belong in each chest (10 / 2)?",
                 "q_type": "multiple_choice",
                 "choices": ["A. 3 coins", "B. 4 coins", "C. 5 coins", "D. 8 coins"],
                 "correct": 2,  # C. 5 coins
@@ -518,7 +518,7 @@ class Quarter3:
         self.load_puzzle_sounds()
 
         # ============================================================
-        # 🏺 3 DISTINCT GAMEPLAY MODES FOR QUARTER 3
+        # [QUEST] 3 DISTINCT GAMEPLAY MODES FOR QUARTER 3
         # ============================================================
         self.is_caravan_mode = (self.map_name == "map7.txt")       # Map 7: Explorer's Royal Caravan
         self.is_relic_hunt_mode = (self.map_name == "map8.txt")    # Map 8: In-World Relic Hunt & Causeway Bridge
@@ -544,9 +544,9 @@ class Quarter3:
         # CITADEL OF THE SUN: KEYSTONE ALTAR SYSTEM (MAP 9 GAMEPLAY)
         # ============================================================
         self.citadel_keystones = {
-            1: {"num": 1, "roman": "I", "name": "Apple Array Scepter", "math": "3 × 4", "color": (239, 68, 68), "icon": "apple"},
-            2: {"num": 2, "roman": "II", "name": "Coconut Oasis Orb", "math": "4 × 2", "color": (180, 83, 9), "icon": "coconut"},
-            3: {"num": 3, "roman": "III", "name": "Scarab Coin Chalice", "math": "10 ÷ 2", "color": (234, 179, 8), "icon": "chest"},
+            1: {"num": 1, "roman": "I", "name": "Apple Array Scepter", "math": "3 x 4", "color": (239, 68, 68), "icon": "apple"},
+            2: {"num": 2, "roman": "II", "name": "Coconut Oasis Orb", "math": "4 x 2", "color": (180, 83, 9), "icon": "coconut"},
+            3: {"num": 3, "roman": "III", "name": "Scarab Coin Chalice", "math": "10 / 2", "color": (234, 179, 8), "icon": "chest"},
             4: {"num": 4, "roman": "IV", "name": "Solar Half Keystone", "math": "1/2", "color": (245, 158, 11), "icon": "sun_disk"},
             5: {"num": 5, "roman": "V", "name": "Golden Ingot Prism", "math": "1/3", "color": (217, 119, 6), "icon": "ingot"}
         }
@@ -578,7 +578,7 @@ class Quarter3:
         if self.is_relic_hunt_mode:
             self.spawn_relic_stage(1)
 
-        print(f"✅ Quarter3 initialized with map: {self.map_name}")
+        print(f"[OK] Quarter3 initialized with map: {self.map_name}")
         print(f"   Goal portal: {self.goal_portal_direction}")
         print(f"   Portals loaded: {len(self.portals)}")
 
@@ -649,7 +649,7 @@ class Quarter3:
             y = (i * 43) % (self.height // 2)
             pygame.draw.circle(self.cached_math_bg, (255, 255, 255), (x, y), 2, 0)
         math_font = pygame.font.SysFont("Comic Sans MS", 22, bold=True)
-        for label, x_pos in [("+", 70), ("=", 180), ("3", 290), ("×", 390), ("7", 520), ("-", 610)]:
+        for label, x_pos in [("+", 70), ("=", 180), ("3", 290), ("x", 390), ("7", 520), ("-", 610)]:
             text = math_font.render(label, True, (59, 130, 246))
             self.cached_math_bg.blit(text, (x_pos, 18))
 
@@ -719,7 +719,7 @@ class Quarter3:
                 return
             questions_result = db.get_questions(quarter=3)
             if not questions_result or len(questions_result) == 0:
-                print("ℹ️ No custom database questions found for Quarter 3. Using default curriculum questions.")
+                print("[INFO] No custom database questions found for Quarter 3. Using default curriculum questions.")
                 return
 
             mapped_questions = []
@@ -778,9 +778,9 @@ class Quarter3:
                     else:
                         self.quiz_questions.append(mapped_questions[i])
 
-                print(f"✅ Successfully loaded {len(mapped_questions)} dynamic question(s) from Database for Quarter 3!")
+                print(f"[OK] Successfully loaded {len(mapped_questions)} dynamic question(s) from Database for Quarter 3!")
         except Exception as e:
-            print(f"⚠️ Exception loading database questions for Quarter 3: {e}")
+            print(f"[WARN] Exception loading database questions for Quarter 3: {e}")
 
     def save_results_to_database(self):
         if not self.is_quiz_map:
@@ -790,7 +790,7 @@ class Quarter3:
                 return
             student_db_id = getattr(self.main_menu, 'student_db_id', None)
             if not student_db_id:
-                print("⚠️ No student_db_id available in main_menu. Skipping database record.")
+                print("[WARN] No student_db_id available in main_menu. Skipping database record.")
                 return
             total_questions = min(5, len(self.quiz_questions))
             correct_answers = sum(1 for k, v in self.first_attempt_correct.items() if k <= total_questions and v)
@@ -799,7 +799,7 @@ class Quarter3:
 
             assessment_id = db.get_assessment_id(quarter=3)
             if assessment_id:
-                print(f"📝 Linked Quarter 3 result to Assessment ID: {assessment_id}")
+                print(f"[LOG] Linked Quarter 3 result to Assessment ID: {assessment_id}")
 
             feedback_msg = f"Completed Quarter 3 (Math Explorations). Answered {correct_answers} of {total_questions} questions correctly on the first attempt."
             grade_level = getattr(self.main_menu, 'selected_student', {}).get('level', 'Grade 2')
@@ -818,9 +818,9 @@ class Quarter3:
                 print(f"Successfully saved Quarter 3 Game Result to Database for Student DB ID {student_db_id}!")
                 print(f"   Score: {score}/{total_questions} ({percentage}%)")
             else:
-                print("⚠️ Failed to save Quarter 3 game results via Database API.")
+                print("[WARN] Failed to save Quarter 3 game results via Database API.")
         except Exception as e:
-            print(f"⚠️ Exception saving Quarter 3 game results: {e}")
+            print(f"[WARN] Exception saving Quarter 3 game results: {e}")
 
     # ============================================================
     # CREATE DEFAULT MAP (fallback)
@@ -1015,7 +1015,7 @@ class Quarter3:
         frames = []
 
         if not os.path.exists(npc_path):
-            print(f"⚠️ NPC path does not exist: {npc_path}")
+            print(f"[WARN] NPC path does not exist: {npc_path}")
             placeholder = pygame.Surface((TILE_SIZE, TILE_SIZE))
             placeholder.fill((255, 200, 100))
             pygame.draw.circle(placeholder, (0, 0, 0), (TILE_SIZE // 2, TILE_SIZE // 2), 12)
@@ -1047,7 +1047,7 @@ class Quarter3:
                     placeholder.fill((255, 200, 0))
                     frames.append(placeholder)
 
-        print(f"✅ Loaded {len(frames)} frames for {npc_name}")
+        print(f"[OK] Loaded {len(frames)} frames for {npc_name}")
         return frames
 
     # ============================================================
@@ -1060,9 +1060,9 @@ class Quarter3:
             if os.path.exists(oldman_path):
                 img = pygame.image.load(oldman_path).convert_alpha()
                 self.npc_oldman_sprite = pygame.transform.scale(img, (TILE_SIZE, TILE_SIZE))
-                print(f"✅ Loaded Oldman sprite")
+                print(f"[OK] Loaded Oldman sprite")
             else:
-                print(f"⚠️ Oldman sprite not found at: {oldman_path}")
+                print(f"[WARN] Oldman sprite not found at: {oldman_path}")
                 placeholder = pygame.Surface((TILE_SIZE, TILE_SIZE))
                 placeholder.fill((200, 200, 200))
                 pygame.draw.circle(placeholder, (0, 0, 0), (TILE_SIZE // 2, TILE_SIZE // 2), 12)
@@ -1073,7 +1073,7 @@ class Quarter3:
                 placeholder.blit(text, (4, TILE_SIZE - 12))
                 self.npc_oldman_sprite = placeholder
         except Exception as e:
-            print(f"❌ Error loading Oldman: {e}")
+            print(f"[FAIL] Error loading Oldman: {e}")
             placeholder = pygame.Surface((TILE_SIZE, TILE_SIZE))
             placeholder.fill((200, 200, 200))
             self.npc_oldman_sprite = placeholder
@@ -1093,7 +1093,7 @@ class Quarter3:
                         scaled = pygame.transform.scale(img, (TILE_SIZE, TILE_SIZE))
                         frames.append(scaled)
                 except Exception as e:
-                    print(f"⚠️ Error loading frame {path}: {e}")
+                    print(f"[WARN] Error loading frame {path}: {e}")
             if not frames:
                 placeholder = pygame.Surface((TILE_SIZE, TILE_SIZE))
                 placeholder.fill((255, 180, 0))
@@ -1107,7 +1107,7 @@ class Quarter3:
             4: {"name": "Number 4 Guardian", "frames": load_frames(self.NPC_PATH_NUM4, "number4npc"), "anim_frame": 0, "anim_timer": 0},
             5: {"name": "Number 5 Guardian", "frames": load_frames(self.NPC_PATH_NUM5, "number5npc"), "anim_frame": 0, "anim_timer": 0},
         }
-        print("✅ Loaded 5 Animated Number Character Station NPCs (Number 1-5)")
+        print("[OK] Loaded 5 Animated Number Character Station NPCs (Number 1-5)")
 
         # Load Knight
         knight_path = os.path.join(self.NPC_PATH_KNIGHT, "knight.png")
@@ -1115,9 +1115,9 @@ class Quarter3:
             if os.path.exists(knight_path):
                 img = pygame.image.load(knight_path).convert_alpha()
                 self.npc_knight_sprite = pygame.transform.scale(img, (TILE_SIZE, TILE_SIZE))
-                print(f"✅ Loaded Knight sprite")
+                print(f"[OK] Loaded Knight sprite")
             else:
-                print(f"⚠️ Knight sprite not found at: {knight_path}")
+                print(f"[WARN] Knight sprite not found at: {knight_path}")
                 placeholder = pygame.Surface((TILE_SIZE, TILE_SIZE))
                 placeholder.fill((192, 192, 192))
                 self.npc_knight_sprite = placeholder
@@ -1130,7 +1130,7 @@ class Quarter3:
                     img = pygame.image.load(path).convert_alpha()
                     scaled = pygame.transform.scale(img, (TILE_SIZE, TILE_SIZE))
                     self.npc_knight_left_sprites.append(scaled)
-                    print(f"✅ Loaded Knight left frame: {name}")
+                    print(f"[OK] Loaded Knight left frame: {name}")
 
             # Load Knight walking down sprites
             self.npc_knight_down_sprites = []
@@ -1140,7 +1140,7 @@ class Quarter3:
                     img = pygame.image.load(path).convert_alpha()
                     scaled = pygame.transform.scale(img, (TILE_SIZE, TILE_SIZE))
                     self.npc_knight_down_sprites.append(scaled)
-                    print(f"✅ Loaded Knight down frame: {name}")
+                    print(f"[OK] Loaded Knight down frame: {name}")
 
             # Load Knight walking right sprites
             self.npc_knight_right_sprites = []
@@ -1150,7 +1150,7 @@ class Quarter3:
                     img = pygame.image.load(path).convert_alpha()
                     scaled = pygame.transform.scale(img, (TILE_SIZE, TILE_SIZE))
                     self.npc_knight_right_sprites.append(scaled)
-                    print(f"✅ Loaded Knight right frame: {name}")
+                    print(f"[OK] Loaded Knight right frame: {name}")
 
             # Load Knight walking up sprites
             self.npc_knight_up_sprites = []
@@ -1160,9 +1160,9 @@ class Quarter3:
                     img = pygame.image.load(path).convert_alpha()
                     scaled = pygame.transform.scale(img, (TILE_SIZE, TILE_SIZE))
                     self.npc_knight_up_sprites.append(scaled)
-                    print(f"✅ Loaded Knight up frame: {name}")
+                    print(f"[OK] Loaded Knight up frame: {name}")
         except Exception as e:
-            print(f"❌ Error loading Knight: {e}")
+            print(f"[FAIL] Error loading Knight: {e}")
             placeholder = pygame.Surface((TILE_SIZE, TILE_SIZE))
             placeholder.fill((192, 192, 192))
             self.npc_knight_sprite = placeholder
@@ -1487,7 +1487,7 @@ class Quarter3:
                         self.main_menu.audio_manager.play_sfx("victory_fanfare")
                         self.main_menu.audio_manager.play_sfx("portal_warp")
                 except Exception as e:
-                    print(f"⚠️ Error recording Quarter 3 completion: {e}")
+                    print(f"[WARN] Error recording Quarter 3 completion: {e}")
 
             self.main_menu.current_screen = "stage_select"
             self.main_menu.quarter3 = None
@@ -1496,7 +1496,7 @@ class Quarter3:
             except ImportError:
                 from .stageselect import StageSelect
             self.main_menu.stage_select = StageSelect(self.screen, self.main_menu)
-            print("🏠 Returning to stage select")
+            print("[HOME] Returning to stage select")
             if completed:
                 self.completed = True
             
@@ -1522,7 +1522,7 @@ class Quarter3:
             if current_portal.direction == self.goal_portal_direction:
                 if self.quiz_state < 6:
                     return False
-                print(f"🎯 Goal reached! Returning to stage select...")
+                print(f"[TARGET] Goal reached! Returning to stage select...")
                 self.return_to_stage_select()
                 return True
 
@@ -1597,7 +1597,7 @@ class Quarter3:
             self.wrong_feedback_msg = ""
             if self.success_sound:
                 self.success_sound.play()
-            print(f"✅ Correct identification answer submitted: {self.ident_input_text}")
+            print(f"[OK] Correct identification answer submitted: {self.ident_input_text}")
         else:
             if hasattr(self, 'first_attempt_correct') and (self.current_question_index + 1) in self.first_attempt_correct:
                 self.first_attempt_correct[self.current_question_index + 1] = False
@@ -1605,15 +1605,15 @@ class Quarter3:
             self.station_attempts[self.quiz_station_index] = self.station_attempts.get(self.quiz_station_index, 0) + 1
             if self.station_attempts[self.quiz_station_index] < 2:
                 self.quiz_state = 2
-                print(f"❌ Incorrect identification answer submitted: {self.ident_input_text} (Attempt 1 of 2)")
+                print(f"[FAIL] Incorrect identification answer submitted: {self.ident_input_text} (Attempt 1 of 2)")
             else:
                 self.quiz_state = 4
-                print(f"❌ Incorrect identification on 2nd try! Out of tries. Station {self.quiz_station_index} cleared for progression.")
+                print(f"[FAIL] Incorrect identification on 2nd try! Out of tries. Station {self.quiz_station_index} cleared for progression.")
                 
             if self.snap_sound:
                 self.snap_sound.play()
-            self.wrong_feedback_msg = f"Almost there! Check the visual model ({q_data.get('hint', '')}) and try again! 💡"
-            print(f"❌ Incorrect identification answer: '{self.ident_input_text}'. Expected one of: {valid_answers}")
+            self.wrong_feedback_msg = f"Almost there! Check the visual model ({q_data.get('hint', '')}) and try again!"
+            print(f"[FAIL] Incorrect identification answer: '{self.ident_input_text}'. Expected one of: {valid_answers}")
             
         from db.save_system import save_student_progress
         save_student_progress(self.main_menu)
@@ -1645,7 +1645,7 @@ class Quarter3:
                     "life": random.uniform(0.8, 1.5),
                     "rad": random.randint(3, 6)
                 })
-            print(f"🐪 Caravan Upgraded! Loaded {reward['name']} (Total Cargo: {len(self.caravan_cargo)}/5)")
+            print(f"[CAMEL] Caravan Upgraded! Loaded {reward['name']} (Total Cargo: {len(self.caravan_cargo)}/5)")
 
         # Map 9 Reward: Unlock Sacred Math Keystone
         elif self.is_puzzle_hybrid_mode and self.quiz_station_index in self.citadel_keystones:
@@ -1699,14 +1699,14 @@ class Quarter3:
                 self.camera_pan_dest_y = max(min_cam_y, min(t_cy, max_cam_y))
 
                 self.quiz_state = 7  # State 7: Camera Pan sequence
-                print(f"🏗️ Aqueduct Bridge Segment {st_num}/5 materialized at ({bx}, {by})! Camera panning...")
+                print(f"[BRIDGE] Aqueduct Bridge Segment {st_num}/5 materialized at ({bx}, {by})! Camera panning...")
                 return
 
         if self.quiz_station_index < 5:
             self.quiz_station_index += 1
             self.current_question_index += 1
             self.quiz_state = 0
-            print(f"✅ Advanced to Quiz Station {self.quiz_station_index}")
+            print(f"[OK] Advanced to Quiz Station {self.quiz_station_index}")
         else:
             self.current_question_index += 1
             if self.is_puzzle_hybrid_mode:
@@ -1772,7 +1772,7 @@ class Quarter3:
                         self.wrong_feedback_msg = ""
                         if self.success_sound:
                             self.success_sound.play()
-                        print(f"✅ Correct answer selected: {q_data['choices'][i]}")
+                        print(f"[OK] Correct answer selected: {q_data['choices'][i]}")
                     else:
                         # 50:50 Wizard Hint: eliminate the clicked wrong choice and give gentle encouragement
                         self.eliminated_choices.add(i)
@@ -1783,10 +1783,10 @@ class Quarter3:
                         self.station_attempts[self.quiz_station_index] = self.station_attempts.get(self.quiz_station_index, 0) + 1
                         if self.station_attempts[self.quiz_station_index] < 2:
                             self.quiz_state = 2
-                            print(f"❌ Incorrect choice selected: {q_data['choices'][i]} (Attempt 1 of 2)")
+                            print(f"[FAIL] Incorrect choice selected: {q_data['choices'][i]} (Attempt 1 of 2)")
                         else:
                             self.quiz_state = 4
-                            print(f"❌ Incorrect choice on 2nd try! Out of tries. Station {self.quiz_station_index} cleared for progression.")
+                            print(f"[FAIL] Incorrect choice on 2nd try! Out of tries. Station {self.quiz_station_index} cleared for progression.")
                         
                         if self.snap_sound:
                             self.snap_sound.play()
@@ -1899,7 +1899,7 @@ class Quarter3:
             if self.stage_time_remaining <= 0.0:
                 self.stage_time_remaining = 0.0
                 self.time_up_dialog_active = True
-                print("⏰ Quarter 3 Time's Up!")
+                print("[TIME] Quarter 3 Time's Up!")
 
         if self.time_up_dialog_active:
             return
@@ -1943,11 +1943,11 @@ class Quarter3:
                         self.eliminated_choices.clear()
                         self.wrong_feedback_msg = ""
                         self.ident_input_text = ""
-                        print(f"📜 Guardian {self.quiz_station_index} Challenge Opened! (Type: {self.quiz_questions[self.current_question_index].get('q_type', 'multiple_choice')})")
+                        print(f"[SCROLL] Guardian {self.quiz_station_index} Challenge Opened! (Type: {self.quiz_questions[self.current_question_index].get('q_type', 'multiple_choice')})")
                     else:
                         # Still missing required supplies in the maze
                         needed = self.relic_target_count - self.relic_collected_count
-                        self.relic_banner_text = f"🔒 Shrine Needs {needed} more {self.relic_item_type.upper()}S!"
+                        self.relic_banner_text = f"Shrine Needs {needed} more {self.relic_item_type.upper()}S!"
                         self.relic_banner_sub = f"Collect all supplies in the desert maze before taking the Guardian's Trial!"
                         self.relic_banner_timer = 2.0
                 else:
@@ -1958,7 +1958,7 @@ class Quarter3:
                     self.eliminated_choices.clear()
                     self.wrong_feedback_msg = ""
                     self.ident_input_text = ""
-                    print(f"📜 Station {self.quiz_station_index} Multiple Choice Challenge Opened!")
+                    print(f"[SCROLL] Station {self.quiz_station_index} Multiple Choice Challenge Opened!")
 
         # Skeleton walking sequence along BFS path
         if self.quiz_state == 4:
@@ -2110,7 +2110,7 @@ class Quarter3:
                 "y": self.caravan_y - 6,
                 "vx": random.uniform(-0.6, 0.6),
                 "vy": -1.2,
-                "char": random.choice(["🎵", "🎶", "✨", "💖", ""]),
+                "kind": random.choice(["note", "sparkle"]),
                 "color": random.choice([(255, 215, 0), (244, 114, 182), (56, 189, 248), (34, 197, 94)]),
                 "life": 1.2
             })
@@ -2171,7 +2171,7 @@ class Quarter3:
                     })
             else:
                 # Reached Portal! Finish level and return to stage select
-                print("🎯 Caravan safely arrived at Goal Portal! Returning to stage select...")
+                print("[TARGET] Caravan safely arrived at Goal Portal! Returning to stage select...")
                 self.caravan_riding = False
                 self.return_to_stage_select()
                 return
@@ -2488,17 +2488,17 @@ class Quarter3:
             
             # Quiz completion progress item
             q_count = min(self.current_question_index, 5)
-            obj1 = f"• Quiz Progress: {q_count}/5 questions answered"
+            obj1 = f"- Quiz Progress: {q_count}/5 questions answered"
             obj1_color = (255, 255, 255) if q_count < 5 else (34, 197, 94)
             obj1_surf = item_font.render(obj1, True, obj1_color)
             self.screen.blit(obj1_surf, (box_x + 15, box_y + 28))
             
             # Goal portal state item
             if self.quiz_state < 6:
-                obj2 = "• Portal Status: LOCKED"
+                obj2 = "- Portal Status: LOCKED"
                 obj2_color = (244, 63, 94)  # Rose
             else:
-                obj2 = "• Portal Status: OPEN (Enter the portal to exit!)"
+                obj2 = "- Portal Status: OPEN (Enter the portal to exit!)"
                 obj2_color = (34, 197, 94)  # Green
             obj2_surf = item_font.render(obj2, True, obj2_color)
             self.screen.blit(obj2_surf, (box_x + 15, box_y + 48))
@@ -2535,7 +2535,7 @@ class Quarter3:
                 y_offset += 18
 
     # ============================================================
-    # 🏺 IN-WORLD RELIC HUNT & SHRINE ALTAR SYSTEM (MAP 8)
+    # [QUEST] IN-WORLD RELIC HUNT & SHRINE ALTAR SYSTEM (MAP 8)
     # ============================================================
     def spawn_relic_stage(self, stage_num):
         """Spawns mathematical relic items in the desert maze for the given stage"""
@@ -2545,11 +2545,11 @@ class Quarter3:
         self.relic_stage = stage_num
 
         if stage_num == 1:
-            # Stage 1: Multiplication Array (3 Rows × 4 Apples = 12)
+            # Stage 1: Multiplication Array (3 Rows x 4 Apples = 12)
             self.relic_target_count = 12
             self.relic_item_type = "apple"
-            self.relic_quest_title = "STAGE 1 • THE GOLDEN ORCHARD TRIAL"
-            self.relic_quest_math = "3 Rows × 4 Apples = 12 Total Apples"
+            self.relic_quest_title = "STAGE 1 - THE GOLDEN ORCHARD TRIAL"
+            self.relic_quest_math = "3 Rows x 4 Apples = 12 Total Apples"
             self.relic_quest_hint = "Gather all 12 Golden Apples and bring them to Shrine 1!"
             coords = [(46, 18), (45, 18), (44, 18), (43, 18), (42, 18), (41, 18), (40, 18), (39, 18), (38, 18), (37, 18), (36, 18), (35, 18)]
             glow = (239, 68, 68)
@@ -2558,18 +2558,18 @@ class Quarter3:
             # Stage 2: Repeated Addition (4 Groups of 2 = 8)
             self.relic_target_count = 8
             self.relic_item_type = "coconut"
-            self.relic_quest_title = "STAGE 2 • THE REPEATED ADDITION TRAIL"
+            self.relic_quest_title = "STAGE 2 - THE REPEATED ADDITION TRAIL"
             self.relic_quest_math = "4 Groups of 2 Coconuts = 2 + 2 + 2 + 2 = 8"
             self.relic_quest_hint = "Gather 8 Coconuts along the oasis path and deliver to Shrine 2!"
             coords = [(32, 18), (30, 18), (28, 18), (26, 18), (23, 18), (21, 18), (19, 18), (17, 18)]
             glow = (180, 83, 9)
 
         elif stage_num == 3:
-            # Stage 3: Equal Sharing Division (10 Coins ÷ 2 Chests = 5)
+            # Stage 3: Equal Sharing Division (10 Coins / 2 Chests = 5)
             self.relic_target_count = 10
             self.relic_item_type = "coin"
-            self.relic_quest_title = "STAGE 3 • EQUAL SHARING DIVISION"
-            self.relic_quest_math = "10 Scarab Coins ÷ 2 Chests = 5 Coins Each"
+            self.relic_quest_title = "STAGE 3 - EQUAL SHARING DIVISION"
+            self.relic_quest_math = "10 Scarab Coins / 2 Chests = 5 Coins Each"
             self.relic_quest_hint = "Collect all 10 Golden Coins to split between the 2 Shrine Chests!"
             coords = [(14, 17), (14, 16), (13, 15), (11, 15), (10, 15), (9, 14), (9, 12), (9, 11), (7, 11), (5, 11)]
             glow = (234, 179, 8)
@@ -2578,7 +2578,7 @@ class Quarter3:
             # Stage 4: Unit Fraction One-Half (1 / 2)
             self.relic_target_count = 2
             self.relic_item_type = "sun_disk"
-            self.relic_quest_title = "STAGE 4 • SACRED UNIT FRACTION (ONE-HALF)"
+            self.relic_quest_title = "STAGE 4 - SACRED UNIT FRACTION (ONE-HALF)"
             self.relic_quest_math = "2 Halves (1/2 + 1/2) = 1 Whole Solar Disk"
             self.relic_quest_hint = "Gather both 2 Sun Disk Halves (1/2 each) and deliver to Shrine 4!"
             coords = [(3, 10), (4, 7)]
@@ -2588,7 +2588,7 @@ class Quarter3:
             # Stage 5: Unit Fraction One-Third (1 / 3)
             self.relic_target_count = 3
             self.relic_item_type = "ingot"
-            self.relic_quest_title = "STAGE 5 • SACRED UNIT FRACTION (ONE-THIRD)"
+            self.relic_quest_title = "STAGE 5 - SACRED UNIT FRACTION (ONE-THIRD)"
             self.relic_quest_math = "3 Segments (1/3 + 1/3 + 1/3) = 1 Whole Ingot Bar"
             self.relic_quest_hint = "Gather all 3 Ingot Segments (1/3 each) and deliver to Shrine 5!"
             coords = [(4, 3), (14, 3), (24, 3)]
@@ -2611,7 +2611,7 @@ class Quarter3:
         self.relic_banner_text = f"{self.relic_quest_title}"
         self.relic_banner_sub = self.relic_quest_math
         self.relic_banner_timer = 4.0
-        print(f"🏺 Relic Stage {stage_num} spawned with {len(self.relic_items)} items!")
+        print(f"[QUEST] Relic Stage {stage_num} spawned with {len(self.relic_items)} items!")
 
     def update_relic_hunt(self, dt):
         """Updates in-world relic item pickup detection, animations, and banner timers"""
@@ -2660,7 +2660,7 @@ class Quarter3:
 
                     if self.relic_collected_count >= self.relic_target_count:
                         self.relic_stage_complete = True
-                        self.relic_banner_text = "ALL SUPPLIES GATHERED! ✨"
+                        self.relic_banner_text = "ALL SUPPLIES GATHERED!"
                         self.relic_banner_sub = f"Deliver them to Guardian {self.quiz_station_index}'s Shrine Altar!"
                         self.relic_banner_timer = 4.0
 
@@ -3034,12 +3034,18 @@ class Quarter3:
         # Gold Halter / Reins
         pygame.draw.line(self.screen, (245, 158, 11), (int(m_cx), int(m_cy)), (int(cart_rect.centerx), int(cart_rect.centery)), 2)
 
-        # 7. Happy Music Notes
+        # 7. Happy Music Notes (Crisp geometric vector notes & stars - zero missing font boxes)
         for note in self.caravan_music_notes:
-            n_x = (note["x"] - self.camera_x) * ZOOM
-            n_y = (note["y"] - self.camera_y) * ZOOM
-            n_surf = self.dialog_hint_font.render(note["char"], True, note["color"])
-            self.screen.blit(n_surf, (n_x, n_y))
+            n_x = int((note["x"] - self.camera_x) * ZOOM)
+            n_y = int((note["y"] - self.camera_y) * ZOOM)
+            col = note["color"]
+            if note.get("kind") == "sparkle":
+                pygame.draw.circle(self.screen, col, (n_x, n_y), 3)
+                pygame.draw.circle(self.screen, (255, 255, 255), (n_x, n_y), 1)
+            else:
+                pygame.draw.circle(self.screen, col, (n_x, n_y), 3)
+                pygame.draw.line(self.screen, col, (n_x + 2, n_y), (n_x + 2, n_y - 7), 2)
+                pygame.draw.line(self.screen, col, (n_x + 2, n_y - 7), (n_x + 6, n_y - 5), 2)
 
     def draw_caravan_hud(self):
         """Draws the expedition inventory rack in the top center with pre-rendered glassmorphic surfaces (0 allocations per frame)"""
@@ -3248,11 +3254,11 @@ class Quarter3:
                 v_type = "fraction_circle"
                 q_data["visual_shaded"] = 1
                 q_data["visual_slices"] = 4
-            elif "row" in q_text or "array" in q_text or "×" in q_text or "times" in q_text or "multiply" in q_text:
+            elif "row" in q_text or "array" in q_text or "x" in q_text or "times" in q_text or "multiply" in q_text:
                 v_type = "array"
             elif "group" in q_text or "+" in q_text or "basket" in q_text or "plate" in q_text or "box" in q_text:
                 v_type = "groups"
-            elif "share" in q_text or "divide" in q_text or "÷" in q_text or "equally" in q_text:
+            elif "share" in q_text or "divide" in q_text or "/" in q_text or "equally" in q_text:
                 v_type = "sharing"
 
         # 1. Multiplication Array (Dynamic rows & cols extracted from text)
@@ -3437,7 +3443,7 @@ class Quarter3:
         q_data = self.quiz_questions[self.current_question_index]
         st_title = q_data.get("title", f"Challenge {self.quiz_station_index}")
         speaker_name = self.station_npcs.get(self.quiz_station_index, {}).get("name", "Guardian")
-        speaker_surf = self.dialog_header_font.render(f"{speaker_name} • {st_title}", True, (255, 215, 0))
+        speaker_surf = self.dialog_header_font.render(f"{speaker_name} - {st_title}", True, (255, 215, 0))
         self.screen.blit(speaker_surf, (box_x + 30, box_y + 18))
 
         # Station progress pill (Top Right)
@@ -3686,9 +3692,9 @@ class Quarter3:
                 self.snap_sound = self.generate_snap_sound()
             if not self.success_sound:
                 self.success_sound = self.generate_success_sound()
-            print("🔊 Sun Relic sound effects synthesized successfully.")
+            print("[AUDIO] Sun Relic sound effects synthesized successfully.")
         except Exception as e:
-            print(f"⚠️ Error loading puzzle sounds: {e}")
+            print(f"[WARN] Error loading puzzle sounds: {e}")
             self.snap_sound = None
             self.success_sound = None
 
@@ -3747,9 +3753,9 @@ class Quarter3:
         random.shuffle(shuffled_indices)
         
         slab_configs = [
-            {"idx": 0, "title": "Array", "math": "3 × 4", "ans": "= 12", "color": (239, 68, 68), "border": (248, 113, 113), "icon_key": "apple"},
-            {"idx": 1, "title": "Groups", "math": "4 × 2", "ans": "= 8", "color": (180, 83, 9), "border": (217, 119, 6), "icon_key": "coconut"},
-            {"idx": 2, "title": "Sharing", "math": "10 ÷ 2", "ans": "= 5", "color": (245, 158, 11), "border": (251, 191, 36), "icon_key": "chest"},
+            {"idx": 0, "title": "Array", "math": "3 x 4", "ans": "= 12", "color": (239, 68, 68), "border": (248, 113, 113), "icon_key": "apple"},
+            {"idx": 1, "title": "Groups", "math": "4 x 2", "ans": "= 8", "color": (180, 83, 9), "border": (217, 119, 6), "icon_key": "coconut"},
+            {"idx": 2, "title": "Sharing", "math": "10 / 2", "ans": "= 5", "color": (245, 158, 11), "border": (251, 191, 36), "icon_key": "chest"},
             {"idx": 3, "title": "Half", "math": "1/2", "ans": "Fraction", "color": (217, 119, 6), "border": (245, 158, 11), "icon_key": "pizza"},
             {"idx": 4, "title": "Third", "math": "1/3", "ans": "Fraction", "color": (168, 85, 247), "border": (192, 132, 252), "icon_key": "chocolate"},
         ]
@@ -3849,9 +3855,9 @@ class Quarter3:
 
         if station_num == 1:
             # Station 1: 3x4 Multiplication Array Builder
-            self.mini_puzzle_title = "PUZZLE 1 • BUILD THE 3 × 4 ARRAY"
+            self.mini_puzzle_title = "PUZZLE 1 - BUILD THE 3 x 4 ARRAY"
             self.mini_puzzle_sub = "Click or drag 12 Golden Apples to fill the 3 rows of 4 grid!"
-            self.mini_puzzle_math_target = "3 Rows × 4 Apples = 12 Total Apples"
+            self.mini_puzzle_math_target = "3 Rows x 4 Apples = 12 Total Apples"
             self.mini_puzzle_type = "array"
             
             grid_start_x = box_x + 220
@@ -3882,7 +3888,7 @@ class Quarter3:
 
         elif station_num == 2:
             # Station 2: Repeated Addition 4 Groups of 2 Coconuts
-            self.mini_puzzle_title = "PUZZLE 2 • GROUP THE COCONUTS (2 + 2 + 2 + 2)"
+            self.mini_puzzle_title = "PUZZLE 2 - GROUP THE COCONUTS (2 + 2 + 2 + 2)"
             self.mini_puzzle_sub = "Place 2 Coconuts into each of the 4 Oasis Baskets!"
             self.mini_puzzle_math_target = "4 Groups of 2 = 2 + 2 + 2 + 2 = 8 Coconuts"
             self.mini_puzzle_type = "groups"
@@ -3911,10 +3917,10 @@ class Quarter3:
                 })
 
         elif station_num == 3:
-            # Station 3: Equal Sharing Division (10 Coins ÷ 2 Chests)
-            self.mini_puzzle_title = "PUZZLE 3 • EQUAL SHARING DIVISION (10 ÷ 2)"
+            # Station 3: Equal Sharing Division (10 Coins / 2 Chests)
+            self.mini_puzzle_title = "PUZZLE 3 - EQUAL SHARING DIVISION (10 / 2)"
             self.mini_puzzle_sub = "Share 10 Scarab Coins equally between the 2 Golden Chests (5 each)!"
-            self.mini_puzzle_math_target = "10 Coins ÷ 2 Chests = 5 Coins Each"
+            self.mini_puzzle_math_target = "10 Coins / 2 Chests = 5 Coins Each"
             self.mini_puzzle_type = "sharing"
             
             chest_w, chest_h = 280, 130
@@ -3943,7 +3949,7 @@ class Quarter3:
 
         elif station_num == 4:
             # Station 4: Unit Fraction (1 / 2) Solar Disk
-            self.mini_puzzle_title = "PUZZLE 4 • UNIT FRACTION (ONE-HALF = 1/2)"
+            self.mini_puzzle_title = "PUZZLE 4 - UNIT FRACTION (ONE-HALF = 1/2)"
             self.mini_puzzle_sub = "Slot 1 shaded half out of 2 equal parts into the Solar Keystone!"
             self.mini_puzzle_math_target = "1 Part out of 2 Equal Parts = 1/2"
             self.mini_puzzle_type = "fraction_half"
@@ -3969,7 +3975,7 @@ class Quarter3:
 
         elif station_num == 5:
             # Station 5: Unit Fraction (1 / 3) Ingot Bar
-            self.mini_puzzle_title = "PUZZLE 5 • UNIT FRACTION (ONE-THIRD = 1/3)"
+            self.mini_puzzle_title = "PUZZLE 5 - UNIT FRACTION (ONE-THIRD = 1/3)"
             self.mini_puzzle_sub = "Slot the 3 equal segments (1/3 each) to assemble the Whole Ingot Bar!"
             self.mini_puzzle_math_target = "3 Segments (1/3 + 1/3 + 1/3) = 1 Whole Bar"
             self.mini_puzzle_type = "fraction_third"
@@ -4078,7 +4084,7 @@ class Quarter3:
                 self.eliminated_choices.clear()
                 self.wrong_feedback_msg = ""
                 self.ident_input_text = ""
-                print(f"📖 Transitioned from Mini-Puzzle to Station {self.quiz_station_index} Multiple Choice Question!")
+                print(f"[BOOK] Transitioned from Mini-Puzzle to Station {self.quiz_station_index} Multiple Choice Question!")
                 return
 
         # 2. Quick Assemble / Auto-Place Button

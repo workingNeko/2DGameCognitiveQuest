@@ -113,7 +113,7 @@ class StudentSelect:
 
         # Check BACK button
         if self.back_button.collidepoint(pos):
-            print("⬅️ Back to main menu")
+            print("[BACK] Back to main menu")
             self.last_click_time = current_time
             if self.main_menu:
                 self.main_menu.current_screen = "menu"
@@ -122,7 +122,7 @@ class StudentSelect:
 
         # Check REFRESH button
         if self.refresh_button.collidepoint(pos):
-            print("🔄 Refresh students")
+            print("[REFRESH] Refresh students")
             self.last_click_time = current_time
             self.load_students()
             return
@@ -151,7 +151,7 @@ class StudentSelect:
 
             # Visual feedback - show selected message
             student = self.students[clicked_index]
-            print(f"👤 Selected student: {student['first_name']} {student['last_name']}")
+            print(f"[USER] Selected student: {student['first_name']} {student['last_name']}")
 
     # =========================================================
     # LOAD GENDER ICONS
@@ -220,7 +220,7 @@ class StudentSelect:
                             "level": student.get("gradeLevel") or student.get("grade_level", "Grade 2"),
                             "gender": str(student.get("gender", "male")).lower()
                         })
-                    print(f"✅ Loaded {len(self.students)} students from Vercel API")
+                    print(f"[OK] Loaded {len(self.students)} students from Vercel API")
                 else:
                     self.load_mock_students()
             else:
@@ -246,7 +246,7 @@ class StudentSelect:
             {"id": 5, "student_id": "MOCK-05", "first_name": "James", "last_name": "Wilson",
              "score": 70, "progress": 60, "level": "Level 1", "gender": "male"},
         ]
-        print(f"📋 Loaded {len(self.students)} mock students for testing")
+        print(f"[DATA] Loaded {len(self.students)} mock students for testing")
 
     # =========================================================
     # MESSAGE
@@ -271,8 +271,8 @@ class StudentSelect:
             self.main_menu.setup_buttons()
 
         display_name = f"{student['first_name']} {student['last_name']}".strip()
-        self.show_message(f"✅ Selected: {display_name}", 2000)
-        print(f"✅ Selected Student: {display_name} (ID: {student['student_id']}, DB ID: {student.get('id')})")
+        self.show_message(f"Selected: {display_name}", 2000)
+        print(f"Selected Student: {display_name} (ID: {student['student_id']}, DB ID: {student.get('id')})")
 
     # =========================================================
     # DRAW BUTTON (with hover detection from cursor)
@@ -401,9 +401,9 @@ class StudentSelect:
         self.draw_button(self.refresh_button, "Refresh")
 
         # GESTURE INSTRUCTION (ADDED)
-        gesture_display = "✊ FIST" if self.current_gesture == "FIST" else "🖐️ OPEN HAND"
+        gesture_display = "FIST" if self.current_gesture == "FIST" else "OPEN HAND"
         if self.current_gesture == "NO HAND":
-            gesture_display = "👆 NO HAND"
+            gesture_display = "NO HAND"
 
         instruction = self.small_font.render(
             f"Gesture: {gesture_display}  |  FIST = Select student/button",

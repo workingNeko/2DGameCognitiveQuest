@@ -81,10 +81,10 @@ class AudioManager:
             if not pygame.mixer.get_init():
                 pygame.mixer.init(frequency=44100, size=-16, channels=2, buffer=512)
             self.available = True
-            print("🔊 AudioManager initialized successfully.")
+            print("[AUDIO] AudioManager initialized successfully.")
         except Exception as e:
             self.available = False
-            print(f"⚠️ AudioManager warning: Failed to initialize audio mixer: {e}")
+            print(f"[WARN] AudioManager warning: Failed to initialize audio mixer: {e}")
 
     # ============================================================
     # PERSISTENCE (SAVE / LOAD)
@@ -109,7 +109,7 @@ class AudioManager:
 
             self._apply_music_volume()
         except Exception as e:
-            print(f"⚠️ AudioManager: Error reading audio settings: {e}")
+            print(f"[WARN] AudioManager: Error reading audio settings: {e}")
 
     def save_settings(self):
         """Persists current volume and mute settings to disk."""
@@ -124,7 +124,7 @@ class AudioManager:
             with open(self.settings_file, "w", encoding="utf-8") as f:
                 json.dump(data, f, indent=4)
         except Exception as e:
-            print(f"⚠️ AudioManager: Error saving audio settings: {e}")
+            print(f"[WARN] AudioManager: Error saving audio settings: {e}")
 
     # ============================================================
     # BACKGROUND MUSIC (BGM)
@@ -151,7 +151,7 @@ class AudioManager:
             self._apply_music_volume()
             return
 
-        print(f"🎵 AudioManager: Transitioning music for '{scene_name}' -> {os.path.basename(track_path)}")
+        print(f"[MUSIC] AudioManager: Transitioning music for '{scene_name}' -> {os.path.basename(track_path)}")
         self.play_music(track_path, loop=-1, fade_ms=fade_ms)
 
     def play_music(self, path=None, loop=-1, fade_ms=500):
@@ -164,7 +164,7 @@ class AudioManager:
             music_path = os.path.join(self.BASE_DIR, music_path)
 
         if not os.path.exists(music_path):
-            print(f"⚠️ AudioManager: Music file not found: {music_path}")
+            print(f"[WARN] AudioManager: Music file not found: {music_path}")
             return
 
         try:
@@ -181,7 +181,7 @@ class AudioManager:
             else:
                 pygame.mixer.music.play(loop)
         except Exception as e:
-            print(f"⚠️ AudioManager: Exception playing music: {e}")
+            print(f"[WARN] AudioManager: Exception playing music: {e}")
 
     def _apply_music_volume(self):
         """Internal helper to apply volume and mute state to Pygame mixer."""
@@ -420,7 +420,7 @@ class AudioManager:
             self.sfx_cache["victory_fanfare"] = pygame.sndarray.make_sound(np.column_stack((a_fan, a_fan)))
 
         except Exception as e:
-            print(f"⚠️ AudioManager: Warning synthesizing core SFX: {e}")
+            print(f"[WARN] AudioManager: Warning synthesizing core SFX: {e}")
 
 
 # Global Singleton Instance

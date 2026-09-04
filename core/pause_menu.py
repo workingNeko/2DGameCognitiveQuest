@@ -3,7 +3,7 @@ import pygame
 
 class InGamePauseMenu:
     """
-    Universal In-Stage Pause Menu component for Quarters 1–4.
+    Universal In-Stage Pause Menu component for Quarters 1-4.
     Provides:
     - On-screen pause button (compatible with gesture fist & mouse clicks).
     - Timer freezing while paused.
@@ -104,7 +104,7 @@ class InGamePauseMenu:
         pygame.draw.rect(self.screen, border, self.pause_btn_rect, 2, border_radius=8)
 
         font = self.get_font(15, bold=True)
-        txt = font.render("⏸ PAUSE", True, fg)
+        txt = font.render("PAUSE", True, fg)
         self.screen.blit(txt, txt.get_rect(center=self.pause_btn_rect.center))
 
     def draw_modal(self, cursor_pos):
@@ -126,7 +126,7 @@ class InGamePauseMenu:
         t_font = self.get_font(24, bold=True)
         btn_font = self.get_font(16, bold=True)
 
-        title = t_font.render("⏸ GAME PAUSED", True, (255, 215, 0))
+        title = t_font.render("GAME PAUSED", True, (255, 215, 0))
         self.screen.blit(title, title.get_rect(center=(self.modal_x + self.modal_w // 2, self.modal_y + 40)))
 
         # 1. Resume Button (Green)
@@ -134,7 +134,7 @@ class InGamePauseMenu:
         r_bg = (34, 197, 94) if r_hov else (22, 163, 74)
         pygame.draw.rect(self.screen, r_bg, self.resume_rect, border_radius=10)
         pygame.draw.rect(self.screen, (134, 239, 172), self.resume_rect, 2, border_radius=10)
-        r_txt = btn_font.render("▶  Resume Game", True, (255, 255, 255))
+        r_txt = btn_font.render("Resume Game", True, (255, 255, 255))
         self.screen.blit(r_txt, r_txt.get_rect(center=self.resume_rect.center))
 
         # 2. Audio Settings Button (Blue)
@@ -142,7 +142,7 @@ class InGamePauseMenu:
         s_bg = (59, 130, 246) if s_hov else (37, 99, 235)
         pygame.draw.rect(self.screen, s_bg, self.audio_rect, border_radius=10)
         pygame.draw.rect(self.screen, (191, 219, 254), self.audio_rect, 2, border_radius=10)
-        s_txt = btn_font.render("🔊  Audio & Sound Settings", True, (255, 255, 255))
+        s_txt = btn_font.render("Audio & Sound Settings", True, (255, 255, 255))
         self.screen.blit(s_txt, s_txt.get_rect(center=self.audio_rect.center))
 
         # 3. Return to Stage Select Button (Red)
@@ -150,5 +150,5 @@ class InGamePauseMenu:
         e_bg = (239, 68, 68) if e_hov else (185, 28, 28)
         pygame.draw.rect(self.screen, e_bg, self.exit_rect, border_radius=10)
         pygame.draw.rect(self.screen, (254, 202, 202), self.exit_rect, 2, border_radius=10)
-        e_txt = btn_font.render("🏠  Return to Stage Select", True, (255, 255, 255))
+        e_txt = btn_font.render("Return to Stage Select", True, (255, 255, 255))
         self.screen.blit(e_txt, e_txt.get_rect(center=self.exit_rect.center))

@@ -156,7 +156,7 @@ class Quarter1:
 
         # Load the specified map
         if not self.map_loader.load_map(map_name):
-            print(f"❌ Failed to load {map_name}")
+            print(f"[FAIL] Failed to load {map_name}")
             self._create_default_map()
         else:
             # Use the loaded map data
@@ -180,7 +180,7 @@ class Quarter1:
                     if c in ['1', '2', '3', '4', '5']:
                         num = int(c)
                         self.quiz_stations[num] = (x, y)
-                        print(f"📍 Quiz Station {num} found at: ({x}, {y})")
+                        print(f"[LOC] Quiz Station {num} found at: ({x}, {y})")
 
         # ============================================================
         # CAMERA
@@ -323,7 +323,7 @@ class Quarter1:
                         "y": pos[1] * TILE_SIZE,
                         "answered": False
                     }
-                    print(f"🏀 Spawned Shape NPC {num}: {shape_names[num]} at ({pos[0]}, {pos[1]})")
+                    print(f"[NPC] Spawned Shape NPC {num}: {shape_names[num]} at ({pos[0]}, {pos[1]})")
         else:
             self.npc_oldman_found = False
 
@@ -512,7 +512,7 @@ class Quarter1:
         # Load custom synthesized puzzle sound effects
         self.load_puzzle_sounds()
 
-        print(f"✅ Quarter1 initialized with map: {self.map_name}")
+        print(f"[OK] Quarter1 initialized with map: {self.map_name}")
         print(f"   Goal portal: {self.goal_portal_direction}")
         print(f"   Portals loaded: {len(self.portals)}")
 
@@ -713,7 +713,7 @@ class Quarter1:
             
             questions_result = db.get_questions(quarter=1)
             if not questions_result or len(questions_result) < 5:
-                print(f"⚠️ Found {len(questions_result) if questions_result else 0} active questions from Vercel API, but need at least 5. Using local questions.")
+                print(f"[WARN] Found {len(questions_result) if questions_result else 0} active questions from Vercel API, but need at least 5. Using local questions.")
                 return
             
             # Map questions to Pygame format
@@ -756,10 +756,10 @@ class Quarter1:
                 })
             
             self.quiz_questions = mapped_questions
-            print(f"✅ Successfully loaded 5 questions from Vercel API for Quarter 1!")
+            print(f"[OK] Successfully loaded 5 questions from Vercel API for Quarter 1!")
             
         except Exception as e:
-            print(f"⚠️ Exception loading database questions from Vercel: {e}. Using local questions.")
+            print(f"[WARN] Exception loading database questions from Vercel: {e}. Using local questions.")
 
     def save_results_to_database(self):
         if not self.is_quiz_map:
@@ -771,7 +771,7 @@ class Quarter1:
 
             student_db_id = getattr(self.main_menu, 'student_db_id', None)
             if not student_db_id:
-                print("⚠️ No student_db_id available in main_menu. Skipping database record.")
+                print("[WARN] No student_db_id available in main_menu. Skipping database record.")
                 return
 
             total_questions = 5
@@ -782,7 +782,7 @@ class Quarter1:
             # Try to fetch assessment_id for Quarter 1 Quiz from Vercel
             assessment_id = db.get_assessment_id(quarter=1)
             if assessment_id:
-                print(f"📝 Linked result to Assessment ID: {assessment_id}")
+                print(f"[LOG] Linked result to Assessment ID: {assessment_id}")
 
             feedback_msg = f"Completed Quarter 1. Answered {correct_answers} of {total_questions} questions correctly on the first attempt."
             grade_level = getattr(self.main_menu, 'selected_student', {}).get('level', 'Grade 2')
@@ -798,13 +798,13 @@ class Quarter1:
                 assessment_id=assessment_id
             )
             if success:
-                print(f"🎉 Successfully saved Quarter 1 Game Result to Vercel for Student DB ID {student_db_id}!")
+                print(f"[WIN] Successfully saved Quarter 1 Game Result to Vercel for Student DB ID {student_db_id}!")
                 print(f"   Score: {score}/{total_questions} ({percentage}%)")
             else:
-                print("⚠️ Failed to save game results via Vercel API.")
+                print("[WARN] Failed to save game results via Vercel API.")
 
         except Exception as e:
-            print(f"⚠️ Exception saving game results to Vercel: {e}")
+            print(f"[WARN] Exception saving game results to Vercel: {e}")
 
     # ============================================================
     # LOAD PLAYER SPRITES
@@ -843,7 +843,7 @@ class Quarter1:
         frames = []
 
         if not os.path.exists(npc_path):
-            print(f"⚠️ NPC path does not exist: {npc_path}")
+            print(f"[WARN] NPC path does not exist: {npc_path}")
             placeholder = pygame.Surface((TILE_SIZE, TILE_SIZE))
             placeholder.fill((255, 200, 100))
             pygame.draw.circle(placeholder, (0, 0, 0), (TILE_SIZE // 2, TILE_SIZE // 2), 12)
@@ -875,7 +875,7 @@ class Quarter1:
                     placeholder.fill((255, 200, 0))
                     frames.append(placeholder)
 
-        print(f"✅ Loaded {len(frames)} frames for {npc_name}")
+        print(f"[OK] Loaded {len(frames)} frames for {npc_name}")
         return frames
 
     # ============================================================
@@ -903,12 +903,12 @@ class Quarter1:
                             scaled = pygame.transform.scale(img, (TILE_SIZE, TILE_SIZE))
                             frames.append(scaled)
                         except Exception as e:
-                            print(f"❌ Error loading shape frame {num} ({idx}): {e}")
+                            print(f"[FAIL] Error loading shape frame {num} ({idx}): {e}")
                 if len(frames) == 8:
                     self.shape_sprites[num] = frames
-                    print(f"🏀 Loaded 8 animation frames for shape {num} ({folder})")
+                    print(f"[NPC] Loaded 8 animation frames for shape {num} ({folder})")
                 else:
-                    print(f"⚠️ Failed to load 8 frames for shape {num} ({folder})")
+                    print(f"[WARN] Failed to load 8 frames for shape {num} ({folder})")
 
         # Load Ball or Oldman (based on map)
         if self.map_name.lower() in ['map1.txt', 'map2.txt', 'map3.txt']:
@@ -918,7 +918,7 @@ class Quarter1:
                 if os.path.exists(oldman_path):
                     img = pygame.image.load(oldman_path).convert_alpha()
                     self.npc_oldman_sprite = pygame.transform.scale(img, (TILE_SIZE, TILE_SIZE))
-                    print(f"✅ Loaded Oldman sprite")
+                    print(f"[OK] Loaded Oldman sprite")
                 else:
                     raise FileNotFoundError("oldman.png not found")
 
@@ -927,7 +927,7 @@ class Quarter1:
                 self.npc_oldman_up_sprites = [self.npc_oldman_sprite]
                 self.npc_oldman_down_sprites = [self.npc_oldman_sprite]
             except Exception as e:
-                print(f"❌ Error loading Oldman: {e}")
+                print(f"[FAIL] Error loading Oldman: {e}")
                 placeholder = pygame.Surface((TILE_SIZE, TILE_SIZE))
                 placeholder.fill((200, 100, 100))
                 self.npc_oldman_sprite = placeholder
@@ -946,9 +946,9 @@ class Quarter1:
                         img = pygame.image.load(path).convert_alpha()
                         scaled = pygame.transform.scale(img, (TILE_SIZE, TILE_SIZE))
                         ball_frames.append(scaled)
-                        print(f"✅ Loaded Ball frame: {filename}")
+                        print(f"[OK] Loaded Ball frame: {filename}")
                     else:
-                        print(f"⚠️ Ball frame not found at: {path}")
+                        print(f"[WARN] Ball frame not found at: {path}")
 
                 if ball_frames:
                     self.npc_oldman_sprite = ball_frames[0]
@@ -956,12 +956,12 @@ class Quarter1:
                     self.npc_oldman_right_sprites = ball_frames
                     self.npc_oldman_up_sprites = ball_frames
                     self.npc_oldman_down_sprites = ball_frames
-                    print("🏀 Loaded Ball sprites to replace Old Man")
+                    print("[NPC] Loaded Ball sprites to replace Old Man")
                 else:
                     raise FileNotFoundError("No ball frames found")
 
             except Exception as e:
-                print(f"❌ Error loading Ball: {e}")
+                print(f"[FAIL] Error loading Ball: {e}")
                 placeholder = pygame.Surface((TILE_SIZE, TILE_SIZE))
                 placeholder.fill((200, 100, 100))
                 self.npc_oldman_sprite = placeholder
@@ -977,9 +977,9 @@ class Quarter1:
             if os.path.exists(skeleton_path):
                 img = pygame.image.load(skeleton_path).convert_alpha()
                 self.npc_skeleton_sprite = pygame.transform.scale(img, (TILE_SIZE, TILE_SIZE))
-                print(f"✅ Loaded Skeleton sprite")
+                print(f"[OK] Loaded Skeleton sprite")
             else:
-                print(f"⚠️ Skeleton sprite not found at: {skeleton_path}")
+                print(f"[WARN] Skeleton sprite not found at: {skeleton_path}")
                 placeholder = pygame.Surface((TILE_SIZE, TILE_SIZE))
                 placeholder.fill((255, 255, 255))
                 pygame.draw.circle(placeholder, (0, 0, 0), (TILE_SIZE // 2, TILE_SIZE // 2), 12)
@@ -990,7 +990,7 @@ class Quarter1:
                 placeholder.blit(text, (2, TILE_SIZE - 12))
                 self.npc_skeleton_sprite = placeholder
         except Exception as e:
-            print(f"❌ Error loading Skeleton: {e}")
+            print(f"[FAIL] Error loading Skeleton: {e}")
             placeholder = pygame.Surface((TILE_SIZE, TILE_SIZE))
             placeholder.fill((255, 255, 255))
             self.npc_skeleton_sprite = placeholder
@@ -1001,9 +1001,9 @@ class Quarter1:
             if os.path.exists(knight_path):
                 img = pygame.image.load(knight_path).convert_alpha()
                 self.npc_knight_sprite = pygame.transform.scale(img, (TILE_SIZE, TILE_SIZE))
-                print(f"✅ Loaded Knight sprite")
+                print(f"[OK] Loaded Knight sprite")
             else:
-                print(f"⚠️ Knight sprite not found at: {knight_path}")
+                print(f"[WARN] Knight sprite not found at: {knight_path}")
                 placeholder = pygame.Surface((TILE_SIZE, TILE_SIZE))
                 placeholder.fill((192, 192, 192))
                 self.npc_knight_sprite = placeholder
@@ -1016,7 +1016,7 @@ class Quarter1:
                     img = pygame.image.load(path).convert_alpha()
                     scaled = pygame.transform.scale(img, (TILE_SIZE, TILE_SIZE))
                     self.npc_knight_left_sprites.append(scaled)
-                    print(f"✅ Loaded Knight left frame: {name}")
+                    print(f"[OK] Loaded Knight left frame: {name}")
 
             # Load Knight walking down sprites
             self.npc_knight_down_sprites = []
@@ -1026,7 +1026,7 @@ class Quarter1:
                     img = pygame.image.load(path).convert_alpha()
                     scaled = pygame.transform.scale(img, (TILE_SIZE, TILE_SIZE))
                     self.npc_knight_down_sprites.append(scaled)
-                    print(f"✅ Loaded Knight down frame: {name}")
+                    print(f"[OK] Loaded Knight down frame: {name}")
 
             # Load Knight walking right sprites
             self.npc_knight_right_sprites = []
@@ -1036,7 +1036,7 @@ class Quarter1:
                     img = pygame.image.load(path).convert_alpha()
                     scaled = pygame.transform.scale(img, (TILE_SIZE, TILE_SIZE))
                     self.npc_knight_right_sprites.append(scaled)
-                    print(f"✅ Loaded Knight right frame: {name}")
+                    print(f"[OK] Loaded Knight right frame: {name}")
 
             # Load Knight walking up sprites
             self.npc_knight_up_sprites = []
@@ -1046,9 +1046,9 @@ class Quarter1:
                     img = pygame.image.load(path).convert_alpha()
                     scaled = pygame.transform.scale(img, (TILE_SIZE, TILE_SIZE))
                     self.npc_knight_up_sprites.append(scaled)
-                    print(f"✅ Loaded Knight up frame: {name}")
+                    print(f"[OK] Loaded Knight up frame: {name}")
         except Exception as e:
-            print(f"❌ Error loading Knight: {e}")
+            print(f"[FAIL] Error loading Knight: {e}")
             placeholder = pygame.Surface((TILE_SIZE, TILE_SIZE))
             placeholder.fill((192, 192, 192))
             self.npc_knight_sprite = placeholder
@@ -1267,7 +1267,7 @@ class Quarter1:
         for portal in self.locked_portals:
             self.portals.append(portal)
         self.locked_portals = []
-        print(f"🏀 Spawned and unlocked portals: {len(self.portals)}")
+        print(f"[NPC] Spawned and unlocked portals: {len(self.portals)}")
 
     # ============================================================
     # COLLISION
@@ -1512,7 +1512,7 @@ class Quarter1:
                 self.award_piece_sprite = raw_img
                 return
             except Exception as e:
-                print(f"⚠️ Error processing user jigsaw image: {e}. Falling back to vector generator.")
+                print(f"[WARN] Error processing user jigsaw image: {e}. Falling back to vector generator.")
 
         # Fallback to vector shape drawing if file is missing/corrupted
         icon_surf = pygame.Surface((160, 160), pygame.SRCALPHA)
@@ -1569,7 +1569,7 @@ class Quarter1:
                     self.main_menu.audio_manager.play_sfx("victory_fanfare")
                     self.main_menu.audio_manager.play_sfx("portal_warp")
             except Exception as e:
-                print(f"⚠️ Error recording Quarter 1 completion: {e}")
+                print(f"[WARN] Error recording Quarter 1 completion: {e}")
 
         if self.main_menu:
             self.main_menu.current_screen = "stage_select"
@@ -1577,7 +1577,7 @@ class Quarter1:
             # Recreate the stage select to reset position
             from .stageselect import StageSelect
             self.main_menu.stage_select = StageSelect(self.screen, self.main_menu)
-            print("🏠 Returning to stage select")
+            print("[HOME] Returning to stage select")
             if completed:
                 self.completed = True
             
@@ -1603,9 +1603,9 @@ class Quarter1:
                 self.snap_sound = self.generate_snap_sound()
             if not self.success_sound:
                 self.success_sound = self.generate_success_sound()
-            print("🔊 Jigsaw puzzle sound effects initialized.")
+            print("[AUDIO] Jigsaw puzzle sound effects initialized.")
         except Exception as e:
-            print(f"⚠️ Error loading puzzle sounds: {e}")
+            print(f"[WARN] Error loading puzzle sounds: {e}")
 
     def generate_snap_sound(self):
         import numpy as np
@@ -1673,10 +1673,10 @@ class Quarter1:
                         "target_y": 0
                     })
                 self.reset_puzzle()
-                print("🧩 Shape matching puzzle loaded and initialized.")
+                print("[PUZZLE] Shape matching puzzle loaded and initialized.")
                 return
             except Exception as e:
-                print(f"❌ Error loading shape matching puzzle: {e}")
+                print(f"[FAIL] Error loading shape matching puzzle: {e}")
                 return
 
         if self.map_name.lower() == 'map3.txt':
@@ -1684,7 +1684,7 @@ class Quarter1:
             puzzle_files = ["CircleNPC.png", "DiamondNPC.png", "HeartNPC.png", "SquareNPC.png", "StarNPC.png"]
             selected_file = random.choice(puzzle_files)
             puzzle_img_path = os.path.join(self.BASE_DIR, "assets", "images", "sprites", "objects", "tiles", "quarter1tiles", "puzzleimages", selected_file)
-            print(f"🎲 Randomized puzzle image for map3.txt: {selected_file}")
+            print(f"[DICE] Randomized puzzle image for map3.txt: {selected_file}")
         else:
             puzzle_img_path = os.path.join(self.BASE_DIR, "assets", "images", "sprites", "objects", "tiles", "quarter1tiles", "puzzleimages", "CircleNPC.png")
         if os.path.exists(puzzle_img_path):
@@ -1746,11 +1746,11 @@ class Quarter1:
                         "deck_y": 0
                     })
                 self.reset_puzzle()
-                print("🧩 Jigsaw puzzle loaded and initialized.")
+                print("[PUZZLE] Jigsaw puzzle loaded and initialized.")
             except Exception as e:
-                print(f"❌ Error initializing puzzle: {e}")
+                print(f"[FAIL] Error initializing puzzle: {e}")
         else:
-            print(f"❌ Puzzle image not found at: {puzzle_img_path}")
+            print(f"[FAIL] Puzzle image not found at: {puzzle_img_path}")
 
     def reset_puzzle(self):
         import random
@@ -1849,13 +1849,13 @@ class Quarter1:
             piece["x"] = target_x
             piece["y"] = target_y
             piece["is_placed"] = True
-            print(f"🧩 Piece {piece['index']} correctly placed!")
+            print(f"[PUZZLE] Piece {piece['index']} correctly placed!")
             if self.snap_sound:
                 self.snap_sound.play()
                 
             # Check if all pieces are placed
             if all(p["is_placed"] for p in self.puzzle_pieces):
-                print("🎉 Puzzle arpeggio triggers!")
+                print("[WIN] Puzzle arpeggio triggers!")
                 self.puzzle_solved_time = pygame.time.get_ticks()
                 if self.success_sound:
                     self.success_sound.play()
@@ -1863,7 +1863,7 @@ class Quarter1:
             # Snap back to starting deck coordinates
             piece["x"] = piece["deck_x"]
             piece["y"] = piece["deck_y"]
-            print(f"🧩 Piece {piece['index']} snapped back to deck.")
+            print(f"[PUZZLE] Piece {piece['index']} snapped back to deck.")
             
         self.dragged_piece = None
 
@@ -2180,7 +2180,7 @@ class Quarter1:
                         else:
                             self.show_bridge_warning("I must talk to the Old Man to solve the puzzle first!")
                         return False
-                print(f"🎯 Goal reached! Returning to stage select...")
+                print(f"[TARGET] Goal reached! Returning to stage select...")
                 self.return_to_stage_select()
                 return True
 
@@ -2327,7 +2327,7 @@ class Quarter1:
                     if i == q_data["correct"]:
                         self.current_correct_phrase = random.choice(self.correct_phrases)
                         self.quiz_state = 3
-                        print(f"✅ Correct answer selected: {q_data['choices'][i]}")
+                        print(f"[OK] Correct answer selected: {q_data['choices'][i]}")
                     else:
                         if hasattr(self, 'first_attempt_correct') and self.active_shape_id in self.first_attempt_correct:
                             self.first_attempt_correct[self.active_shape_id] = False
@@ -2335,10 +2335,10 @@ class Quarter1:
                         self.question_attempts[self.active_shape_id] = self.question_attempts.get(self.active_shape_id, 0) + 1
                         if self.question_attempts[self.active_shape_id] < 2:
                             self.quiz_state = 2
-                            print(f"❌ Incorrect answer selected! (Attempt 1 of 2)")
+                            print(f"[FAIL] Incorrect answer selected! (Attempt 1 of 2)")
                         else:
                             self.quiz_state = 4
-                            print(f"❌ Incorrect answer on 2nd try! Out of tries. Shape {self.active_shape_id} piece awarded for progression.")
+                            print(f"[FAIL] Incorrect answer on 2nd try! Out of tries. Shape {self.active_shape_id} piece awarded for progression.")
                     
                     # Auto-save immediately upon answer selection
                     save_student_progress(self.main_menu)
@@ -2439,7 +2439,7 @@ class Quarter1:
             if btn_rect.collidepoint(pos):
                 self.quiz_state = 6
                 self.npc_oldman_found = False
-                print("🧙‍♂️ Old Man disappeared from Quarter 1")
+                print("[Bromen] Old Man disappeared from Quarter 1")
                 save_student_progress(self.main_menu)
  
         # State 10: Old Man Warning Dialog OK Click
@@ -2474,10 +2474,10 @@ class Quarter1:
                 if btn_rect.collidepoint(pos):
                     if i == correct_idx:
                         self.quiz_state = 13  # Correct dialog
-                        print("✅ Riddle correct answer selected!")
+                        print("[OK] Riddle correct answer selected!")
                     else:
                         self.quiz_state = 12  # Wrong dialog
-                        print("❌ Riddle incorrect answer selected!")
+                        print("[FAIL] Riddle incorrect answer selected!")
                     break
 
         # State 12: Old Man Riddle Wrong Retry Click
@@ -2567,7 +2567,7 @@ class Quarter1:
             if self.stage_time_remaining <= 0.0:
                 self.stage_time_remaining = 0.0
                 self.time_up_dialog_active = True
-                print("⏰ Quarter 1 Time's Up!")
+                print("[TIME] Quarter 1 Time's Up!")
 
         if self.time_up_dialog_active:
             return
@@ -3859,9 +3859,9 @@ class Quarter1:
             # Render Jigsaw or Quiz progress
             if self.map_name.lower() in ['map1.txt', 'map2.txt', 'map3.txt']:
                 if self.map_name.lower() == 'map2.txt':
-                    obj1 = f"• Shape Pieces: {q_count}/5 collected"
+                    obj1 = f"- Shape Pieces: {q_count}/5 collected"
                 else:
-                    obj1 = f"• Jigsaw Pieces: {q_count}/5 collected"
+                    obj1 = f"- Jigsaw Pieces: {q_count}/5 collected"
                 obj1_color = (255, 255, 255) if q_count < 5 else (34, 197, 94)
                 obj1_surf = item_font.render(obj1, True, obj1_color)
                 self.screen.blit(obj1_surf, (box_x + 15, box_y + 28))
@@ -3871,17 +3871,17 @@ class Quarter1:
                     indicator_color = (34, 197, 94) if i < q_count else (71, 85, 105)
                     pygame.draw.rect(self.screen, indicator_color, (box_x + 220 + i * 14, box_y + 31, 10, 10), border_radius=2)
             else:
-                obj1 = f"• Quiz Progress: {q_count}/5 questions answered"
+                obj1 = f"- Quiz Progress: {q_count}/5 questions answered"
                 obj1_color = (255, 255, 255) if q_count < 5 else (34, 197, 94)
                 obj1_surf = item_font.render(obj1, True, obj1_color)
                 self.screen.blit(obj1_surf, (box_x + 15, box_y + 28))
             
             # Goal portal state item
             if self.quiz_state < 6:
-                obj2 = "• Portal Status: LOCKED"
+                obj2 = "- Portal Status: LOCKED"
                 obj2_color = (244, 63, 94)  # Rose
             else:
-                obj2 = "• Portal Status: OPEN (Enter the portal to exit!)"
+                obj2 = "- Portal Status: OPEN (Enter the portal to exit!)"
                 obj2_color = (34, 197, 94)  # Green
             obj2_surf = item_font.render(obj2, True, obj2_color)
             self.screen.blit(obj2_surf, (box_x + 15, box_y + 48))
@@ -3947,11 +3947,11 @@ class Quarter1:
                     if close_btn_rect.collidepoint(event.pos):
                         self.puzzle_active = False
                         self.dragged_piece = None
-                        print("🧩 Puzzle closed by player")
+                        print("[PUZZLE] Puzzle closed by player")
                         return None
                     elif reset_btn_rect.collidepoint(event.pos):
                         self.reset_puzzle()
-                        print("🧩 Puzzle reset")
+                        print("[PUZZLE] Puzzle reset")
                         return None
                         
                     # Check if picking up a jigsaw piece

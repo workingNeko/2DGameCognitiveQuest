@@ -150,7 +150,7 @@ class Quarter2:
 
         # Load the specified map
         if not self.map_loader.load_map(map_name):
-            print(f"❌ Failed to load {map_name}")
+            print(f"[FAIL] Failed to load {map_name}")
             self._create_default_map()
         else:
             # Use the loaded map data
@@ -250,8 +250,8 @@ class Quarter2:
                     "name": "Station 1",
                     "title": "Bibingka & Unit Fractions (1/4 Slices)",
                     "dialog_title": "Fresh Bibingka Fraction Challenge",
-                    "wrong_encouragement": "Check the Slices • Try Again",
-                    "correct_praise": "Correct Fraction! • Well Done",
+                    "wrong_encouragement": "Check the Slices - Try Again",
+                    "correct_praise": "Correct Fraction! - Well Done",
                     "target_math": "1 Slice out of 4 Equal Slices = 1/4 (One-fourth)",
                     "frames": [],
                     "anim_frame": 0,
@@ -259,11 +259,11 @@ class Quarter2:
                 },
                 2: {
                     "name": "Station 2",
-                    "title": "Equal Sharing & Division (20 ÷ 4)",
+                    "title": "Equal Sharing & Division (20 / 4)",
                     "dialog_title": "Mango Harvest Division Challenge",
-                    "wrong_encouragement": "Count the Baskets • Try Again",
-                    "correct_praise": "Equal Sharing Mastered! • Well Done",
-                    "target_math": "20 Mangoes ÷ 4 Baskets = 5 Mangoes per Basket",
+                    "wrong_encouragement": "Count the Baskets - Try Again",
+                    "correct_praise": "Equal Sharing Mastered! - Well Done",
+                    "target_math": "20 Mangoes / 4 Baskets = 5 Mangoes per Basket",
                     "frames": [],
                     "anim_frame": 0,
                     "anim_timer": 0
@@ -272,8 +272,8 @@ class Quarter2:
                     "name": "Station 3",
                     "title": "3D Geometric Solids (Salakot Cone)",
                     "dialog_title": "Traditional Shape Crafting Challenge",
-                    "wrong_encouragement": "Inspect the Shape Faces • Try Again",
-                    "correct_praise": "Exact Geometric Shape! • Well Done",
+                    "wrong_encouragement": "Inspect the Shape Faces - Try Again",
+                    "correct_praise": "Exact Geometric Shape! - Well Done",
                     "target_math": "Salakot Hat = Cone (1 Flat Circular Base + 1 Vertex)",
                     "frames": [],
                     "anim_frame": 0,
@@ -283,8 +283,8 @@ class Quarter2:
                     "name": "Station 4",
                     "title": "Analog Clock Time Reading (8:30 AM)",
                     "dialog_title": "Fiesta Schedule Clock Challenge",
-                    "wrong_encouragement": "Check the Clock Hands • Try Again",
-                    "correct_praise": "Exactly On Time! • Well Done",
+                    "wrong_encouragement": "Check the Clock Hands - Try Again",
+                    "correct_praise": "Exactly On Time! - Well Done",
                     "target_math": "8:30 AM = Hour Hand between 8 & 9, Minute Hand at 6",
                     "frames": [],
                     "anim_frame": 0,
@@ -294,8 +294,8 @@ class Quarter2:
                     "name": "Station 5",
                     "title": "Garden Perimeter & Measurement",
                     "dialog_title": "Bamboo Garden Perimeter Challenge",
-                    "wrong_encouragement": "Measure All Outer Sides • Try Again",
-                    "correct_praise": "Garden Perimeter Complete! • Well Done",
+                    "wrong_encouragement": "Measure All Outer Sides - Try Again",
+                    "correct_praise": "Garden Perimeter Complete! - Well Done",
                     "target_math": "Perimeter = 5m + 3m + 5m + 3m = 16 Meters Total",
                     "frames": [],
                     "anim_frame": 0,
@@ -306,22 +306,22 @@ class Quarter2:
             self.station_npc_info = {
                 1: {
                     "name": "Station 1",
-                    "title": "Sari-Sari Store & Change (₱50 - ₱35)",
+                    "title": "Sari-Sari Store & Change (P50 - P35)",
                     "dialog_title": "Sari-Sari Store Change Challenge",
-                    "wrong_encouragement": "Count the Change • Try Again",
-                    "correct_praise": "Exact Change! • Well Done",
-                    "target_math": "₱50 Bill - ₱35 Purchase = ₱15 Change",
+                    "wrong_encouragement": "Count the Change - Try Again",
+                    "correct_praise": "Exact Change! - Well Done",
+                    "target_math": "P50 Bill - P35 Purchase = P15 Change",
                     "frames": [],
                     "anim_frame": 0,
                     "anim_timer": 0
                 },
                 2: {
                     "name": "Station 2",
-                    "title": "Philippine Coins (₱25 Combinations)",
-                    "dialog_title": "₱25 Sorbetes Coin Challenge",
-                    "wrong_encouragement": "Count the Coins • Try Again",
-                    "correct_praise": "Exact Payment! • Well Done",
-                    "target_math": "₱25 Cone = One ₱20 Coin + One ₱5 Coin",
+                    "title": "Philippine Coins (P25 Combinations)",
+                    "dialog_title": "P25 Sorbetes Coin Challenge",
+                    "wrong_encouragement": "Count the Coins - Try Again",
+                    "correct_praise": "Exact Payment! - Well Done",
+                    "target_math": "P25 Cone = One P20 Coin + One P5 Coin",
                     "frames": [],
                     "anim_frame": 0,
                     "anim_timer": 0
@@ -330,9 +330,9 @@ class Quarter2:
                     "name": "Station 3",
                     "title": "Jeepney Passenger Fare & Multiplication",
                     "dialog_title": "Jeepney Passenger Fare Challenge",
-                    "wrong_encouragement": "Check the Fare • Try Again",
-                    "correct_praise": "Full Fare Collected! • Well Done",
-                    "target_math": "3 Students × ₱12 Fare = ₱36 Total Payment",
+                    "wrong_encouragement": "Check the Fare - Try Again",
+                    "correct_praise": "Full Fare Collected! - Well Done",
+                    "target_math": "3 Students x P12 Fare = P36 Total Payment",
                     "frames": [],
                     "anim_frame": 0,
                     "anim_timer": 0
@@ -341,9 +341,9 @@ class Quarter2:
                     "name": "Station 4",
                     "title": "Market Fruit Scale (Grams & Kilograms)",
                     "dialog_title": "Market Fruit Scale Challenge",
-                    "wrong_encouragement": "Weigh the Fruit • Try Again",
-                    "correct_praise": "Exact Weight Scale! • Well Done",
-                    "target_math": "4 Mangoes × 500g = 2,000g = 2 Kilograms (2kg)",
+                    "wrong_encouragement": "Weigh the Fruit - Try Again",
+                    "correct_praise": "Exact Weight Scale! - Well Done",
+                    "target_math": "4 Mangoes x 500g = 2,000g = 2 Kilograms (2kg)",
                     "frames": [],
                     "anim_frame": 0,
                     "anim_timer": 0
@@ -352,9 +352,9 @@ class Quarter2:
                     "name": "Station 5",
                     "title": "Fiesta Budgeting & Money Comparison",
                     "dialog_title": "Fiesta Parol Budget Challenge",
-                    "wrong_encouragement": "Check Your Budget • Try Again",
-                    "correct_praise": "Budget is Enough! • Well Done",
-                    "target_math": "₱350 Budget > ₱300 Total Materials Cost",
+                    "wrong_encouragement": "Check Your Budget - Try Again",
+                    "correct_praise": "Budget is Enough! - Well Done",
+                    "target_math": "P350 Budget > P300 Total Materials Cost",
                     "frames": [],
                     "anim_frame": 0,
                     "anim_timer": 0
@@ -416,7 +416,7 @@ class Quarter2:
         self.warp_out_duration = 0.65
 
         # ============================================================
-        # UI & TYPOGRAPHY TOKENS (Complete Philippine Peso ₱ Support)
+        # UI & TYPOGRAPHY TOKENS (Complete Philippine Peso P Support)
         # ============================================================
         self.font_family = ["Segoe UI", "Tahoma", "Verdana", "Calibri", "Arial"]
         self.show_info = True
@@ -512,7 +512,7 @@ class Quarter2:
                 if c in ['1', '2', '3', '4', '5']:
                     num = int(c)
                     self.quiz_stations[num] = (x, y)
-                    print(f"📍 Quiz Station {num} found at: ({x}, {y})")
+                    print(f"[LOC] Quiz Station {num} found at: ({x}, {y})")
 
         # Station Standby Directions
         self.station_directions = {
@@ -530,7 +530,7 @@ class Quarter2:
             self.npc_knight_x = self.npc_knight_tile_x * TILE_SIZE
             self.npc_knight_y = self.npc_knight_tile_y * TILE_SIZE
             self.npc_knight_found = True
-            print(f"🏪 Barangay Characters spawned at Quiz Stations 1-5")
+            print(f"[STORE] Barangay Characters spawned at Quiz Stations 1-5")
 
         # Quiz state variables
         self.quiz_state = 0  # 0: waiting proximity, 1: dialog Q, 2: wrong try again, 3: correct phrase transition, 4: out of tries reveal, 5: final speech, 6: quiz complete
@@ -554,7 +554,7 @@ class Quarter2:
             self.quiz_questions = [
                 {
                     "station": 1,
-                    "title": "STATION 1 • BIBINGKA FRACTIONS (1/4)",
+                    "title": "STATION 1 - BIBINGKA FRACTIONS (1/4)",
                     "question": "A fresh circular Bibingka was sliced into 4 equal parts. Juan ate 1 slice. What fraction part of the Bibingka did Juan eat?",
                     "choices": ["A. 1/2 (One-half)", "B. 1/4 (One-fourth)", "C. 1/3 (One-third)", "D. 3/4 (Three-fourths)"],
                     "correct": 1,
@@ -563,16 +563,16 @@ class Quarter2:
                 },
                 {
                     "station": 2,
-                    "title": "STATION 2 • EQUAL SHARING DIVISION (20 ÷ 4)",
-                    "question": "There are 20 ripe Carabao mangoes divided equally into 4 woven bayong baskets. How many mangoes are in each basket? (20 ÷ 4)",
+                    "title": "STATION 2 - EQUAL SHARING DIVISION (20 / 4)",
+                    "question": "There are 20 ripe Carabao mangoes divided equally into 4 woven bayong baskets. How many mangoes are in each basket? (20 / 4)",
                     "choices": ["A. 4 mangoes", "B. 5 mangoes", "C. 6 mangoes", "D. 8 mangoes"],
                     "correct": 1,
                     "visual_type": "mango_division",
-                    "hint": "Divide 20 mangoes into 4 equal groups: 20 ÷ 4 = 5 mangoes per basket (5 + 5 + 5 + 5 = 20)!"
+                    "hint": "Divide 20 mangoes into 4 equal groups: 20 / 4 = 5 mangoes per basket (5 + 5 + 5 + 5 = 20)!"
                 },
                 {
                     "station": 3,
-                    "title": "STATION 3 • 3D GEOMETRIC SOLIDS (CONE)",
+                    "title": "STATION 3 - 3D GEOMETRIC SOLIDS (CONE)",
                     "question": "A traditional farmer's Salakot hat is being crafted. Which 3D geometric solid has 1 flat circular base and 1 pointed top vertex?",
                     "choices": ["A. Cube", "B. Cylinder", "C. Cone", "D. Sphere"],
                     "correct": 2,
@@ -581,7 +581,7 @@ class Quarter2:
                 },
                 {
                     "station": 4,
-                    "title": "STATION 4 • ANALOG CLOCK TIME (8:30 AM)",
+                    "title": "STATION 4 - ANALOG CLOCK TIME (8:30 AM)",
                     "question": "The Grand Fiesta Parade starts at 8:30 AM. How should the hands be positioned on the analog clock at 8:30?",
                     "choices": [
                         "A. Short hand between 8 and 9, Long hand pointing at 6",
@@ -595,7 +595,7 @@ class Quarter2:
                 },
                 {
                     "station": 5,
-                    "title": "STATION 5 • GARDEN PERIMETER (5m + 3m + 5m + 3m)",
+                    "title": "STATION 5 - GARDEN PERIMETER (5m + 3m + 5m + 3m)",
                     "question": "A rectangular bamboo vegetable garden has a length of 5 meters and width of 3 meters. What is the total perimeter around the garden?",
                     "choices": ["A. 8 meters", "B. 15 meters", "C. 16 meters", "D. 20 meters"],
                     "correct": 2,
@@ -607,35 +607,35 @@ class Quarter2:
             self.quiz_questions = [
                 {
                     "station": 1,
-                    "title": "STATION 1 • SARI-SARI STORE SUKLI",
-                    "question": "A customer bought items worth ₱35 and paid with a ₱50 bill. How much change (Sukli) should be given back? (₱50 - ₱35)",
-                    "choices": ["A. ₱10", "B. ₱15", "C. ₱20", "D. ₱25"],
+                    "title": "STATION 1 - SARI-SARI STORE SUKLI",
+                    "question": "A customer bought items worth P35 and paid with a P50 bill. How much change (Sukli) should be given back? (P50 - P35)",
+                    "choices": ["A. P10", "B. P15", "C. P20", "D. P25"],
                     "correct": 1,
                     "visual_type": "sari_sukli",
-                    "hint": "Subtract the cost from the bill: ₱50 - ₱35 = ₱15 (One ₱10 coin + One ₱5 coin)!"
+                    "hint": "Subtract the cost from the bill: P50 - P35 = P15 (One P10 coin + One P5 coin)!"
                 },
                 {
                     "station": 2,
-                    "title": "STATION 2 • ₱25 COIN COMBINATIONS",
-                    "question": "A Double Ube-Cheese Sorbetes cone costs ₱25. Which combination of Philippine coins equals exactly ₱25?",
-                    "choices": ["A. One ₱20 coin + One ₱5 coin", "B. Two ₱10 coins + One ₱1 coin", "C. Three ₱5 coins", "D. One ₱10 coin + One ₱5 coin"],
+                    "title": "STATION 2 - P25 COIN COMBINATIONS",
+                    "question": "A Double Ube-Cheese Sorbetes cone costs P25. Which combination of Philippine coins equals exactly P25?",
+                    "choices": ["A. One P20 coin + One P5 coin", "B. Two P10 coins + One P1 coin", "C. Three P5 coins", "D. One P10 coin + One P5 coin"],
                     "correct": 0,
                     "visual_type": "sorbetes_coins",
-                    "hint": "Count the values: ₱20 + ₱5 = ₱25 exact payment!"
+                    "hint": "Count the values: P20 + P5 = P25 exact payment!"
                 },
                 {
                     "station": 3,
-                    "title": "STATION 3 • JEEPNEY FARE MULTIPLICATION",
-                    "question": "3 students rode the Jeepney. The fare is ₱12 per student. How much is the total fare payment? (3 × ₱12 or ₱12 + ₱12 + ₱12)",
-                    "choices": ["A. ₱24", "B. ₱30", "C. ₱36", "D. ₱40"],
+                    "title": "STATION 3 - JEEPNEY FARE MULTIPLICATION",
+                    "question": "3 students rode the Jeepney. The fare is P12 per student. How much is the total fare payment? (3 x P12 or P12 + P12 + P12)",
+                    "choices": ["A. P24", "B. P30", "C. P36", "D. P40"],
                     "correct": 2,
                     "visual_type": "jeepney_fare",
-                    "hint": "Multiply 3 passengers by ₱12: 3 × 12 = ₱36 total fare!"
+                    "hint": "Multiply 3 passengers by P12: 3 x 12 = P36 total fare!"
                 },
                 {
                     "station": 4,
-                    "title": "STATION 4 • PALENGKE FRUIT SCALE (MASS)",
-                    "question": "One Carabao mango weighs 500 grams (g). How many mangoes are needed to weigh exactly 2 Kilograms (2,000 g)? (500g × 4 = 2,000g = 2kg)",
+                    "title": "STATION 4 - PALENGKE FRUIT SCALE (MASS)",
+                    "question": "One Carabao mango weighs 500 grams (g). How many mangoes are needed to weigh exactly 2 Kilograms (2,000 g)? (500g x 4 = 2,000g = 2kg)",
                     "choices": ["A. 2 mangoes", "B. 3 mangoes", "C. 4 mangoes", "D. 5 mangoes"],
                     "correct": 2,
                     "visual_type": "market_scale",
@@ -643,19 +643,19 @@ class Quarter2:
                 },
                 {
                     "station": 5,
-                    "title": "STATION 5 • FIESTA PAROL BUDGET (> < =)",
-                    "question": "A budget for fiesta parol making is ₱350. The bamboo sticks cost ₱120 and the papel de hapon costs ₱180 (Total = ₱300). Is the budget enough? (₱350 > ₱300)",
-                    "choices": ["A. Yes, ₱350 is greater than ₱300 (₱350 > ₱300)", "B. No, ₱350 is less than ₱300 (₱350 < ₱300)", "C. No, the budget is exactly equal (₱350 = ₱300)", "D. No, she needs ₱100 more"],
+                    "title": "STATION 5 - FIESTA PAROL BUDGET (> < =)",
+                    "question": "A budget for fiesta parol making is P350. The bamboo sticks cost P120 and the papel de hapon costs P180 (Total = P300). Is the budget enough? (P350 > P300)",
+                    "choices": ["A. Yes, P350 is greater than P300 (P350 > P300)", "B. No, P350 is less than P300 (P350 < P300)", "C. No, the budget is exactly equal (P350 = P300)", "D. No, she needs P100 more"],
                     "correct": 0,
                     "visual_type": "fiesta_budget",
-                    "hint": "Add the materials: ₱120 + ₱180 = ₱300. Since ₱350 is greater than ₱300 (₱350 > ₱300), the budget is enough!"
+                    "hint": "Add the materials: P120 + P180 = P300. Since P350 is greater than P300 (P350 > P300), the budget is enough!"
                 }
             ]
 
         # Load dynamic questions from Database / Vercel API
         self.load_database_questions()
 
-        print(f"✅ Quarter2 initialized with map: {self.map_name}")
+        print(f"[OK] Quarter2 initialized with map: {self.map_name}")
         print(f"   Goal portal: {self.goal_portal_direction}")
         print(f"   Portals loaded: {len(self.portals)}")
 
@@ -671,7 +671,7 @@ class Quarter2:
                 return
             questions_result = db.get_questions(quarter=2)
             if not questions_result or len(questions_result) == 0:
-                print("ℹ️ No custom database questions found for Quarter 2. Using default curriculum questions.")
+                print("[INFO] No custom database questions found for Quarter 2. Using default curriculum questions.")
                 return
 
             mapped_questions = []
@@ -728,9 +728,9 @@ class Quarter2:
                     else:
                         self.quiz_questions.append(mapped_questions[i])
 
-                print(f"✅ Successfully loaded {len(mapped_questions)} dynamic question(s) from Database for Quarter 2!")
+                print(f"[OK] Successfully loaded {len(mapped_questions)} dynamic question(s) from Database for Quarter 2!")
         except Exception as e:
-            print(f"⚠️ Exception loading database questions for Quarter 2: {e}")
+            print(f"[WARN] Exception loading database questions for Quarter 2: {e}")
 
     def save_results_to_database(self):
         if not self.is_quiz_map:
@@ -740,7 +740,7 @@ class Quarter2:
                 return
             student_db_id = getattr(self.main_menu, 'student_db_id', None)
             if not student_db_id:
-                print("⚠️ No student_db_id available in main_menu. Skipping database record.")
+                print("[WARN] No student_db_id available in main_menu. Skipping database record.")
                 return
             total_questions = min(5, len(self.quiz_questions))
             correct_answers = sum(1 for k, v in self.first_attempt_correct.items() if k <= total_questions and v)
@@ -749,7 +749,7 @@ class Quarter2:
 
             assessment_id = db.get_assessment_id(quarter=2)
             if assessment_id:
-                print(f"📝 Linked Quarter 2 result to Assessment ID: {assessment_id}")
+                print(f"[LOG] Linked Quarter 2 result to Assessment ID: {assessment_id}")
 
             feedback_msg = f"Completed Quarter 2 (Barangay Geometry). Answered {correct_answers} of {total_questions} questions correctly on the first attempt."
             grade_level = getattr(self.main_menu, 'selected_student', {}).get('level', 'Grade 2')
@@ -765,12 +765,12 @@ class Quarter2:
                 assessment_id=assessment_id
             )
             if success:
-                print(f"🎉 Successfully saved Quarter 2 Game Result to Database for Student DB ID {student_db_id}!")
+                print(f"[WIN] Successfully saved Quarter 2 Game Result to Database for Student DB ID {student_db_id}!")
                 print(f"   Score: {score}/{total_questions} ({percentage}%)")
             else:
-                print("⚠️ Failed to save Quarter 2 game results via Database API.")
+                print("[WARN] Failed to save Quarter 2 game results via Database API.")
         except Exception as e:
-            print(f"⚠️ Exception saving Quarter 2 game results: {e}")
+            print(f"[WARN] Exception saving Quarter 2 game results: {e}")
 
     # ============================================================
     # SYNTHESIZED SOUND EFFECTS ENGINE (Zero-Dependency Audio)
@@ -792,7 +792,7 @@ class Quarter2:
             self.wood_snap_sound = am.get_sound("wood_snap")
 
             if self.sorbetes_bell and self.coin_clink and self.snap_sound:
-                print("🔊 Quarter 2 sound effects retrieved from AudioManager.")
+                print("[AUDIO] Quarter 2 sound effects retrieved from AudioManager.")
                 return
 
             if not pygame.mixer.get_init():
@@ -852,9 +852,9 @@ class Quarter2:
             a_wood = (w_wood * 30000).astype(np.int16)
             self.wood_snap_sound = pygame.sndarray.make_sound(np.column_stack((a_wood, a_wood)))
 
-            print("🔊 Quarter 2 Barrio sound effects synthesized successfully.")
+            print("[AUDIO] Quarter 2 Barrio sound effects synthesized successfully.")
         except Exception as e:
-            print(f"⚠️ Audio synthesis note: {e}")
+            print(f"[WARN] Audio synthesis note: {e}")
             self.sorbetes_bell = None
             self.jeepney_horn = None
             self.coin_clink = None
@@ -864,37 +864,37 @@ class Quarter2:
             self.wood_snap_sound = None
 
     # ============================================================
-    # FONT ENGINE WITH PHILIPPINE PESO (₱) SUPPORT
+    # FONT ENGINE WITH PHILIPPINE PESO (P) SUPPORT
     # ============================================================
     def get_ui_font(self, size, bold=False):
-        """Returns a high-legibility system font with full Philippine Peso (₱) character support"""
+        """Returns a high-legibility system font with full Philippine Peso (P) character support"""
         return pygame.font.SysFont(["Segoe UI", "Tahoma", "Verdana", "Calibri", "Arial"], size, bold=bold)
 
     # ============================================================
     # VECTOR PHILIPPINE CURRENCY & MEASUREMENT ENGINE
     # ============================================================
     def draw_peso_coin(self, surf, center_x, center_y, radius, value_str, style="gold"):
-        """Draws crisp vector Philippine Peso coin (₱1, ₱5, ₱10, ₱20)"""
+        """Draws crisp vector Philippine Peso coin (P1, P5, P10, P20)"""
         cx, cy = int(center_x), int(center_y)
         r = int(radius)
-        if style == "bimetal_gold": # ₱20 coin (Bronze core, silver outer ring)
+        if style == "bimetal_gold": # P20 coin (Bronze core, silver outer ring)
             pygame.draw.circle(surf, (203, 213, 225), (cx, cy), r)
             pygame.draw.circle(surf, (148, 163, 184), (cx, cy), r, 2)
             pygame.draw.circle(surf, (217, 119, 6), (cx, cy), int(r * 0.72))
             pygame.draw.circle(surf, (251, 191, 36), (cx, cy), int(r * 0.72), 2)
             val_col = (255, 255, 255)
-        elif style == "bimetal_silver": # ₱10 coin (Silver core, brass ring)
+        elif style == "bimetal_silver": # P10 coin (Silver core, brass ring)
             pygame.draw.circle(surf, (245, 158, 11), (cx, cy), r)
             pygame.draw.circle(surf, (217, 119, 6), (cx, cy), r, 2)
             pygame.draw.circle(surf, (226, 232, 240), (cx, cy), int(r * 0.72))
             pygame.draw.circle(surf, (148, 163, 184), (cx, cy), int(r * 0.72), 2)
             val_col = (15, 23, 42)
-        elif style == "brass": # ₱5 coin
+        elif style == "brass": # P5 coin
             pygame.draw.circle(surf, (234, 179, 8), (cx, cy), r)
             pygame.draw.circle(surf, (202, 138, 4), (cx, cy), r, 2)
             pygame.draw.circle(surf, (253, 224, 71), (cx, cy), int(r * 0.78), 1)
             val_col = (15, 23, 42)
-        else: # ₱1 coin (Silver)
+        else: # P1 coin (Silver)
             pygame.draw.circle(surf, (203, 213, 225), (cx, cy), r)
             pygame.draw.circle(surf, (148, 163, 184), (cx, cy), r, 2)
             pygame.draw.circle(surf, (241, 245, 249), (cx, cy), int(r * 0.78), 1)
@@ -905,7 +905,7 @@ class Quarter2:
         surf.blit(txt, txt.get_rect(center=(cx, cy)))
 
     def draw_peso_bill(self, surf, x, y, w, h, val_str, bg_col, border_col):
-        """Draws crisp vector Philippine Banknote (₱20, ₱50, ₱100, ₱200, ₱500, ₱1000)"""
+        """Draws crisp vector Philippine Banknote (P20, P50, P100, P200, P500, P1000)"""
         b_rect = pygame.Rect(x, y, w, h)
         pygame.draw.rect(surf, bg_col, b_rect, border_radius=6)
         pygame.draw.rect(surf, border_col, b_rect, 2, border_radius=6)
@@ -935,45 +935,45 @@ class Quarter2:
 
         # Station 1: Tomas' Sari-Sari Store Sukli Calculator
         if v_type == "sari_sukli" or "sukli" in q_text or "change" in q_text:
-            # 1. ₱50 Bill on the left
+            # 1. P50 Bill on the left
             b_x = vis_rect.left + 24
             b_y = vis_rect.centery - 36
-            self.draw_peso_bill(self.screen, b_x, b_y, 110, 56, "₱50", (220, 38, 38), (248, 113, 113))
+            self.draw_peso_bill(self.screen, b_x, b_y, 110, 56, "P50", (220, 38, 38), (248, 113, 113))
             
             # Minus sign
             m_font = self.get_ui_font(22, bold=True)
             m_surf = m_font.render("-", True, (255, 215, 0))
             self.screen.blit(m_surf, (b_x + 125, vis_rect.centery - 18))
 
-            # 2. Purchase Cost Tag (₱35) in the middle
+            # 2. Purchase Cost Tag (P35) in the middle
             cost_rect = pygame.Rect(b_x + 155, vis_rect.centery - 34, 100, 52)
             pygame.draw.rect(self.screen, (30, 41, 59), cost_rect, border_radius=8)
             pygame.draw.rect(self.screen, (245, 158, 11), cost_rect, 2, border_radius=8)
             
             c_lbl = self.dialog_hint_font.render("Purchase:", True, (203, 213, 225))
             self.screen.blit(c_lbl, (cost_rect.x + (cost_rect.w - c_lbl.get_width()) // 2, cost_rect.y + 6))
-            p_val = m_font.render("₱35", True, (251, 191, 36))
+            p_val = m_font.render("P35", True, (251, 191, 36))
             self.screen.blit(p_val, (cost_rect.x + (cost_rect.w - p_val.get_width()) // 2, cost_rect.y + 24))
 
             # Equals sign
             eq_surf = m_font.render("=", True, (255, 215, 0))
             self.screen.blit(eq_surf, (cost_rect.right + 15, vis_rect.centery - 18))
 
-            # 3. Sukli Jar (₱15 = ₱10 + ₱5) on the right
+            # 3. Sukli Jar (P15 = P10 + P5) on the right
             jar_rect = pygame.Rect(cost_rect.right + 45, vis_rect.centery - 40, 180, 64)
             pygame.draw.rect(self.screen, (6, 78, 59), jar_rect, border_radius=10)
             pygame.draw.rect(self.screen, (34, 197, 94), jar_rect, 2, border_radius=10)
             
-            j_lbl = self.dialog_hint_font.render("Exact Sukli: ₱15", True, (187, 247, 208))
+            j_lbl = self.dialog_hint_font.render("Exact Sukli: P15", True, (187, 247, 208))
             self.screen.blit(j_lbl, (jar_rect.x + (jar_rect.w - j_lbl.get_width()) // 2, jar_rect.y + 6))
             
-            self.draw_peso_coin(self.screen, jar_rect.x + 55, jar_rect.y + 40, 15, "₱10", "bimetal_silver")
-            self.draw_peso_coin(self.screen, jar_rect.x + 125, jar_rect.y + 40, 14, "₱5", "brass")
+            self.draw_peso_coin(self.screen, jar_rect.x + 55, jar_rect.y + 40, 15, "P10", "bimetal_silver")
+            self.draw_peso_coin(self.screen, jar_rect.x + 125, jar_rect.y + 40, 14, "P5", "brass")
 
-            lbl = self.dialog_stat_font.render("Sukli Model: ₱50 (Bayad) - ₱35 (Halaga) = ₱15 (Sukli)", True, (253, 230, 138))
+            lbl = self.dialog_stat_font.render("Sukli Model: P50 (Bayad) - P35 (Halaga) = P15 (Sukli)", True, (253, 230, 138))
             self.screen.blit(lbl, (vis_rect.centerx - lbl.get_width() // 2, vis_rect.bottom - 22))
 
-        # Station 2: Manong Sorbetero Coin Combinations (₱25)
+        # Station 2: Manong Sorbetero Coin Combinations (P25)
         elif v_type == "sorbetes_coins" or "sorbetes" in q_text or "25" in q_text:
             # 1. Ice cream cone on left
             cone_rect = pygame.Rect(vis_rect.left + 35, vis_rect.centery - 42, 90, 70)
@@ -993,26 +993,26 @@ class Quarter2:
             eq_surf = m_font.render("=", True, (255, 215, 0))
             self.screen.blit(eq_surf, (cone_rect.right + 20, vis_rect.centery - 18))
 
-            # 2. Coin Combination Wallet (One ₱20 coin + One ₱5 coin = ₱25)
+            # 2. Coin Combination Wallet (One P20 coin + One P5 coin = P25)
             wallet_rect = pygame.Rect(cone_rect.right + 55, vis_rect.centery - 40, 360, 68)
             pygame.draw.rect(self.screen, (30, 41, 59), wallet_rect, border_radius=10)
             pygame.draw.rect(self.screen, (251, 191, 36), wallet_rect, 2, border_radius=10)
 
-            w_lbl = self.dialog_hint_font.render("Target Amount: ₱25.00", True, (254, 240, 138))
+            w_lbl = self.dialog_hint_font.render("Target Amount: P25.00", True, (254, 240, 138))
             self.screen.blit(w_lbl, (wallet_rect.left + 16, wallet_rect.top + 8))
 
-            # Draw ₱20 coin and ₱5 coin
-            self.draw_peso_coin(self.screen, wallet_rect.left + 220, wallet_rect.centery + 4, 20, "₱20", "bimetal_gold")
+            # Draw P20 coin and P5 coin
+            self.draw_peso_coin(self.screen, wallet_rect.left + 220, wallet_rect.centery + 4, 20, "P20", "bimetal_gold")
             plus_s = m_font.render("+", True, (255, 215, 0))
             self.screen.blit(plus_s, (wallet_rect.left + 252, wallet_rect.centery - 12))
-            self.draw_peso_coin(self.screen, wallet_rect.left + 295, wallet_rect.centery + 4, 16, "₱5", "brass")
+            self.draw_peso_coin(self.screen, wallet_rect.left + 295, wallet_rect.centery + 4, 16, "P5", "brass")
 
-            lbl = self.dialog_stat_font.render("Coin Value Model: One ₱20 Bimetal Coin + One ₱5 Coin = ₱25", True, (253, 230, 138))
+            lbl = self.dialog_stat_font.render("Coin Value Model: One P20 Bimetal Coin + One P5 Coin = P25", True, (253, 230, 138))
             self.screen.blit(lbl, (vis_rect.centerx - lbl.get_width() // 2, vis_rect.bottom - 22))
 
         # Station 3: Kuya Drayber "Bayad Po!" Jeepney Fare Multiplication
         elif v_type == "jeepney_fare" or "fare" in q_text or "jeep" in q_text or "pasada" in q_text:
-            # 3 Passengers with ₱12 fare coins
+            # 3 Passengers with P12 fare coins
             pass_w = 110
             start_x = vis_rect.left + 40
             for pi in range(3):
@@ -1023,8 +1023,8 @@ class Quarter2:
                 p_txt = self.dialog_hint_font.render(f"Student {pi+1}", True, (147, 197, 253))
                 self.screen.blit(p_txt, (p_rect.x + (p_rect.w - p_txt.get_width()) // 2, p_rect.y + 6))
                 
-                self.draw_peso_coin(self.screen, p_rect.centerx - 12, p_rect.y + 40, 13, "₱10", "bimetal_silver")
-                self.draw_peso_coin(self.screen, p_rect.centerx + 14, p_rect.y + 40, 11, "₱2", "silver")
+                self.draw_peso_coin(self.screen, p_rect.centerx - 12, p_rect.y + 40, 13, "P10", "bimetal_silver")
+                self.draw_peso_coin(self.screen, p_rect.centerx + 14, p_rect.y + 40, 11, "P2", "silver")
 
             # Equals / Total Fare
             m_font = self.get_ui_font(22, bold=True)
@@ -1037,10 +1037,10 @@ class Quarter2:
             
             t_lbl = self.dialog_hint_font.render("Total Fare:", True, (187, 247, 208))
             self.screen.blit(t_lbl, (tot_rect.x + (tot_rect.w - t_lbl.get_width()) // 2, tot_rect.y + 8))
-            t_val = m_font.render("₱36", True, (251, 191, 36))
+            t_val = m_font.render("P36", True, (251, 191, 36))
             self.screen.blit(t_val, (tot_rect.x + (tot_rect.w - t_val.get_width()) // 2, tot_rect.y + 28))
 
-            lbl = self.dialog_stat_font.render("Rate Model: 3 Passengers x ₱12 = ₱12 + ₱12 + ₱12 = ₱36", True, (253, 230, 138))
+            lbl = self.dialog_stat_font.render("Rate Model: 3 Passengers x P12 = P12 + P12 + P12 = P36", True, (253, 230, 138))
             self.screen.blit(lbl, (vis_rect.centerx - lbl.get_width() // 2, vis_rect.bottom - 22))
 
         # Station 4: Ate Maya Palengke Timbangan (Mass in g & kg)
@@ -1086,7 +1086,7 @@ class Quarter2:
 
         # Station 5: Lola Rosa Fiesta Budget Comparison (> < =)
         elif v_type == "fiesta_budget" or "budget" in q_text or "parol" in q_text or "greater" in q_text or ">" in q_text:
-            # 1. Budget Card (₱350)
+            # 1. Budget Card (P350)
             b_rect = pygame.Rect(vis_rect.left + 35, vis_rect.centery - 38, 160, 60)
             pygame.draw.rect(self.screen, (6, 78, 59), b_rect, border_radius=10)
             pygame.draw.rect(self.screen, (34, 197, 94), b_rect, 2, border_radius=10)
@@ -1094,7 +1094,7 @@ class Quarter2:
             b_lbl = self.dialog_hint_font.render("Lola's Budget:", True, (187, 247, 208))
             self.screen.blit(b_lbl, (b_rect.x + 12, b_rect.y + 6))
             m_font = self.get_ui_font(20, bold=True)
-            b_val = m_font.render("₱350.00", True, (254, 240, 138))
+            b_val = m_font.render("P350.00", True, (254, 240, 138))
             self.screen.blit(b_val, (b_rect.x + 12, b_rect.y + 26))
 
             # 2. Relation Symbol ( > )
@@ -1102,17 +1102,17 @@ class Quarter2:
             rel_surf = rel_font.render(">", True, (255, 215, 0))
             self.screen.blit(rel_surf, (b_rect.right + 25, vis_rect.centery - 22))
 
-            # 3. Materials Cost (₱120 + ₱180 = ₱300)
+            # 3. Materials Cost (P120 + P180 = P300)
             cost_rect = pygame.Rect(b_rect.right + 75, vis_rect.centery - 38, 240, 60)
             pygame.draw.rect(self.screen, (30, 41, 59), cost_rect, border_radius=10)
             pygame.draw.rect(self.screen, (245, 158, 11), cost_rect, 2, border_radius=10)
             
-            c_lbl = self.dialog_hint_font.render("Materials: ₱120 + ₱180", True, (203, 213, 225))
+            c_lbl = self.dialog_hint_font.render("Materials: P120 + P180", True, (203, 213, 225))
             self.screen.blit(c_lbl, (cost_rect.x + 12, cost_rect.y + 6))
-            c_val = m_font.render("Total: ₱300.00", True, (251, 191, 36))
+            c_val = m_font.render("Total: P300.00", True, (251, 191, 36))
             self.screen.blit(c_val, (cost_rect.x + 12, cost_rect.y + 26))
 
-            lbl = self.dialog_stat_font.render("Budget Comparison: ₱350 > ₱300 (Kasya ang Pera para sa Pista!)", True, (253, 230, 138))
+            lbl = self.dialog_stat_font.render("Budget Comparison: P350 > P300 (Kasya ang Pera para sa Pista!)", True, (253, 230, 138))
             self.screen.blit(lbl, (vis_rect.centerx - lbl.get_width() // 2, vis_rect.bottom - 22))
 
         # Station 1 (Map 5): Aling Nena's Bibingka Fractions (1/4)
@@ -1145,8 +1145,8 @@ class Quarter2:
             f_val = m_font.render("1/4", True, (255, 215, 0))
             self.screen.blit(f_val, (f_rect.x + 20, f_rect.centery - 16))
             
-            t1 = self.dialog_hint_font.render("• Numerator (1): 1 Slice eaten by Juan", True, (254, 240, 138))
-            t2 = self.dialog_hint_font.render("• Denominator (4): 4 Total Equal Slices in the Bibingka", True, (187, 247, 208))
+            t1 = self.dialog_hint_font.render("- Numerator (1): 1 Slice eaten by Juan", True, (254, 240, 138))
+            t2 = self.dialog_hint_font.render("- Denominator (4): 4 Total Equal Slices in the Bibingka", True, (187, 247, 208))
             self.screen.blit(t1, (f_rect.x + 85, f_rect.y + 8))
             self.screen.blit(t2, (f_rect.x + 85, f_rect.y + 30))
 
@@ -1189,7 +1189,7 @@ class Quarter2:
                                                               (c1_rect.centerx - 22, c1_rect.top + 40),
                                                               (c1_rect.centerx + 22, c1_rect.top + 40)])
             pygame.draw.ellipse(self.screen, (217, 119, 6), (c1_rect.centerx - 22, c1_rect.top + 34, 44, 12))
-            l1 = self.dialog_hint_font.render("CONE (Salakot) • OK", True, (74, 222, 128))
+            l1 = self.dialog_hint_font.render("CONE (Salakot) - OK", True, (74, 222, 128))
             self.screen.blit(l1, (c1_rect.centerx - l1.get_width() // 2, c1_rect.bottom - 18))
 
             # 2. Cylinder (Bamboo Kawayan)
@@ -1245,8 +1245,8 @@ class Quarter2:
             d_val = m_font.render("8:30 AM", True, (74, 222, 128))
             self.screen.blit(d_val, (t_rect.x + 20, t_rect.centery - 14))
 
-            t1 = self.dialog_hint_font.render("• Short Hand: Halfway between 8 and 9 (Hour 8)", True, (254, 240, 138))
-            t2 = self.dialog_hint_font.render("• Long Hand: Points directly at 6 (30 Minutes)", True, (187, 247, 208))
+            t1 = self.dialog_hint_font.render("- Short Hand: Halfway between 8 and 9 (Hour 8)", True, (254, 240, 138))
+            t2 = self.dialog_hint_font.render("- Long Hand: Points directly at 6 (30 Minutes)", True, (187, 247, 208))
             self.screen.blit(t1, (t_rect.x + 115, t_rect.y + 8))
             self.screen.blit(t2, (t_rect.x + 115, t_rect.y + 30))
 
@@ -1287,7 +1287,7 @@ class Quarter2:
         else:
             hint_txt = q_data.get("hint", "Suriin nang mabuti ang mga pagpipilian at piliin ang tamang sagot sa ibaba!")
             # Stylized Fiesta Coin Icon
-            self.draw_peso_coin(self.screen, vis_rect.centerx, vis_rect.centery - 16, 22, "₱", "bimetal_gold")
+            self.draw_peso_coin(self.screen, vis_rect.centerx, vis_rect.centery - 16, 22, "P", "bimetal_gold")
             
             h_surf = self.dialog_hint_font.render(f"{hint_txt}", True, (253, 230, 138))
             self.screen.blit(h_surf, (vis_rect.centerx - h_surf.get_width() // 2, vis_rect.bottom - 24))
@@ -1811,7 +1811,7 @@ class Quarter2:
         frames = []
 
         if not os.path.exists(npc_path):
-            print(f"⚠️ NPC path does not exist: {npc_path}")
+            print(f"[WARN] NPC path does not exist: {npc_path}")
             placeholder = pygame.Surface((TILE_SIZE, TILE_SIZE))
             placeholder.fill((255, 200, 100))
             pygame.draw.circle(placeholder, (0, 0, 0), (TILE_SIZE // 2, TILE_SIZE // 2), 12)
@@ -1843,7 +1843,7 @@ class Quarter2:
                     placeholder.fill((255, 200, 0))
                     frames.append(placeholder)
 
-        print(f"✅ Loaded {len(frames)} frames for {npc_name}")
+        print(f"[OK] Loaded {len(frames)} frames for {npc_name}")
         return frames
 
     # ============================================================
@@ -1856,9 +1856,9 @@ class Quarter2:
             if os.path.exists(oldman_path):
                 img = pygame.image.load(oldman_path).convert_alpha()
                 self.npc_oldman_sprite = pygame.transform.scale(img, (TILE_SIZE, TILE_SIZE))
-                print(f"✅ Loaded Oldman sprite")
+                print(f"[OK] Loaded Oldman sprite")
             else:
-                print(f"⚠️ Oldman sprite not found at: {oldman_path}")
+                print(f"[WARN] Oldman sprite not found at: {oldman_path}")
                 placeholder = pygame.Surface((TILE_SIZE, TILE_SIZE))
                 placeholder.fill((200, 200, 200))
                 pygame.draw.circle(placeholder, (0, 0, 0), (TILE_SIZE // 2, TILE_SIZE // 2), 12)
@@ -1869,7 +1869,7 @@ class Quarter2:
                 placeholder.blit(text, (4, TILE_SIZE - 12))
                 self.npc_oldman_sprite = placeholder
         except Exception as e:
-            print(f"❌ Error loading Oldman: {e}")
+            print(f"[FAIL] Error loading Oldman: {e}")
             placeholder = pygame.Surface((TILE_SIZE, TILE_SIZE))
             placeholder.fill((200, 200, 200))
             self.npc_oldman_sprite = placeholder
@@ -1880,9 +1880,9 @@ class Quarter2:
             if os.path.exists(skeleton_path):
                 img = pygame.image.load(skeleton_path).convert_alpha()
                 self.npc_skeleton_sprite = pygame.transform.scale(img, (TILE_SIZE, TILE_SIZE))
-                print(f"✅ Loaded Skeleton sprite")
+                print(f"[OK] Loaded Skeleton sprite")
             else:
-                print(f"⚠️ Skeleton sprite not found at: {skeleton_path}")
+                print(f"[WARN] Skeleton sprite not found at: {skeleton_path}")
                 placeholder = pygame.Surface((TILE_SIZE, TILE_SIZE))
                 placeholder.fill((255, 255, 255))
                 pygame.draw.circle(placeholder, (0, 0, 0), (TILE_SIZE // 2, TILE_SIZE // 2), 12)
@@ -1893,7 +1893,7 @@ class Quarter2:
                 placeholder.blit(text, (2, TILE_SIZE - 12))
                 self.npc_skeleton_sprite = placeholder
         except Exception as e:
-            print(f"❌ Error loading Skeleton: {e}")
+            print(f"[FAIL] Error loading Skeleton: {e}")
             placeholder = pygame.Surface((TILE_SIZE, TILE_SIZE))
             placeholder.fill((255, 255, 255))
             self.npc_skeleton_sprite = placeholder
@@ -1904,9 +1904,9 @@ class Quarter2:
             if os.path.exists(knight_path):
                 img = pygame.image.load(knight_path).convert_alpha()
                 self.npc_knight_sprite = pygame.transform.scale(img, (TILE_SIZE, TILE_SIZE))
-                print(f"✅ Loaded Knight sprite")
+                print(f"[OK] Loaded Knight sprite")
             else:
-                print(f"⚠️ Knight sprite not found at: {knight_path}")
+                print(f"[WARN] Knight sprite not found at: {knight_path}")
                 placeholder = pygame.Surface((TILE_SIZE, TILE_SIZE))
                 placeholder.fill((192, 192, 192))
                 self.npc_knight_sprite = placeholder
@@ -1919,7 +1919,7 @@ class Quarter2:
                     img = pygame.image.load(path).convert_alpha()
                     scaled = pygame.transform.scale(img, (TILE_SIZE, TILE_SIZE))
                     self.npc_knight_left_sprites.append(scaled)
-                    print(f"✅ Loaded Knight left frame: {name}")
+                    print(f"[OK] Loaded Knight left frame: {name}")
 
             # Load Knight walking down sprites
             self.npc_knight_down_sprites = []
@@ -1929,7 +1929,7 @@ class Quarter2:
                     img = pygame.image.load(path).convert_alpha()
                     scaled = pygame.transform.scale(img, (TILE_SIZE, TILE_SIZE))
                     self.npc_knight_down_sprites.append(scaled)
-                    print(f"✅ Loaded Knight down frame: {name}")
+                    print(f"[OK] Loaded Knight down frame: {name}")
 
             # Load Knight walking right sprites
             self.npc_knight_right_sprites = []
@@ -1939,7 +1939,7 @@ class Quarter2:
                     img = pygame.image.load(path).convert_alpha()
                     scaled = pygame.transform.scale(img, (TILE_SIZE, TILE_SIZE))
                     self.npc_knight_right_sprites.append(scaled)
-                    print(f"✅ Loaded Knight right frame: {name}")
+                    print(f"[OK] Loaded Knight right frame: {name}")
 
             # Load Knight walking up sprites
             self.npc_knight_up_sprites = []
@@ -1949,9 +1949,9 @@ class Quarter2:
                     img = pygame.image.load(path).convert_alpha()
                     scaled = pygame.transform.scale(img, (TILE_SIZE, TILE_SIZE))
                     self.npc_knight_up_sprites.append(scaled)
-                    print(f"✅ Loaded Knight up frame: {name}")
+                    print(f"[OK] Loaded Knight up frame: {name}")
         except Exception as e:
-            print(f"❌ Error loading Knight: {e}")
+            print(f"[FAIL] Error loading Knight: {e}")
             placeholder = pygame.Surface((TILE_SIZE, TILE_SIZE))
             placeholder.fill((192, 192, 192))
         # Load 5 Quarter 2 Filipino Street Character NPCs (Tomas, Sorbetero, Drayber, Maya, Lola Rosa)
@@ -1968,9 +1968,9 @@ class Quarter2:
                         frames.append(pygame.transform.scale(img, (TILE_SIZE, TILE_SIZE)))
                 if frames and num in self.station_npc_info:
                     self.station_npc_info[num]["frames"] = frames
-                    print(f"✅ Loaded {len(frames)} frames for Filipino NPC {num}: {self.station_npc_info[num]['name']}")
+                    print(f"[OK] Loaded {len(frames)} frames for Filipino NPC {num}: {self.station_npc_info[num]['name']}")
             except Exception as e:
-                print(f"❌ Error loading Filipino NPC {num}: {e}")
+                print(f"[FAIL] Error loading Filipino NPC {num}: {e}")
 
     # ============================================================
     # PORTAL SPRITE ANIMATION CLASS
@@ -2295,14 +2295,14 @@ class Quarter2:
                         self.main_menu.audio_manager.play_sfx("victory_fanfare")
                         self.main_menu.audio_manager.play_sfx("portal_warp")
                 except Exception as e:
-                    print(f"⚠️ Error recording Quarter 2 completion: {e}")
+                    print(f"[WARN] Error recording Quarter 2 completion: {e}")
 
             self.main_menu.current_screen = "stage_select"
             self.main_menu.quarter2 = None
             # Recreate the stage select to reset position
             from .stageselect import StageSelect
             self.main_menu.stage_select = StageSelect(self.screen, self.main_menu)
-            print("🏠 Returning to stage select")
+            print("[HOME] Returning to stage select")
             if completed:
                 self.completed = True
             
@@ -2327,7 +2327,7 @@ class Quarter2:
             # When all 5 challenges are cleared, stepping into the goal portal initiates seamless warp!
             if self.quiz_state == 6:
                 if current_portal.direction == self.goal_portal_direction or current_portal.is_static:
-                    print("✨ Entering Grand Fiesta Portal - Initiating seamless warp transition...")
+                    print("* Entering Grand Fiesta Portal - Initiating seamless warp transition...")
                     self.warp_out_active = True
                     self.warp_out_timer = self.warp_out_duration
                     return True
@@ -2483,7 +2483,7 @@ class Quarter2:
                         elif self.coin_clink:
                             self.coin_clink.play()
                         
-                        print(f"✅ Correct answer selected: {q_data['choices'][i]}")
+                        print(f"[OK] Correct answer selected: {q_data['choices'][i]}")
                     else:
                         # 50:50 Wizard Hint: eliminate clicked choice with gentle encouragement
                         self.eliminated_choices.add(i)
@@ -2497,11 +2497,11 @@ class Quarter2:
                         if self.station_attempts[self.quiz_station_index] < 2:
                             # 1st wrong attempt: Give player 1 more try
                             self.quiz_state = 2
-                            print(f"❌ Incorrect choice selected: {q_data['choices'][i]} (Attempt 1 of 2)")
+                            print(f"[FAIL] Incorrect choice selected: {q_data['choices'][i]} (Attempt 1 of 2)")
                         else:
                             # 2nd wrong attempt: Out of tries! Recorded as wrong, but award progression item
                             self.quiz_state = 4
-                            print(f"❌ Incorrect choice on 2nd try! Out of tries. Station {self.quiz_station_index} cleared for progression.")
+                            print(f"[FAIL] Incorrect choice on 2nd try! Out of tries. Station {self.quiz_station_index} cleared for progression.")
                         
                         if self.snap_sound:
                             self.snap_sound.play()
@@ -2543,7 +2543,7 @@ class Quarter2:
                     self.quiz_station_index += 1
                     self.current_question_index = self.quiz_station_index - 1
                     self.quiz_state = 0  # Immediate return to exploration!
-                    print(f"🎯 Proceeding to Station {self.quiz_station_index}")
+                    print(f"[TARGET] Proceeding to Station {self.quiz_station_index}")
                 else:
                     self.current_question_index = 5
                     self.quiz_state = 5
@@ -2575,7 +2575,7 @@ class Quarter2:
                     self.quiz_station_index += 1
                     self.current_question_index = self.quiz_station_index - 1
                     self.quiz_state = 0
-                    print(f"🎯 Proceeding to Station {self.quiz_station_index}")
+                    print(f"[TARGET] Proceeding to Station {self.quiz_station_index}")
                 else:
                     self.current_question_index = 5
                     self.quiz_state = 5
@@ -2597,7 +2597,7 @@ class Quarter2:
                 self.banner_timer = 999.0
                 if self.success_sound:
                     self.success_sound.play()
-                print("✨ Grand Fiesta Exit Portal unlocked!")
+                print("* Grand Fiesta Exit Portal unlocked!")
 
     # ============================================================
     # UPDATE
@@ -2619,7 +2619,7 @@ class Quarter2:
             if self.stage_time_remaining <= 0.0:
                 self.stage_time_remaining = 0.0
                 self.time_up_dialog_active = True
-                print("⏰ Quarter 2 Time's Up!")
+                print("[TIME] Quarter 2 Time's Up!")
 
         if self.time_up_dialog_active:
             return
@@ -2837,7 +2837,7 @@ class Quarter2:
 
         info = self.station_npc_info.get(self.quiz_station_index, {})
         speaker_name = info.get("name", f"Station {self.quiz_station_index}")
-        speaker_surf = self.dialog_header_font.render(f"{speaker_name} • Out of Tries", True, (245, 158, 11))
+        speaker_surf = self.dialog_header_font.render(f"{speaker_name} - Out of Tries", True, (245, 158, 11))
         self.screen.blit(speaker_surf, (box_x + 30, box_y + 18))
 
         q_data = self.quiz_questions[self.current_question_index]
@@ -2925,7 +2925,7 @@ class Quarter2:
         pygame.draw.rect(self.screen, (218, 165, 32), dialog_rect, 3, border_radius=14)
         pygame.draw.rect(self.screen, (255, 215, 0), dialog_rect.inflate(-6, -6), 1, border_radius=10)
 
-        speaker_surf = self.dialog_header_font.render("BARANGAY FIESTA • ALL TRIALS SOLVED!", True, (255, 215, 0))
+        speaker_surf = self.dialog_header_font.render("BARANGAY FIESTA - ALL TRIALS SOLVED!", True, (255, 215, 0))
         self.screen.blit(speaker_surf, (box_x + 30, box_y + 18))
 
         speech_lines = [
@@ -2961,7 +2961,7 @@ class Quarter2:
         self.draw_victory_speech()
 
     # ============================================================
-    # 🏡 PROGRESSIVE BAHAY KUBO CONSTRUCTION (Map 5 Specific)
+    # [HOUSE] PROGRESSIVE BAHAY KUBO CONSTRUCTION (Map 5 Specific)
     # ============================================================
     def trigger_kubo_pan_sequence(self, piece_index):
         """Starts cinematic camera pan sequence to the Bahay Kubo plaza construction site in Map 5"""
@@ -3137,7 +3137,7 @@ class Quarter2:
 
         # Floating Landmark Name Badge
         b_name_font = self.get_ui_font(11, bold=True)
-        b_label = f"🏡 BARANGAY BAHAY KUBO ({self.kubo_pieces_collected}/5)"
+        b_label = f"BARANGAY BAHAY KUBO ({self.kubo_pieces_collected}/5)"
         b_surf = b_name_font.render(b_label, True, (255, 215, 0) if self.kubo_pieces_collected == 5 else (254, 240, 138))
         badge_w, badge_h = b_surf.get_width() + 14, 24
         badge_rect = pygame.Rect(sx + int(50 * ZOOM - badge_w // 2), sy - int(34 * ZOOM), badge_w, badge_h)
@@ -3735,7 +3735,7 @@ class Quarter2:
                 obj1_surf = item_font.render(obj1, True, (74, 222, 128))
                 self.screen.blit(obj1_surf, (box_x + 16, box_y + 32))
 
-                obj2 = ">> Exit Portal Status: OPEN • Enter portal to return!"
+                obj2 = ">> Exit Portal Status: OPEN - Enter portal to return!"
                 obj2_surf = item_font.render(obj2, True, (255, 215, 0))
                 self.screen.blit(obj2_surf, (box_x + 16, box_y + 54))
 

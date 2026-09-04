@@ -50,7 +50,7 @@ class MapLoader:
                 break
 
         if map_path is None:
-            print(f"❌ Map not found: {map_filename}")
+            print(f"[FAIL] Map not found: {map_filename}")
             return False
 
         try:
@@ -58,7 +58,7 @@ class MapLoader:
                 lines = [line.rstrip("\n\r") for line in f if line.rstrip("\n\r")]
 
             if not lines:
-                print(f"❌ Map file is empty: {map_path}")
+                print(f"[FAIL] Map file is empty: {map_path}")
                 return False
 
             self.game_map = lines
@@ -69,13 +69,13 @@ class MapLoader:
             # Parse NPC positions and player start
             self._parse_map_data()
 
-            print(f"✅ Loaded map: {self.current_map_name} ({self.rows}x{self.cols})")
+            print(f"[OK] Loaded map: {self.current_map_name} ({self.rows}x{self.cols})")
             print(f"   Player start: {self.player_start}")
             print(f"   NPCs found: {len(self.npc_positions)}")
             return True
 
         except Exception as e:
-            print(f"❌ Error loading map {map_filename}: {e}")
+            print(f"[FAIL] Error loading map {map_filename}: {e}")
             return False
 
     def _parse_map_data(self):
@@ -103,22 +103,22 @@ class MapLoader:
     def get_random_map(self):
         """Get a random map from Quarter1Maps folder"""
         if not os.path.exists(self.quarter_maps_dir):
-            print(f"❌ Quarter1Maps directory not found: {self.quarter_maps_dir}")
+            print(f"[FAIL] Quarter1Maps directory not found: {self.quarter_maps_dir}")
             return None
 
         try:
             map_files = [f for f in os.listdir(self.quarter_maps_dir)
                          if f.endswith('.txt')]
             if not map_files:
-                print(f"❌ No map files found in {self.quarter_maps_dir}")
+                print(f"[FAIL] No map files found in {self.quarter_maps_dir}")
                 return None
 
             selected = random.choice(map_files)
-            print(f"🎲 Randomly selected map: {selected}")
+            print(f"[DICE] Randomly selected map: {selected}")
             return selected
 
         except Exception as e:
-            print(f"❌ Error getting random map: {e}")
+            print(f"[FAIL] Error getting random map: {e}")
             return None
 
     def get_map_tile(self, row, col):

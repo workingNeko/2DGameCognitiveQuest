@@ -73,7 +73,7 @@ class TutorialScreen:
                 if char == 'r':
                     self.portal_tile_x = c_idx
                     self.portal_tile_y = r_idx
-                    print(f"🌀 Tutorial Exit Portal ('r') mapped at tile: ({c_idx}, {r_idx})")
+                    print(f"[PORTAL] Tutorial Exit Portal ('r') mapped at tile: ({c_idx}, {r_idx})")
 
         self.portal_anim_frame = 0
         self.portal_anim_timer = 0
@@ -108,7 +108,7 @@ class TutorialScreen:
         self.ui_font = pygame.font.SysFont(["Segoe UI", "Tahoma", "Comic Sans MS", "Arial"], 12, bold=True)
         self.skip_font = pygame.font.SysFont(["Segoe UI", "Tahoma", "Comic Sans MS", "Arial"], 16, bold=True)
 
-        print("🎓 Live Interactive Gameplay Tutorial Initialized!")
+        print("[TUTORIAL] Live Interactive Gameplay Tutorial Initialized!")
 
     # ============================================================
     # ASSET & MAP LOADERS
@@ -120,10 +120,10 @@ class TutorialScreen:
                 with open(self.map_path, "r") as f:
                     lines = [line.rstrip("\r\n") for line in f if line.strip()]
                 if lines:
-                    print(f"✅ Loaded tutorial map from: {self.map_path} ({len(lines)}x{len(lines[0])})")
+                    print(f"[OK] Loaded tutorial map from: {self.map_path} ({len(lines)}x{len(lines[0])})")
                     return lines
             except Exception as e:
-                print(f"⚠️ Error reading tutorial map file: {e}")
+                print(f"[WARN] Error reading tutorial map file: {e}")
 
         # Fallback grid
         return [
@@ -221,14 +221,14 @@ class TutorialScreen:
                     scaled_height = TILE_SIZE * 3
                     frames.append(pygame.transform.scale(img, (scaled_width, scaled_height)))
             except Exception as e:
-                print(f"⚠️ Error loading tutorial portal frame {filename}: {e}")
+                print(f"[WARN] Error loading tutorial portal frame {filename}: {e}")
 
         if not frames:
             p = pygame.Surface((TILE_SIZE * 3, TILE_SIZE * 3), pygame.SRCALPHA)
             pygame.draw.circle(p, (74, 222, 128), (TILE_SIZE * 3 // 2, TILE_SIZE * 3 // 2), TILE_SIZE * 3 // 2)
             frames.append(p)
         else:
-            print(f"✅ Loaded {len(frames)} portal animation frames for Tutorial!")
+            print(f"[OK] Loaded {len(frames)} portal animation frames for Tutorial!")
         return frames
 
     # ============================================================
@@ -267,10 +267,10 @@ class TutorialScreen:
         if self.phase == 1 and npc_dist < 2.5 * TILE_SIZE:
             self.phase = 3
             self.quiz_state = 1
-            print("🎓 Player approached Guide NPC: Automatically Triggered Question Dialogue!")
+            print("[TUTORIAL] Player approached Guide NPC: Automatically Triggered Question Dialogue!")
 
         if self.phase == 4 and portal_dist < 1.8 * TILE_SIZE:
-            print("🎉 Exit Portal Entered! Tutorial Complete!")
+            print("[WIN] Exit Portal Entered! Tutorial Complete!")
             self.finish_tutorial()
 
     def update_player_movement(self):
@@ -367,13 +367,13 @@ class TutorialScreen:
             return
         if choice_idx == self.sample_question["correct"]:
             self.quiz_state = 3  # Correct
-            print("✅ Correct Answer in Tutorial Quiz!")
+            print("[OK] Correct Answer in Tutorial Quiz!")
         else:
             self.quiz_attempts += 1
             self.eliminated_choice = choice_idx
             self.wrong_feedback_msg = "Almost! You have 1 try remaining. Pick again!"
             self.quiz_state = 2 if self.quiz_attempts < 2 else 3
-            print("❌ Wrong Answer in Tutorial Quiz -> Showing 2-Attempt Mechanics!")
+            print("[FAIL] Wrong Answer in Tutorial Quiz -> Showing 2-Attempt Mechanics!")
 
     def trigger_click(self, pos=None):
         if pos is None:
@@ -393,7 +393,7 @@ class TutorialScreen:
             if npc_rect.collidepoint(pos) or math.hypot(self.player_x - self.npc_tile_x * TILE_SIZE, self.player_y - self.npc_tile_y * TILE_SIZE) < 3.0 * TILE_SIZE:
                 self.phase = 3
                 self.quiz_state = 1
-                print("🎓 Opening Sample Quiz Modal!")
+                print("[TUTORIAL] Opening Sample Quiz Modal!")
                 return
 
         # 3. Phase 3: Sample Quiz Dialog Clicks
@@ -432,7 +432,7 @@ class TutorialScreen:
             if btn_rect.collidepoint(pos):
                 self.quiz_state = 0
                 self.phase = 4
-                print("🎓 Tutorial Phase 4: Portal Unlocked! Guide student to Exit Portal.")
+                print("[TUTORIAL] Tutorial Phase 4: Portal Unlocked! Guide student to Exit Portal.")
                 return
 
     def finish_tutorial(self):
@@ -441,7 +441,7 @@ class TutorialScreen:
         if student_id:
             set_tutorial_completed(self.main_menu, student_id, completed=True)
 
-        print("🚀 Tutorial Complete! Opening Stage Select...")
+        print("[GO] Tutorial Complete! Opening Stage Select...")
         from screens.stageselect import StageSelect
         self.main_menu.current_screen = "stage_select"
         self.main_menu.stage_select = StageSelect(self.screen, self.main_menu)
@@ -696,15 +696,15 @@ class TutorialScreen:
             t_radar = self.dialog_btn_font.render("GESTURE RADAR", True, border_col)
             self.screen.blit(t_radar, (card_x + 16, card_y + 10))
 
-            status_text = "● HAND DETECTED" if self.hand_detected else "○ DUAL INPUT READY"
+            status_text = "[HAND DETECTED]" if self.hand_detected else "[DUAL INPUT READY]"
             status_col = (74, 222, 128) if self.hand_detected else (56, 189, 248)
             stat_surf = self.ui_font.render(status_text, True, status_col)
             self.screen.blit(stat_surf, (card_x + 16, card_y + 34))
 
             # Dual input hints
-            t_sub1 = self.ui_font.render("• Hand: Move away from center to steer", True, (226, 232, 240))
-            t_sub2 = self.ui_font.render("• Keys: WASD or Arrow Keys to walk", True, (203, 213, 225))
-            t_sub3 = self.ui_font.render("• Action: Hold Fist (0.9s) or Click", True, (251, 191, 36))
+            t_sub1 = self.ui_font.render("- Hand: Move away from center to steer", True, (226, 232, 240))
+            t_sub2 = self.ui_font.render("- Keys: WASD or Arrow Keys to walk", True, (203, 213, 225))
+            t_sub3 = self.ui_font.render("- Action: Hold Fist (0.9s) or Click", True, (251, 191, 36))
             self.screen.blit(t_sub1, (card_x + 16, card_y + 54))
             self.screen.blit(t_sub2, (card_x + 16, card_y + 70))
             self.screen.blit(t_sub3, (card_x + 16, card_y + 86))
@@ -820,17 +820,17 @@ class TutorialScreen:
         # Pulse accent border
         pulse = 0.5 + 0.5 * math.sin(t * 3.0)
         if self.phase == 1:
-            step_tag = "🧭 STEP 1/3: NAVIGATION"
+            step_tag = "STEP 1/3: NAVIGATION"
             tag_col = (251, 191, 36)
             txt = "Move hand away from center or press WASD to approach the Guide Sage!"
             border_col = (245, 158, 11)
         elif self.phase == 3:
-            step_tag = "🧠 STEP 2/3: WISDOM TRIAL"
+            step_tag = "STEP 2/3: WISDOM TRIAL"
             tag_col = (234, 179, 8)
             txt = "Select your answer by holding a FIST (0.9s) or clicking your choice!"
             border_col = (234, 179, 8)
         else:
-            step_tag = "🌀 STEP 3/3: PORTAL ODYSSEY"
+            step_tag = "STEP 3/3: PORTAL ODYSSEY"
             tag_col = (74, 222, 128)
             txt = "Exit Portal is active! Walk into the celestial portal to start your journey!"
             border_col = (34, 197, 94)
@@ -889,7 +889,7 @@ class TutorialScreen:
         self.screen.blit(h_surf, (h_x, h_y))
         pygame.draw.rect(self.screen, (251, 191, 36), (h_x, h_y, h_w, h_h), 1, border_radius=10)
 
-        title = self.dialog_header_font.render("🧙 Guide Sage • Trial of Wisdom", True, (255, 215, 0))
+        title = self.dialog_header_font.render("Guide Sage - Trial of Wisdom", True, (255, 215, 0))
         self.screen.blit(title, (h_x + 16, h_y + 9))
 
         # Question text card
@@ -975,14 +975,14 @@ class TutorialScreen:
         pygame.draw.rect(self.screen, (239, 68, 68), dialog_rect, 2, border_radius=18)
 
         # Header
-        speaker = self.dialog_header_font.render("🧙 Guide Sage • Trial Feedback", True, (248, 113, 113))
+        speaker = self.dialog_header_font.render("Guide Sage - Trial Feedback", True, (248, 113, 113))
         self.screen.blit(speaker, (box_x + 24, box_y + 20))
 
         # Attempts pill badge
         att_rect = pygame.Rect(box_x + box_w - 210, box_y + 18, 186, 28)
         pygame.draw.rect(self.screen, (30, 41, 59), att_rect, border_radius=6)
         pygame.draw.rect(self.screen, (251, 191, 36), att_rect, 1, border_radius=6)
-        att_txt = self.ui_font.render("⚠️ 1 ATTEMPT REMAINING", True, (254, 240, 138))
+        att_txt = self.ui_font.render("1 ATTEMPT REMAINING", True, (254, 240, 138))
         self.screen.blit(att_txt, att_txt.get_rect(center=att_rect.center))
 
         m1 = self.dialog_q_font.render("Hmm, that is not the right answer.", True, (255, 255, 255))
@@ -995,7 +995,7 @@ class TutorialScreen:
         pygame.draw.rect(self.screen, (220, 38, 38) if is_hov else (153, 27, 27), btn_rect, border_radius=12)
         pygame.draw.rect(self.screen, (255, 255, 255), btn_rect, 2, border_radius=12)
 
-        c_surf = self.dialog_btn_font.render("Try Again ↺  [SPACE]", True, (255, 255, 255))
+        c_surf = self.dialog_btn_font.render("Try Again  [SPACE]", True, (255, 255, 255))
         self.screen.blit(c_surf, c_surf.get_rect(center=btn_rect.center))
 
     def draw_sample_correct_dialog(self):
@@ -1014,12 +1014,16 @@ class TutorialScreen:
         pygame.draw.rect(self.screen, (15, 23, 42), dialog_rect, border_radius=18)
         pygame.draw.rect(self.screen, (34, 197, 94), dialog_rect, 2, border_radius=18)
 
-        speaker = self.dialog_header_font.render("🧙 Guide Sage • Trial Mastered!", True, (74, 222, 128))
+        speaker = self.dialog_header_font.render("Guide Sage - Trial Mastered!", True, (74, 222, 128))
         self.screen.blit(speaker, (box_x + 24, box_y + 20))
 
-        # Golden stars badge
-        star_txt = self.dialog_header_font.render("★ ★ ★", True, (251, 191, 36))
-        self.screen.blit(star_txt, (box_x + box_w - 110, box_y + 18))
+        # Golden stars / medal badges drawn geometrically
+        for s_i in range(3):
+            sc_x = box_x + box_w - 85 + s_i * 22
+            sc_y = box_y + 32
+            pygame.draw.circle(self.screen, (251, 191, 36), (sc_x, sc_y), 7)
+            pygame.draw.circle(self.screen, (254, 240, 138), (sc_x, sc_y), 4)
+            pygame.draw.circle(self.screen, (255, 255, 255), (sc_x, sc_y), 7, 1)
 
         m1 = self.dialog_q_font.render("Outstanding! 2 + 2 = 4 is correct!", True, (255, 255, 255))
         m2 = self.dialog_choice_font.render("The mystical Exit Portal has materialized on the path ahead.", True, (203, 213, 225))

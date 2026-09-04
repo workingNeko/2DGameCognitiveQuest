@@ -368,7 +368,7 @@ def save_wav(track, file_path, sample_rate=SAMPLE_RATE):
         wf.setsampwidth(2)
         wf.setframerate(sample_rate)
         wf.writeframes(int_track.tobytes())
-    print(f"🎵 Generated soundtrack: {file_path} ({len(track)/sample_rate:.2f}s loop)")
+    print(f"[MUSIC] Generated soundtrack: {file_path} ({len(track)/sample_rate:.2f}s loop)")
 
 
 # ======================================================================

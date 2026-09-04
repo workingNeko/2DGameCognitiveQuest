@@ -218,7 +218,7 @@ class LeaderboardScreen:
         self.screen.blit(dim, (0, 0))
 
         # 2. Header & Title
-        title_surf = self.title_font.render("COGNITIVE QUEST • HALL OF FAME", True, (255, 215, 0))
+        title_surf = self.title_font.render("COGNITIVE QUEST - HALL OF FAME", True, (255, 215, 0))
         self.screen.blit(title_surf, title_surf.get_rect(center=(self.width // 2, 28)))
 
         subtitle_surf = self.subtitle_font.render("DepEd MATATAG Grade 2 Mathematics Official Student Rankings", True, (203, 213, 225))
@@ -292,7 +292,7 @@ class LeaderboardScreen:
             self.screen.blit(name_surf, (spotlight_x + 280, spotlight_y + 11))
 
             # Grade & Section
-            meta_txt = f"{top_grade_lvl} • Section {top_section}"
+            meta_txt = f"{top_grade_lvl} - Section {top_section}"
             meta_surf = self.spotlight_meta_font.render(meta_txt, True, (148, 163, 184))
             self.screen.blit(meta_surf, (spotlight_x + 280, spotlight_y + 32))
 

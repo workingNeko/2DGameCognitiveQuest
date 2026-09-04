@@ -38,9 +38,9 @@ def set_tutorial_completed(main_menu, student_id, completed=True):
     try:
         with open(path, "w") as f:
             json.dump(save_data, f, indent=4)
-        print(f"🎓 Tutorial completed status saved for student {student_id}: {completed}")
+        print(f"[TUTORIAL] Tutorial completed status saved for student {student_id}: {completed}")
     except Exception as e:
-        print(f"⚠️ Error saving tutorial status: {e}")
+        print(f"[WARN] Error saving tutorial status: {e}")
 
 def delete_student_progress(student_id):
     if not student_id:
@@ -49,9 +49,9 @@ def delete_student_progress(student_id):
     if os.path.exists(path):
         try:
             os.remove(path)
-            print(f"🗑️ Deleted save file: {path}")
+            print(f"[DELETE] Deleted save file: {path}")
         except Exception as e:
-            print(f"⚠️ Error deleting save file: {e}")
+            print(f"[WARN] Error deleting save file: {e}")
 
 def mark_quarter_completed(main_menu, quarter_name, score=100, percentage=100.0, total_questions=5):
     """Marks a specific quarter as completed in the student's persistent save data."""
@@ -75,9 +75,9 @@ def mark_quarter_completed(main_menu, quarter_name, score=100, percentage=100.0,
     try:
         with open(path, "w") as f:
             json.dump(save_data, f, indent=4)
-        print(f"🌟 Quarter '{quarter_name}' marked as COMPLETED for student {student_id}! ({score} pts, {percentage:.1f}%)")
+        print(f"[STAR] Quarter '{quarter_name}' marked as COMPLETED for student {student_id}! ({score} pts, {percentage:.1f}%)")
     except Exception as e:
-        print(f"⚠️ Error marking quarter completed: {e}")
+        print(f"[WARN] Error marking quarter completed: {e}")
 
 def get_completed_quarters(student_id):
     """Returns dict of completed quarters for given student."""
@@ -163,10 +163,10 @@ def save_student_progress(main_menu):
     try:
         with open(path, "w") as f:
             json.dump(save_data, f, indent=4)
-        print(f"💾 Student progress saved successfully to: {path}")
+        print(f"[SAVE] Student progress saved successfully to: {path}")
         return True
     except Exception as e:
-        print(f"⚠️ Error writing save file: {e}")
+        print(f"[WARN] Error writing save file: {e}")
         return False
 
 def gather_quarter_data(q, quarter_name):
@@ -214,7 +214,7 @@ def load_student_progress(student_id):
         with open(path, "r") as f:
             return json.load(f)
     except Exception as e:
-        print(f"⚠️ Error reading save file {path}: {e}")
+        print(f"[WARN] Error reading save file {path}: {e}")
         return None
 
 def apply_student_progress(main_menu, save_data):
@@ -248,7 +248,7 @@ def apply_student_progress(main_menu, save_data):
         ss.camera_x = ss.player_x + 16 - (ss.width // 2) / 1.50
         ss.camera_y = ss.player_y + 16 - (ss.height // 2) / 1.50
         
-        print("🗺️ Stage Select screen state resumed.")
+        print("[MAP] Stage Select screen state resumed.")
         
     elif current_screen in ["quarter1", "quarter2", "quarter3", "quarter4"]:
         q_data = save_data.get("quarter_data", {})
@@ -328,7 +328,7 @@ def apply_student_progress(main_menu, save_data):
             q.camera_x = q.player_x + 16 - (q.width // 2) / ZOOM_FACTOR
             q.camera_y = q.player_y + 16 - (q.height // 2) / ZOOM_FACTOR
             
-            print(f"🎮 Resumed {current_screen} state at Question {q.current_question_index + 1}.")
+            print(f"[GAME] Resumed {current_screen} state at Question {q.current_question_index + 1}.")
 
 def show_saving_and_exit(main_menu, target_screen="menu"):
     # Intercept return to Main Menu
@@ -391,4 +391,4 @@ def show_saving_and_exit(main_menu, target_screen="menu"):
     if hasattr(main_menu, 'setup_buttons'):
         main_menu.setup_buttons()
         
-    print("🚪 Returned to menu screen.")
+    print("[DOOR] Returned to menu screen.")

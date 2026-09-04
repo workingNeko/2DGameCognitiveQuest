@@ -168,7 +168,7 @@ class Quarter4:
 
         # Load the specified map
         if not self.map_loader.load_map(map_name):
-            print(f"❌ Failed to load {map_name}")
+            print(f"[FAIL] Failed to load {map_name}")
             self._create_default_map()
         else:
             # Use the loaded map data
@@ -369,7 +369,7 @@ class Quarter4:
                 if c in ['1', '2', '3', '4', '5', '6']:
                     num = int(c)
                     self.quiz_stations[num] = (x, y)
-                    print(f"📍 Quiz Station {num} found at: ({x}, {y})")
+                    print(f"[LOC] Quiz Station {num} found at: ({x}, {y})")
 
         # Correct answer random responses
         self.current_correct_phrase = ""
@@ -415,7 +415,7 @@ class Quarter4:
             }
         ]
 
-        print(f"✅ Quarter4 initialized with map: {self.map_name}")
+        print(f"[OK] Quarter4 initialized with map: {self.map_name}")
         print(f"   Goal portal: {self.goal_portal_direction}")
         print(f"   Portals loaded: {len(self.portals)}")
 
@@ -493,7 +493,7 @@ class Quarter4:
                 self.npc_positions_data['B'] = []
             if (29, 9) not in self.npc_positions_data['B']:
                 self.npc_positions_data['B'].append((29, 9))
-            print(f"🧙‍♂️ Boat Guardian Bromen stationed at ({self.npc_bromen_tile_x}, {self.npc_bromen_tile_y}) directly guarding the Lotus Raft (30, 9)!")
+            print(f"[Bromen] Boat Guardian Bromen stationed at ({self.npc_bromen_tile_x}, {self.npc_bromen_tile_y}) directly guarding the Lotus Raft (30, 9)!")
 
     # ============================================================
     # LOAD TILE IMAGES
@@ -615,7 +615,7 @@ class Quarter4:
         frames = []
 
         if not os.path.exists(npc_path):
-            print(f"⚠️ NPC path does not exist: {npc_path}")
+            print(f"[WARN] NPC path does not exist: {npc_path}")
             placeholder = pygame.Surface((TILE_SIZE, TILE_SIZE))
             placeholder.fill((255, 200, 100))
             frames.append(placeholder)
@@ -644,7 +644,7 @@ class Quarter4:
                     placeholder.fill((255, 200, 0))
                     frames.append(placeholder)
 
-        print(f"✅ Loaded {len(frames)} frames for {npc_name}")
+        print(f"[OK] Loaded {len(frames)} frames for {npc_name}")
         return frames
 
     # ============================================================
@@ -751,7 +751,7 @@ class Quarter4:
                 "anim_timer": 0
             },
         }
-        print("✅ Loaded 6 Animated Water-Themed Station NPCs for Quarter 4 Evaluation")
+        print("[OK] Loaded 6 Animated Water-Themed Station NPCs for Quarter 4 Evaluation")
 
 
     # ============================================================
@@ -1036,7 +1036,7 @@ class Quarter4:
 
             assessment_id = db.get_assessment_id(quarter=4)
             if assessment_id:
-                print(f"📝 Linked Quarter 4 result to Assessment ID: {assessment_id}")
+                print(f"[LOG] Linked Quarter 4 result to Assessment ID: {assessment_id}")
 
             feedback_msg = f"Completed Quarter 4 (Water Temple). Answered {correct_answers} of {total_questions} questions correctly on first attempt."
             grade_level = getattr(self.main_menu, 'selected_student', {}).get('level', 'Grade 2')
@@ -1052,10 +1052,10 @@ class Quarter4:
                 assessment_id=assessment_id
             )
             if success:
-                print(f"🎉 Successfully saved Quarter 4 Game Result to Database for Student DB ID {student_db_id}!")
+                print(f"[WIN] Successfully saved Quarter 4 Game Result to Database for Student DB ID {student_db_id}!")
                 print(f"   Score: {score}/{total_questions} ({percentage:.1f}%)")
         except Exception as e:
-            print(f"⚠️ Error saving Quarter 4 game result: {e}")
+            print(f"[WARN] Error saving Quarter 4 game result: {e}")
 
     # ============================================================
     # RETURN TO STAGE SELECT
@@ -1076,14 +1076,14 @@ class Quarter4:
                         self.main_menu.audio_manager.play_sfx("victory_fanfare")
                         self.main_menu.audio_manager.play_sfx("portal_warp")
                 except Exception as e:
-                    print(f"⚠️ Error recording Quarter 4 completion: {e}")
+                    print(f"[WARN] Error recording Quarter 4 completion: {e}")
 
             self.main_menu.current_screen = "stage_select"
             self.main_menu.quarter4 = None
             # Recreate the stage select to reset position
             from .stageselect import StageSelect
             self.main_menu.stage_select = StageSelect(self.screen, self.main_menu)
-            print("🏠 Returning to stage select")
+            print("[HOME] Returning to stage select")
             if completed:
                 self.completed = True
             
@@ -1122,7 +1122,7 @@ class Quarter4:
                 )
                 if not is_unlocked:
                     return False
-                print(f"🎯 Goal reached! Exiting portal in Quarter 4 - Returning to stage select...")
+                print(f"[TARGET] Goal reached! Exiting portal in Quarter 4 - Returning to stage select...")
                 self.return_to_stage_select()
                 return True
 
@@ -1215,7 +1215,7 @@ class Quarter4:
                         self.current_correct_phrase = random.choice(self.correct_phrases)
                         self.quiz_state = 3
                         self.answered_stations.add(self.quiz_station_index)
-                        print(f"✨ Correct answer selected for Station {self.quiz_station_index}!")
+                        print(f"* Correct answer selected for Station {self.quiz_station_index}!")
                     else:
                         self.first_attempt_correct[self.current_question_index + 1] = False
                         self.station_attempts[self.quiz_station_index] = self.station_attempts.get(self.quiz_station_index, 0) + 1
@@ -1223,12 +1223,12 @@ class Quarter4:
                         if self.station_attempts[self.quiz_station_index] < 2:
                             # 1st wrong attempt: Give player 1 more try
                             self.quiz_state = 2
-                            print(f"❌ Incorrect answer selected! (Attempt 1 of 2)")
+                            print(f"[FAIL] Incorrect answer selected! (Attempt 1 of 2)")
                         else:
                             # 2nd wrong attempt: Out of tries! Recorded as wrong, but award emblem so game proceeds
                             self.quiz_state = 4
                             self.answered_stations.add(self.quiz_station_index)
-                            print(f"❌ Incorrect answer on 2nd try! Out of tries. Station {self.quiz_station_index} emblem awarded.")
+                            print(f"[FAIL] Incorrect answer on 2nd try! Out of tries. Station {self.quiz_station_index} emblem awarded.")
                     
                     save_student_progress(self.main_menu)
                     break
@@ -1278,11 +1278,11 @@ class Quarter4:
                 if getattr(self, 'is_map12', False):
                     self.quiz_state = 0
                     self.raft_state = "ready_to_sail"
-                    print("⛵ Bromen dismissed! Step onto the Lotus Raft to sail!")
+                    print("[BOAT] Bromen dismissed! Step onto the Lotus Raft to sail!")
                 else:
                     self.quiz_state = 6
                 save_student_progress(self.main_menu)
-                print("🎓 Quarter 4 evaluation completed!")
+                print("[TUTORIAL] Quarter 4 evaluation completed!")
 
         # Bromen Proximity Dialogue click
         elif self.bromen_dialogue_state in [1, 2]:
@@ -1320,7 +1320,7 @@ class Quarter4:
                         self.npc_bromen_y = 8 * TILE_SIZE
                         if 'B' in self.npc_positions_data:
                             self.npc_positions_data['B'] = [(29, 8)]
-                        print("⛵ Addition helm puzzle solved! Bromen untethered the Lotus Raft!")
+                        print("[BOAT] Addition helm puzzle solved! Bromen untethered the Lotus Raft!")
                         return
                 if hasattr(self, 'addition_reset_btn_rect') and self.addition_reset_btn_rect and self.addition_reset_btn_rect.collidepoint(pos):
                     self.reset_addition_puzzle()
@@ -1364,7 +1364,7 @@ class Quarter4:
             if self.stage_time_remaining <= 0.0:
                 self.stage_time_remaining = 0.0
                 self.time_up_dialog_active = True
-                print("⏰ Quarter 4 Time's Up!")
+                print("[TIME] Quarter 4 Time's Up!")
 
         if self.time_up_dialog_active:
             return
@@ -1406,7 +1406,7 @@ class Quarter4:
                             self.current_question_index = num - 1
                         self.quiz_state = 1
                         self.selected_choice_index = -1
-                        print(f"🧙‍♂️ Interacting with Station {self.quiz_station_index} NPC!")
+                        print(f"[Bromen] Interacting with Station {self.quiz_station_index} NPC!")
                         break
 
         # Map 12: Lotus Raft sailing logic
@@ -1414,7 +1414,7 @@ class Quarter4:
             # Ready to sail once the helm lock puzzle with Guardian Bromen is solved
             if self.key_puzzle_solved and self.raft_state == "docked_west":
                 self.raft_state = "ready_to_sail"
-                print("🌊 Helm lock solved! Lotus Raft is untethered and ready to sail!")
+                print("[WAVE] Helm lock solved! Lotus Raft is untethered and ready to sail!")
 
             # Check if player is near the Lotus Raft when ready to sail
             if self.raft_state == "ready_to_sail":
@@ -1426,7 +1426,7 @@ class Quarter4:
                 if dist_to_raft < TILE_SIZE * 1.5:
                     self.raft_state = "sailing"
                     self.raft_passenger = True
-                    print("⛵ Player hopped on the Lotus Raft! Sailing down the canal rapids!")
+                    print("[BOAT] Player hopped on the Lotus Raft! Sailing down the canal rapids!")
                     if hasattr(self, 'sound_snap') and self.sound_snap:
                         try:
                             self.sound_snap.play()
@@ -1458,7 +1458,7 @@ class Quarter4:
                     self.quiz_state = 6  # Unlock exit portal!
                     self.open_dungeon_doors()
                     self.save_quarter4_game_result()
-                    print("🎉 Lotus Raft docked at East Pier! Portal unlocked!")
+                    print("[WIN] Lotus Raft docked at East Pier! Portal unlocked!")
                     if hasattr(self, 'sound_correct') and self.sound_correct:
                         try:
                             self.sound_correct.play()
@@ -1469,7 +1469,7 @@ class Quarter4:
             self.quiz_state = 6
             self.open_dungeon_doors()
             self.save_quarter4_game_result()
-            print("🎉 All 6 Golden Keys collected! Exit portal unlocked!")
+            print("[WIN] All 6 Golden Keys collected! Exit portal unlocked!")
 
         # Proximity check for Bromen (Boat Guardian on Map 12, Final obstacle on other maps)
         now = pygame.time.get_ticks()
@@ -1487,10 +1487,10 @@ class Quarter4:
             if dist < TILE_SIZE * 1.5:
                 if len(self.answered_stations) >= 6:
                     self.bromen_dialogue_state = 2  # Ready for Key Lock Block Puzzle
-                    print(f"🧙‍♂️ All 6 Sluices open! Interacting with Bromen! state={self.bromen_dialogue_state}")
+                    print(f"[Bromen] All 6 Sluices open! Interacting with Bromen! state={self.bromen_dialogue_state}")
                 else:
                     self.bromen_dialogue_state = 1  # Not enough sluices open
-                    print(f"🔒 Bromen: Canal not full yet ({len(self.answered_stations)}/6)")
+                    print(f"[LOCKED] Bromen: Canal not full yet ({len(self.answered_stations)}/6)")
 
         # Update Bromen animation
         if self.npc_bromen_found and self.npc_bromen_sprites:
@@ -1794,7 +1794,7 @@ class Quarter4:
         # 6. Boarding Banner Pill when ready to sail
         if self.raft_state == "ready_to_sail":
             prompt_font = pygame.font.SysFont("Comic Sans MS", int(11 * ZOOM), bold=True)
-            prompt_text = "⛵ HOP ON THE RAFT! ⛵"
+            prompt_text = "HOP ON THE RAFT!"
             p_surf = prompt_font.render(prompt_text, True, (15, 23, 42))
             pw = p_surf.get_width() + 14
             ph = p_surf.get_height() + 8
@@ -2050,42 +2050,42 @@ class Quarter4:
             
             q_count = len(self.answered_stations)
             if getattr(self, 'is_map12', False):
-                obj1 = f"• Canal Water Sluices: {q_count}/6 Opened"
+                obj1 = f"- Canal Water Sluices: {q_count}/6 Opened"
                 obj1_color = (255, 255, 255) if q_count < 6 else (34, 197, 94)
                 obj1_surf = item_font.render(obj1, True, obj1_color)
                 self.screen.blit(obj1_surf, (box_x + 15, box_y + 30))
                 
                 if q_count < 6:
-                    obj2 = f"• Water Canal: {q_count}/6 Full (Open all 6 to fill canal)"
+                    obj2 = f"- Water Canal: {q_count}/6 Full (Open all 6 to fill canal)"
                     obj2_color = (244, 63, 94)
                 elif not self.key_puzzle_solved:
-                    obj2 = "• 🧙 Canal Full! Talk to Guardian Bromen at dock to unlock raft!"
+                    obj2 = "- Canal Full! Talk to Guardian Bromen at dock to unlock raft!"
                     obj2_color = (250, 204, 21)
                 elif self.raft_state == "ready_to_sail":
-                    obj2 = "• 🌊 Raft Untethered! Walk onto Lotus Raft to sail!"
+                    obj2 = "- Raft Untethered! Walk onto Lotus Raft to sail!"
                     obj2_color = (34, 197, 94)
                 elif self.raft_state == "sailing":
-                    obj2 = "• ⛵ Sailing across rapids to Portal Island!"
+                    obj2 = "- Sailing across rapids to Portal Island!"
                     obj2_color = (56, 189, 248)
                 else:
-                    obj2 = "• 🌟 Arrived! Step into the Portal to finish Quarter 4!"
+                    obj2 = "- Arrived! Step into the Portal to finish Quarter 4!"
                     obj2_color = (34, 197, 94)
                 obj2_surf = item_font.render(obj2, True, obj2_color)
                 self.screen.blit(obj2_surf, (box_x + 15, box_y + 52))
             else:
-                obj1 = f"• Golden Keys: {q_count}/6 collected"
+                obj1 = f"- Golden Keys: {q_count}/6 collected"
                 obj1_color = (255, 255, 255) if q_count < 6 else (34, 197, 94)
                 obj1_surf = item_font.render(obj1, True, obj1_color)
                 self.screen.blit(obj1_surf, (box_x + 15, box_y + 30))
                 
                 if len(self.answered_stations) < 6:
-                    obj2 = "• Doors & Portal: LOCKED (Collect all 6 Golden Keys)"
+                    obj2 = "- Doors & Portal: LOCKED (Collect all 6 Golden Keys)"
                     obj2_color = (244, 63, 94)
                 elif self.quiz_state < 6:
-                    obj2 = "• Keys Gathered! Approach Bromen to open double doors" if self.npc_bromen_found else "• All 6 Keys Gathered! Step into portal to finish"
+                    obj2 = "- Keys Gathered! Approach Bromen to open double doors" if self.npc_bromen_found else "- All 6 Keys Gathered! Step into portal to finish"
                     obj2_color = (250, 204, 21)
                 else:
-                    obj2 = "• Double Doors Open! Step into portal to finish" if self.npc_bromen_found else "• Portal Unlocked! Step into portal to finish"
+                    obj2 = "- Double Doors Open! Step into portal to finish" if self.npc_bromen_found else "- Portal Unlocked! Step into portal to finish"
                     obj2_color = (34, 197, 94)
                 obj2_surf = item_font.render(obj2, True, obj2_color)
                 self.screen.blit(obj2_surf, (box_x + 15, box_y + 52))
@@ -2563,9 +2563,9 @@ class Quarter4:
         if getattr(self, 'is_map12', False):
             valve_name = self.valve_names[key_num - 1] if 1 <= key_num <= len(self.valve_names) else "Aqueduct Sluice"
             if total_keys < 6:
-                banner_text = f"✨ {valve_name.upper()} OPENED! ({total_keys}/6) - Canal Filling with Water! ✨"
+                banner_text = f"{valve_name.upper()} OPENED! ({total_keys}/6) - Canal Filling with Water!"
             else:
-                banner_text = f"🌊 ALL 6 SLUICES OPEN! (6/6) - THE LOTUS RAFT IS READY TO SAIL! ⛵"
+                banner_text = f"ALL 6 SLUICES OPEN! (6/6) - THE LOTUS RAFT IS READY TO SAIL!"
             valve_color = self.valve_colors[key_num - 1] if 1 <= key_num <= len(self.valve_colors) else (56, 189, 248)
         else:
             banner_text = f"NEW GOLDEN KEY #{key_num} COLLECTED! ({total_keys}/6)"
@@ -2813,7 +2813,7 @@ class Quarter4:
 
         # Make open doors walkable
         self.WALKABLE_TILES.update({"{", "}", "G", "P"})
-        print(f"🚪 Dungeon double doors unlocked and swung open! ({doors_opened} panels opened)")
+        print(f"[DOOR] Dungeon double doors unlocked and swung open! ({doors_opened} panels opened)")
 
     def update_key_puzzle(self):
         if not (self.key_puzzle_active or getattr(self, 'emblem_puzzle_active', False)):
@@ -3066,13 +3066,13 @@ class Quarter4:
             # Header text
             s_font = pygame.font.SysFont("Comic Sans MS", 20, bold=True)
             if getattr(self, 'is_map12', False):
-                h_text = "🎉 HELM UNLOCKED! RAFT READY! 🎉"
+                h_text = "HELM UNLOCKED! RAFT READY!"
                 sub_text = "All 6 elemental rudders aligned! The Lotus Raft is untethered!"
-                btn_text = "Continue to Lotus Raft ⛵"
+                btn_text = "Continue to Lotus Raft"
             else:
-                h_text = "🎉 ANCIENT LOCK SOLVED! 🎉"
+                h_text = "ANCIENT LOCK SOLVED!"
                 sub_text = "All 6 Golden Keys inserted! Double doors ready to open!"
-                btn_text = "Open Double Doors 🚪"
+                btn_text = "Open Double Doors"
 
             h_surf = s_font.render(h_text, True, (250, 204, 21))
             self.screen.blit(h_surf, (card_x + (card_w - h_surf.get_width()) // 2, card_y + 18))
@@ -3357,7 +3357,7 @@ class Quarter4:
 
         # Header Title
         title_font = pygame.font.SysFont("Comic Sans MS", 22, bold=True)
-        title_surf = title_font.render("🌟 ANCIENT LOTUS RAFT HELM PUZZLE 🌟", True, (255, 215, 0))
+        title_surf = title_font.render("ANCIENT LOTUS RAFT HELM PUZZLE", True, (255, 215, 0))
         self.screen.blit(title_surf, (box_x + (box_w - title_surf.get_width()) // 2, box_y + 12))
 
         sub_font = pygame.font.SysFont("Comic Sans MS", 13)
@@ -3404,9 +3404,9 @@ class Quarter4:
         all_filled = all(s["placed_piece_id"] is not None for s in getattr(self, 'addition_slots', []))
         if all_filled:
             if getattr(self, 'addition_is_correct', False):
-                status_txt = status_font.render("✅ Perfect! The addition equation is balanced and correct!", True, (34, 197, 94))
+                status_txt = status_font.render("Perfect! The addition equation is balanced and correct!", True, (34, 197, 94))
             else:
-                status_txt = status_font.render("⚠️ Equation not balanced yet! Try swapping the numbers or sum.", True, (251, 191, 36))
+                status_txt = status_font.render("Equation not balanced yet! Try swapping the numbers or sum.", True, (251, 191, 36))
         else:
             status_txt = status_font.render("Drag each rune tablet into an altar pedestal to build: [Number] + [Number] = [Sum]", True, (147, 197, 253))
         self.screen.blit(status_txt, (tray_rect.x + 16, tray_rect.y + 35))
@@ -3466,7 +3466,7 @@ class Quarter4:
         pygame.draw.rect(self.screen, (234, 179, 8) if is_reset_hov else (30, 41, 59), reset_rect, border_radius=8)
         pygame.draw.rect(self.screen, (218, 165, 32), reset_rect, 2, border_radius=8)
         rst_font = pygame.font.SysFont("Comic Sans MS", 12, bold=True)
-        rst_surf = rst_font.render("↺ Reset Runes", True, (0, 0, 0) if is_reset_hov else (255, 255, 255))
+        rst_surf = rst_font.render("Reset Runes", True, (0, 0, 0) if is_reset_hov else (255, 255, 255))
         self.screen.blit(rst_surf, rst_surf.get_rect(center=reset_rect.center))
         self.addition_reset_btn_rect = reset_rect
 
@@ -3487,11 +3487,11 @@ class Quarter4:
             eq_str = f"{slot_pieces[0]['text']} {slot_pieces[1]['text']} {slot_pieces[2]['text']} {slot_pieces[3]['text']} {slot_pieces[4]['text']}"
 
             v_title_font = pygame.font.SysFont("Comic Sans MS", 20, bold=True)
-            v_title = v_title_font.render("🎉 EQUATION RESTORED! HELM UNLOCKED! 🎉", True, (250, 204, 21))
+            v_title = v_title_font.render("EQUATION RESTORED! HELM UNLOCKED!", True, (250, 204, 21))
             self.screen.blit(v_title, (card_x + (card_w - v_title.get_width()) // 2, card_y + 16))
 
             v_sub_font = pygame.font.SysFont("Comic Sans MS", 15, bold=True)
-            v_sub = v_sub_font.render(f"✨ {eq_str} is Balanced & Correct! ✨", True, (56, 189, 248))
+            v_sub = v_sub_font.render(f"{eq_str} is Balanced & Correct!", True, (56, 189, 248))
             self.screen.blit(v_sub, (card_x + (card_w - v_sub.get_width()) // 2, card_y + 50))
 
             v_desc_font = pygame.font.SysFont("Comic Sans MS", 12)
@@ -3509,7 +3509,7 @@ class Quarter4:
             pygame.draw.rect(self.screen, (255, 255, 255), btn_rect, 2, border_radius=12)
 
             btn_font = pygame.font.SysFont("Comic Sans MS", 16, bold=True)
-            btn_surf = btn_font.render("Continue to Lotus Raft ⛵", True, (255, 255, 255))
+            btn_surf = btn_font.render("Continue to Lotus Raft", True, (255, 255, 255))
             self.screen.blit(btn_surf, btn_surf.get_rect(center=btn_rect.center))
             self.addition_continue_btn_rect = btn_rect
 
@@ -3623,11 +3623,11 @@ class Quarter4:
                 target_info = (st_x, st_y, npc_name)
             elif getattr(self, 'is_map12', False):
                 if not self.key_puzzle_solved and self.npc_bromen_found:
-                    target_info = (self.npc_bromen_tile_x, self.npc_bromen_tile_y, "Guardian Bromen 🧙")
+                    target_info = (self.npc_bromen_tile_x, self.npc_bromen_tile_y, "Guardian Bromen")
                 elif getattr(self, 'raft_state', None) in ["docked_west", "ready_to_sail"]:
-                    target_info = (29, 9, "Lotus Raft ⛵")
+                    target_info = (29, 9, "Lotus Raft")
                 else:
-                    target_info = (48, 9, "Exit Portal 🌟")
+                    target_info = (48, 9, "Exit Portal")
             elif self.npc_bromen_found and not (self.key_puzzle_solved or self.emblem_puzzle_solved):
                 target_info = (self.npc_bromen_tile_x, self.npc_bromen_tile_y, "Bromen (Ancient Lock Block)")
 

@@ -61,16 +61,16 @@ class MainMenu:
             if self.cap.isOpened():
                 self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 320)
                 self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 240)
-                print("✅ Camera initialized!")
+                print("[OK] Camera initialized!")
             else:
-                print("⚠️ Camera not available, falling back to mouse control.")
+                print("[WARN] Camera not available, falling back to mouse control.")
                 try:
                     self.cap.release()
                 except Exception:
                     pass
                 self.cap = None
         except Exception as e:
-            print(f"⚠️ Camera init exception: {e}")
+            print(f"[WARN] Camera init exception: {e}")
             self.cap = None
 
         # Threaded Camera & MediaPipe Background Worker (60 FPS Unlocked)
@@ -238,7 +238,7 @@ class MainMenu:
         self.show_no_student_message = False
         self.no_student_timer = 0
 
-        print(f"🎮 Simple Gesture Control Active!")
+        print(f"[GAME] Simple Gesture Control Active!")
         print(f"   - WRIST movement controls cursor (stable when making fist)")
         print(f"   - Make a FIST and hold for {self.CLICK_HOLD_TIME} seconds to click")
 
@@ -400,24 +400,24 @@ class MainMenu:
                 if fist_detected:
                     if self.fist_start_time == 0:
                         self.fist_start_time = time.time()
-                        print("👊 Fist detected! Hold to click...")
+                        print("[FIST] Fist detected! Hold to click...")
 
                     hold_time = time.time() - self.fist_start_time
 
                     if hold_time >= self.CLICK_HOLD_TIME and not self.click_ready:
                         self.click_ready = True
-                        print(f"✅ CLICK! (Held for {hold_time:.1f}s)")
+                        print(f"[OK] CLICK! (Held for {hold_time:.1f}s)")
                         self.trigger_click()
                 else:
                     if self.fist_start_time != 0:
-                        print("✋ Fist released")
+                        print("[HAND] Fist released")
                     self.fist_start_time = 0
                     self.click_ready = False
 
                 if peace_detected:
                     if self.peace_start_time == 0:
                         self.peace_start_time = time.time()
-                        print("✌️ Peace sign detected! Hold to trigger confirmation...")
+                        print("[PEACE] Peace sign detected! Hold to trigger confirmation...")
 
                     hold_time = time.time() - self.peace_start_time
                     if hold_time >= self.CLICK_HOLD_TIME:
@@ -427,7 +427,7 @@ class MainMenu:
                                 self.popup_state = "confirm_exit"
                             else:
                                 self.popup_state = "confirm_menu"
-                            print(f"✅ PEACE SIGN TRIGGERED! Popup state: {self.popup_state}")
+                            print(f"[OK] PEACE SIGN TRIGGERED! Popup state: {self.popup_state}")
                 else:
                     self.peace_start_time = 0
 
@@ -457,7 +457,7 @@ class MainMenu:
     def trigger_click(self):
         """Handle click at cursor position"""
         pos = self.cursor_pos
-        print(f"🖱️ Click at: {pos}")
+        print(f"[MOUSE] Click at: {pos}")
 
         # If pop-up is active, intercept clicks!
         if self.popup_state:
@@ -492,7 +492,7 @@ class MainMenu:
 
         # Check dialogue box first
         if self.dialogue_active and self.dialogue_rect.collidepoint(pos):
-            print("💬 Dialogue clicked!")
+            print("[DIALOG] Dialogue clicked!")
             self.next_dialogue()
             return
 
@@ -500,12 +500,12 @@ class MainMenu:
         for button in self.buttons:
             if button.rect.collidepoint(pos):
                 name = button.text if hasattr(button, 'text') and button.text else "EXIT"
-                print(f"🔘 Button clicked: {name}")
+                print(f"[BTN] Button clicked: {name}")
                 if button.action:
                     button.action()
                 return
 
-        print("❌ Nothing clicked")
+        print("[FAIL] Nothing clicked")
 
     def handle_popup_click(self, pos):
         """Handle clicking inside confirmation and settings pop-ups"""
@@ -572,7 +572,7 @@ class MainMenu:
         no_rect = pygame.Rect(box_x + box_w - 60 - btn_w, box_y + 180, btn_w, btn_h)
 
         if yes_rect.collidepoint(pos):
-            print("👍 Confirmation pop-up: YES clicked")
+            print("[YES] Confirmation pop-up: YES clicked")
             if hasattr(self, 'audio_manager'):
                 self.audio_manager.play_sfx("click")
             if self.popup_state == "confirm_exit":
@@ -586,14 +586,14 @@ class MainMenu:
                 self.setup_buttons()
                 
                 # Start Tutorial for new activity
-                print("🎓 Starting New Activity: Launching Tutorial Screen...")
+                print("[TUTORIAL] Starting New Activity: Launching Tutorial Screen...")
                 self.current_screen = "tutorial"
                 self.tutorial = TutorialScreen(self.screen, self)
             elif self.popup_state == "confirm_menu":
                 from db.save_system import show_saving_and_exit
                 show_saving_and_exit(self)
         elif no_rect.collidepoint(pos):
-            print("👎 Confirmation pop-up: NO clicked")
+            print("[NO] Confirmation pop-up: NO clicked")
             if hasattr(self, 'audio_manager'):
                 self.audio_manager.play_sfx("click")
             self.popup_state = None
@@ -730,13 +730,13 @@ class MainMenu:
         hover_test = test_rect.collidepoint(self.cursor_pos)
         pygame.draw.rect(self.screen, (59, 130, 246) if hover_test else (37, 99, 235), test_rect, border_radius=8)
         pygame.draw.rect(self.screen, (147, 197, 253), test_rect, 2, border_radius=8)
-        t_txt = btn_font.render("🎵 Test Sound", True, (255, 255, 255))
+        t_txt = btn_font.render("Test Sound", True, (255, 255, 255))
         self.screen.blit(t_txt, (test_rect.centerx - t_txt.get_width() // 2, test_rect.centery - t_txt.get_height() // 2))
 
         hover_done = done_rect.collidepoint(self.cursor_pos)
         pygame.draw.rect(self.screen, (34, 197, 94) if hover_done else (22, 163, 74), done_rect, border_radius=8)
         pygame.draw.rect(self.screen, (134, 239, 172), done_rect, 2, border_radius=8)
-        d_txt = btn_font.render("✓ Close / Done", True, (255, 255, 255))
+        d_txt = btn_font.render("Close / Done", True, (255, 255, 255))
         self.screen.blit(d_txt, (done_rect.centerx - d_txt.get_width() // 2, done_rect.centery - d_txt.get_height() // 2))
 
     def draw_popup(self):
@@ -830,9 +830,9 @@ class MainMenu:
         self.current_line += 1
         if self.current_line >= len(self.dialogue_lines):
             self.dialogue_active = False
-            print("✅ Dialogue finished!")
+            print("[OK] Dialogue finished!")
         else:
-            print(f"📖 Next: {self.dialogue_lines[self.current_line]}")
+            print(f"[BOOK] Next: {self.dialogue_lines[self.current_line]}")
 
     # ==========================================
     # BUTTON ACTIONS
@@ -871,7 +871,7 @@ class MainMenu:
         sound_text = "MUTED" if is_muted else f"SOUND {int(self.audio_manager.music_volume * 100)}%"
         self.sound_btn = Button(
             (sound_btn_x, sound_btn_y, sound_btn_w, sound_btn_h),
-            text=f"🔊 {sound_text}" if not is_muted else f"🔇 {sound_text}",
+            text=f"SOUND: {sound_text}",
             font=self.small_font,
             bg_color=(30, 41, 59),
             text_color=(255, 215, 0) if not is_muted else (239, 68, 68),
@@ -966,17 +966,17 @@ class MainMenu:
         self.popup_state = "audio_settings"
 
     def show_leaderboard(self):
-        print("🏆 LEADERBOARD clicked! Loading Hall of Fame rankings...")
+        print("[TROPHY] LEADERBOARD clicked! Loading Hall of Fame rankings...")
         self.current_screen = "leaderboard"
         self.leaderboard = LeaderboardScreen(self.screen, self)
 
     def select_student(self):
-        print(f"📋 SELECT STUDENT clicked!")
+        print(f"[DATA] SELECT STUDENT clicked!")
         self.current_screen = "student_select"
         self.student_select = StudentSelect(self.screen, self)
 
     def start_activity(self):
-        print(f"🎮 START ACTIVITY clicked!")
+        print(f"[GAME] START ACTIVITY clicked!")
         if not self.selected_student:
             self.show_no_student_message = True
             self.no_student_timer = pygame.time.get_ticks() + 2000
@@ -984,7 +984,7 @@ class MainMenu:
 
         from db.save_system import is_tutorial_completed
         if not is_tutorial_completed(self.student_id):
-            print("🎓 New player detected! Launching Tutorial Screen...")
+            print("[TUTORIAL] New player detected! Launching Tutorial Screen...")
             self.current_screen = "tutorial"
             self.tutorial = TutorialScreen(self.screen, self)
             return
@@ -993,7 +993,7 @@ class MainMenu:
         self.stage_select = StageSelect(self.screen, self)
 
     def continue_activity(self):
-        print("🎮 CONTINUE ACTIVITY clicked!")
+        print("[GAME] CONTINUE ACTIVITY clicked!")
         if not self.selected_student:
             self.show_no_student_message = True
             self.no_student_timer = pygame.time.get_ticks() + 2000
@@ -1004,11 +1004,11 @@ class MainMenu:
         if save_data:
             apply_student_progress(self, save_data)
         else:
-            print("⚠️ Save progress not found, starting new activity instead.")
+            print("[WARN] Save progress not found, starting new activity instead.")
             self.start_activity()
 
     def confirm_start_new_activity(self):
-        print("🔄 START NEW ACTIVITY clicked! Requesting confirmation popup...")
+        print("[REFRESH] START NEW ACTIVITY clicked! Requesting confirmation popup...")
         if not self.selected_student:
             self.show_no_student_message = True
             self.no_student_timer = pygame.time.get_ticks() + 2000
@@ -1016,13 +1016,13 @@ class MainMenu:
         self.popup_state = "confirm_new_activity"
 
     def confirm_exit_game(self):
-        print("🚪 ESC / EXIT clicked! Requesting 'Are you sure you want to quit?' confirmation popup...")
+        print("[DOOR] ESC / EXIT clicked! Requesting 'Are you sure you want to quit?' confirmation popup...")
         if hasattr(self, 'audio_manager'):
             self.audio_manager.play_sfx("click")
         self.popup_state = "confirm_exit"
 
     def exit_game(self):
-        print("🚪 EXIT clicked!")
+        print("[DOOR] EXIT clicked!")
         self.camera_running = False
         from db.save_system import save_student_progress
         save_student_progress(self)
@@ -1063,7 +1063,7 @@ class MainMenu:
                 if getattr(self, 'sound_btn', None):
                     is_muted = self.audio_manager.music_muted and self.audio_manager.sfx_muted
                     sound_text = "MUTED" if is_muted else f"SOUND {int(self.audio_manager.music_volume * 100)}%"
-                    self.sound_btn.text = f"🔊 {sound_text}" if not is_muted else f"🔇 {sound_text}"
+                    self.sound_btn.text = f"SOUND: {sound_text}"
                     self.sound_btn.text_color = (255, 215, 0) if not is_muted else (239, 68, 68)
 
                 # Update button hover states
@@ -1180,7 +1180,7 @@ class MainMenu:
                 return
             elif event.key == pygame.K_c:
                 self.show_camera_overlay = not getattr(self, 'show_camera_overlay', False)
-                print(f"📷 Webcam preview box toggled: {self.show_camera_overlay}")
+                print(f"[CAM] Webcam preview box toggled: {self.show_camera_overlay}")
                 return
 
         # If popup is active, intercept clicks and key events!
@@ -1281,29 +1281,29 @@ class MainMenu:
         if self.current_gesture == "FIST":
             hold_time = time.time() - self.fist_start_time if self.fist_start_time > 0 else 0
             pct = min(100, int((hold_time / self.CLICK_HOLD_TIME) * 100))
-            label = f"✊ FIST: HOLD {pct}%"
+            label = f"FIST: HOLD {pct}%"
             border_col = (250, 204, 21)   # Yellow
             text_col = (254, 240, 138)
             fill_pct = pct / 100.0
         elif self.current_gesture == "PEACE":
             hold_time = time.time() - getattr(self, 'peace_start_time', 0) if getattr(self, 'peace_start_time', 0) > 0 else 0
             pct = min(100, int((hold_time / self.CLICK_HOLD_TIME) * 100))
-            label = f"✌️ PEACE: CONFIRM {pct}%"
+            label = f"PEACE: CONFIRM {pct}%"
             border_col = (34, 197, 94)    # Emerald green
             text_col = (187, 247, 208)
             fill_pct = pct / 100.0
         elif self.current_gesture == "OPEN":
-            label = "🖐️ HAND: OPEN"
+            label = "HAND: OPEN"
             border_col = (56, 189, 248)   # Cyan
             text_col = (224, 242, 254)
             fill_pct = 0.0
         elif "GRACE" in self.current_gesture:
-            label = "🖐️ HOLDING..."
+            label = "HOLDING..."
             border_col = (148, 163, 184)
             text_col = (241, 245, 249)
             fill_pct = 0.0
         else:
-            label = "👆 MOUSE / SEEKING HAND"
+            label = "MOUSE / SEEKING HAND"
             border_col = (100, 116, 139)  # Slate
             text_col = (203, 213, 225)
             fill_pct = 0.0

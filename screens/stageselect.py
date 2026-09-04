@@ -355,7 +355,7 @@ class StageSelect:
         self.clock = pygame.time.Clock()
         self.frame_counter = 0
 
-        print(f"✅ StageSelect initialized with map: {self.ROWS}x{self.COLS}")
+        print(f"[OK] StageSelect initialized with map: {self.ROWS}x{self.COLS}")
         print(f"   Walkable tiles: {self.WALKABLE_TILES}")
         print(f"   Portals loaded: {len(self.portals)}")
         print(f"   Bromen NPC found: {self.npc_bromen_found}")
@@ -539,7 +539,7 @@ class StageSelect:
         frames = []
 
         if not os.path.exists(npc_path):
-            print(f"⚠️ NPC path does not exist: {npc_path}")
+            print(f"[WARNING] NPC path does not exist: {npc_path}")
             placeholder = pygame.Surface((TILE_SIZE, TILE_SIZE))
             placeholder.fill((255, 200, 100))
             pygame.draw.circle(placeholder, (0, 0, 0), (TILE_SIZE // 2, TILE_SIZE // 2), 12)
@@ -571,7 +571,7 @@ class StageSelect:
                     placeholder.fill((255, 200, 0))
                     frames.append(placeholder)
 
-        print(f"✅ Loaded {len(frames)} frames for {npc_name}")
+        print(f"[OK] Loaded {len(frames)} frames for {npc_name}")
         return frames
 
     def load_bromen_teleport_sprites(self):
@@ -583,7 +583,7 @@ class StageSelect:
                 img = pygame.image.load(path).convert_alpha()
                 scaled = pygame.transform.scale(img, (TILE_SIZE, TILE_SIZE))
                 frames.append(scaled)
-                print(f"✅ Loaded Bromen teleport frame: {filename}")
+                print(f"[OK] Loaded Bromen teleport frame: {filename}")
         return frames
 
     # ============================================================
@@ -598,7 +598,7 @@ class StageSelect:
                 img = pygame.image.load(path).convert_alpha()
                 scaled = pygame.transform.scale(img, (TILE_SIZE, TILE_SIZE))
                 self.npc_bromen_up_sprites.append(scaled)
-                print(f"✅ Loaded Bromen up frame: {name}")
+                print(f"[OK] Loaded Bromen up frame: {name}")
 
         # Load Oldman
         oldman_path = os.path.join(self.NPC_PATH_OLDMAN, "oldman.png")
@@ -606,9 +606,9 @@ class StageSelect:
             if os.path.exists(oldman_path):
                 img = pygame.image.load(oldman_path).convert_alpha()
                 self.npc_oldman_sprite = pygame.transform.scale(img, (TILE_SIZE, TILE_SIZE))
-                print(f"✅ Loaded Oldman sprite")
+                print(f"[OK] Loaded Oldman sprite")
             else:
-                print(f"⚠️ Oldman sprite not found at: {oldman_path}")
+                print(f"[WARNING] Oldman sprite not found at: {oldman_path}")
                 placeholder = pygame.Surface((TILE_SIZE, TILE_SIZE))
                 placeholder.fill((200, 200, 200))
                 pygame.draw.circle(placeholder, (0, 0, 0), (TILE_SIZE // 2, TILE_SIZE // 2), 12)
@@ -627,9 +627,9 @@ class StageSelect:
                     img = pygame.image.load(path).convert_alpha()
                     scaled = pygame.transform.scale(img, (TILE_SIZE, TILE_SIZE))
                     self.npc_oldman_left_sprites.append(scaled)
-                    print(f"✅ Loaded Old Man walking frame: {name}")
+                    print(f"[OK] Loaded Old Man walking frame: {name}")
                 else:
-                    print(f"⚠️ Walking frame not found at: {path}")
+                    print(f"[WARNING] Walking frame not found at: {path}")
 
             # Load Old Man walking down sprites
             self.npc_oldman_down_sprites = []
@@ -639,9 +639,9 @@ class StageSelect:
                     img = pygame.image.load(path).convert_alpha()
                     scaled = pygame.transform.scale(img, (TILE_SIZE, TILE_SIZE))
                     self.npc_oldman_down_sprites.append(scaled)
-                    print(f"✅ Loaded Old Man down frame: {name}")
+                    print(f"[OK] Loaded Old Man down frame: {name}")
                 else:
-                    print(f"⚠️ Down frame not found at: {path}")
+                    print(f"[WARNING] Down frame not found at: {path}")
 
             # Load Old Man walking right sprites
             self.npc_oldman_right_sprites = []
@@ -651,9 +651,9 @@ class StageSelect:
                     img = pygame.image.load(path).convert_alpha()
                     scaled = pygame.transform.scale(img, (TILE_SIZE, TILE_SIZE))
                     self.npc_oldman_right_sprites.append(scaled)
-                    print(f"✅ Loaded Old Man right frame: {name}")
+                    print(f"[OK] Loaded Old Man right frame: {name}")
                 else:
-                    print(f"⚠️ Right frame not found at: {path}")
+                    print(f"[WARNING] Right frame not found at: {path}")
 
             # Load Old Man walking up sprites
             self.npc_oldman_up_sprites = []
@@ -663,11 +663,11 @@ class StageSelect:
                     img = pygame.image.load(path).convert_alpha()
                     scaled = pygame.transform.scale(img, (TILE_SIZE, TILE_SIZE))
                     self.npc_oldman_up_sprites.append(scaled)
-                    print(f"✅ Loaded Old Man up frame: {name}")
+                    print(f"[OK] Loaded Old Man up frame: {name}")
                 else:
-                    print(f"⚠️ Up frame not found at: {path}")
+                    print(f"[WARNING] Up frame not found at: {path}")
         except Exception as e:
-            print(f"❌ Error loading Oldman: {e}")
+            print(f"[ERROR] Error loading Oldman: {e}")
             placeholder = pygame.Surface((TILE_SIZE, TILE_SIZE))
             placeholder.fill((200, 200, 200))
             self.npc_oldman_sprite = placeholder
@@ -678,9 +678,9 @@ class StageSelect:
             if os.path.exists(skeleton_path):
                 img = pygame.image.load(skeleton_path).convert_alpha()
                 self.npc_skeleton_sprite = pygame.transform.scale(img, (TILE_SIZE, TILE_SIZE))
-                print(f"✅ Loaded Skeleton sprite")
+                print(f"[OK] Loaded Skeleton sprite")
             else:
-                print(f"⚠️ Skeleton sprite not found at: {skeleton_path}")
+                print(f"[WARNING] Skeleton sprite not found at: {skeleton_path}")
                 placeholder = pygame.Surface((TILE_SIZE, TILE_SIZE))
                 placeholder.fill((255, 255, 255))
                 self.npc_skeleton_sprite = placeholder
@@ -693,7 +693,7 @@ class StageSelect:
                     img = pygame.image.load(path).convert_alpha()
                     scaled = pygame.transform.scale(img, (TILE_SIZE, TILE_SIZE))
                     self.npc_skeleton_left_sprites.append(scaled)
-                    print(f"✅ Loaded Skeleton left frame: {name}")
+                    print(f"[OK] Loaded Skeleton left frame: {name}")
 
             # Load Skeleton walking down sprites
             self.npc_skeleton_down_sprites = []
@@ -703,7 +703,7 @@ class StageSelect:
                     img = pygame.image.load(path).convert_alpha()
                     scaled = pygame.transform.scale(img, (TILE_SIZE, TILE_SIZE))
                     self.npc_skeleton_down_sprites.append(scaled)
-                    print(f"✅ Loaded Skeleton down frame: {name}")
+                    print(f"[OK] Loaded Skeleton down frame: {name}")
 
             # Load Skeleton walking right sprites
             self.npc_skeleton_right_sprites = []
@@ -713,7 +713,7 @@ class StageSelect:
                     img = pygame.image.load(path).convert_alpha()
                     scaled = pygame.transform.scale(img, (TILE_SIZE, TILE_SIZE))
                     self.npc_skeleton_right_sprites.append(scaled)
-                    print(f"✅ Loaded Skeleton right frame: {name}")
+                    print(f"[OK] Loaded Skeleton right frame: {name}")
 
             # Load Skeleton walking up sprites
             self.npc_skeleton_up_sprites = []
@@ -723,9 +723,9 @@ class StageSelect:
                     img = pygame.image.load(path).convert_alpha()
                     scaled = pygame.transform.scale(img, (TILE_SIZE, TILE_SIZE))
                     self.npc_skeleton_up_sprites.append(scaled)
-                    print(f"✅ Loaded Skeleton up frame: {name}")
+                    print(f"[OK] Loaded Skeleton up frame: {name}")
         except Exception as e:
-            print(f"❌ Error loading Skeleton: {e}")
+            print(f"[ERROR] Error loading Skeleton: {e}")
             placeholder = pygame.Surface((TILE_SIZE, TILE_SIZE))
             placeholder.fill((255, 255, 255))
             self.npc_skeleton_sprite = placeholder
@@ -736,9 +736,9 @@ class StageSelect:
             if os.path.exists(knight_path):
                 img = pygame.image.load(knight_path).convert_alpha()
                 self.npc_knight_sprite = pygame.transform.scale(img, (TILE_SIZE, TILE_SIZE))
-                print(f"✅ Loaded Knight sprite")
+                print(f"[OK] Loaded Knight sprite")
             else:
-                print(f"⚠️ Knight sprite not found at: {knight_path}")
+                print(f"[WARNING] Knight sprite not found at: {knight_path}")
                 placeholder = pygame.Surface((TILE_SIZE, TILE_SIZE))
                 placeholder.fill((192, 192, 192))
                 self.npc_knight_sprite = placeholder
@@ -751,7 +751,7 @@ class StageSelect:
                     img = pygame.image.load(path).convert_alpha()
                     scaled = pygame.transform.scale(img, (TILE_SIZE, TILE_SIZE))
                     self.npc_knight_left_sprites.append(scaled)
-                    print(f"✅ Loaded Knight left frame: {name}")
+                    print(f"[OK] Loaded Knight left frame: {name}")
 
             # Load Knight walking down sprites
             self.npc_knight_down_sprites = []
@@ -761,7 +761,7 @@ class StageSelect:
                     img = pygame.image.load(path).convert_alpha()
                     scaled = pygame.transform.scale(img, (TILE_SIZE, TILE_SIZE))
                     self.npc_knight_down_sprites.append(scaled)
-                    print(f"✅ Loaded Knight down frame: {name}")
+                    print(f"[OK] Loaded Knight down frame: {name}")
 
             # Load Knight walking right sprites
             self.npc_knight_right_sprites = []
@@ -771,7 +771,7 @@ class StageSelect:
                     img = pygame.image.load(path).convert_alpha()
                     scaled = pygame.transform.scale(img, (TILE_SIZE, TILE_SIZE))
                     self.npc_knight_right_sprites.append(scaled)
-                    print(f"✅ Loaded Knight right frame: {name}")
+                    print(f"[OK] Loaded Knight right frame: {name}")
 
             # Load Knight walking up sprites
             self.npc_knight_up_sprites = []
@@ -781,9 +781,9 @@ class StageSelect:
                     img = pygame.image.load(path).convert_alpha()
                     scaled = pygame.transform.scale(img, (TILE_SIZE, TILE_SIZE))
                     self.npc_knight_up_sprites.append(scaled)
-                    print(f"✅ Loaded Knight up frame: {name}")
+                    print(f"[OK] Loaded Knight up frame: {name}")
         except Exception as e:
-            print(f"❌ Error loading Knight: {e}")
+            print(f"[ERROR] Error loading Knight: {e}")
             placeholder = pygame.Surface((TILE_SIZE, TILE_SIZE))
             placeholder.fill((192, 192, 192))
             self.npc_knight_sprite = placeholder
@@ -1021,7 +1021,7 @@ class StageSelect:
         if col in (25, 26, 27) and row >= 16:
             if not self.is_quarter_unlocked("quarter2"):
                 if self.locked_portal_banner_timer <= 0:
-                    self.locked_portal_banner_msg = "🔒 Complete Quarter 1 to unlock the path to Quarter 2!"
+                    self.locked_portal_banner_msg = "Complete Quarter 1 to unlock the path to Quarter 2!"
                     self.locked_portal_banner_timer = 2.5
                 return False
 
@@ -1029,7 +1029,7 @@ class StageSelect:
         if row in (12, 13, 14) and col >= 28:
             if not self.is_quarter_unlocked("quarter3"):
                 if self.locked_portal_banner_timer <= 0:
-                    self.locked_portal_banner_msg = "🔒 Complete Quarter 2 to unlock the path to Quarter 3!"
+                    self.locked_portal_banner_msg = "Complete Quarter 2 to unlock the path to Quarter 3!"
                     self.locked_portal_banner_timer = 2.5
                 return False
 
@@ -1037,7 +1037,7 @@ class StageSelect:
         if col in (25, 26, 27) and row <= 11:
             if not self.is_quarter_unlocked("quarter4"):
                 if self.locked_portal_banner_timer <= 0:
-                    self.locked_portal_banner_msg = "🔒 Complete Quarter 3 to unlock the path to Quarter 4!"
+                    self.locked_portal_banner_msg = "Complete Quarter 3 to unlock the path to Quarter 4!"
                     self.locked_portal_banner_timer = 2.5
                 return False
 
@@ -1084,12 +1084,12 @@ class StageSelect:
             # Check if it's a left portal (goes to Quarter1)
             if current_portal.direction == 'left':
                 if self.oldman_dialogue_state == 0:
-                    print("🔒 Quarter 1 Portal Locked! Talk to the Old Man first.")
-                    self.locked_portal_banner_msg = "🔒 Talk to the Old Man first to unlock Quarter 1!"
+                    print("[LOCKED] Quarter 1 Portal Locked! Talk to the Old Man first.")
+                    self.locked_portal_banner_msg = "Talk to the Old Man first to unlock Quarter 1!"
                     self.locked_portal_banner_timer = 2.5
                     return False
                 map_name = random.choice(["map1.txt", "map2.txt", "map3.txt"])
-                print(f"🎮 Entering Quarter 1 - {map_name}")
+                print(f"[STAGE] Entering Quarter 1 - {map_name}")
                 save_ss_state()
                 self.main_menu.current_screen = "quarter1"
                 self.main_menu.quarter1 = Quarter1(self.screen, self.main_menu, map_name)
@@ -1102,17 +1102,17 @@ class StageSelect:
             # Check if it's an up portal (goes to Quarter2)
             elif current_portal.direction == 'up':
                 if not self.is_quarter_unlocked('quarter2'):
-                    print("🔒 Quarter 2 Locked! Complete Quarter 1 first.")
-                    self.locked_portal_banner_msg = "🔒 Complete Quarter 1 to unlock Quarter 2!"
+                    print("[LOCKED] Quarter 2 Locked! Complete Quarter 1 first.")
+                    self.locked_portal_banner_msg = "Complete Quarter 1 to unlock Quarter 2!"
                     self.locked_portal_banner_timer = 2.5
                     return False
                 if self.knight_dialogue_state == 0:
-                    print("🔒 Quarter 2 Portal Locked! Talk to the Knight first.")
-                    self.locked_portal_banner_msg = "🔒 Talk to the Knight first to unlock Quarter 2!"
+                    print("[LOCKED] Quarter 2 Portal Locked! Talk to the Knight first.")
+                    self.locked_portal_banner_msg = "Talk to the Knight first to unlock Quarter 2!"
                     self.locked_portal_banner_timer = 2.5
                     return False
                 map_name = "map5.txt"
-                print(f"🎮 Entering Quarter 2 - {map_name}")
+                print(f"[STAGE] Entering Quarter 2 - {map_name}")
                 save_ss_state()
                 self.main_menu.current_screen = "quarter2"
                 self.main_menu.quarter2 = Quarter2(self.screen, self.main_menu, map_name)
@@ -1125,17 +1125,17 @@ class StageSelect:
             # Check if it's a right portal (goes to Quarter3)
             elif current_portal.direction == 'right':
                 if not self.is_quarter_unlocked('quarter3'):
-                    print("🔒 Quarter 3 Locked! Complete Quarter 2 first.")
-                    self.locked_portal_banner_msg = "🔒 Complete Quarter 2 to unlock Quarter 3!"
+                    print("[LOCKED] Quarter 3 Locked! Complete Quarter 2 first.")
+                    self.locked_portal_banner_msg = "Complete Quarter 2 to unlock Quarter 3!"
                     self.locked_portal_banner_timer = 2.5
                     return False
                 if self.skeleton_dialogue_state == 0:
-                    print("🔒 Quarter 3 Portal Locked! Talk to the Skeleton first.")
-                    self.locked_portal_banner_msg = "🔒 Talk to the Skeleton first to unlock Quarter 3!"
+                    print("[LOCKED] Quarter 3 Portal Locked! Talk to the Skeleton first.")
+                    self.locked_portal_banner_msg = "Talk to the Skeleton first to unlock Quarter 3!"
                     self.locked_portal_banner_timer = 2.5
                     return False
                 map_name = "map7.txt"
-                print(f"🎮 Entering Quarter 3 - {map_name}")
+                print(f"[STAGE] Entering Quarter 3 - {map_name}")
                 save_ss_state()
                 self.main_menu.current_screen = "quarter3"
                 self.main_menu.quarter3 = Quarter3(self.screen, self.main_menu, map_name)
@@ -1148,17 +1148,17 @@ class StageSelect:
             # Check if it's a down portal (goes to Quarter4)
             elif current_portal.direction == 'down':
                 if not self.is_quarter_unlocked('quarter4'):
-                    print("🔒 Quarter 4 Locked! Complete Quarter 3 first.")
-                    self.locked_portal_banner_msg = "🔒 Complete Quarter 3 to unlock Quarter 4!"
+                    print("[LOCKED] Quarter 4 Locked! Complete Quarter 3 first.")
+                    self.locked_portal_banner_msg = "Complete Quarter 3 to unlock Quarter 4!"
                     self.locked_portal_banner_timer = 2.5
                     return False
                 if self.bromen_dialogue_state == 0:
-                    print("🔒 Quarter 4 Portal Locked! Talk to Bromen first.")
-                    self.locked_portal_banner_msg = "🔒 Talk to Bromen first to unlock Quarter 4!"
+                    print("[LOCKED] Quarter 4 Portal Locked! Talk to Bromen first.")
+                    self.locked_portal_banner_msg = "Talk to Bromen first to unlock Quarter 4!"
                     self.locked_portal_banner_timer = 2.5
                     return False
                 map_name = "map11.txt"
-                print(f"🎮 Entering Quarter 4 - {map_name}")
+                print(f"[STAGE] Entering Quarter 4 - {map_name}")
                 save_ss_state()
                 self.main_menu.current_screen = "quarter4"
                 self.main_menu.quarter4 = Quarter4(self.screen, self.main_menu, map_name)
@@ -1226,7 +1226,7 @@ class StageSelect:
         self.camera_x = max(0, min(self.camera_x, max_cam_x))
         self.camera_y = max(0, min(self.camera_y, max_cam_y))
 
-        print(f"✅ Switched to new map: {self.map_loader.current_map_name}")
+        print(f"[OK] Switched to new map: {self.map_loader.current_map_name}")
 
     # ============================================================
     # UPDATE CAMERA
@@ -1293,7 +1293,7 @@ class StageSelect:
                 self.oldman_dialogue_state = 2
                 self.player_following_target = 'oldman'
                 self.player_block_timer = 0
-                print("🧙‍♂️ Dialog complete! Old Man starts moving left and player follows.")
+                print("[Old Man] Dialog complete! Old Man starts moving left and player follows.")
             return
 
         if self.skeleton_dialogue_state == 1:
@@ -1302,7 +1302,7 @@ class StageSelect:
                 self.skeleton_dialogue_state = 2
                 self.player_following_target = 'skeleton'
                 self.player_block_timer = 0
-                print("☠️ Dialog complete! Skeleton starts moving right to portal and player follows.")
+                print("[Skeleton] Dialog complete! Skeleton starts moving right to portal and player follows.")
             return
 
         if self.knight_dialogue_state == 1:
@@ -1311,7 +1311,7 @@ class StageSelect:
                 self.knight_dialogue_state = 2
                 self.player_following_target = 'knight'
                 self.player_block_timer = 0
-                print("⚔️ Dialog complete! Knight starts moving down to portal and player follows.")
+                print("[Knight] Dialog complete! Knight starts moving down to portal and player follows.")
             return
 
         if self.bromen_dialogue_state == 1:
@@ -1320,7 +1320,7 @@ class StageSelect:
                 self.bromen_dialogue_state = 2
                 self.player_following_target = 'bromen'
                 self.player_block_timer = 0
-                print("✨ Dialogue complete! Bromen starts moving north to portal and player follows.")
+                print("* Dialogue complete! Bromen starts moving north to portal and player follows.")
             return
 
         # Trigger teleport on click/hold when standing on a portal (Only if NPC has been spoken to)
@@ -1333,50 +1333,50 @@ class StageSelect:
         if current_portal and self.teleport_cooldown <= 0:
             if current_portal.direction == 'left':
                 if self.oldman_dialogue_state == 0:
-                    self.locked_portal_banner_msg = "🔒 Talk to the Old Man first to unlock Quarter 1!"
+                    self.locked_portal_banner_msg = "Talk to the Old Man first to unlock Quarter 1!"
                     self.locked_portal_banner_timer = 1.0
                 else:
                     map_name = random.choice(["map1.txt", "map2.txt", "map3.txt"])
-                    print(f"🎮 Entering Quarter 1 - {map_name}")
+                    print(f"[STAGE] Entering Quarter 1 - {map_name}")
                     self.main_menu.current_screen = "quarter1"
                     self.main_menu.quarter1 = Quarter1(self.screen, self.main_menu, map_name)
                     self.main_menu.stage_select = None
             elif current_portal.direction == 'up':
                 if not self.is_quarter_unlocked('quarter2'):
-                    self.locked_portal_banner_msg = "🔒 Complete Quarter 1 to unlock Quarter 2!"
+                    self.locked_portal_banner_msg = "Complete Quarter 1 to unlock Quarter 2!"
                     self.locked_portal_banner_timer = 2.0
                 elif self.knight_dialogue_state == 0:
-                    self.locked_portal_banner_msg = "🔒 Talk to the Knight first to unlock Quarter 2!"
+                    self.locked_portal_banner_msg = "Talk to the Knight first to unlock Quarter 2!"
                     self.locked_portal_banner_timer = 1.5
                 else:
                     map_name = "map5.txt"
-                    print(f"🎮 Entering Quarter 2 - {map_name}")
+                    print(f"[STAGE] Entering Quarter 2 - {map_name}")
                     self.main_menu.current_screen = "quarter2"
                     self.main_menu.quarter2 = Quarter2(self.screen, self.main_menu, map_name)
                     self.main_menu.stage_select = None
             elif current_portal.direction == 'right':
                 if not self.is_quarter_unlocked('quarter3'):
-                    self.locked_portal_banner_msg = "🔒 Complete Quarter 2 to unlock Quarter 3!"
+                    self.locked_portal_banner_msg = "Complete Quarter 2 to unlock Quarter 3!"
                     self.locked_portal_banner_timer = 2.0
                 elif self.skeleton_dialogue_state == 0:
-                    self.locked_portal_banner_msg = "🔒 Talk to the Skeleton first to unlock Quarter 3!"
+                    self.locked_portal_banner_msg = "Talk to the Skeleton first to unlock Quarter 3!"
                     self.locked_portal_banner_timer = 1.5
                 else:
                     map_name = "map7.txt"
-                    print(f"🎮 Entering Quarter 3 - {map_name}")
+                    print(f"[STAGE] Entering Quarter 3 - {map_name}")
                     self.main_menu.current_screen = "quarter3"
                     self.main_menu.quarter3 = Quarter3(self.screen, self.main_menu, map_name)
                     self.main_menu.stage_select = None
             elif current_portal.direction == 'down':
                 if not self.is_quarter_unlocked('quarter4'):
-                    self.locked_portal_banner_msg = "🔒 Complete Quarter 3 to unlock Quarter 4!"
+                    self.locked_portal_banner_msg = "Complete Quarter 3 to unlock Quarter 4!"
                     self.locked_portal_banner_timer = 2.0
                 elif self.bromen_dialogue_state == 0:
-                    self.locked_portal_banner_msg = "🔒 Talk to Bromen first to unlock Quarter 4!"
+                    self.locked_portal_banner_msg = "Talk to Bromen first to unlock Quarter 4!"
                     self.locked_portal_banner_timer = 1.5
                 else:
                     map_name = "map11.txt"
-                    print(f"🎮 Entering Quarter 4 - {map_name}")
+                    print(f"[STAGE] Entering Quarter 4 - {map_name}")
                     self.main_menu.current_screen = "quarter4"
                     self.main_menu.quarter4 = Quarter4(self.screen, self.main_menu, map_name)
                     self.main_menu.stage_select = None
@@ -1446,7 +1446,7 @@ class StageSelect:
                 if dist < TILE_SIZE * 2.5:
                     if not self.is_quarter_unlocked('quarter4'):
                         if self.locked_portal_banner_timer <= 0:
-                            self.locked_portal_banner_msg = "🔒 Complete Quarter 3 to unlock Quarter 4!"
+                            self.locked_portal_banner_msg = "Complete Quarter 3 to unlock Quarter 4!"
                             self.locked_portal_banner_timer = 2.0
                     else:
                         self.bromen_dialogue_state = 1
@@ -1484,7 +1484,7 @@ class StageSelect:
                     if 'B' in r_str:
                         self.game_map[r_idx] = r_str.replace('B', '8')
                         
-                print("✨ Bromen reached north portal and disappeared from stage select!")
+                print("* Bromen reached north portal and disappeared from stage select!")
 
 
         # Proximity interaction check for Old Man NPC
@@ -1554,7 +1554,7 @@ class StageSelect:
                     row_list[5] = '6'
                     self.game_map[12] = "".join(row_list)
                     
-                print("🧙‍♂️ Old Man reached portal and disappeared from stage select!")
+                print("[Old Man] Old Man reached portal and disappeared from stage select!")
 
         # Proximity interaction check for Skeleton NPC
         if self.npc_skeleton_found:
@@ -1567,7 +1567,7 @@ class StageSelect:
                 if dist < TILE_SIZE * 2.5:
                     if not self.is_quarter_unlocked('quarter3'):
                         if self.locked_portal_banner_timer <= 0:
-                            self.locked_portal_banner_msg = "🔒 Complete Quarter 2 to unlock Quarter 3!"
+                            self.locked_portal_banner_msg = "Complete Quarter 2 to unlock Quarter 3!"
                             self.locked_portal_banner_timer = 2.0
                     else:
                         self.skeleton_dialogue_state = 1
@@ -1628,7 +1628,7 @@ class StageSelect:
                     if 'S' in r_str:
                         self.game_map[r_idx] = r_str.replace('S', '6')
                         
-                print("☠️ Skeleton reached portal and disappeared from stage select!")
+                print("[Skeleton] Skeleton reached portal and disappeared from stage select!")
 
         # Proximity interaction check for Knight NPC
         if self.npc_knight_found:
@@ -1641,7 +1641,7 @@ class StageSelect:
                 if dist < TILE_SIZE * 2.5:
                     if not self.is_quarter_unlocked('quarter2'):
                         if self.locked_portal_banner_timer <= 0:
-                            self.locked_portal_banner_msg = "🔒 Complete Quarter 1 to unlock Quarter 2!"
+                            self.locked_portal_banner_msg = "Complete Quarter 1 to unlock Quarter 2!"
                             self.locked_portal_banner_timer = 2.0
                     else:
                         self.knight_dialogue_state = 1
@@ -1691,7 +1691,7 @@ class StageSelect:
                     if 'K' in r_str:
                         self.game_map[r_idx] = r_str.replace('K', '7')
                         
-                print("⚔️ Knight reached down portal and disappeared from stage select!")
+                print("[Knight] Knight reached down portal and disappeared from stage select!")
 
         # Update player following NPC
         if self.player_following_target:
@@ -1711,64 +1711,64 @@ class StageSelect:
                             if hasattr(self.main_menu, 'audio_manager'):
                                 self.main_menu.audio_manager.play_sfx("portal_warp")
                             map_name = random.choice(["map1.txt", "map2.txt", "map3.txt"])
-                            print(f"🎮 Auto-entering Quarter 1 - {map_name}")
+                            print(f"[STAGE] Auto-entering Quarter 1 - {map_name}")
                             self.main_menu.current_screen = "quarter1"
                             self.main_menu.quarter1 = Quarter1(self.screen, self.main_menu, map_name)
                             self.main_menu.stage_select = None
                             return
                         elif self.oldman_dialogue_state == 0 and self.locked_portal_banner_timer <= 0:
-                            self.locked_portal_banner_msg = "🔒 Talk to the Old Man first to unlock Quarter 1!"
+                            self.locked_portal_banner_msg = "Talk to the Old Man first to unlock Quarter 1!"
                             self.locked_portal_banner_timer = 2.0
                     elif portal.direction == 'right':
                         if not self.is_quarter_unlocked('quarter3'):
                             if self.locked_portal_banner_timer <= 0:
-                                self.locked_portal_banner_msg = "🔒 Complete Quarter 2 to unlock Quarter 3!"
+                                self.locked_portal_banner_msg = "Complete Quarter 2 to unlock Quarter 3!"
                                 self.locked_portal_banner_timer = 2.0
                         elif self.skeleton_dialogue_state >= 2 or self.player_following_target == 'skeleton':
                             if hasattr(self.main_menu, 'audio_manager'):
                                 self.main_menu.audio_manager.play_sfx("portal_warp")
                             map_name = "map7.txt"
-                            print(f"🎮 Auto-entering Quarter 3 - {map_name}")
+                            print(f"[STAGE] Auto-entering Quarter 3 - {map_name}")
                             self.main_menu.current_screen = "quarter3"
                             self.main_menu.quarter3 = Quarter3(self.screen, self.main_menu, map_name)
                             self.main_menu.stage_select = None
                             return
                         elif self.skeleton_dialogue_state == 0 and self.locked_portal_banner_timer <= 0:
-                            self.locked_portal_banner_msg = "🔒 Talk to the Skeleton first to unlock Quarter 3!"
+                            self.locked_portal_banner_msg = "Talk to the Skeleton first to unlock Quarter 3!"
                             self.locked_portal_banner_timer = 2.0
                     elif portal.direction == 'up':
                         if not self.is_quarter_unlocked('quarter2'):
                             if self.locked_portal_banner_timer <= 0:
-                                self.locked_portal_banner_msg = "🔒 Complete Quarter 1 to unlock Quarter 2!"
+                                self.locked_portal_banner_msg = "Complete Quarter 1 to unlock Quarter 2!"
                                 self.locked_portal_banner_timer = 2.0
                         elif self.knight_dialogue_state >= 2 or self.player_following_target == 'knight':
                             if hasattr(self.main_menu, 'audio_manager'):
                                 self.main_menu.audio_manager.play_sfx("portal_warp")
                             map_name = "map5.txt"
-                            print(f"🎮 Auto-entering Quarter 2 - {map_name}")
+                            print(f"[STAGE] Auto-entering Quarter 2 - {map_name}")
                             self.main_menu.current_screen = "quarter2"
                             self.main_menu.quarter2 = Quarter2(self.screen, self.main_menu, map_name)
                             self.main_menu.stage_select = None
                             return
                         elif self.knight_dialogue_state == 0 and self.locked_portal_banner_timer <= 0:
-                            self.locked_portal_banner_msg = "🔒 Talk to the Knight first to unlock Quarter 2!"
+                            self.locked_portal_banner_msg = "Talk to the Knight first to unlock Quarter 2!"
                             self.locked_portal_banner_timer = 2.0
                     elif portal.direction == 'down':
                         if not self.is_quarter_unlocked('quarter4'):
                             if self.locked_portal_banner_timer <= 0:
-                                self.locked_portal_banner_msg = "🔒 Complete Quarter 3 to unlock Quarter 4!"
+                                self.locked_portal_banner_msg = "Complete Quarter 3 to unlock Quarter 4!"
                                 self.locked_portal_banner_timer = 2.0
                         elif self.bromen_dialogue_state >= 2 or self.player_following_target == 'bromen':
                             if hasattr(self.main_menu, 'audio_manager'):
                                 self.main_menu.audio_manager.play_sfx("portal_warp")
                             map_name = "map11.txt"
-                            print(f"🎮 Auto-entering Quarter 4 - {map_name}")
+                            print(f"[STAGE] Auto-entering Quarter 4 - {map_name}")
                             self.main_menu.current_screen = "quarter4"
                             self.main_menu.quarter4 = Quarter4(self.screen, self.main_menu, map_name)
                             self.main_menu.stage_select = None
                             return
                         elif self.bromen_dialogue_state == 0 and self.locked_portal_banner_timer <= 0:
-                            self.locked_portal_banner_msg = "🔒 Talk to Bromen first to unlock Quarter 4!"
+                            self.locked_portal_banner_msg = "Talk to Bromen first to unlock Quarter 4!"
                             self.locked_portal_banner_timer = 2.0
 
         # Update portal animations
@@ -1959,7 +1959,7 @@ class StageSelect:
                 'world_y': 16 * TILE_SIZE,
                 'width_tiles': 3,
                 'height_tiles': 1,
-                'label': "🔒 COMPLETE Q1 TO UNLOCK",
+                'label': "COMPLETE Q1 TO UNLOCK",
                 'color': (239, 68, 68),
                 'pylon_axis': 'horizontal'
             })
@@ -1971,7 +1971,7 @@ class StageSelect:
                 'world_y': 12 * TILE_SIZE,
                 'width_tiles': 1,
                 'height_tiles': 3,
-                'label': "🔒 COMPLETE Q2 TO UNLOCK",
+                'label': "COMPLETE Q2 TO UNLOCK",
                 'color': (239, 68, 68),
                 'pylon_axis': 'vertical'
             })
@@ -1983,7 +1983,7 @@ class StageSelect:
                 'world_y': 11 * TILE_SIZE,
                 'width_tiles': 3,
                 'height_tiles': 1,
-                'label': "🔒 COMPLETE Q3 TO UNLOCK",
+                'label': "COMPLETE Q3 TO UNLOCK",
                 'color': (239, 68, 68),
                 'pylon_axis': 'horizontal'
             })
@@ -2177,22 +2177,22 @@ class StageSelect:
                 b_font = pygame.font.SysFont("Comic Sans MS", int(11 * ZOOM), bold=True)
                 
                 if self.is_quarter_completed(qid):
-                    # ★ CLEARED (Gold)
+                    # CLEARED (Gold)
                     pygame.draw.rect(self.screen, (15, 23, 42), badge_rect, border_radius=6)
                     pygame.draw.rect(self.screen, (255, 215, 0), badge_rect, 2, border_radius=6)
-                    b_txt = b_font.render("★ CLEARED", True, (255, 215, 0))
+                    b_txt = b_font.render("CLEARED", True, (255, 215, 0))
                     self.screen.blit(b_txt, b_txt.get_rect(center=badge_rect.center))
                 elif self.is_quarter_unlocked(qid):
-                    # ▶ OPEN (Emerald green)
+                    # OPEN (Emerald green)
                     pygame.draw.rect(self.screen, (15, 23, 42), badge_rect, border_radius=6)
                     pygame.draw.rect(self.screen, (34, 197, 94), badge_rect, 2, border_radius=6)
-                    b_txt = b_font.render("▶ OPEN", True, (34, 197, 94))
+                    b_txt = b_font.render("OPEN", True, (34, 197, 94))
                     self.screen.blit(b_txt, b_txt.get_rect(center=badge_rect.center))
                 else:
-                    # 🔒 LOCKED (Ruby red)
+                    # LOCKED (Ruby red)
                     pygame.draw.rect(self.screen, (15, 23, 42), badge_rect, border_radius=6)
                     pygame.draw.rect(self.screen, (239, 68, 68), badge_rect, 2, border_radius=6)
-                    b_txt = b_font.render("🔒 LOCKED", True, (248, 113, 113))
+                    b_txt = b_font.render("LOCKED", True, (248, 113, 113))
                     self.screen.blit(b_txt, b_txt.get_rect(center=badge_rect.center))
 
         # Draw NPCs (before player so player is on top)
@@ -2495,13 +2495,17 @@ class StageSelect:
         t_surf = hud_font.render(f"Quarters Mastered: {num_cleared}/4", True, (241, 245, 249))
         self.screen.blit(t_surf, (hud_x + 14, hud_y + 7))
 
-        # 4 Golden Stars
-        star_x = hud_x + 205
+        # 4 Golden Stars / Gem Medals
+        star_x = hud_x + 212
         for i in range(4):
             is_on = i < num_cleared
-            s_col = (255, 215, 0) if is_on else (100, 116, 139)
-            s_surf = hud_font.render("★", True, s_col)
-            self.screen.blit(s_surf, (star_x + i * 18, hud_y + 6))
+            cx = star_x + i * 20
+            cy = hud_y + hud_h // 2
+            s_col = (255, 215, 0) if is_on else (71, 85, 105)
+            pygame.draw.circle(self.screen, s_col, (cx, cy), 6)
+            if is_on:
+                pygame.draw.circle(self.screen, (254, 240, 138), (cx, cy), 3)
+            pygame.draw.circle(self.screen, (255, 255, 255) if is_on else (51, 65, 85), (cx, cy), 6, 1)
 
         # Draw Locked Notification Banner if active
         if self.locked_portal_banner_timer > 0 and self.locked_portal_banner_msg:
@@ -2530,7 +2534,7 @@ class StageSelect:
             bg = (245, 158, 11) if hov else (217, 119, 6)
             pygame.draw.rect(self.screen, bg, btn_r, border_radius=8)
             pygame.draw.rect(self.screen, (255, 255, 255), btn_r, 2, border_radius=8)
-            btn_txt = hud_font.render("🏆 Victory Card", True, (255, 255, 255))
+            btn_txt = hud_font.render("Victory Card", True, (255, 255, 255))
             self.screen.blit(btn_txt, btn_txt.get_rect(center=btn_r.center))
 
         # Draw Grand Finale Modal if active
@@ -2660,21 +2664,21 @@ class StageSelect:
                     if self.oldman_dialogue_index >= len(self.dialogue_lines):
                         self.oldman_dialogue_state = 2
                         self.player_block_timer = 3.0
-                        print("🧙‍♂️ Dialog complete! Old Man starts moving left.")
+                        print("[Old Man] Dialog complete! Old Man starts moving left.")
                     return "dialogue_advance"
             elif self.skeleton_dialogue_state == 1:
                 if event.key in [pygame.K_SPACE, pygame.K_RETURN]:
                     self.skeleton_dialogue_index += 1
                     if self.skeleton_dialogue_index >= len(self.skeleton_dialogue_lines):
                         self.skeleton_dialogue_state = 2
-                        print("☠️ Dialog complete! Skeleton starts moving right.")
+                        print("[Skeleton] Dialog complete! Skeleton starts moving right.")
                     return "dialogue_advance"
             elif self.knight_dialogue_state == 1:
                 if event.key in [pygame.K_SPACE, pygame.K_RETURN]:
                     self.knight_dialogue_index += 1
                     if self.knight_dialogue_index >= len(self.knight_dialogue_lines):
                         self.knight_dialogue_state = 2
-                        print("⚔️ Dialog complete! Knight starts moving down.")
+                        print("[Knight] Dialog complete! Knight starts moving down.")
                     return "dialogue_advance"
             elif self.bromen_dialogue_state == 1:
                 if event.key in [pygame.K_SPACE, pygame.K_RETURN]:
@@ -2683,7 +2687,7 @@ class StageSelect:
                         self.bromen_dialogue_state = 2
                         self.bromen_teleport_frame = 0
                         self.bromen_teleport_timer = 0
-                        print("✨ Dialogue complete! Bromen starts teleporting away.")
+                        print("* Dialogue complete! Bromen starts teleporting away.")
                     return "dialogue_advance"
 
             if event.key == pygame.K_ESCAPE:
@@ -2722,7 +2726,7 @@ class StageSelect:
         row_font = pygame.font.SysFont("Comic Sans MS", 13, bold=True)
 
         # Title Header
-        title = t_font.render("🏆 QUEST COMPLETE: GRAND CHAMPION! 🏆", True, (255, 215, 0))
+        title = t_font.render("QUEST COMPLETE: GRAND CHAMPION!", True, (255, 215, 0))
         self.screen.blit(title, title.get_rect(center=(card_x + card_w // 2, card_y + 35)))
 
         sub = sub_font.render("Outstanding achievement! You have mastered all 4 Quarters of Cognitive Quest!", True, (226, 232, 240))
@@ -2751,14 +2755,14 @@ class StageSelect:
             lbl_surf = row_font.render(f"{title_str}  ({desc_str})", True, (248, 250, 252))
             self.screen.blit(lbl_surf, (card_x + 45, row_y + 8))
 
-            val_str = f"★ Cleared  |  Score: {score} pts  ({pct:.0f}%)"
+            val_str = f"[Cleared]  Score: {score} pts  ({pct:.0f}%)"
             val_surf = sub_font.render(val_str, True, (255, 215, 0))
             self.screen.blit(val_surf, (card_x + 45, row_y + 28))
 
             row_y += 58
 
         # Total Cumulative Mastery Summary
-        total_txt = row_font.render(f"Cumulative Score: {total_pts} / 400 pts   •   Rank: Cognitive Master 🌟🌟🌟🌟", True, (52, 211, 153))
+        total_txt = row_font.render(f"Cumulative Score: {total_pts} / 400 pts   -   Rank: Cognitive Master (Master Tier)", True, (52, 211, 153))
         self.screen.blit(total_txt, total_txt.get_rect(center=(card_x + card_w // 2, card_y + 348)))
 
         # Close / Celebrate Button
@@ -2767,7 +2771,7 @@ class StageSelect:
         bg = (34, 197, 94) if hov else (22, 163, 74)
         pygame.draw.rect(self.screen, bg, btn_rect, border_radius=10)
         pygame.draw.rect(self.screen, (134, 239, 172), btn_rect, 2, border_radius=10)
-        btn_lbl = row_font.render("🎉 Celebrate & Explore!", True, (255, 255, 255))
+        btn_lbl = row_font.render("Celebrate & Explore!", True, (255, 255, 255))
         self.screen.blit(btn_lbl, btn_lbl.get_rect(center=btn_rect.center))
 
     # ============================================================
