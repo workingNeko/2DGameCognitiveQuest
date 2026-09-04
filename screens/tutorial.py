@@ -16,6 +16,8 @@ import math
 import time
 import cv2
 import numpy as np
+from core.camera_system import LoLCamera
+from core.cursor_system import game_cursor, CursorState
 
 TILE_SIZE = 32
 ZOOM = 1.50
@@ -78,9 +80,13 @@ class TutorialScreen:
         self.portal_anim_frame = 0
         self.portal_anim_timer = 0
 
-        # Camera
-        self.camera_x = 0
-        self.camera_y = 0
+        # Map Dimensions & LoL Camera
+        self.MAP_WIDTH = (len(self.map_grid[0]) if self.map_grid else 25) * TILE_SIZE
+        self.MAP_HEIGHT = (len(self.map_grid) if self.map_grid else 12) * TILE_SIZE
+        self.lol_camera = LoLCamera(self.width, self.height, zoom=ZOOM)
+        self.lol_camera.snap_to(self.player_x, self.player_y, TILE_SIZE, self.MAP_WIDTH, self.MAP_HEIGHT)
+        self.camera_x = self.lol_camera.camera_x
+        self.camera_y = self.lol_camera.camera_y
 
         # Tutorial Gameplay Phase (1 = Move, 2 = Interact, 3 = Quiz, 4 = Exit Portal)
         self.phase = 1
@@ -242,11 +248,60 @@ class TutorialScreen:
         self.hand_detected = (current_gesture not in ["NO HAND", "NO HAND (GRACE)"])
 
     def update(self):
-        # Update camera
-        target_cam_x = self.player_x - (self.width / ZOOM) / 2
-        target_cam_y = self.player_y - (self.height / ZOOM) / 2
-        self.camera_x += (target_cam_x - self.camera_x) * 0.1
-        self.camera_y += (target_cam_y - self.camera_y) * 0.1
+        # Update LoL-style camera with cursor lead and edge scrolling
+        self.lol_camera.update(
+            self.player_x,
+            self.player_y,
+            cursor_pos=self.cursor_pos,
+            map_width=self.MAP_WIDTH,
+            map_height=self.MAP_HEIGHT,
+            tile_size=TILE_SIZE,
+            enable_edge_scroll=(self.quiz_state == 0)
+        )
+        self.camera_x = self.lol_camera.camera_x
+        self.camera_y = self.lol_camera.camera_y
+
+        # Contextual Cursor Hover State Detection
+        skip_rect = pygame.Rect(self.width - 230, 16, 210, 52)
+        if skip_rect.collidepoint(self.cursor_pos):
+            game_cursor.set_hover_state(CursorState.HOVER_BUTTON)
+        elif self.quiz_state == 1:
+            box_w, box_h = 600, 390
+            box_x = (self.width - box_w) // 2
+            box_y = (self.height - box_h) // 2
+            button_w, button_h = 560, 48
+            button_x = box_x + (box_w - button_w) // 2
+            button_y_start = box_y + 142
+            spacing = 56
+            hovering_choice = False
+            for i in range(4):
+                if i == self.eliminated_choice:
+                    continue
+                btn_rect = pygame.Rect(button_x, button_y_start + i * spacing, button_w, button_h)
+                if btn_rect.collidepoint(self.cursor_pos):
+                    hovering_choice = True
+                    break
+            game_cursor.set_hover_state(CursorState.HOVER_BUTTON if hovering_choice else CursorState.DEFAULT)
+        elif self.quiz_state in [2, 3]:
+            game_cursor.set_hover_state(CursorState.HOVER_BUTTON)
+        elif self.phase in [1, 2]:
+            screen_npc_x = (self.npc_tile_x * TILE_SIZE - self.camera_x) * ZOOM
+            screen_npc_y = (self.npc_tile_y * TILE_SIZE - self.camera_y) * ZOOM
+            npc_rect = pygame.Rect(screen_npc_x - 10, screen_npc_y - 10, TILE_SIZE * ZOOM + 20, TILE_SIZE * ZOOM + 20)
+            if npc_rect.collidepoint(self.cursor_pos):
+                game_cursor.set_hover_state(CursorState.HOVER_NPC)
+            else:
+                game_cursor.set_hover_state(CursorState.DEFAULT)
+        elif self.phase == 4:
+            screen_p_x = (self.portal_tile_x * TILE_SIZE - self.camera_x) * ZOOM
+            screen_p_y = (self.portal_tile_y * TILE_SIZE - self.camera_y) * ZOOM
+            portal_rect = pygame.Rect(screen_p_x, screen_p_y, TILE_SIZE * 3 * ZOOM, TILE_SIZE * 3 * ZOOM)
+            if portal_rect.collidepoint(self.cursor_pos):
+                game_cursor.set_hover_state(CursorState.HOVER_PORTAL)
+            else:
+                game_cursor.set_hover_state(CursorState.DEFAULT)
+        else:
+            game_cursor.set_hover_state(CursorState.DEFAULT)
 
         # Animate NPC & Portal
         self.npc_anim_timer += 0.05
@@ -277,11 +332,12 @@ class TutorialScreen:
         vx, vy = 0, 0
         current_speed = SPEED
 
-        # 1. Gesture Steering
-        center_x, center_y = self.width // 2, self.height // 2
+        # 1. Gesture / Cursor Steering (relative to on-screen player position)
+        player_screen_x = (self.player_x - self.camera_x + TILE_SIZE / 2) * ZOOM
+        player_screen_y = (self.player_y - self.camera_y + TILE_SIZE / 2) * ZOOM
         cursor_x, cursor_y = self.cursor_pos
-        dx = cursor_x - center_x
-        dy = cursor_y - center_y
+        dx = cursor_x - player_screen_x
+        dy = cursor_y - player_screen_y
 
         dist_factor = 1.3 if (abs(dx) > 160 or abs(dy) > 160) else 1.0
         g_speed = current_speed * dist_factor
@@ -341,10 +397,13 @@ class TutorialScreen:
     # EVENT & CLICK HANDLERS
     # ============================================================
     def handle_event(self, event):
+        self.lol_camera.handle_event(event)
         if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
             self.trigger_click(event.pos)
         elif event.type == pygame.KEYDOWN:
-            if event.key == pygame.K_ESCAPE:
+            if event.key == pygame.K_SPACE and self.quiz_state == 0:
+                self.lol_camera.recenter()
+            elif event.key == pygame.K_ESCAPE:
                 self.finish_tutorial()
             elif self.quiz_state == 1:
                 # Keyboard quick-answers: 1/A, 2/B, 3/C, 4/D
@@ -728,11 +787,12 @@ class TutorialScreen:
             sweep_y = radar_cy + math.sin(sweep_angle) * (radar_r - 2)
             pygame.draw.line(self.screen, (*border_col, 180), (radar_cx, radar_cy), (int(sweep_x), int(sweep_y)), 1)
 
-            # Real-time hand offset dot
-            center_x, center_y = self.width // 2, self.height // 2
+            # Real-time hand offset dot (relative to player on-screen position)
+            player_screen_x = (self.player_x - self.camera_x + TILE_SIZE / 2) * ZOOM
+            player_screen_y = (self.player_y - self.camera_y + TILE_SIZE / 2) * ZOOM
             cur_x, cur_y = self.cursor_pos
-            dx = (cur_x - center_x) / 300.0
-            dy = (cur_y - center_y) / 300.0
+            dx = (cur_x - player_screen_x) / 300.0
+            dy = (cur_y - player_screen_y) / 300.0
             dist = math.hypot(dx, dy)
             if dist > 1.0:
                 dx /= dist

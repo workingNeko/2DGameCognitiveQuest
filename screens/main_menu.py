@@ -20,6 +20,7 @@ import time
 import math
 import threading
 from core.audio_manager import audio_manager
+from core.cursor_system import game_cursor, CursorState
 from ui.button import Button
 from screens.stageselect import StageSelect
 from screens.studentselect import StudentSelect
@@ -102,6 +103,7 @@ class MainMenu:
         self.CLICK_HOLD_TIME = 0.9
         self.click_ready = False
         self.popup_state = None
+        self.game_cursor = game_cursor
 
         # Cursor smoothing & jitter suppression
         self.cursor_x = float(self.w // 2)
@@ -473,6 +475,7 @@ class MainMenu:
     def trigger_click(self):
         """Handle click at cursor position"""
         pos = self.cursor_pos
+        self.game_cursor.add_click_ripple(pos, "interact" if self.popup_state else "move")
         print(f"[MOUSE] Click at: {pos}")
 
         # If pop-up is active, intercept clicks!
@@ -1375,39 +1378,27 @@ class MainMenu:
         self.screen.blit(txt_surf, txt_surf.get_rect(center=(pill_x + pill_w // 2, pill_y + pill_h // 2 - 1)))
 
     def draw_cursor(self):
-        if self.current_gesture != "NO HAND":
-            if self.fist_start_time > 0:
-                color = (255, 200, 0)  # Yellow when holding fist
-                hold_time = time.time() - self.fist_start_time
-                pct = min(1.0, hold_time / self.CLICK_HOLD_TIME)
-                pygame.draw.circle(self.screen, color, self.cursor_pos, 15, 2)
-                pygame.draw.circle(self.screen, (255, 100, 100), self.cursor_pos, 4)
-                # Draw loading progress bar under cursor
-                pygame.draw.rect(self.screen, (30, 41, 59), (self.cursor_pos[0] - 20, self.cursor_pos[1] + 20, 40, 6))
-                pygame.draw.rect(self.screen, (255, 200, 0), (self.cursor_pos[0] - 20, self.cursor_pos[1] + 20, int(40 * pct), 6))
-            elif getattr(self, 'peace_start_time', 0) > 0:
-                color = (34, 197, 94)  # Green when holding peace sign
-                hold_time = time.time() - self.peace_start_time
-                pct = min(1.0, hold_time / self.CLICK_HOLD_TIME)
-                pygame.draw.circle(self.screen, color, self.cursor_pos, 15, 2)
-                pygame.draw.circle(self.screen, (255, 100, 100), self.cursor_pos, 4)
-                # Draw loading progress bar under cursor
-                pygame.draw.rect(self.screen, (30, 41, 59), (self.cursor_pos[0] - 20, self.cursor_pos[1] + 20, 40, 6))
-                pygame.draw.rect(self.screen, (34, 197, 94), (self.cursor_pos[0] - 20, self.cursor_pos[1] + 20, int(40 * pct), 6))
+        # Update GameCursor state with current tracking
+        self.game_cursor.update(
+            self.cursor_pos,
+            current_gesture=self.current_gesture,
+            fist_start_time=self.fist_start_time,
+            click_hold_time=self.CLICK_HOLD_TIME,
+            peace_start_time=getattr(self, 'peace_start_time', 0)
+        )
+
+        # Contextual hover check for UI buttons when in menu or popups
+        if self.popup_state:
+            self.game_cursor.set_hover_state(CursorState.HOVER_BUTTON)
+        elif self.current_screen == "menu":
+            is_hovering_btn = any(b.rect.collidepoint(self.cursor_pos) for b in getattr(self, 'buttons', []))
+            if is_hovering_btn:
+                self.game_cursor.set_hover_state(CursorState.HOVER_BUTTON)
             else:
-                color = (255, 255, 255)  # White normally
-                pygame.draw.circle(self.screen, color, self.cursor_pos, 15, 2)
-                pygame.draw.circle(self.screen, (255, 100, 100), self.cursor_pos, 4)
-        else:
-            # Clean, always-visible mouse / targeting cursor so cursor never disappears!
-            pygame.draw.circle(self.screen, (255, 255, 255), self.cursor_pos, 13, 2)
-            pygame.draw.circle(self.screen, (56, 189, 248), self.cursor_pos, 4)
-            # Subtle crosshair pings
-            cx, cy = self.cursor_pos
-            pygame.draw.line(self.screen, (255, 255, 255), (cx - 17, cy), (cx - 13, cy), 2)
-            pygame.draw.line(self.screen, (255, 255, 255), (cx + 13, cy), (cx + 17, cy), 2)
-            pygame.draw.line(self.screen, (255, 255, 255), (cx, cy - 17), (cx, cy - 13), 2)
-            pygame.draw.line(self.screen, (255, 255, 255), (cx, cy + 13), (cx, cy + 17), 2)
+                self.game_cursor.set_hover_state(CursorState.DEFAULT)
+
+        # Render LoL MOBA cursor, click ripples, and stardust trail
+        self.game_cursor.draw(self.screen)
 
     def draw(self):
         if self.current_screen == "menu":

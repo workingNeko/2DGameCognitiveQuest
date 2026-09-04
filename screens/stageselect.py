@@ -13,6 +13,8 @@ from screens.quarter1 import Quarter1
 from screens.quarter2 import Quarter2
 from screens.quarter3 import Quarter3
 from screens.quarter4 import Quarter4
+from core.camera_system import LoLCamera
+from core.cursor_system import game_cursor, CursorState
 
 # ============================================================
 # SETTINGS
@@ -185,6 +187,7 @@ class StageSelect:
         # ============================================================
         # CAMERA
         # ============================================================
+        self.lol_camera = LoLCamera(self.width, self.height, zoom=ZOOM)
         self.camera_x = 0
         self.camera_y = 0
 
@@ -341,14 +344,9 @@ class StageSelect:
         self._init_npc_positions()
 
         # Center camera directly on player spawn without sliding
-        self.camera_x = self.player_x + TILE_SIZE // 2 - (self.width // 2) / ZOOM
-        self.camera_y = self.player_y + TILE_SIZE // 2 - (self.height // 2) / ZOOM
-        
-        # Apply camera boundaries
-        max_cam_x = max(0, self.MAP_WIDTH - self.width / ZOOM)
-        max_cam_y = max(0, self.MAP_HEIGHT - self.height / ZOOM)
-        self.camera_x = max(0, min(self.camera_x, max_cam_x))
-        self.camera_y = max(0, min(self.camera_y, max_cam_y))
+        self.lol_camera.snap_to(self.player_x, self.player_y, TILE_SIZE, self.MAP_WIDTH, self.MAP_HEIGHT)
+        self.camera_x = self.lol_camera.camera_x
+        self.camera_y = self.lol_camera.camera_y
 
         # ============================================================
         # LOAD PORTALS
@@ -1361,14 +1359,9 @@ class StageSelect:
         self._init_npc_positions()
 
         # Center camera directly on player without sliding
-        self.camera_x = self.player_x + TILE_SIZE // 2 - (self.width // 2) / ZOOM
-        self.camera_y = self.player_y + TILE_SIZE // 2 - (self.height // 2) / ZOOM
-        
-        # Apply camera boundaries
-        max_cam_x = max(0, self.MAP_WIDTH - self.width / ZOOM)
-        max_cam_y = max(0, self.MAP_HEIGHT - self.height / ZOOM)
-        self.camera_x = max(0, min(self.camera_x, max_cam_x))
-        self.camera_y = max(0, min(self.camera_y, max_cam_y))
+        self.lol_camera.snap_to(self.player_x, self.player_y, TILE_SIZE, self.MAP_WIDTH, self.MAP_HEIGHT)
+        self.camera_x = self.lol_camera.camera_x
+        self.camera_y = self.lol_camera.camera_y
 
         print(f"[OK] Switched to new map: {self.map_loader.current_map_name}")
 
@@ -1376,18 +1369,17 @@ class StageSelect:
     # UPDATE CAMERA
     # ============================================================
     def update_camera(self):
-        target_x = self.player_x + TILE_SIZE // 2 - (self.width // 2) / ZOOM
-        target_y = self.player_y + TILE_SIZE // 2 - (self.height // 2) / ZOOM
-        self.camera_x += (target_x - self.camera_x) * 0.1
-        self.camera_y += (target_y - self.camera_y) * 0.1
-
-        min_cam_x = 0
-        max_cam_x = max(0, self.MAP_WIDTH - self.width / ZOOM)
-        min_cam_y = 0
-        max_cam_y = max(0, self.MAP_HEIGHT - self.height / ZOOM)
-
-        self.camera_x = max(min_cam_x, min(self.camera_x, max_cam_x))
-        self.camera_y = max(min_cam_y, min(self.camera_y, max_cam_y))
+        self.lol_camera.update(
+            self.player_x,
+            self.player_y,
+            cursor_pos=self.cursor_pos,
+            map_width=self.MAP_WIDTH,
+            map_height=self.MAP_HEIGHT,
+            tile_size=TILE_SIZE,
+            enable_edge_scroll=True
+        )
+        self.camera_x = self.lol_camera.camera_x
+        self.camera_y = self.lol_camera.camera_y
 
     # ============================================================
     # UPDATE GESTURE (called from main_menu)
@@ -1980,6 +1972,34 @@ class StageSelect:
         for portal in self.portals:
             portal.update_animation()
 
+        # Update contextual cursor hover state for LoL cursor
+        hover_state = CursorState.DEFAULT
+        if getattr(self, 'pause_menu', None) and self.pause_menu.is_hovering(self.cursor_pos):
+            hover_state = CursorState.HOVER_BUTTON
+        else:
+            cx, cy = self.cursor_pos
+            # Check NPCs
+            npc_targets = [
+                (getattr(self, 'npc_oldman_x', -999), getattr(self, 'npc_oldman_y', -999)),
+                (getattr(self, 'npc_skeleton_x', -999), getattr(self, 'npc_skeleton_y', -999)),
+                (getattr(self, 'npc_knight_x', -999), getattr(self, 'npc_knight_y', -999)),
+                (getattr(self, 'npc_bromen_x', -999), getattr(self, 'npc_bromen_y', -999))
+            ]
+            for (nx, ny) in npc_targets:
+                if nx > -100:
+                    nsx, nsy = self.lol_camera.world_to_screen(nx + TILE_SIZE // 2, ny + TILE_SIZE // 2)
+                    if math.hypot(cx - nsx, cy - nsy) < 45:
+                        hover_state = CursorState.HOVER_NPC
+                        break
+            if hover_state == CursorState.DEFAULT:
+                # Check Portals
+                for portal in self.portals:
+                    psx, psy = self.lol_camera.world_to_screen(portal.get_center_x(), portal.get_center_y())
+                    if math.hypot(cx - psx, cy - psy) < 48:
+                        hover_state = CursorState.HOVER_PORTAL
+                        break
+        game_cursor.set_hover_state(hover_state)
+
         # Update camera
         self.update_camera()
 
@@ -2127,10 +2147,11 @@ class StageSelect:
         current_speed = SPEED
 
         # Hand Gesture / Cursor Directional Controls (Pure Gesture Navigation)
-        center_x, center_y = self.width // 2, self.height // 2
+        player_screen_x = (self.player_x - self.camera_x + TILE_SIZE / 2) * ZOOM
+        player_screen_y = (self.player_y - self.camera_y + TILE_SIZE / 2) * ZOOM
         cursor_x, cursor_y = self.cursor_pos
-        dx = cursor_x - center_x
-        dy = cursor_y - center_y
+        dx = cursor_x - player_screen_x
+        dy = cursor_y - player_screen_y
 
         # Dynamic speed scaling: faster when hand is stretched further out
         dist_factor = 1.3 if (abs(dx) > 160 or abs(dy) > 160) else 1.0
@@ -3014,6 +3035,9 @@ class StageSelect:
     # HANDLE EVENT
     # ============================================================
     def handle_event(self, event):
+        # Allow LoL camera to process middle mouse drag or Spacebar recentering
+        self.lol_camera.handle_event(event)
+
         if getattr(self, 'portal_transition_active', False):
             return "handled"
 
@@ -3023,10 +3047,12 @@ class StageSelect:
                 self.grand_finale_dismissed = True
                 return "handled"
             if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                game_cursor.add_click_ripple(event.pos, "interact")
                 self.trigger_click(event.pos)
                 return "handled"
 
         if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+            game_cursor.add_click_ripple(event.pos, "move")
             self.trigger_click(event.pos)
             return "handled"
 

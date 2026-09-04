@@ -9,6 +9,8 @@ import time
 import math
 import random
 from .map_loader import MapLoader
+from core.camera_system import LoLCamera
+from core.cursor_system import game_cursor, CursorState
 
 try:
     from db import db
@@ -169,6 +171,7 @@ class Quarter2:
         # ============================================================
         # CAMERA
         # ============================================================
+        self.lol_camera = LoLCamera(self.width, self.height, zoom=ZOOM)
         self.camera_x = 0
         self.camera_y = 0
 
@@ -385,6 +388,11 @@ class Quarter2:
                 self.render_map[y] = row.replace("P", "G")
         # Initialize NPC positions from map data
         self._init_npc_positions()
+
+        # Snap camera directly to player spawn
+        self.lol_camera.snap_to(self.player_x, self.player_y, TILE_SIZE, self.MAP_WIDTH, self.MAP_HEIGHT)
+        self.camera_x = self.lol_camera.camera_x
+        self.camera_y = self.lol_camera.camera_y
 
         # ============================================================
         # LOAD PORTALS
@@ -2388,18 +2396,17 @@ class Quarter2:
                 self.camera_pan_active = False
                 self.award_anim_active = False
         else:
-            target_x = self.player_x + TILE_SIZE // 2 - (self.width // 2) / ZOOM
-            target_y = self.player_y + TILE_SIZE // 2 - (self.height // 2) / ZOOM
-            self.camera_x += (target_x - self.camera_x) * 0.1
-            self.camera_y += (target_y - self.camera_y) * 0.1
-
-        min_cam_x = 0
-        max_cam_x = max(0, self.MAP_WIDTH - self.width / ZOOM)
-        min_cam_y = 0
-        max_cam_y = max(0, self.MAP_HEIGHT - self.height / ZOOM)
-
-        self.camera_x = max(min_cam_x, min(self.camera_x, max_cam_x))
-        self.camera_y = max(min_cam_y, min(self.camera_y, max_cam_y))
+            self.lol_camera.update(
+                self.player_x,
+                self.player_y,
+                cursor_pos=self.cursor_pos,
+                map_width=self.MAP_WIDTH,
+                map_height=self.MAP_HEIGHT,
+                tile_size=TILE_SIZE,
+                enable_edge_scroll=True
+            )
+            self.camera_x = self.lol_camera.camera_x
+            self.camera_y = self.lol_camera.camera_y
 
     # ============================================================
     # UPDATE GESTURE
@@ -2715,6 +2722,28 @@ class Quarter2:
 
         for portal in self.portals:
             portal.update_animation()
+
+        # Update contextual cursor hover state for LoL cursor
+        hover_state = CursorState.DEFAULT
+        if getattr(self, 'pause_menu', None) and self.pause_menu.is_hovering(self.cursor_pos):
+            hover_state = CursorState.HOVER_BUTTON
+        elif self.quiz_state in [1, 2, 3, 4, 5]:
+            hover_state = CursorState.HOVER_BUTTON
+        else:
+            cx, cy = self.cursor_pos
+            for sid, station in getattr(self, 'quiz_stations', {}).items():
+                st_x, st_y = station
+                nsx, nsy = self.lol_camera.world_to_screen(st_x * TILE_SIZE + TILE_SIZE // 2, st_y * TILE_SIZE + TILE_SIZE // 2)
+                if math.hypot(cx - nsx, cy - nsy) < 45:
+                    hover_state = CursorState.HOVER_QUIZ
+                    break
+            if hover_state == CursorState.DEFAULT:
+                for portal in self.portals:
+                    psx, psy = self.lol_camera.world_to_screen(portal.get_center_x(), portal.get_center_y())
+                    if math.hypot(cx - psx, cy - psy) < 48:
+                        hover_state = CursorState.HOVER_PORTAL
+                        break
+        game_cursor.set_hover_state(hover_state)
 
         self.update_camera()
 
@@ -3280,10 +3309,11 @@ class Quarter2:
         vx, vy = 0, 0
 
         # Hand Gesture / Cursor Directional Controls (Pure Gesture Navigation)
-        center_x, center_y = self.width // 2, self.height // 2
+        player_screen_x = (self.player_x - self.camera_x + TILE_SIZE / 2) * ZOOM
+        player_screen_y = (self.player_y - self.camera_y + TILE_SIZE / 2) * ZOOM
         cursor_x, cursor_y = self.cursor_pos
-        dx = cursor_x - center_x
-        dy = cursor_y - center_y
+        dx = cursor_x - player_screen_x
+        dy = cursor_y - player_screen_y
 
         # Dynamic speed scaling: faster when hand is stretched further out
         dist_factor = 1.3 if (abs(dx) > 160 or abs(dy) > 160) else 1.0
@@ -3752,15 +3782,6 @@ class Quarter2:
     # DRAW UI
     # ============================================================
     def draw_ui(self):
-        if self.hand_detected:
-            if self.fist_start_time > 0:
-                color = (255, 200, 0)
-            else:
-                color = (255, 255, 255)
-
-            pygame.draw.circle(self.screen, color, self.cursor_pos, 15, 2)
-            pygame.draw.circle(self.screen, (255, 100, 100), self.cursor_pos, 4)
-
         # HUD Objectives Box (Top/Bottom Center)
         if self.quiz_state in [0, 6]:
             box_w = 460
@@ -3840,10 +3861,14 @@ class Quarter2:
     # HANDLE EVENT
     # ============================================================
     def handle_event(self, event):
+        # Allow LoL camera to process middle mouse drag or Spacebar recentering
+        self.lol_camera.handle_event(event)
+
         if hasattr(self, 'victory_card') and self.victory_card.active:
             if self.victory_card.handle_event(event):
                 return "blocked"
             if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                game_cursor.add_click_ripple(event.pos, "interact")
                 res = self.victory_card.handle_click(event.pos)
                 if res:
                     return "blocked"
@@ -3851,8 +3876,14 @@ class Quarter2:
         if self.pause_menu.handle_event(event):
             return "blocked"
 
+        if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+            game_cursor.add_click_ripple(event.pos, "move")
+
         if event.type == pygame.KEYDOWN:
-            if event.key == pygame.K_ESCAPE:
+            if event.key in [pygame.K_SPACE, pygame.K_RETURN]:
+                if self.quiz_state == 0:
+                    self.lol_camera.recenter()
+            elif event.key == pygame.K_ESCAPE:
                 if self.main_menu:
                     from db.save_system import show_saving_and_exit
                     show_saving_and_exit(self.main_menu)

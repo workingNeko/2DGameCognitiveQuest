@@ -81,6 +81,12 @@ class InGamePauseMenu:
             self.showing_controls = False
         self._play_sfx("click")
 
+    def is_hovering(self, pos):
+        """Returns True if cursor is hovering over pause button or modal buttons."""
+        if self.is_paused:
+            return True
+        return self.pause_btn_rect.collidepoint(pos)
+
     def handle_click(self, pos):
         """Handles cursor or mouse clicks on pause button or modal."""
         # 1. Check Pause Button toggle (only when not paused)
