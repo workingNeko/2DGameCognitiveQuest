@@ -64,6 +64,7 @@ class MapLoader:
             self.game_map = lines
             self.rows = len(lines)
             self.cols = max(len(row) for row in lines)
+            self.current_map_path = map_path
             self.current_map_name = os.path.basename(map_path)
 
             # Parse NPC positions and player start
@@ -83,8 +84,18 @@ class MapLoader:
         self.npc_positions = {}
         self.player_start = None
 
-        # NPC markers to look for - 'O' for Oldman/Omen, 'B' for Bromen, 'S' for Skeleton, 'K' for Knight
-        npc_markers = ['O', 'S', 'K', 'B']
+        # NPC markers to look for - 'O' for Oldman/Omen, 'S' for Skeleton, 'K' for Knight.
+        # 'B' for Bromen is strictly restricted to Quarter 4 maps and the Stage Select hub ('map.txt').
+        # In Quarter 1 and Quarter 3, 'B' represents river bridge / causeway tiles and must not be treated as Bromen.
+        is_q4_or_hub = False
+        norm_path = (getattr(self, 'current_map_path', None) or "").lower().replace("\\", "/")
+        norm_name = (self.current_map_name or "").lower()
+        if norm_name == "map.txt" or "quarter4maps" in norm_path or any(norm_name.startswith(p) for p in ["map10", "map11", "map12"]):
+            is_q4_or_hub = True
+
+        npc_markers = ['O', 'S', 'K']
+        if is_q4_or_hub:
+            npc_markers.append('B')
 
         for y, row in enumerate(self.game_map):
             for x, char in enumerate(row):

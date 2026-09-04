@@ -67,7 +67,15 @@ class Quarter4:
 
         # Universal In-Stage Pause Menu
         from core.pause_menu import InGamePauseMenu
-        self.pause_menu = InGamePauseMenu(self.screen, self.width, self.height, self.main_menu, self.return_to_stage_select)
+        self.pause_menu = InGamePauseMenu(self.screen, self.width, self.height, self.main_menu, self.return_to_stage_select, restart_callback=self.restart_level)
+
+        # 3-Star Victory Report Card & Celebration Particles
+        from core.report_card import VictoryReportCard, CelebrationParticleSystem
+        self.celebration_particles = CelebrationParticleSystem()
+        self.victory_card = VictoryReportCard(self.screen, self.width, self.height, self.main_menu,
+                                              quarter_id="quarter4",
+                                              replay_callback=self.restart_level,
+                                              continue_callback=self.finish_and_return_to_hub)
 
         # ============================================================
         # PATHS
@@ -1093,6 +1101,15 @@ class Quarter4:
             
         return "back"
 
+    def restart_level(self):
+        """Restarts the current Quarter 4 level."""
+        from screens.quarter4 import Quarter4
+        self.main_menu.quarter4 = Quarter4(self.screen, self.main_menu, self.map_name)
+
+    def finish_and_return_to_hub(self):
+        """Callback invoked by Victory Report Card to transition back to stage select."""
+        self.return_to_stage_select(completed=True)
+
     # ============================================================
     # CHECK PORTAL TELEPORT
     # ============================================================
@@ -1122,8 +1139,15 @@ class Quarter4:
                 )
                 if not is_unlocked:
                     return False
-                print(f"[TARGET] Goal reached! Exiting portal in Quarter 4 - Returning to stage select...")
-                self.return_to_stage_select()
+                print(f"[TARGET] Goal reached! Showing 3-Star Victory Report Card in Quarter 4...")
+                self.save_quarter4_game_result()
+                total_questions = min(6, len(self.quiz_questions)) if hasattr(self, 'quiz_questions') and self.quiz_questions else 6
+                correct_answers = sum(1 for k, v in self.first_attempt_correct.items() if k <= total_questions and v)
+                percentage = (correct_answers / float(total_questions)) * 100.0 if total_questions > 0 else 100.0
+                score = int(correct_answers * 20)
+                from db.save_system import mark_quarter_completed
+                mark_quarter_completed(self.main_menu, "quarter4", score=score, percentage=percentage, total_questions=total_questions)
+                self.victory_card.show(total_questions=total_questions, correct_first_try=correct_answers, score=score)
                 return True
 
             # Regular portal teleport (to another portal on same map) - requires fist hold or space
@@ -1169,6 +1193,11 @@ class Quarter4:
     # TRIGGER CLICK
     # ============================================================
     def trigger_click(self, pos):
+        if hasattr(self, 'victory_card') and self.victory_card.active:
+            res = self.victory_card.handle_click(pos)
+            if res:
+                return
+
         if self.pause_menu.handle_click(pos):
             return
 
@@ -1215,11 +1244,18 @@ class Quarter4:
                         self.current_correct_phrase = random.choice(self.correct_phrases)
                         self.quiz_state = 3
                         self.answered_stations.add(self.quiz_station_index)
+                        if hasattr(self.main_menu, 'audio_manager'):
+                            self.main_menu.audio_manager.play_sfx("correct")
+                            self.main_menu.audio_manager.play_sfx("star_chime")
+                        if hasattr(self, 'celebration_particles'):
+                            self.celebration_particles.spawn_burst(self.width // 2, self.height // 2, count=30)
                         print(f"* Correct answer selected for Station {self.quiz_station_index}!")
                     else:
                         self.first_attempt_correct[self.current_question_index + 1] = False
                         self.station_attempts[self.quiz_station_index] = self.station_attempts.get(self.quiz_station_index, 0) + 1
                         
+                        if hasattr(self.main_menu, 'audio_manager'):
+                            self.main_menu.audio_manager.play_sfx("wrong")
                         if self.station_attempts[self.quiz_station_index] < 2:
                             # 1st wrong attempt: Give player 1 more try
                             self.quiz_state = 2
@@ -1235,10 +1271,10 @@ class Quarter4:
  
         # State 2: Incorrect answer feedback click (1 try remaining)
         elif self.quiz_state == 2:
-            box_w, box_h = 520, 250
+            box_w, box_h = 560, 290
             box_x = (self.width - box_w) // 2
             box_y = (self.height - box_h) // 2
-            btn_rect = pygame.Rect(box_x + (box_w - 200) // 2, box_y + 160, 200, 42)
+            btn_rect = pygame.Rect(box_x + (box_w - 200) // 2, box_y + 225, 200, 42)
             if btn_rect.collidepoint(pos):
                 self.quiz_state = 1
                 save_student_progress(self.main_menu)
@@ -1348,6 +1384,13 @@ class Quarter4:
         self.frame_counter += 1
 
         if self.pause_menu.is_paused:
+            return
+
+        # Update celebration particles & victory report card
+        if hasattr(self, 'celebration_particles'):
+            self.celebration_particles.update(dt)
+        if hasattr(self, 'victory_card') and self.victory_card.active:
+            self.victory_card.update(dt)
             return
 
         # Update Map 12 water particles
@@ -1562,6 +1605,8 @@ class Quarter4:
             if self.anim_timer >= 8:
                 self.anim_timer = 0
                 self.anim_frame = (self.anim_frame + 1) % 2
+                if hasattr(self.main_menu, 'audio_manager'):
+                    self.main_menu.audio_manager.play_sfx("footstep_stone")
         else:
             self.anim_frame = 0
 
@@ -1981,6 +2026,14 @@ class Quarter4:
         if self.pause_menu.is_paused:
             self.pause_menu.draw_modal(self.cursor_pos)
 
+        # Draw Celebration Particles
+        if hasattr(self, 'celebration_particles'):
+            self.celebration_particles.draw(self.screen)
+
+        # Draw 3-Star Victory Report Card Modal
+        if hasattr(self, 'victory_card') and self.victory_card.active:
+            self.victory_card.draw(self.cursor_pos)
+
     # ============================================================
     # DRAW UI
     # ============================================================
@@ -2124,6 +2177,14 @@ class Quarter4:
     # HANDLE EVENT
     # ============================================================
     def handle_event(self, event):
+        if hasattr(self, 'victory_card') and self.victory_card.active:
+            if self.victory_card.handle_event(event):
+                return "blocked"
+            if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                res = self.victory_card.handle_click(event.pos)
+                if res:
+                    return "blocked"
+
         if self.pause_menu.handle_event(event):
             return "blocked"
 
@@ -2286,19 +2347,19 @@ class Quarter4:
         overlay.set_alpha(150)
         self.screen.blit(overlay, (0, 0))
 
-        box_w, box_h = 520, 250
+        box_w, box_h = 560, 290
         box_x = (self.width - box_w) // 2
         box_y = (self.height - box_h) // 2
 
         dialog_rect = pygame.Rect(box_x, box_y, box_w, box_h)
-        pygame.draw.rect(self.screen, (15, 23, 42), dialog_rect)
-        pygame.draw.rect(self.screen, (220, 38, 38), dialog_rect, 3, border_radius=8)
+        pygame.draw.rect(self.screen, (15, 23, 42), dialog_rect, border_radius=12)
+        pygame.draw.rect(self.screen, (220, 38, 38), dialog_rect, 3, border_radius=12)
 
         speaker_font = pygame.font.SysFont("Comic Sans MS", 18, bold=True)
         npc_data = self.station_npcs.get(self.quiz_station_index, {})
         speaker_name = npc_data.get("name", "Water Guardian")
-        speaker_surf = speaker_font.render(speaker_name, True, (220, 38, 38))
-        self.screen.blit(speaker_surf, (box_x + 25, box_y + 20))
+        speaker_surf = speaker_font.render(speaker_name, True, (239, 68, 68))
+        self.screen.blit(speaker_surf, (box_x + 25, box_y + 16))
 
         # Avatar in dialog
         if "frames" in npc_data and npc_data["frames"]:
@@ -2307,15 +2368,49 @@ class Quarter4:
             pygame.draw.circle(self.screen, (239, 68, 68), (box_x + box_w - 45, box_y + 35), 22, 2)
             self.screen.blit(avatar, (box_x + box_w - 64, box_y + 16))
 
-        q_font = pygame.font.SysFont("Comic Sans MS", 16)
-        msg_surf1 = q_font.render("Hmm, that is not correct.", True, (255, 255, 255))
+        q_font = pygame.font.SysFont("Comic Sans MS", 15)
+        msg_surf1 = q_font.render("Hmm, that is not quite correct.", True, (255, 255, 255))
         msg_surf2 = q_font.render("You have 1 try remaining! Think carefully.", True, (255, 215, 0))
-        self.screen.blit(msg_surf1, (box_x + 25, box_y + 65))
-        self.screen.blit(msg_surf2, (box_x + 25, box_y + 95))
+        self.screen.blit(msg_surf1, (box_x + 25, box_y + 48))
+        self.screen.blit(msg_surf2, (box_x + 25, box_y + 72))
+
+        # Pedagogical Educational Hint Box
+        from core.hints import get_educational_hint
+        current_q = self.quiz_questions[self.current_question_index] if self.current_question_index < len(self.quiz_questions) else {}
+        q_text = current_q.get("question", "")
+        hint_text = get_educational_hint("quarter4", q_text)
+
+        hint_box = pygame.Rect(box_x + 20, box_y + 104, box_w - 40, 105)
+        pygame.draw.rect(self.screen, (30, 41, 59), hint_box, border_radius=8)
+        pygame.draw.rect(self.screen, (245, 158, 11), hint_box, 1, border_radius=8)
+
+        hint_title_font = pygame.font.SysFont("Comic Sans MS", 14, bold=True)
+        hint_body_font = pygame.font.SysFont("Comic Sans MS", 13)
+        h_title = hint_title_font.render("💡 Pedagogical Hint:", True, (255, 215, 0))
+        self.screen.blit(h_title, (hint_box.x + 12, hint_box.y + 6))
+
+        # Text wrap
+        words = hint_text.split(" ")
+        lines = []
+        cur = []
+        for w in words:
+            cur.append(w)
+            if hint_body_font.size(" ".join(cur))[0] > (hint_box.width - 24):
+                cur.pop()
+                lines.append(" ".join(cur))
+                cur = [w]
+        if cur:
+            lines.append(" ".join(cur))
+
+        hy = hint_box.y + 30
+        for hl in lines[:3]:
+            h_surf = hint_body_font.render(hl, True, (241, 245, 249))
+            self.screen.blit(h_surf, (hint_box.x + 12, hy))
+            hy += 22
 
         button_w, button_h = 200, 42
         button_x = box_x + (box_w - button_w) // 2
-        button_y = box_y + 160
+        button_y = box_y + 225
         btn_rect = pygame.Rect(button_x, button_y, button_w, button_h)
 
         is_hovered = btn_rect.collidepoint(self.cursor_pos)
@@ -2706,13 +2801,14 @@ class Quarter4:
         self.sound_correct = None
         self.sound_snap = None
         try:
-            if hasattr(self, 'main_menu') and hasattr(self.main_menu, 'audio_manager'):
-                self.sound_correct = self.main_menu.audio_manager.get_sound("correct")
-                self.sound_snap = self.main_menu.audio_manager.get_sound("snap")
-            else:
+            am = getattr(self.main_menu, 'audio_manager', None) if hasattr(self, 'main_menu') else None
+            if not am:
                 from core.audio_manager import audio_manager
-                self.sound_correct = audio_manager.get_sound("correct")
-                self.sound_snap = audio_manager.get_sound("snap")
+                am = audio_manager
+
+            if am:
+                self.sound_correct = am.get_sound("correct")
+                self.sound_snap = am.get_sound("snap")
         except Exception as e:
             print(f"Sound load warning: {e}")
 

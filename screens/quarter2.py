@@ -68,7 +68,15 @@ class Quarter2:
 
         # Universal In-Stage Pause Menu
         from core.pause_menu import InGamePauseMenu
-        self.pause_menu = InGamePauseMenu(self.screen, self.width, self.height, self.main_menu, self.return_to_stage_select)
+        self.pause_menu = InGamePauseMenu(self.screen, self.width, self.height, self.main_menu, self.return_to_stage_select, restart_callback=self.restart_level)
+
+        # 3-Star Victory Report Card & Celebration Particles
+        from core.report_card import VictoryReportCard, CelebrationParticleSystem
+        self.celebration_particles = CelebrationParticleSystem()
+        self.victory_card = VictoryReportCard(self.screen, self.width, self.height, self.main_menu,
+                                              quarter_id="quarter2",
+                                              replay_callback=self.restart_level,
+                                              continue_callback=self.finish_and_return_to_hub)
 
         # ============================================================
         # PATHS
@@ -102,15 +110,6 @@ class Quarter2:
             "portal"
         )
 
-        self.NPC_PATH_BROMEN = os.path.join(
-            self.BASE_DIR,
-            "assets",
-            "images",
-            "sprites",
-            "objects",
-            "NPC",
-            "bromen"
-        )
 
         self.NPC_PATH_OLDMAN = os.path.join(
             self.BASE_DIR,
@@ -197,15 +196,6 @@ class Quarter2:
         # ============================================================
         # LOAD NPC SPRITES
         # ============================================================
-        # Bromen NPC (animated)
-        self.npc_bromen_sprites = self.load_npc_sprites_animated(self.NPC_PATH_BROMEN, "bromen")
-        self.npc_bromen_anim_frame = 0
-        self.npc_bromen_anim_timer = 0
-        self.npc_bromen_x = 0
-        self.npc_bromen_y = 0
-        self.npc_bromen_tile_x = 0
-        self.npc_bromen_tile_y = 0
-        self.npc_bromen_found = False
 
         # Oldman NPC (static)
         self.npc_oldman_sprite = None
@@ -733,6 +723,10 @@ class Quarter2:
             print(f"[WARN] Exception loading database questions for Quarter 2: {e}")
 
     def save_results_to_database(self):
+        import threading
+        threading.Thread(target=self._run_save_results_to_database, daemon=True).start()
+
+    def _run_save_results_to_database(self):
         if not self.is_quiz_map:
             return
         try:
@@ -777,21 +771,21 @@ class Quarter2:
     # ============================================================
     def load_puzzle_sounds(self):
         try:
-            if hasattr(self, 'main_menu') and hasattr(self.main_menu, 'audio_manager'):
-                am = self.main_menu.audio_manager
-            else:
+            am = getattr(self.main_menu, 'audio_manager', None) if hasattr(self, 'main_menu') else None
+            if not am:
                 from core.audio_manager import audio_manager
                 am = audio_manager
 
-            self.sorbetes_bell = am.get_sound("bell")
-            self.jeepney_horn = am.get_sound("horn")
-            self.coin_clink = am.get_sound("coin")
-            self.cash_register = am.get_sound("cash_register")
-            self.snap_sound = am.get_sound("snap")
-            self.success_sound = am.get_sound("success")
-            self.wood_snap_sound = am.get_sound("wood_snap")
+            if am:
+                self.sorbetes_bell = am.get_sound("bell")
+                self.jeepney_horn = am.get_sound("horn")
+                self.coin_clink = am.get_sound("coin")
+                self.cash_register = am.get_sound("cash_register")
+                self.snap_sound = am.get_sound("snap")
+                self.success_sound = am.get_sound("success")
+                self.wood_snap_sound = am.get_sound("wood_snap")
 
-            if self.sorbetes_bell and self.coin_clink and self.snap_sound:
+            if getattr(self, 'sorbetes_bell', None) and getattr(self, 'coin_clink', None) and getattr(self, 'snap_sound', None):
                 print("[AUDIO] Quarter 2 sound effects retrieved from AudioManager.")
                 return
 
@@ -1359,7 +1353,6 @@ class Quarter2:
     def _init_npc_positions(self):
         """Initialize NPC positions from map data"""
         # Reset NPC flags
-        self.npc_bromen_found = False
         self.npc_oldman_found = False
         self.npc_skeleton_found = False
         self.npc_knight_found = False
@@ -1368,12 +1361,7 @@ class Quarter2:
         for marker, positions in self.npc_positions_data.items():
             for x, y in positions:
                 if marker == 'B':
-                    self.npc_bromen_tile_x = x
-                    self.npc_bromen_tile_y = y
-                    self.npc_bromen_x = x * TILE_SIZE
-                    self.npc_bromen_y = y * TILE_SIZE
-                    self.npc_bromen_found = True
-                    print(f"Bromen NPC at: ({x}, {y})")
+                    continue
                 elif marker == 'O':
                     self.npc_oldman_tile_x = x
                     self.npc_oldman_tile_y = y
@@ -2312,6 +2300,15 @@ class Quarter2:
             
         return "back"
 
+    def restart_level(self):
+        """Restarts the current Quarter 2 level."""
+        from screens.quarter2 import Quarter2
+        self.main_menu.quarter2 = Quarter2(self.screen, self.main_menu, self.map_name)
+
+    def finish_and_return_to_hub(self):
+        """Callback invoked by Victory Report Card to transition back to stage select."""
+        self.return_to_stage_select(completed=True)
+
     def check_portal_teleport_on_hold(self):
         if self.warp_out_active:
             return False
@@ -2328,6 +2325,8 @@ class Quarter2:
             if self.quiz_state == 6:
                 if current_portal.direction == self.goal_portal_direction or current_portal.is_static:
                     print("* Entering Grand Fiesta Portal - Initiating seamless warp transition...")
+                    if hasattr(self.main_menu, 'audio_manager'):
+                        self.main_menu.audio_manager.play_sfx("portal_transition")
                     self.warp_out_active = True
                     self.warp_out_timer = self.warp_out_duration
                     return True
@@ -2417,6 +2416,11 @@ class Quarter2:
     # TRIGGER CLICK (2x2 Elemental Cards with 50:50 Wizard Hint)
     # ============================================================
     def trigger_click(self, pos):
+        if hasattr(self, 'victory_card') and self.victory_card.active:
+            res = self.victory_card.handle_click(pos)
+            if res:
+                return
+
         if self.pause_menu.handle_click(pos):
             return
 
@@ -2469,6 +2473,12 @@ class Quarter2:
                         self.eliminated_choices.clear()
                         self.wrong_feedback_msg = ""
                         
+                        if hasattr(self.main_menu, 'audio_manager'):
+                            self.main_menu.audio_manager.play_sfx("correct")
+                            self.main_menu.audio_manager.play_sfx("star_chime")
+                        if hasattr(self, 'celebration_particles'):
+                            self.celebration_particles.spawn_burst(self.width // 2, self.height // 2, count=30)
+
                         # Trigger station-specific authentic sounds
                         if self.quiz_station_index == 1 and self.cash_register:
                             self.cash_register.play()
@@ -2494,6 +2504,8 @@ class Quarter2:
                             self.first_attempt_correct[self.current_question_index + 1] = False
                         
                         self.station_attempts[self.quiz_station_index] = self.station_attempts.get(self.quiz_station_index, 0) + 1
+                        if hasattr(self.main_menu, 'audio_manager'):
+                            self.main_menu.audio_manager.play_sfx("wrong")
                         if self.station_attempts[self.quiz_station_index] < 2:
                             # 1st wrong attempt: Give player 1 more try
                             self.quiz_state = 2
@@ -2511,10 +2523,10 @@ class Quarter2:
                     
         # State 2: Wrong answer retry screen click (1 try remaining)
         elif self.quiz_state == 2:
-            box_w, box_h = 520, 250
+            box_w, box_h = 560, 290
             box_x = (self.width - box_w) // 2
             box_y = (self.height - box_h) // 2
-            btn_rect = pygame.Rect(box_x + (box_w - 220) // 2, box_y + 160, 220, 44)
+            btn_rect = pygame.Rect(box_x + (box_w - 220) // 2, box_y + 225, 220, 44)
             if btn_rect.collidepoint(pos):
                 self.quiz_state = 1
                 save_student_progress(self.main_menu)
@@ -2624,12 +2636,26 @@ class Quarter2:
         if self.time_up_dialog_active:
             return
 
+        # Update celebration particles & victory report card
+        if hasattr(self, 'celebration_particles'):
+            self.celebration_particles.update(dt)
+        if hasattr(self, 'victory_card') and self.victory_card.active:
+            self.victory_card.update(dt)
+            return
+
         # Handle smooth warp-out transition to stage select
         if self.warp_out_active:
             self.warp_out_timer -= dt
             if self.warp_out_timer <= 0:
                 self.warp_out_active = False
-                self.return_to_stage_select()
+                self.save_results_to_database()
+                total_questions = min(5, len(self.quiz_questions)) if hasattr(self, 'quiz_questions') and self.quiz_questions else 5
+                correct_answers = sum(1 for k, v in self.first_attempt_correct.items() if k <= total_questions and v)
+                percentage = (correct_answers / float(total_questions)) * 100.0 if total_questions > 0 else 100.0
+                score = int(correct_answers * 20)
+                from db.save_system import mark_quarter_completed
+                mark_quarter_completed(self.main_menu, "quarter2", score=score, percentage=percentage, total_questions=total_questions)
+                self.victory_card.show(total_questions=total_questions, correct_first_try=correct_answers, score=score)
             return
 
         # Update speed boost timer & banner timer
@@ -2783,7 +2809,7 @@ class Quarter2:
         overlay.fill((10, 15, 29, 170))
         self.screen.blit(overlay, (0, 0))
 
-        box_w, box_h = 520, 250
+        box_w, box_h = 560, 290
         box_x = (self.width - box_w) // 2
         box_y = (self.height - box_h) // 2
 
@@ -2797,16 +2823,50 @@ class Quarter2:
         info = self.station_npc_info.get(self.quiz_station_index, {})
         w_title = info.get("wrong_encouragement", "Barrio Stall - Try Again")
         speaker_surf = self.dialog_header_font.render(w_title, True, (248, 113, 113))
-        self.screen.blit(speaker_surf, (box_x + 32, box_y + 18))
+        self.screen.blit(speaker_surf, (box_x + 32, box_y + 16))
 
-        msg_surf1 = self.dialog_q_font.render("That choice is not correct.", True, (255, 255, 255))
+        msg_surf1 = self.dialog_q_font.render("That choice is not quite correct.", True, (255, 255, 255))
         msg_surf2 = self.dialog_hint_font.render("You have 1 try remaining! Think carefully and try again.", True, (254, 240, 138))
-        self.screen.blit(msg_surf1, (box_x + 30, box_y + 68))
-        self.screen.blit(msg_surf2, (box_x + 30, box_y + 98))
+        self.screen.blit(msg_surf1, (box_x + 30, box_y + 46))
+        self.screen.blit(msg_surf2, (box_x + 30, box_y + 70))
+
+        # Pedagogical Educational Hint Box
+        from core.hints import get_educational_hint
+        current_q = self.quiz_questions[self.current_question_index] if self.current_question_index < len(self.quiz_questions) else {}
+        q_text = current_q.get("question", "")
+        hint_text = get_educational_hint("quarter2", q_text)
+
+        hint_box = pygame.Rect(box_x + 20, box_y + 100, box_w - 40, 105)
+        pygame.draw.rect(self.screen, (30, 41, 59), hint_box, border_radius=8)
+        pygame.draw.rect(self.screen, (245, 158, 11), hint_box, 1, border_radius=8)
+
+        hint_title_font = pygame.font.SysFont("Comic Sans MS", 14, bold=True)
+        hint_body_font = pygame.font.SysFont("Comic Sans MS", 13)
+        h_title = hint_title_font.render("💡 Pedagogical Hint:", True, (255, 215, 0))
+        self.screen.blit(h_title, (hint_box.x + 12, hint_box.y + 6))
+
+        # Text wrap
+        words = hint_text.split(" ")
+        lines = []
+        cur = []
+        for w in words:
+            cur.append(w)
+            if hint_body_font.size(" ".join(cur))[0] > (hint_box.width - 24):
+                cur.pop()
+                lines.append(" ".join(cur))
+                cur = [w]
+        if cur:
+            lines.append(" ".join(cur))
+
+        hy = hint_box.y + 30
+        for hl in lines[:3]:
+            h_surf = hint_body_font.render(hl, True, (241, 245, 249))
+            self.screen.blit(h_surf, (hint_box.x + 12, hy))
+            hy += 22
 
         button_w, button_h = 220, 44
         button_x = box_x + (box_w - button_w) // 2
-        button_y = box_y + 160
+        button_y = box_y + 225
         btn_rect = pygame.Rect(button_x, button_y, button_w, button_h)
 
         is_hovered = btn_rect.collidepoint(self.cursor_pos)
@@ -3277,6 +3337,8 @@ class Quarter2:
             if self.anim_timer >= (5 if self.speed_boost_timer > 0 else 8):
                 self.anim_timer = 0
                 self.anim_frame = (self.anim_frame + 1) % 2
+                if hasattr(self.main_menu, 'audio_manager'):
+                    self.main_menu.audio_manager.play_sfx("footstep_stone")
         else:
             self.anim_frame = 0
 
@@ -3678,6 +3740,14 @@ class Quarter2:
         if self.pause_menu.is_paused:
             self.pause_menu.draw_modal(self.cursor_pos)
 
+        # Draw Celebration Particles
+        if hasattr(self, 'celebration_particles'):
+            self.celebration_particles.draw(self.screen)
+
+        # Draw 3-Star Victory Report Card Modal
+        if hasattr(self, 'victory_card') and self.victory_card.active:
+            self.victory_card.draw(self.cursor_pos)
+
     # ============================================================
     # DRAW UI
     # ============================================================
@@ -3770,6 +3840,14 @@ class Quarter2:
     # HANDLE EVENT
     # ============================================================
     def handle_event(self, event):
+        if hasattr(self, 'victory_card') and self.victory_card.active:
+            if self.victory_card.handle_event(event):
+                return "blocked"
+            if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                res = self.victory_card.handle_click(event.pos)
+                if res:
+                    return "blocked"
+
         if self.pause_menu.handle_event(event):
             return "blocked"
 

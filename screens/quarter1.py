@@ -6,6 +6,8 @@ import sys
 import cv2
 import numpy as np
 import time
+import math
+import random
 from .map_loader import MapLoader
 
 # Import db - safe import in case db modules are missing
@@ -64,7 +66,15 @@ class Quarter1:
 
         # Universal In-Stage Pause Menu
         from core.pause_menu import InGamePauseMenu
-        self.pause_menu = InGamePauseMenu(self.screen, self.width, self.height, self.main_menu, self.return_to_stage_select)
+        self.pause_menu = InGamePauseMenu(self.screen, self.width, self.height, self.main_menu, self.return_to_stage_select, restart_callback=self.restart_level)
+
+        # 3-Star Victory Report Card & Celebration Particles
+        from core.report_card import VictoryReportCard, CelebrationParticleSystem
+        self.celebration_particles = CelebrationParticleSystem()
+        self.victory_card = VictoryReportCard(self.screen, self.width, self.height, self.main_menu,
+                                              quarter_id="quarter1",
+                                              replay_callback=self.restart_level,
+                                              continue_callback=self.finish_and_return_to_hub)
 
         # ============================================================
         # PATHS
@@ -98,15 +108,6 @@ class Quarter1:
             "portal"
         )
 
-        self.NPC_PATH_BROMEN = os.path.join(
-            self.BASE_DIR,
-            "assets",
-            "images",
-            "sprites",
-            "objects",
-            "NPC",
-            "bromen"
-        )
 
         self.NPC_PATH_OLDMAN = os.path.join(
             self.BASE_DIR,
@@ -200,7 +201,7 @@ class Quarter1:
         # ============================================================
         # WALKABLE TILES
         # ============================================================
-        self.WALKABLE_TILES = {"G", "#", "1", "2", "3", "4", "5", "6", "7", "8", "P", "B"}
+        self.WALKABLE_TILES = {"G", "#", "1", "2", "3", "4", "5", "6", "7", "8", "P", "B", "r", "l", "u", "d"}
 
         # ============================================================
         # LOAD PLAYER SPRITES
@@ -212,15 +213,6 @@ class Quarter1:
         # ============================================================
         # LOAD NPC SPRITES
         # ============================================================
-        # Bromen NPC (animated)
-        self.npc_bromen_sprites = self.load_npc_sprites_animated(self.NPC_PATH_BROMEN, "bromen")
-        self.npc_bromen_anim_frame = 0
-        self.npc_bromen_anim_timer = 0
-        self.npc_bromen_x = 0
-        self.npc_bromen_y = 0
-        self.npc_bromen_tile_x = 0
-        self.npc_bromen_tile_y = 0
-        self.npc_bromen_found = False
 
         # Oldman NPC (static)
         self.npc_oldman_sprite = None
@@ -549,7 +541,6 @@ class Quarter1:
     def _init_npc_positions(self):
         """Initialize NPC positions from map data"""
         # Reset NPC flags
-        self.npc_bromen_found = False
         self.npc_oldman_found = False
         self.npc_skeleton_found = False
         self.npc_knight_found = False
@@ -558,12 +549,8 @@ class Quarter1:
         for marker, positions in self.npc_positions_data.items():
             for x, y in positions:
                 if marker == 'B':
-                    self.npc_bromen_tile_x = x
-                    self.npc_bromen_tile_y = y
-                    self.npc_bromen_x = x * TILE_SIZE
-                    self.npc_bromen_y = y * TILE_SIZE
-                    self.npc_bromen_found = True
-                    print(f"Bromen NPC at: ({x}, {y})")
+                    # 'B' in Quarter 1 maps represents bridge tiles, not an NPC
+                    continue
                 elif marker == 'O':
                     if not self.is_quiz_map or self.map_name.lower() in ['map1.txt', 'map2.txt', 'map3.txt']:
                         self.npc_oldman_tile_x = x
@@ -762,6 +749,10 @@ class Quarter1:
             print(f"[WARN] Exception loading database questions from Vercel: {e}. Using local questions.")
 
     def save_results_to_database(self):
+        import threading
+        threading.Thread(target=self._run_save_results_to_database, daemon=True).start()
+
+    def _run_save_results_to_database(self):
         if not self.is_quiz_map:
             return
 
@@ -1220,52 +1211,32 @@ class Quarter1:
     # LOAD STATIC PORTALS
     # ============================================================
     def load_static_portals(self):
-        for y, row in enumerate(self.render_map):
-            row_list = list(row)
+        self.portals = []
+        self.locked_portals = []
+        # Use game_map for portal detection so markers are never lost
+        for y, row in enumerate(self.game_map):
+            row_list = list(self.render_map[y]) if y < len(self.render_map) else []
             modified = False
             for x, c in enumerate(row):
-                if c == 'r':
-                    portal = self.Portal(x, y, 'right', is_static=True)
-                    portal.set_animation(self.portal_frames_cache['right'])
-                    if self.is_quiz_map and self.map_name.lower() != 'map1.txt':
+                if c in ['r', 'l', 'u', 'd']:
+                    dir_map = {'r': 'right', 'l': 'left', 'u': 'up', 'd': 'down'}
+                    p_dir = dir_map[c]
+                    portal = self.Portal(x, y, p_dir, is_static=True)
+                    portal.set_animation(self.portal_frames_cache[p_dir])
+                    if self.is_quiz_map:
                         self.locked_portals.append(portal)
                     else:
                         self.portals.append(portal)
-                    row_list[x] = 'G'
-                    modified = True
-                elif c == 'l':
-                    portal = self.Portal(x, y, 'left', is_static=True)
-                    portal.set_animation(self.portal_frames_cache['left'])
-                    if self.is_quiz_map and self.map_name.lower() != 'map1.txt':
-                        self.locked_portals.append(portal)
-                    else:
-                        self.portals.append(portal)
-                    row_list[x] = 'G'
-                    modified = True
-                elif c == 'u':
-                    portal = self.Portal(x, y, 'up', is_static=True)
-                    portal.set_animation(self.portal_frames_cache['up'])
-                    if self.is_quiz_map and self.map_name.lower() != 'map1.txt':
-                        self.locked_portals.append(portal)
-                    else:
-                        self.portals.append(portal)
-                    row_list[x] = 'G'
-                    modified = True
-                elif c == 'd':
-                    portal = self.Portal(x, y, 'down', is_static=True)
-                    portal.set_animation(self.portal_frames_cache['down'])
-                    if self.is_quiz_map and self.map_name.lower() != 'map1.txt':
-                        self.locked_portals.append(portal)
-                    else:
-                        self.portals.append(portal)
-                    row_list[x] = 'G'
-                    modified = True
-            if modified:
+                    if row_list and x < len(row_list):
+                        row_list[x] = 'G'
+                        modified = True
+            if modified and y < len(self.render_map):
                 self.render_map[y] = ''.join(row_list)
 
     def spawn_portals(self):
         for portal in self.locked_portals:
-            self.portals.append(portal)
+            if portal not in self.portals:
+                self.portals.append(portal)
         self.locked_portals = []
         print(f"[NPC] Spawned and unlocked portals: {len(self.portals)}")
 
@@ -1587,18 +1558,28 @@ class Quarter1:
             
         return "back"
 
+    def restart_level(self):
+        """Restarts the current Quarter 1 level."""
+        from screens.quarter1 import Quarter1
+        self.main_menu.quarter1 = Quarter1(self.screen, self.main_menu, self.map_name)
+
+    def finish_and_return_to_hub(self):
+        """Callback invoked by Victory Report Card to transition back to stage select."""
+        self.return_to_stage_select(completed=True)
+
     # ============================================================
     # JIGSAW PUZZLE SOUND SYNTHESIS
     # ============================================================
     def load_puzzle_sounds(self):
         try:
-            if hasattr(self, 'main_menu') and hasattr(self.main_menu, 'audio_manager'):
-                self.snap_sound = self.main_menu.audio_manager.get_sound("snap")
-                self.success_sound = self.main_menu.audio_manager.get_sound("success")
+            am = getattr(self.main_menu, 'audio_manager', None) if hasattr(self, 'main_menu') else None
+            if am:
+                self.snap_sound = am.get_sound("snap")
+                self.success_sound = am.get_sound("success")
             else:
                 from core.audio_manager import audio_manager
-                self.snap_sound = audio_manager.get_sound("snap")
-                self.success_sound = audio_manager.get_sound("success")
+                self.snap_sound = audio_manager.get_sound("snap") if audio_manager else None
+                self.success_sound = audio_manager.get_sound("success") if audio_manager else None
             if not self.snap_sound:
                 self.snap_sound = self.generate_snap_sound()
             if not self.success_sound:
@@ -2148,50 +2129,37 @@ class Quarter1:
                 current_portal = portal
                 break
 
-        if current_portal and self.fist_closed and self.teleport_cooldown <= 0:
+        if current_portal and self.teleport_cooldown <= 0:
             # Check if this is the goal portal
-            if current_portal.direction == self.goal_portal_direction:
-                if self.is_quiz_map and self.quiz_state < 6:
+            if current_portal.direction == self.goal_portal_direction or current_portal.is_static:
+                answered_count = sum(1 for s in self.shape_npcs.values() if s['answered']) if self.is_quiz_map else 5
+                if answered_count < 5:
                     if self.map_name.lower() == 'map1.txt':
-                        if not getattr(self, 'oldman_riddle_answered', False):
-                            return False
-                    elif self.map_name.lower() in ['map2.txt', 'map3.txt']:
-                        if not getattr(self, 'puzzle_solved', False):
-                            return False
+                        self.show_bridge_warning("I should answer all 5 questions to build the bridge!")
                     else:
-                        return False
-                # Intercept for map1.txt (bridge completion) and map2.txt / map3.txt (puzzle minigames)
-                if self.map_name.lower() == 'map1.txt':
-                    answered_count = sum(1 for s in self.shape_npcs.values() if s['answered'])
-                    if answered_count < 5:
-                        self.show_bridge_warning("I should answer the questions to build the bridge!")
-                        return False
-                    if not getattr(self, 'oldman_riddle_answered', False):
-                        self.show_bridge_warning("I must answer the Old Man's riddle first!")
-                        return False
-                elif self.map_name.lower() in ['map2.txt', 'map3.txt']:
-                    if not self.puzzle_solved:
-                        answered_count = sum(1 for s in self.shape_npcs.values() if s['answered'])
-                        if answered_count < 5:
-                            if self.map_name.lower() == 'map2.txt':
-                                self.show_bridge_warning("I should gather all the shape pieces first!")
-                            else:
-                                self.show_bridge_warning("I should gather all the puzzle pieces first!")
-                        else:
-                            self.show_bridge_warning("I must talk to the Old Man to solve the puzzle first!")
-                        return False
-                print(f"[TARGET] Goal reached! Returning to stage select...")
-                self.return_to_stage_select()
+                        self.show_bridge_warning("I should gather all 5 shape pieces first!")
+                    return False
+
+                print(f"[TARGET] Goal reached! Displaying 3-Star Victory Report Card...")
+                self.save_results_to_database()
+                total_questions = 5
+                correct_answers = sum(1 for v in self.first_attempt_correct.values() if v)
+                percentage = (correct_answers / float(total_questions)) * 100.0 if total_questions > 0 else 100.0
+                score = int(correct_answers * 20)
+                from db.save_system import mark_quarter_completed
+                mark_quarter_completed(self.main_menu, "quarter1", score=score, percentage=percentage, total_questions=total_questions)
+                self.victory_card.show(total_questions=total_questions, correct_first_try=correct_answers, score=score)
                 return True
 
             # Regular portal teleport (to another portal on same map)
-            other_portals = [p for p in self.portals if p != current_portal]
-            if other_portals:
-                target_portal = other_portals[0]
-                self.player_x = target_portal.get_center_x() - TILE_SIZE // 2
-                self.player_y = target_portal.get_center_y() - TILE_SIZE // 2
-                self.teleport_cooldown = self.TELEPORT_COOLDOWN_TIME
-                return True
+            if self.fist_closed:
+                other_portals = [p for p in self.portals if p != current_portal]
+                if other_portals:
+                    target_portal = other_portals[0]
+                    self.player_x = target_portal.get_center_x() - TILE_SIZE // 2
+                    self.player_y = target_portal.get_center_y() - TILE_SIZE // 2
+                    self.teleport_cooldown = self.TELEPORT_COOLDOWN_TIME
+                    return True
         return False
 
     # ============================================================
@@ -2276,6 +2244,11 @@ class Quarter1:
     # TRIGGER CLICK
     # ============================================================
     def trigger_click(self, pos):
+        if hasattr(self, 'victory_card') and self.victory_card.active:
+            res = self.victory_card.handle_click(pos)
+            if res:
+                return
+
         if self.pause_menu.handle_click(pos):
             return
 
@@ -2327,12 +2300,19 @@ class Quarter1:
                     if i == q_data["correct"]:
                         self.current_correct_phrase = random.choice(self.correct_phrases)
                         self.quiz_state = 3
+                        if hasattr(self.main_menu, 'audio_manager'):
+                            self.main_menu.audio_manager.play_sfx("correct")
+                            self.main_menu.audio_manager.play_sfx("star_chime")
+                        if hasattr(self, 'celebration_particles'):
+                            self.celebration_particles.spawn_burst(self.width // 2, self.height // 2, count=30)
                         print(f"[OK] Correct answer selected: {q_data['choices'][i]}")
                     else:
                         if hasattr(self, 'first_attempt_correct') and self.active_shape_id in self.first_attempt_correct:
                             self.first_attempt_correct[self.active_shape_id] = False
                         
                         self.question_attempts[self.active_shape_id] = self.question_attempts.get(self.active_shape_id, 0) + 1
+                        if hasattr(self.main_menu, 'audio_manager'):
+                            self.main_menu.audio_manager.play_sfx("wrong")
                         if self.question_attempts[self.active_shape_id] < 2:
                             self.quiz_state = 2
                             print(f"[FAIL] Incorrect answer selected! (Attempt 1 of 2)")
@@ -2346,10 +2326,10 @@ class Quarter1:
                     
         # State 2: Wrong answer retry screen click (1 try remaining)
         elif self.quiz_state == 2:
-            box_w, box_h = 520, 250
+            box_w, box_h = 560, 290
             box_x = (self.width - box_w) // 2
             box_y = (self.height - box_h) // 2
-            btn_rect = pygame.Rect(box_x + (box_w - 200) // 2, box_y + 160, 200, 42)
+            btn_rect = pygame.Rect(box_x + (box_w - 200) // 2, box_y + 225, 200, 42)
             if btn_rect.collidepoint(pos):
                 self.quiz_state = 1
                 save_student_progress(self.main_menu)
@@ -2372,14 +2352,8 @@ class Quarter1:
                         self.trigger_award_animation()
                         
                     if answered_count == 5:
-                        if self.map_name.lower() == 'map1.txt':
-                            self.spawn_portals()
-                            self.quiz_state = 0
-                        elif self.map_name.lower() in ['map2.txt', 'map3.txt']:
-                            self.quiz_state = 0
-                        else:
-                            self.spawn_portals()
-                            self.quiz_state = 5
+                        self.spawn_portals()
+                        self.quiz_state = 0
                     else:
                         self.quiz_state = 0
                 else:
@@ -2410,14 +2384,8 @@ class Quarter1:
                         self.trigger_award_animation()
                         
                     if answered_count == 5:
-                        if self.map_name.lower() == 'map1.txt':
-                            self.spawn_portals()
-                            self.quiz_state = 0
-                        elif self.map_name.lower() in ['map2.txt', 'map3.txt']:
-                            self.quiz_state = 0
-                        else:
-                            self.spawn_portals()
-                            self.quiz_state = 5
+                        self.spawn_portals()
+                        self.quiz_state = 0
                     else:
                         self.quiz_state = 0
                 else:
@@ -2439,7 +2407,7 @@ class Quarter1:
             if btn_rect.collidepoint(pos):
                 self.quiz_state = 6
                 self.npc_oldman_found = False
-                print("[Bromen] Old Man disappeared from Quarter 1")
+                print("[NPC] Old Man disappeared from Quarter 1")
                 save_student_progress(self.main_menu)
  
         # State 10: Old Man Warning Dialog OK Click
@@ -2557,6 +2525,13 @@ class Quarter1:
         if self.pause_menu.is_paused:
             return
 
+        # Update celebration particles & victory report card
+        if hasattr(self, 'celebration_particles'):
+            self.celebration_particles.update(dt)
+        if hasattr(self, 'victory_card') and self.victory_card.active:
+            self.victory_card.update(dt)
+            return
+
         # 10-Minute Stage Timer
         if not getattr(self, 'completed', False) and not self.time_up_dialog_active:
             self.stage_time_remaining = max(0.0, self.stage_time_remaining - dt)
@@ -2593,11 +2568,6 @@ class Quarter1:
             if self.title_elapsed >= self.title_duration:
                 self.title_active = False
 
-        if self.npc_bromen_sprites and self.npc_bromen_found:
-            self.npc_bromen_anim_timer += 1
-            if self.npc_bromen_anim_timer >= 5:
-                self.npc_bromen_anim_timer = 0
-                self.npc_bromen_anim_frame = (self.npc_bromen_anim_frame + 1) % len(self.npc_bromen_sprites)
 
         # Update Shape NPC animation frame
         if self.is_quiz_map:
@@ -2754,6 +2724,8 @@ class Quarter1:
             if self.anim_timer >= 8:
                 self.anim_timer = 0
                 self.anim_frame = (self.anim_frame + 1) % 2
+                if hasattr(self.main_menu, 'audio_manager'):
+                    self.main_menu.audio_manager.play_sfx("footstep_grass")
         else:
             self.anim_frame = 0
 
@@ -2869,9 +2841,6 @@ class Quarter1:
             for portal in self.portals:
                 portal.draw(self.screen, self.camera_x, self.camera_y, ZOOM, self.width, self.height)
 
-        if self.npc_bromen_found:
-            self.draw_npc_animated(self.npc_bromen_x, self.npc_bromen_y,
-                                   self.npc_bromen_sprites, self.npc_bromen_anim_frame)
 
         # Draw Shape NPCs
         if self.is_quiz_map:
@@ -3125,6 +3094,14 @@ class Quarter1:
         if self.pause_menu.is_paused:
             self.pause_menu.draw_modal(self.cursor_pos)
 
+        # Draw Celebration Particles
+        if hasattr(self, 'celebration_particles'):
+            self.celebration_particles.draw(self.screen)
+
+        # Draw 3-Star Victory Report Card Modal
+        if hasattr(self, 'victory_card') and self.victory_card.active:
+            self.victory_card.draw(self.cursor_pos)
+
     def draw_quiz_dialog(self):
         overlay = pygame.Surface((self.width, self.height))
         overlay.fill((0, 0, 0))
@@ -3190,13 +3167,13 @@ class Quarter1:
         overlay.set_alpha(150)
         self.screen.blit(overlay, (0, 0))
 
-        box_w, box_h = 520, 250
+        box_w, box_h = 560, 290
         box_x = (self.width - box_w) // 2
         box_y = (self.height - box_h) // 2
 
         dialog_rect = pygame.Rect(box_x, box_y, box_w, box_h)
-        pygame.draw.rect(self.screen, (15, 23, 42), dialog_rect)
-        pygame.draw.rect(self.screen, (220, 38, 38), dialog_rect, 3, border_radius=8)
+        pygame.draw.rect(self.screen, (15, 23, 42), dialog_rect, border_radius=12)
+        pygame.draw.rect(self.screen, (220, 38, 38), dialog_rect, 3, border_radius=12)
 
         speaker_font = pygame.font.SysFont("Comic Sans MS", 18, bold=True)
         speaker_name = "Old Man"
@@ -3205,18 +3182,52 @@ class Quarter1:
             if npc_data:
                 speaker_name = f"{npc_data['name'].capitalize()} NPC"
         
-        speaker_surf = speaker_font.render(speaker_name, True, (220, 38, 38))
-        self.screen.blit(speaker_surf, (box_x + 25, box_y + 20))
+        speaker_surf = speaker_font.render(speaker_name, True, (239, 68, 68))
+        self.screen.blit(speaker_surf, (box_x + 25, box_y + 16))
 
-        q_font = pygame.font.SysFont("Comic Sans MS", 16)
-        msg_surf1 = q_font.render("Hmm, that is not correct.", True, (255, 255, 255))
+        q_font = pygame.font.SysFont("Comic Sans MS", 15)
+        msg_surf1 = q_font.render("Hmm, that is not quite correct.", True, (255, 255, 255))
         msg_surf2 = q_font.render("You have 1 try remaining! Think carefully.", True, (255, 215, 0))
-        self.screen.blit(msg_surf1, (box_x + 25, box_y + 65))
-        self.screen.blit(msg_surf2, (box_x + 25, box_y + 95))
+        self.screen.blit(msg_surf1, (box_x + 25, box_y + 48))
+        self.screen.blit(msg_surf2, (box_x + 25, box_y + 72))
+
+        # Pedagogical Educational Hint Box
+        from core.hints import get_educational_hint
+        current_q = self.quiz_questions[self.current_question_index] if self.current_question_index < len(self.quiz_questions) else {}
+        q_text = current_q.get("question", "")
+        hint_text = get_educational_hint("quarter1", q_text)
+
+        hint_box = pygame.Rect(box_x + 20, box_y + 104, box_w - 40, 105)
+        pygame.draw.rect(self.screen, (30, 41, 59), hint_box, border_radius=8)
+        pygame.draw.rect(self.screen, (245, 158, 11), hint_box, 1, border_radius=8)
+
+        hint_title_font = pygame.font.SysFont("Comic Sans MS", 14, bold=True)
+        hint_body_font = pygame.font.SysFont("Comic Sans MS", 13)
+        h_title = hint_title_font.render("💡 Pedagogical Hint:", True, (255, 215, 0))
+        self.screen.blit(h_title, (hint_box.x + 12, hint_box.y + 6))
+
+        # Text wrap
+        words = hint_text.split(" ")
+        lines = []
+        cur = []
+        for w in words:
+            cur.append(w)
+            if hint_body_font.size(" ".join(cur))[0] > (hint_box.width - 24):
+                cur.pop()
+                lines.append(" ".join(cur))
+                cur = [w]
+        if cur:
+            lines.append(" ".join(cur))
+
+        hy = hint_box.y + 30
+        for hl in lines[:3]:
+            h_surf = hint_body_font.render(hl, True, (241, 245, 249))
+            self.screen.blit(h_surf, (hint_box.x + 12, hy))
+            hy += 22
 
         button_w, button_h = 200, 42
         button_x = box_x + (box_w - button_w) // 2
-        button_y = box_y + 160
+        button_y = box_y + 225
         btn_rect = pygame.Rect(button_x, button_y, button_w, button_h)
 
         is_hovered = btn_rect.collidepoint(self.cursor_pos)
@@ -3877,7 +3888,8 @@ class Quarter1:
                 self.screen.blit(obj1_surf, (box_x + 15, box_y + 28))
             
             # Goal portal state item
-            if self.quiz_state < 6:
+            answered_count = sum(1 for s in self.shape_npcs.values() if s['answered']) if self.is_quiz_map else 5
+            if answered_count < 5 or len(self.portals) == 0:
                 obj2 = "- Portal Status: LOCKED"
                 obj2_color = (244, 63, 94)  # Rose
             else:
@@ -3888,8 +3900,6 @@ class Quarter1:
 
         if self.show_info:
             npc_status = []
-            if self.npc_bromen_found:
-                npc_status.append("Bromen")
             if self.npc_oldman_found:
                 npc_status.append("Oldman")
             if self.npc_skeleton_found:
@@ -3924,6 +3934,14 @@ class Quarter1:
     # HANDLE EVENT
     # ============================================================
     def handle_event(self, event):
+        if hasattr(self, 'victory_card') and self.victory_card.active:
+            if self.victory_card.handle_event(event):
+                return "blocked"
+            if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                res = self.victory_card.handle_click(event.pos)
+                if res:
+                    return "blocked"
+
         if self.pause_menu.handle_event(event):
             return "blocked"
 
@@ -3986,6 +4004,8 @@ class Quarter1:
             elif event.key in [pygame.K_SPACE, pygame.K_RETURN]:
                 if self.quiz_state in [1, 2, 3, 5, 10, 11, 12, 13, 14, 20, 21, 22]:
                     self.trigger_click(self.cursor_pos)
+                elif self.quiz_state == 0:
+                    self.check_portal_teleport_on_hold()
         elif event.type == pygame.MOUSEBUTTONDOWN:
             if event.button == 1:  # Left click
                 self.trigger_click(event.pos)

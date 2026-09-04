@@ -7,17 +7,20 @@ class InGamePauseMenu:
     Provides:
     - On-screen pause button (compatible with gesture fist & mouse clicks).
     - Timer freezing while paused.
-    - Interactive modal with Resume, Audio Settings, and Return to Stage Select.
+    - Interactive modal with Resume, Restart Level, Controls Guide, Audio Settings, and Return to Stage Select.
+    - Built-in Controls Guide overlay.
     - Keyboard shortcut support (ESC, P).
     """
 
-    def __init__(self, screen, width, height, main_menu, return_callback):
+    def __init__(self, screen, width, height, main_menu, return_callback, restart_callback=None):
         self.screen = screen
         self.width = width
         self.height = height
         self.main_menu = main_menu
         self.return_callback = return_callback
+        self.restart_callback = restart_callback
         self.is_paused = False
+        self.showing_controls = False
 
         # Top-right Pause Button
         self.btn_w = 114
@@ -28,13 +31,22 @@ class InGamePauseMenu:
 
         # Modal geometry
         self.modal_w = 460
-        self.modal_h = 300
+        self.modal_h = 390
         self.modal_x = (self.width - self.modal_w) // 2
         self.modal_y = (self.height - self.modal_h) // 2
 
-        self.resume_rect = pygame.Rect(self.modal_x + 50, self.modal_y + 85, 360, 48)
-        self.audio_rect = pygame.Rect(self.modal_x + 50, self.modal_y + 145, 360, 48)
-        self.exit_rect = pygame.Rect(self.modal_x + 50, self.modal_y + 205, 360, 48)
+        self.resume_rect = pygame.Rect(self.modal_x + 45, self.modal_y + 70, 370, 44)
+        self.restart_rect = pygame.Rect(self.modal_x + 45, self.modal_y + 126, 370, 44)
+        self.controls_rect = pygame.Rect(self.modal_x + 45, self.modal_y + 182, 370, 44)
+        self.audio_rect = pygame.Rect(self.modal_x + 45, self.modal_y + 238, 370, 44)
+        self.exit_rect = pygame.Rect(self.modal_x + 45, self.modal_y + 294, 370, 44)
+
+        # Controls Guide Sub-modal geometry
+        self.guide_w = 560
+        self.guide_h = 420
+        self.guide_x = (self.width - self.guide_w) // 2
+        self.guide_y = (self.height - self.guide_h) // 2
+        self.guide_back_rect = pygame.Rect(self.guide_x + (self.guide_w - 220) // 2, self.guide_y + self.guide_h - 58, 220, 42)
 
     def get_font(self, size, bold=False):
         for name in ["Comic Sans MS", "Segoe UI", "Arial"]:
@@ -48,28 +60,57 @@ class InGamePauseMenu:
         """Processes keyboard toggle for pause (ESC or P)."""
         if event.type == pygame.KEYDOWN:
             if event.key in [pygame.K_ESCAPE, pygame.K_p]:
+                if self.showing_controls:
+                    self.showing_controls = False
+                    return True
                 self.toggle_pause()
                 return True
         return False
 
+    def _play_sfx(self, name):
+        mgr = getattr(self.main_menu, 'audio_manager', None)
+        if mgr is not None:
+            try:
+                mgr.play_sfx(name)
+            except Exception:
+                pass
+
     def toggle_pause(self):
         self.is_paused = not self.is_paused
-        if hasattr(self.main_menu, 'audio_manager'):
-            self.main_menu.audio_manager.play_sfx("click")
+        if not self.is_paused:
+            self.showing_controls = False
+        self._play_sfx("click")
 
     def handle_click(self, pos):
         """Handles cursor or mouse clicks on pause button or modal."""
-        # 1. Check Pause Button toggle
-        if self.pause_btn_rect.collidepoint(pos):
+        # 1. Check Pause Button toggle (only when not paused)
+        if not self.is_paused and self.pause_btn_rect.collidepoint(pos):
             self.toggle_pause()
             return True
 
         # 2. If Paused, intercept modal clicks
         if self.is_paused:
+            if self.showing_controls:
+                if self.guide_back_rect.collidepoint(pos):
+                    self.showing_controls = False
+                    self._play_sfx("click")
+                return True
+
             if self.resume_rect.collidepoint(pos):
                 self.is_paused = False
-                if hasattr(self.main_menu, 'audio_manager'):
-                    self.main_menu.audio_manager.play_sfx("click")
+                self._play_sfx("click")
+                return True
+
+            elif self.restart_rect.collidepoint(pos):
+                self.is_paused = False
+                self._play_sfx("click")
+                if callable(self.restart_callback):
+                    self.restart_callback()
+                return True
+
+            elif self.controls_rect.collidepoint(pos):
+                self.showing_controls = True
+                self._play_sfx("click")
                 return True
 
             elif self.audio_rect.collidepoint(pos):
@@ -79,8 +120,7 @@ class InGamePauseMenu:
 
             elif self.exit_rect.collidepoint(pos):
                 self.is_paused = False
-                if hasattr(self.main_menu, 'audio_manager'):
-                    self.main_menu.audio_manager.play_sfx("click")
+                self._play_sfx("click")
                 if callable(self.return_callback):
                     try:
                         self.return_callback(completed=False)
@@ -108,14 +148,19 @@ class InGamePauseMenu:
         self.screen.blit(txt, txt.get_rect(center=self.pause_btn_rect.center))
 
     def draw_modal(self, cursor_pos):
-        """Draws the pause modal overlay."""
+        """Draws the pause modal overlay or controls guide overlay."""
         if not self.is_paused:
             return
 
         # Semi-transparent overlay
         dim = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
-        dim.fill((0, 0, 0, 185))
+        dim.fill((0, 0, 0, 195))
         self.screen.blit(dim, (0, 0))
+
+        # Check if showing Controls Guide
+        if self.showing_controls:
+            self.draw_controls_guide(cursor_pos)
+            return
 
         # Centered Dialog Box
         modal_rect = pygame.Rect(self.modal_x, self.modal_y, self.modal_w, self.modal_h)
@@ -127,7 +172,7 @@ class InGamePauseMenu:
         btn_font = self.get_font(16, bold=True)
 
         title = t_font.render("GAME PAUSED", True, (255, 215, 0))
-        self.screen.blit(title, title.get_rect(center=(self.modal_x + self.modal_w // 2, self.modal_y + 40)))
+        self.screen.blit(title, title.get_rect(center=(self.modal_x + self.modal_w // 2, self.modal_y + 36)))
 
         # 1. Resume Button (Green)
         r_hov = self.resume_rect.collidepoint(cursor_pos)
@@ -137,7 +182,23 @@ class InGamePauseMenu:
         r_txt = btn_font.render("Resume Game", True, (255, 255, 255))
         self.screen.blit(r_txt, r_txt.get_rect(center=self.resume_rect.center))
 
-        # 2. Audio Settings Button (Blue)
+        # 2. Restart Level Button (Amber / Orange)
+        res_hov = self.restart_rect.collidepoint(cursor_pos)
+        res_bg = (234, 88, 12) if res_hov else (194, 65, 12)
+        pygame.draw.rect(self.screen, res_bg, self.restart_rect, border_radius=10)
+        pygame.draw.rect(self.screen, (253, 186, 116), self.restart_rect, 2, border_radius=10)
+        res_txt = btn_font.render("Restart Level", True, (255, 255, 255))
+        self.screen.blit(res_txt, res_txt.get_rect(center=self.restart_rect.center))
+
+        # 3. Controls Guide Button (Indigo / Violet)
+        c_hov = self.controls_rect.collidepoint(cursor_pos)
+        c_bg = (99, 102, 241) if c_hov else (79, 70, 229)
+        pygame.draw.rect(self.screen, c_bg, self.controls_rect, border_radius=10)
+        pygame.draw.rect(self.screen, (199, 210, 254), self.controls_rect, 2, border_radius=10)
+        c_txt = btn_font.render("Controls Guide", True, (255, 255, 255))
+        self.screen.blit(c_txt, c_txt.get_rect(center=self.controls_rect.center))
+
+        # 4. Audio Settings Button (Blue)
         s_hov = self.audio_rect.collidepoint(cursor_pos)
         s_bg = (59, 130, 246) if s_hov else (37, 99, 235)
         pygame.draw.rect(self.screen, s_bg, self.audio_rect, border_radius=10)
@@ -145,10 +206,48 @@ class InGamePauseMenu:
         s_txt = btn_font.render("Audio & Sound Settings", True, (255, 255, 255))
         self.screen.blit(s_txt, s_txt.get_rect(center=self.audio_rect.center))
 
-        # 3. Return to Stage Select Button (Red)
+        # 5. Return to Stage Select Button (Red)
         e_hov = self.exit_rect.collidepoint(cursor_pos)
         e_bg = (239, 68, 68) if e_hov else (185, 28, 28)
         pygame.draw.rect(self.screen, e_bg, self.exit_rect, border_radius=10)
         pygame.draw.rect(self.screen, (254, 202, 202), self.exit_rect, 2, border_radius=10)
         e_txt = btn_font.render("Return to Stage Select", True, (255, 255, 255))
         self.screen.blit(e_txt, e_txt.get_rect(center=self.exit_rect.center))
+
+    def draw_controls_guide(self, cursor_pos):
+        """Renders the comprehensive controls guide overlay."""
+        card_rect = pygame.Rect(self.guide_x, self.guide_y, self.guide_w, self.guide_h)
+        pygame.draw.rect(self.screen, (15, 23, 42), card_rect, border_radius=16)
+        pygame.draw.rect(self.screen, (99, 102, 241), card_rect, 3, border_radius=16)
+
+        t_font = self.get_font(22, bold=True)
+        h_font = self.get_font(16, bold=True)
+        b_font = self.get_font(14)
+
+        title = t_font.render("CONTROLS GUIDE", True, (255, 215, 0))
+        self.screen.blit(title, title.get_rect(center=(self.guide_x + self.guide_w // 2, self.guide_y + 32)))
+
+        controls_data = [
+            ("Hand Gestures", "Move open hand to guide cursor / steer player. Stretch out to walk faster.", (100, 255, 150)),
+            ("Closed Fist", "Close and hold fist to select choices, interact with NPCs, and confirm.", (255, 215, 0)),
+            ("Keyboard", "WASD or Arrow Keys to move. Space / Enter to interact or advance dialogue.", (147, 197, 253)),
+            ("Mouse", "Move cursor to aim or steer. Left Click to choose answers and interact.", (244, 114, 182)),
+            ("Pause & Menu", "Press ESC or P anytime to pause the game and adjust sound.", (209, 213, 219))
+        ]
+
+        curr_y = self.guide_y + 68
+        for name, desc, col in controls_data:
+            badge = h_font.render(name, True, col)
+            self.screen.blit(badge, (self.guide_x + 30, curr_y))
+
+            desc_surf = b_font.render(desc, True, (241, 245, 249))
+            self.screen.blit(desc_surf, (self.guide_x + 30, curr_y + 24))
+            curr_y += 56
+
+        # Back Button
+        b_hov = self.guide_back_rect.collidepoint(cursor_pos)
+        b_bg = (79, 70, 229) if b_hov else (67, 56, 202)
+        pygame.draw.rect(self.screen, b_bg, self.guide_back_rect, border_radius=10)
+        pygame.draw.rect(self.screen, (199, 210, 254), self.guide_back_rect, 2, border_radius=10)
+        b_txt = h_font.render("Back to Pause", True, (255, 255, 255))
+        self.screen.blit(b_txt, b_txt.get_rect(center=self.guide_back_rect.center))

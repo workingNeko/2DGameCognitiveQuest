@@ -419,6 +419,73 @@ class AudioManager:
             a_fan = (np.clip(w_fan, -1.0, 1.0) * 29000).astype(np.int16)
             self.sfx_cache["victory_fanfare"] = pygame.sndarray.make_sound(np.column_stack((a_fan, a_fan)))
 
+            # 15. Cinematic Portal Transition (Dimensional sub-bass rumble + rising swirl + sparkle chimes + wind whoosh)
+            dur_trans = 0.95
+            t_trans = np.linspace(0, dur_trans, int(sr * dur_trans), False)
+            bass_f = 45 + 75 * (t_trans / dur_trans)**1.2
+            w_bass = 0.45 * np.sin(2 * np.pi * bass_f * t_trans) * np.sin(np.pi * (t_trans / dur_trans)**0.7)
+            sweep_f = 240 + 1350 * (t_trans / dur_trans)**1.8
+            fm_mod = 18 * np.sin(2 * np.pi * 14 * t_trans)
+            w_sweep = 0.40 * np.sin(2 * np.pi * (sweep_f + fm_mod) * t_trans)
+            chords = [523.25, 659.25, 783.99, 1046.5, 1318.5]
+            w_sparkle = np.zeros_like(t_trans)
+            for idx, freq in enumerate(chords):
+                start = 0.15 + idx * 0.08
+                active = (t_trans >= start)
+                dt = np.maximum(0, t_trans - start)
+                env = np.exp(-dt * 4.5) * active
+                w_sparkle += 0.12 * np.sin(2 * np.pi * freq * dt) * env
+            noise = np.random.uniform(-1, 1, len(t_trans))
+            k_size = 40
+            kernel = np.ones(k_size) / k_size
+            smooth_n = np.convolve(noise, kernel, mode='same')
+            w_whoosh = 0.35 * smooth_n * (np.sin(np.pi * (t_trans / dur_trans))**1.5)
+            mix_l = w_bass + w_sweep * (0.9 - 0.2 * (t_trans / dur_trans)) + w_sparkle * 1.1 + w_whoosh * (0.8 + 0.3 * np.sin(2*np.pi*3*t_trans))
+            mix_r = w_bass + w_sweep * (0.7 + 0.2 * (t_trans / dur_trans)) + w_sparkle * 0.9 + w_whoosh * (0.8 - 0.3 * np.sin(2*np.pi*3*t_trans))
+            fade_in = np.minimum(1.0, t_trans / 0.03)
+            fade_out = np.minimum(1.0, (dur_trans - t_trans) / 0.08)
+            env_m = fade_in * fade_out
+            a_l = (np.clip(mix_l * env_m, -0.95, 0.95) * 30000).astype(np.int16)
+            a_r = (np.clip(mix_r * env_m, -0.95, 0.95) * 30000).astype(np.int16)
+            self.sfx_cache["portal_transition"] = pygame.sndarray.make_sound(np.column_stack((a_l, a_r)))
+
+            # 16. Typewriter Dialogue Voice Blip
+            t_blip = np.linspace(0, 0.025, int(sr * 0.025), False)
+            w_blip = np.sin(2 * np.pi * 580 * t_blip) * np.exp(-t_blip * 140)
+            a_blip = (w_blip * 18000).astype(np.int16)
+            self.sfx_cache["dialogue_blip"] = pygame.sndarray.make_sound(np.column_stack((a_blip, a_blip)))
+
+            # 17. Footstep Grass (Gentle soft high-frequency rustle)
+            t_grass = np.linspace(0, 0.04, int(sr * 0.04), False)
+            n_grass = np.random.uniform(-0.5, 0.5, len(t_grass))
+            k_g = np.ones(12) / 12
+            w_grass = np.convolve(n_grass, k_g, mode='same') * np.exp(-t_grass * 60)
+            a_grass = (w_grass * 12000).astype(np.int16)
+            self.sfx_cache["footstep_grass"] = pygame.sndarray.make_sound(np.column_stack((a_grass, a_grass)))
+
+            # 18. Footstep Stone (Crisp low tap)
+            t_stone = np.linspace(0, 0.035, int(sr * 0.035), False)
+            w_stone = (0.7 * np.sin(2 * np.pi * 280 * t_stone) + 0.3 * np.sin(2 * np.pi * 560 * t_stone)) * np.exp(-t_stone * 110)
+            a_stone = (w_stone * 14000).astype(np.int16)
+            self.sfx_cache["footstep_stone"] = pygame.sndarray.make_sound(np.column_stack((a_stone, a_stone)))
+
+            # 19. Footstep Wood (Warm hollow wooden step)
+            t_wood = np.linspace(0, 0.045, int(sr * 0.045), False)
+            w_wood = np.sin(2 * np.pi * 380 * t_wood) * np.exp(-t_wood * 75)
+            a_wood = (w_wood * 15000).astype(np.int16)
+            self.sfx_cache["footstep_wood"] = pygame.sndarray.make_sound(np.column_stack((a_wood, a_wood)))
+
+            # 20. Star Chime (Ascending bright 3-note sparkle arpeggio)
+            t_star = np.linspace(0, 0.45, int(sr * 0.45), False)
+            w_star = np.zeros_like(t_star)
+            for s_idx, f_star in enumerate([880, 1174.66, 1760]):
+                st = s_idx * 0.09
+                active_s = (t_star >= st)
+                dt_s = np.maximum(0, t_star - st)
+                w_star += np.sin(2 * np.pi * f_star * dt_s) * np.exp(-dt_s * 9) * active_s * 0.3
+            a_star = (np.clip(w_star, -1.0, 1.0) * 26000).astype(np.int16)
+            self.sfx_cache["star_chime"] = pygame.sndarray.make_sound(np.column_stack((a_star, a_star)))
+
         except Exception as e:
             print(f"[WARN] AudioManager: Warning synthesizing core SFX: {e}")
 

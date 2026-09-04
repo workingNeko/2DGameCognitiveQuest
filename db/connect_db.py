@@ -19,6 +19,7 @@ class Database:
     def __init__(self, *args, **kwargs):
         self.connection = None
         self.cursor = None
+        self._assessment_cache = {}
         print(f"[API SUCCESS] Web API Client initialized targeting: {BASE_URL}")
 
     def connect(self):
@@ -34,26 +35,49 @@ class Database:
         pass
 
     def get_students(self):
-        """Fetch students list from Vercel API."""
+        """Fetch students list from Vercel API, with automatic local cache fallback."""
+        import os
         url = f"{BASE_URL}/students"
+        cache_dir = os.path.join("db", "cache")
+        cache_file = os.path.join(cache_dir, "students_cache.json")
         try:
             req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-            with urllib.request.urlopen(req, timeout=8) as response:
+            with urllib.request.urlopen(req, timeout=5) as response:
                 data = json.loads(response.read().decode('utf-8'))
+                if isinstance(data, list) and len(data) > 0:
+                    try:
+                        os.makedirs(cache_dir, exist_ok=True)
+                        with open(cache_file, "w", encoding="utf-8") as f:
+                            json.dump(data, f, indent=4)
+                    except Exception:
+                        pass
                 # If online, flush any pending offline sync queue
                 self.sync_offline_results()
                 return data
         except Exception as e:
             print(f"[API ERROR] Failed to fetch students from Vercel: {e}")
+            # Offline fallback: read from local cache
+            if os.path.exists(cache_file):
+                try:
+                    with open(cache_file, "r", encoding="utf-8") as f:
+                        cached = json.load(f)
+                    if isinstance(cached, list) and len(cached) > 0:
+                        print(f"[OFFLINE CACHE] Loaded {len(cached)} student(s) from local cache!")
+                        return cached
+                except Exception:
+                    pass
             return None
 
     def get_questions(self, quarter=1):
-        """Fetch questions for a specific quarter unit from Vercel API."""
+        """Fetch questions for a specific quarter unit from Vercel API, with local cache fallback."""
+        import os
+        cache_dir = os.path.join("db", "cache")
+        cache_file = os.path.join(cache_dir, f"questions_q{quarter}.json")
         try:
             # 1. Fetch units to find all matching unit_ids for the quarter
             units_url = f"{BASE_URL}/units"
             req_units = urllib.request.Request(units_url, headers={'User-Agent': 'Mozilla/5.0'})
-            with urllib.request.urlopen(req_units, timeout=8) as resp:
+            with urllib.request.urlopen(req_units, timeout=5) as resp:
                 units = json.loads(resp.read().decode('utf-8'))
             
             # Find all units matching Quarter (e.g. Q1, Q2, etc.)
@@ -73,7 +97,7 @@ class Database:
             # 2. Fetch all questions and filter by unit_id or quarter field
             questions_url = f"{BASE_URL}/questions"
             req_qs = urllib.request.Request(questions_url, headers={'User-Agent': 'Mozilla/5.0'})
-            with urllib.request.urlopen(req_qs, timeout=8) as resp:
+            with urllib.request.urlopen(req_qs, timeout=5) as resp:
                 all_questions = json.loads(resp.read().decode('utf-8'))
             
             # Filter active questions matching unit_id or quarter field
@@ -95,23 +119,44 @@ class Database:
                 if is_match:
                     filtered.append(q)
             
-            # Print status summary
+            # Print status summary and cache if questions found
             if len(filtered) > 0:
                 print(f"[API SUCCESS] Found {len(filtered)} active questions matching {q_full_str}")
+                try:
+                    os.makedirs(cache_dir, exist_ok=True)
+                    with open(cache_file, "w", encoding="utf-8") as f:
+                        json.dump(filtered, f, indent=4)
+                except Exception:
+                    pass
+                return filtered
             else:
                 print(f"[API WARNING] No active questions found matching {q_full_str}")
             
-            return filtered
         except Exception as e:
             print(f"[API ERROR] Failed to fetch questions from Vercel: {e}")
-            return None
+
+        # Offline fallback: read from local cache if available
+        if os.path.exists(cache_file):
+            try:
+                with open(cache_file, "r", encoding="utf-8") as f:
+                    cached_qs = json.load(f)
+                if isinstance(cached_qs, list) and len(cached_qs) > 0:
+                    print(f"[OFFLINE CACHE] Loaded {len(cached_qs)} dynamic question(s) for Quarter {quarter} from local cache!")
+                    return cached_qs
+            except Exception:
+                pass
+
+        return None
 
     def get_assessment_id(self, quarter=1):
-        """Fetch assessments and find one matching the given Quarter."""
+        """Fetch assessments and find one matching the given Quarter, with session cache."""
+        if quarter in self._assessment_cache:
+            return self._assessment_cache[quarter]
+
         url = f"{BASE_URL}/assessments"
         try:
             req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-            with urllib.request.urlopen(req, timeout=8) as resp:
+            with urllib.request.urlopen(req, timeout=5) as resp:
                 assessments = json.loads(resp.read().decode('utf-8'))
             
             q_str = f"Q{quarter}"
@@ -119,7 +164,9 @@ class Database:
             for ass in assessments:
                 title = str(ass.get("title", "")).upper()
                 if q_str in title or q_full_str.upper() in title:
-                    return ass.get("id")
+                    ass_id = ass.get("id")
+                    self._assessment_cache[quarter] = ass_id
+                    return ass_id
             return None
         except Exception as e:
             print(f"[API ERROR] Failed to fetch assessment_id: {e}")
@@ -247,26 +294,177 @@ class Database:
             self.queue_offline_result(payload)
             return False
 
-    def get_grades(self):
-        """Fetch all recorded grades (recent grades) from Vercel API."""
+    def _get_student_reset_timestamp(self, student_id):
+        """Read recorded reset timestamp for a student from db/reset_records.json."""
+        if not student_id:
+            return None
+        import os
+        reset_file = os.path.join("db", "reset_records.json")
+        if os.path.exists(reset_file):
+            try:
+                with open(reset_file, "r", encoding="utf-8") as f:
+                    records = json.load(f)
+                    val = records.get(str(student_id))
+                    if val is not None:
+                        return float(val)
+            except Exception:
+                pass
+        return None
+
+    def delete_student_records(self, student_id=None, student_db_id=None):
+        """
+        Purge all past progress and grade records from the live Vercel database for a student:
+        1. Deletes all past grade rows for this student via DELETE /api/grades
+        2. Clears any pending offline synchronization results in db/pending_sync.json
+        3. Records a persistent reset timestamp in db/reset_records.json so historical game results
+           prior to starting this new game are excluded from leaderboards and rankings.
+        """
+        import os
+        import time
+        from datetime import datetime, timezone
+
+        target_ids = set()
+        if student_id is not None:
+            target_ids.add(str(student_id))
+            if str(student_id).isdigit():
+                target_ids.add(int(student_id))
+        if student_db_id is not None:
+            target_ids.add(str(student_db_id))
+            if str(student_db_id).isdigit():
+                target_ids.add(int(student_db_id))
+
+        if not target_ids:
+            return 0
+
+        print(f"[DB RESET] Purging past database records for student IDs: {target_ids}...")
+
+        # 1. Delete matching grades from live Vercel database (/api/grades)
+        deleted_count = 0
+        try:
+            all_grades = self.get_grades(filter_reset=False)
+            for g in all_grades:
+                g_sid = g.get("studentId")
+                if g_sid in target_ids or str(g_sid) in target_ids:
+                    gid = g.get("id")
+                    if gid is not None:
+                        del_url = f"{BASE_URL}/grades"
+                        del_data = json.dumps({"id": gid}).encode("utf-8")
+                        req = urllib.request.Request(
+                            del_url,
+                            data=del_data,
+                            headers={"User-Agent": "Mozilla/5.0", "Content-Type": "application/json"},
+                            method="DELETE"
+                        )
+                        try:
+                            with urllib.request.urlopen(req, timeout=5) as resp:
+                                if resp.status == 200:
+                                    deleted_count += 1
+                        except Exception as de:
+                            print(f"[DB RESET WARN] Failed to delete grade ID {gid}: {de}")
+            print(f"[DB RESET SUCCESS] Deleted {deleted_count} past grade record(s) from Vercel database.")
+        except Exception as e:
+            print(f"[DB RESET ERROR] Error querying/deleting grades from Vercel: {e}")
+
+        # 2. Clear matching pending offline sync results
+        try:
+            q_path = os.path.join("db", "pending_sync.json")
+            if os.path.exists(q_path):
+                with open(q_path, "r", encoding="utf-8") as f:
+                    pending = json.load(f)
+                if isinstance(pending, list):
+                    filtered_pending = [
+                        item for item in pending
+                        if item.get("studentId") not in target_ids
+                        and str(item.get("studentId")) not in target_ids
+                        and str(item.get("student_id")) not in target_ids
+                    ]
+                    if len(filtered_pending) != len(pending):
+                        with open(q_path, "w", encoding="utf-8") as f:
+                            json.dump(filtered_pending, f, indent=4)
+                        print(f"[DB RESET] Removed {len(pending) - len(filtered_pending)} item(s) from offline sync queue.")
+        except Exception as e:
+            print(f"[DB RESET WARN] Error cleaning offline sync queue: {e}")
+
+        # 3. Store reset timestamp in db/reset_records.json
+        try:
+            os.makedirs("db", exist_ok=True)
+            reset_file = os.path.join("db", "reset_records.json")
+            records = {}
+            if os.path.exists(reset_file):
+                try:
+                    with open(reset_file, "r", encoding="utf-8") as f:
+                        records = json.load(f)
+                except Exception:
+                    records = {}
+            now_ts = datetime.now(timezone.utc).timestamp()
+            for tid in target_ids:
+                records[str(tid)] = now_ts
+            with open(reset_file, "w", encoding="utf-8") as f:
+                json.dump(records, f, indent=4)
+            print(f"[DB RESET] Stored reset timestamp {now_ts} for student {target_ids}")
+        except Exception as e:
+            print(f"[DB RESET WARN] Error writing reset timestamp: {e}")
+
+        return deleted_count
+
+    def get_grades(self, filter_reset=True):
+        """Fetch all recorded grades (recent grades) from Vercel API, filtering out reset past records."""
         url = f"{BASE_URL}/grades"
         try:
             req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
             with urllib.request.urlopen(req, timeout=8) as response:
                 data = json.loads(response.read().decode('utf-8'))
-                return data if isinstance(data, list) else []
+                if not isinstance(data, list):
+                    return []
+                if not filter_reset:
+                    return data
+                
+                # Filter out grades created before student's reset timestamp
+                from datetime import datetime, timezone
+                filtered = []
+                for g in data:
+                    sid = g.get("studentId")
+                    reset_ts = self._get_student_reset_timestamp(sid)
+                    if reset_ts and g.get("createdAt"):
+                        try:
+                            g_time = datetime.fromisoformat(g["createdAt"].replace('Z', '+00:00')).timestamp()
+                            if g_time < reset_ts:
+                                continue
+                        except Exception:
+                            pass
+                    filtered.append(g)
+                return filtered
         except Exception as e:
             print(f"[API ERROR] Failed to fetch grades from Vercel: {e}")
             return []
 
-    def get_game_results(self):
-        """Fetch all recorded game results from Vercel API."""
+    def get_game_results(self, filter_reset=True):
+        """Fetch all recorded game results from Vercel API, filtering out reset past records."""
         url = f"{BASE_URL}/game-results"
         try:
             req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
             with urllib.request.urlopen(req, timeout=8) as response:
                 data = json.loads(response.read().decode('utf-8'))
-                return data if isinstance(data, list) else []
+                if not isinstance(data, list):
+                    return []
+                if not filter_reset:
+                    return data
+
+                # Filter out results created before student's reset timestamp
+                from datetime import datetime, timezone
+                filtered = []
+                for gr in data:
+                    sid = gr.get("studentId")
+                    reset_ts = self._get_student_reset_timestamp(sid)
+                    if reset_ts and gr.get("createdAt"):
+                        try:
+                            gr_time = datetime.fromisoformat(gr["createdAt"].replace('Z', '+00:00')).timestamp()
+                            if gr_time < reset_ts:
+                                continue
+                        except Exception:
+                            pass
+                    filtered.append(gr)
+                return filtered
         except Exception as e:
             print(f"[API ERROR] Failed to fetch game results from Vercel: {e}")
             return []

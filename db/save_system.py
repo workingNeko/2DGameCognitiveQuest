@@ -3,6 +3,31 @@ import json
 import time
 import pygame
 
+def atomic_save_json(path, data):
+    """
+    Safely writes JSON data atomically:
+    Writes to a temporary file first and replaces the target file,
+    preventing corrupt/empty (0-byte) save files during crashes or interruptions.
+    """
+    directory = os.path.dirname(path)
+    if directory:
+        os.makedirs(directory, exist_ok=True)
+    tmp_path = f"{path}.tmp_{os.getpid()}_{int(time.time()*1000)}"
+    try:
+        with open(tmp_path, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=4)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp_path, path)
+        return True
+    except Exception as e:
+        if os.path.exists(tmp_path):
+            try:
+                os.remove(tmp_path)
+            except Exception:
+                pass
+        raise e
+
 def get_save_path(student_id):
     os.makedirs("db/saves", exist_ok=True)
     return f"db/saves/{student_id}.json"
@@ -36,22 +61,102 @@ def set_tutorial_completed(main_menu, student_id, completed=True):
     
     path = get_save_path(student_id)
     try:
-        with open(path, "w") as f:
-            json.dump(save_data, f, indent=4)
+        atomic_save_json(path, save_data)
         print(f"[TUTORIAL] Tutorial completed status saved for student {student_id}: {completed}")
     except Exception as e:
         print(f"[WARN] Error saving tutorial status: {e}")
 
-def delete_student_progress(student_id):
-    if not student_id:
+def delete_student_progress(student_id, student_db_id=None, main_menu=None):
+    """
+    Deletes past progress in both the game and the database when starting a New Game:
+    1. Removes all local save files for this student from db/saves/
+    2. Deletes past grade records from the live Vercel database via DELETE /api/grades
+    3. Cleans up pending offline sync entries in db/pending_sync.json
+    4. Sets student reset timestamp in db/reset_records.json
+    5. Cleans in-memory stage and quarter states on main_menu
+    """
+    if not student_id and not student_db_id and not main_menu:
         return
-    path = get_save_path(student_id)
-    if os.path.exists(path):
-        try:
-            os.remove(path)
-            print(f"[DELETE] Deleted save file: {path}")
-        except Exception as e:
-            print(f"[WARN] Error deleting save file: {e}")
+
+    target_ids = set()
+    if student_id:
+        target_ids.add(str(student_id))
+    if student_db_id:
+        target_ids.add(str(student_db_id))
+    if main_menu:
+        if getattr(main_menu, 'student_id', None):
+            target_ids.add(str(main_menu.student_id))
+        if getattr(main_menu, 'student_db_id', None):
+            target_ids.add(str(main_menu.student_db_id))
+        if getattr(main_menu, 'selected_student', None):
+            sel = main_menu.selected_student
+            if sel.get("id"): target_ids.add(str(sel.get("id")))
+            if sel.get("student_id"): target_ids.add(str(sel.get("student_id")))
+            if sel.get("studentId"): target_ids.add(str(sel.get("studentId")))
+
+    saves_dir = "db/saves"
+    if os.path.exists(saves_dir):
+        for fname in os.listdir(saves_dir):
+            if fname.endswith(".json") and fname != "audio_settings.json":
+                fpath = os.path.join(saves_dir, fname)
+                should_delete = False
+                base_name = fname[:-5]
+                if base_name in target_ids:
+                    should_delete = True
+                else:
+                    try:
+                        with open(fpath, "r", encoding="utf-8") as f:
+                            data = json.load(f)
+                            sid = str(data.get("student_id") or "")
+                            sel_id = str(data.get("selected_student", {}).get("id") or "")
+                            sel_sid = str(data.get("selected_student", {}).get("student_id") or "")
+                            if sid in target_ids or sel_id in target_ids or sel_sid in target_ids:
+                                should_delete = True
+                    except Exception:
+                        pass
+                if should_delete:
+                    try:
+                        os.remove(fpath)
+                        print(f"[DELETE] Deleted local save file: {fpath}")
+                    except Exception as e:
+                        print(f"[WARN] Error deleting save file {fpath}: {e}")
+
+    # Purge past records in the live database via db.connect_db
+    try:
+        from db.connect_db import db
+        effective_sid = student_id or (getattr(main_menu, 'student_id', None) if main_menu else None)
+        effective_db_id = student_db_id or (getattr(main_menu, 'student_db_id', None) if main_menu else None)
+        deleted_count = db.delete_student_records(
+            student_id=effective_sid,
+            student_db_id=effective_db_id
+        )
+        print(f"[DB RESET] Purged past database records ({deleted_count} deleted) for student {target_ids}")
+    except Exception as e:
+        print(f"[WARN] Could not purge database records: {e}")
+
+    # Reset in-memory session states on main_menu
+    if main_menu:
+        main_menu.last_stage_select_data = None
+        main_menu.tutorial_completed = False
+        if hasattr(main_menu, 'completed_quarters'):
+            main_menu.completed_quarters = {}
+        if main_menu.quarter1 and hasattr(main_menu.quarter1, 'cleanup'):
+            main_menu.quarter1.cleanup()
+        main_menu.quarter1 = None
+        if main_menu.quarter2 and hasattr(main_menu.quarter2, 'cleanup'):
+            main_menu.quarter2.cleanup()
+        main_menu.quarter2 = None
+        if main_menu.quarter3 and hasattr(main_menu.quarter3, 'cleanup'):
+            main_menu.quarter3.cleanup()
+        main_menu.quarter3 = None
+        if main_menu.quarter4 and hasattr(main_menu.quarter4, 'cleanup'):
+            main_menu.quarter4.cleanup()
+        main_menu.quarter4 = None
+        if main_menu.stage_select and hasattr(main_menu.stage_select, 'cleanup'):
+            main_menu.stage_select.cleanup()
+        main_menu.stage_select = None
+        if hasattr(main_menu, 'setup_buttons'):
+            main_menu.setup_buttons()
 
 def mark_quarter_completed(main_menu, quarter_name, score=100, percentage=100.0, total_questions=5):
     """Marks a specific quarter as completed in the student's persistent save data."""
@@ -73,8 +178,7 @@ def mark_quarter_completed(main_menu, quarter_name, score=100, percentage=100.0,
     
     path = get_save_path(student_id)
     try:
-        with open(path, "w") as f:
-            json.dump(save_data, f, indent=4)
+        atomic_save_json(path, save_data)
         print(f"[STAR] Quarter '{quarter_name}' marked as COMPLETED for student {student_id}! ({score} pts, {percentage:.1f}%)")
     except Exception as e:
         print(f"[WARN] Error marking quarter completed: {e}")
@@ -161,8 +265,7 @@ def save_student_progress(main_menu):
         
     path = get_save_path(student_id)
     try:
-        with open(path, "w") as f:
-            json.dump(save_data, f, indent=4)
+        atomic_save_json(path, save_data)
         print(f"[SAVE] Student progress saved successfully to: {path}")
         return True
     except Exception as e:

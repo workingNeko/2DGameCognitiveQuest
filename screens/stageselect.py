@@ -26,10 +26,10 @@ ZOOM = 1.50  # Fixed zoom level
 
 # Portal settings
 PORTAL_SIZES = {
-    'right': (3, 3),  # 3 tiles wide, 3 tiles tall (square)
-    'left': (2, 3),  # 2 tile wide, 3 tiles tall (vertical strip)
-    'up': (3, 3),  # 3 tiles wide, 3 tiles tall (square)
-    'down': (3, 2)  # 3 tiles wide, 2 tile tall (horizontal strip)
+    'right': (2, 3),  # 2 tiles wide, 3 tiles tall (vertical strip matching east corridor)
+    'left': (2, 3),   # 2 tiles wide, 3 tiles tall (vertical strip matching west corridor)
+    'up': (3, 2),     # 3 tiles wide, 2 tiles tall (horizontal strip matching south corridor)
+    'down': (3, 2)    # 3 tiles wide, 2 tiles tall (horizontal strip matching north corridor)
 }
 
 
@@ -67,6 +67,23 @@ class StageSelect:
         self.completed_quarters = get_completed_quarters(student_id)
         if is_game_completed(student_id):
             self.grand_finale_active = True
+
+        # Portal Warp Screen Transition State
+        self.portal_transition_active = False
+        self.portal_transition_timer = 0.0
+        self.portal_transition_duration = 0.95
+        self.portal_transition_target = None
+        self.portal_transition_origin = (self.width // 2, self.height // 2)
+        self.portal_transition_particles = []
+        self.portal_transition_stars = []
+        self.portal_transition_theme = None
+        self.portal_transition_surface = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
+
+        # Typewriter Dialogue State
+        self.dialogue_char_index = 0.0
+        self.dialogue_typing_speed = 38.0  # characters per second
+        self.dialogue_active_key = None
+        self.dialogue_sound_timer = 0.0
 
         # ============================================================
         # PATHS
@@ -184,7 +201,7 @@ class StageSelect:
         # ============================================================
         # WALKABLE TILES
         # ============================================================
-        self.WALKABLE_TILES = {"G", "#", "1", "2", "3", "4", "5", "6", "7", "8", "P"}
+        self.WALKABLE_TILES = {"G", "#", "1", "2", "3", "4", "5", "6", "7", "8", "P", "l", "r", "u", "d"}
 
         # ============================================================
         # LOAD PLAYER SPRITES
@@ -875,22 +892,25 @@ class StageSelect:
                 self.animation.update()
 
         def draw(self, screen, camera_x, camera_y, zoom, screen_width, screen_height):
+            screen_x = (self.get_world_x() - camera_x) * zoom
+            screen_y = (self.get_world_y() - camera_y) * zoom
+            scaled_width = int(self.get_width_pixels() * zoom)
+            scaled_height = int(self.get_height_pixels() * zoom)
+
+            # Soft radiant pulsating aura glow behind the portal
+            glow_surf = pygame.Surface((scaled_width + 20, scaled_height + 20), pygame.SRCALPHA)
+            aura_rgb = (34, 197, 94) if self.direction == 'left' else (
+                (59, 130, 246) if self.direction == 'up' else (
+                    (245, 158, 11) if self.direction == 'right' else (168, 85, 247)
+                )
+            )
+            pulse = (math.sin(pygame.time.get_ticks() * 0.005) + 1.0) * 0.5
+            alpha = int(70 + 45 * pulse)
+            pygame.draw.ellipse(glow_surf, (*aura_rgb, alpha), (0, 0, scaled_width + 20, scaled_height + 20))
+            screen.blit(glow_surf, (screen_x - 10, screen_y - 10))
+
             if self.animation:
                 self.animation.draw(screen, camera_x, camera_y, zoom, screen_width, screen_height)
-            else:
-                screen_x = (self.get_world_x() - camera_x) * zoom
-                screen_y = (self.get_world_y() - camera_y) * zoom
-                scaled_width = int(self.get_width_pixels() * zoom)
-                scaled_height = int(self.get_height_pixels() * zoom)
-
-                glow_surf = pygame.Surface((scaled_width, scaled_height), pygame.SRCALPHA)
-                aura_color = (34, 197, 94, 160) if self.direction == 'left' else (
-                    (59, 130, 246, 160) if self.direction == 'up' else (
-                        (245, 158, 11, 160) if self.direction == 'right' else (168, 85, 247, 160)
-                    )
-                )
-                pygame.draw.ellipse(glow_surf, aura_color, (0, 0, scaled_width, scaled_height))
-                screen.blit(glow_surf, (screen_x, screen_y))
 
         def contains_position(self, world_x, world_y):
             portal_left = self.get_world_x()
@@ -942,39 +962,44 @@ class StageSelect:
         }
 
     # ============================================================
-    # LOAD STATIC PORTALS - MODIFIED to use self.render_map
+    # LOAD STATIC PORTALS - Detect from game_map
     # ============================================================
     def load_static_portals(self):
-        # Use render_map for portal detection
-        for y, row in enumerate(self.render_map):
-            row_list = list(row)
+        self.portals = []
+        # Use game_map for portal detection so markers are never lost
+        for y, row in enumerate(self.game_map):
+            row_list = list(self.render_map[y]) if y < len(self.render_map) else []
             modified = False
             for x, c in enumerate(row):
                 if c == 'r':
                     portal = self.Portal(x, y, 'right', is_static=True)
                     portal.set_animation(self.portal_frames_cache['right'])
                     self.portals.append(portal)
-                    row_list[x] = '6'
-                    modified = True
+                    if row_list and x < len(row_list):
+                        row_list[x] = '6'
+                        modified = True
                 elif c == 'l':
                     portal = self.Portal(x, y, 'left', is_static=True)
                     portal.set_animation(self.portal_frames_cache['left'])
                     self.portals.append(portal)
-                    row_list[x] = '6'
-                    modified = True
+                    if row_list and x < len(row_list):
+                        row_list[x] = '6'
+                        modified = True
                 elif c == 'u':
                     portal = self.Portal(x, y, 'up', is_static=True)
                     portal.set_animation(self.portal_frames_cache['up'])
                     self.portals.append(portal)
-                    row_list[x] = '7'
-                    modified = True
+                    if row_list and x < len(row_list):
+                        row_list[x] = '7'
+                        modified = True
                 elif c == 'd':
                     portal = self.Portal(x, y, 'down', is_static=True)
                     portal.set_animation(self.portal_frames_cache['down'])
                     self.portals.append(portal)
-                    row_list[x] = '7'
-                    modified = True
-            if modified:
+                    if row_list and x < len(row_list):
+                        row_list[x] = '7'
+                        modified = True
+            if modified and y < len(self.render_map):
                 self.render_map[y] = ''.join(row_list)
 
     # ============================================================
@@ -1058,6 +1083,173 @@ class StageSelect:
 
         return True
 
+    def save_ss_state(self):
+        """Helper to save Stage Select states to main_menu"""
+        if self.main_menu:
+            self.main_menu.last_stage_select_data = {
+                "player_x": self.player_x,
+                "player_y": self.player_y,
+                "oldman_dialogue_state": self.oldman_dialogue_state,
+                "knight_dialogue_state": self.knight_dialogue_state,
+                "skeleton_dialogue_state": self.skeleton_dialogue_state,
+                "bromen_dialogue_state": self.bromen_dialogue_state,
+                "player_following_target": self.player_following_target
+            }
+
+    def enter_quarter(self, qid):
+        """Initiate centralized portal transition to enter a quarter with sound, animation, and state persistence."""
+        if getattr(self, 'portal_transition_active', False):
+            return
+
+        self.portal_transition_active = True
+        self.portal_transition_timer = 0.0
+        self.portal_transition_duration = 0.95
+        self.portal_transition_target = qid
+        self.player_following_target = False  # Stop walking follow
+
+        # Compute screen position of player/portal for radial effect center
+        center_x = int((self.player_x - self.camera_x + TILE_SIZE / 2) * ZOOM)
+        center_y = int((self.player_y - self.camera_y + TILE_SIZE / 2) * ZOOM)
+        if not (0 <= center_x <= self.width and 0 <= center_y <= self.height):
+            center_x, center_y = self.width // 2, self.height // 2
+        self.portal_transition_origin = (center_x, center_y)
+
+        # Initialize particles & theme
+        self._init_portal_transition_fx(qid)
+
+        # Play transition sound effect
+        if hasattr(self.main_menu, 'audio_manager'):
+            snd = self.main_menu.audio_manager.play_sfx("portal_transition")
+            if snd is None:
+                self.main_menu.audio_manager.play_sfx("portal_warp")
+
+    def _finish_portal_transition(self):
+        """Execute screen change to target quarter once warp transition completes."""
+        qid = self.portal_transition_target
+        self.portal_transition_active = False
+
+        self.save_ss_state()
+        from db.save_system import save_student_progress
+        save_student_progress(self.main_menu)
+
+        if qid == "quarter1":
+            map_name = random.choice(["map1.txt", "map2.txt", "map3.txt"])
+            print(f"[STAGE] Entering Quarter 1 - {map_name}")
+            self.main_menu.current_screen = "quarter1"
+            self.main_menu.quarter1 = Quarter1(self.screen, self.main_menu, map_name)
+        elif qid == "quarter2":
+            map_name = "map5.txt"
+            print(f"[STAGE] Entering Quarter 2 - {map_name}")
+            self.main_menu.current_screen = "quarter2"
+            self.main_menu.quarter2 = Quarter2(self.screen, self.main_menu, map_name)
+        elif qid == "quarter3":
+            map_name = "map7.txt"
+            print(f"[STAGE] Entering Quarter 3 - {map_name}")
+            self.main_menu.current_screen = "quarter3"
+            self.main_menu.quarter3 = Quarter3(self.screen, self.main_menu, map_name)
+        elif qid == "quarter4":
+            map_name = "map11.txt"
+            print(f"[STAGE] Entering Quarter 4 - {map_name}")
+            self.main_menu.current_screen = "quarter4"
+            self.main_menu.quarter4 = Quarter4(self.screen, self.main_menu, map_name)
+
+        self.main_menu.stage_select = None
+
+    def _init_portal_transition_fx(self, qid):
+        """Initialize theme palettes, swirling energy vortex, and hyperspace star particles."""
+        palettes = {
+            "quarter1": {
+                "name": "QUARTER 1",
+                "title": "FOREST OF SHAPES",
+                "realm": "Geometry & Polygon Realm",
+                "primary": (34, 197, 94),
+                "secondary": (56, 189, 248),
+                "accent": (250, 204, 21),
+                "void": (6, 32, 20),
+            },
+            "quarter2": {
+                "name": "QUARTER 2",
+                "title": "BARRIO FIESTA",
+                "realm": "Market & Arithmetic Realm",
+                "primary": (245, 158, 11),
+                "secondary": (239, 68, 68),
+                "accent": (253, 224, 71),
+                "void": (36, 15, 6),
+            },
+            "quarter3": {
+                "name": "QUARTER 3",
+                "title": "SUN TEMPLE",
+                "realm": "Solar Desert & Fractions Realm",
+                "primary": (234, 179, 8),
+                "secondary": (249, 115, 22),
+                "accent": (254, 240, 138),
+                "void": (40, 24, 6),
+            },
+            "quarter4": {
+                "name": "QUARTER 4",
+                "title": "CLOCKTOWER CASTLE",
+                "realm": "Temporal Mastery & Grand Finale",
+                "primary": (168, 85, 247),
+                "secondary": (59, 130, 246),
+                "accent": (216, 180, 254),
+                "void": (20, 10, 42),
+            },
+        }
+        self.portal_transition_theme = palettes.get(qid, palettes["quarter1"])
+
+        # Swirling spiral particles
+        self.portal_transition_particles = []
+        for _ in range(48):
+            angle = random.uniform(0, 2 * math.pi)
+            dist = random.uniform(8, 75)
+            ang_spd = random.uniform(200, 450)
+            radial_spd = random.uniform(40, 140)
+            color = random.choice([
+                self.portal_transition_theme["primary"],
+                self.portal_transition_theme["secondary"],
+                self.portal_transition_theme["accent"],
+                (255, 255, 255)
+            ])
+            size = random.randint(3, 7)
+            self.portal_transition_particles.append({
+                "angle": angle,
+                "dist": dist,
+                "angular_speed": ang_spd,
+                "radial_speed": radial_spd,
+                "color": color,
+                "size": size
+            })
+
+        # Hyperspace warp stars
+        self.portal_transition_stars = []
+        for _ in range(40):
+            star_ang = random.uniform(0, 2 * math.pi)
+            speed = random.uniform(280, 700)
+            color = random.choice([
+                (255, 255, 255),
+                self.portal_transition_theme["accent"],
+                self.portal_transition_theme["primary"]
+            ])
+            self.portal_transition_stars.append({
+                "angle": star_ang,
+                "dist": random.uniform(5, 45),
+                "speed": speed,
+                "length": random.uniform(8, 24),
+                "color": color,
+                "width": random.randint(2, 4)
+            })
+
+    def _update_portal_transition(self, dt):
+        """Update positions and velocities of portal warp particles and hyperspace stars."""
+        for p in self.portal_transition_particles:
+            p["angle"] += math.radians(p["angular_speed"] * dt)
+            p["dist"] += p["radial_speed"] * dt
+            p["angular_speed"] += 140 * dt
+
+        for s in self.portal_transition_stars:
+            s["dist"] += s["speed"] * dt
+            s["speed"] += 380 * dt
+
     # ============================================================
     # CHECK PORTAL TELEPORT - Load Quarter1, Quarter2, Quarter3, or Quarter4
     # ============================================================
@@ -1069,35 +1261,14 @@ class StageSelect:
                 break
 
         if current_portal and self.fist_closed and self.teleport_cooldown <= 0:
-            # Helper to save Stage Select states
-            def save_ss_state():
-                self.main_menu.last_stage_select_data = {
-                    "player_x": self.player_x,
-                    "player_y": self.player_y,
-                    "oldman_dialogue_state": self.oldman_dialogue_state,
-                    "knight_dialogue_state": self.knight_dialogue_state,
-                    "skeleton_dialogue_state": self.skeleton_dialogue_state,
-                    "bromen_dialogue_state": self.bromen_dialogue_state,
-                    "player_following_target": self.player_following_target
-                }
-
             # Check if it's a left portal (goes to Quarter1)
             if current_portal.direction == 'left':
-                if self.oldman_dialogue_state == 0:
+                if self.oldman_dialogue_state == 0 and not self.is_quarter_completed('quarter1'):
                     print("[LOCKED] Quarter 1 Portal Locked! Talk to the Old Man first.")
                     self.locked_portal_banner_msg = "Talk to the Old Man first to unlock Quarter 1!"
                     self.locked_portal_banner_timer = 2.5
                     return False
-                map_name = random.choice(["map1.txt", "map2.txt", "map3.txt"])
-                print(f"[STAGE] Entering Quarter 1 - {map_name}")
-                save_ss_state()
-                self.main_menu.current_screen = "quarter1"
-                self.main_menu.quarter1 = Quarter1(self.screen, self.main_menu, map_name)
-                
-                from db.save_system import save_student_progress
-                save_student_progress(self.main_menu)
-                
-                self.main_menu.stage_select = None
+                self.enter_quarter("quarter1")
                 return True
             # Check if it's an up portal (goes to Quarter2)
             elif current_portal.direction == 'up':
@@ -1106,21 +1277,12 @@ class StageSelect:
                     self.locked_portal_banner_msg = "Complete Quarter 1 to unlock Quarter 2!"
                     self.locked_portal_banner_timer = 2.5
                     return False
-                if self.knight_dialogue_state == 0:
+                if self.knight_dialogue_state == 0 and not self.is_quarter_completed('quarter2'):
                     print("[LOCKED] Quarter 2 Portal Locked! Talk to the Knight first.")
                     self.locked_portal_banner_msg = "Talk to the Knight first to unlock Quarter 2!"
                     self.locked_portal_banner_timer = 2.5
                     return False
-                map_name = "map5.txt"
-                print(f"[STAGE] Entering Quarter 2 - {map_name}")
-                save_ss_state()
-                self.main_menu.current_screen = "quarter2"
-                self.main_menu.quarter2 = Quarter2(self.screen, self.main_menu, map_name)
-                
-                from db.save_system import save_student_progress
-                save_student_progress(self.main_menu)
-                
-                self.main_menu.stage_select = None
+                self.enter_quarter("quarter2")
                 return True
             # Check if it's a right portal (goes to Quarter3)
             elif current_portal.direction == 'right':
@@ -1129,21 +1291,12 @@ class StageSelect:
                     self.locked_portal_banner_msg = "Complete Quarter 2 to unlock Quarter 3!"
                     self.locked_portal_banner_timer = 2.5
                     return False
-                if self.skeleton_dialogue_state == 0:
+                if self.skeleton_dialogue_state == 0 and not self.is_quarter_completed('quarter3'):
                     print("[LOCKED] Quarter 3 Portal Locked! Talk to the Skeleton first.")
                     self.locked_portal_banner_msg = "Talk to the Skeleton first to unlock Quarter 3!"
                     self.locked_portal_banner_timer = 2.5
                     return False
-                map_name = "map7.txt"
-                print(f"[STAGE] Entering Quarter 3 - {map_name}")
-                save_ss_state()
-                self.main_menu.current_screen = "quarter3"
-                self.main_menu.quarter3 = Quarter3(self.screen, self.main_menu, map_name)
-                
-                from db.save_system import save_student_progress
-                save_student_progress(self.main_menu)
-                
-                self.main_menu.stage_select = None
+                self.enter_quarter("quarter3")
                 return True
             # Check if it's a down portal (goes to Quarter4)
             elif current_portal.direction == 'down':
@@ -1152,21 +1305,12 @@ class StageSelect:
                     self.locked_portal_banner_msg = "Complete Quarter 3 to unlock Quarter 4!"
                     self.locked_portal_banner_timer = 2.5
                     return False
-                if self.bromen_dialogue_state == 0:
+                if self.bromen_dialogue_state == 0 and not self.is_quarter_completed('quarter4'):
                     print("[LOCKED] Quarter 4 Portal Locked! Talk to Bromen first.")
                     self.locked_portal_banner_msg = "Talk to Bromen first to unlock Quarter 4!"
                     self.locked_portal_banner_timer = 2.5
                     return False
-                map_name = "map11.txt"
-                print(f"[STAGE] Entering Quarter 4 - {map_name}")
-                save_ss_state()
-                self.main_menu.current_screen = "quarter4"
-                self.main_menu.quarter4 = Quarter4(self.screen, self.main_menu, map_name)
-                
-                from db.save_system import save_student_progress
-                save_student_progress(self.main_menu)
-                
-                self.main_menu.stage_select = None
+                self.enter_quarter("quarter4")
                 return True
             # Regular portal teleport (to another portal on same map)
             other_portals = [p for p in self.portals if p != current_portal]
@@ -1262,9 +1406,99 @@ class StageSelect:
         self.fist_closed = fist_start_time > 0
 
     # ============================================================
+    # ADVANCE DIALOGUE / SKIP CUTSCENE
+    # ============================================================
+    def advance_dialogue(self):
+        """Advances active NPC dialogue. If dialogue finishes, triggers NPC move & player follow.
+        If player is already following, calling advance immediately enters the portal."""
+        if getattr(self, 'portal_transition_active', False):
+            return True
+
+        if self.player_following_target:
+            # Skip follow cutscene and enter immediately
+            if self.player_following_target == 'oldman':
+                self.enter_quarter("quarter1")
+            elif self.player_following_target == 'knight':
+                self.enter_quarter("quarter2")
+            elif self.player_following_target == 'skeleton':
+                self.enter_quarter("quarter3")
+            elif self.player_following_target == 'bromen':
+                self.enter_quarter("quarter4")
+            return True
+
+        # Check if active dialogue line is still typing: fast forward on first press
+        active_line_len = None
+        if self.oldman_dialogue_state == 1 and self.oldman_dialogue_index < len(self.dialogue_lines):
+            active_line_len = len(self.dialogue_lines[self.oldman_dialogue_index][1])
+        elif self.skeleton_dialogue_state == 1 and self.skeleton_dialogue_index < len(self.skeleton_dialogue_lines):
+            active_line_len = len(self.skeleton_dialogue_lines[self.skeleton_dialogue_index][1])
+        elif self.knight_dialogue_state == 1 and self.knight_dialogue_index < len(self.knight_dialogue_lines):
+            active_line_len = len(self.knight_dialogue_lines[self.knight_dialogue_index][1])
+        elif self.bromen_dialogue_state == 1 and self.bromen_dialogue_index < len(self.bromen_dialogue_lines):
+            active_line_len = len(self.bromen_dialogue_lines[self.bromen_dialogue_index][1])
+
+        if active_line_len is not None and self.dialogue_char_index < active_line_len:
+            self.dialogue_char_index = float(active_line_len)
+            return True
+
+        # Text is fully typed: reset typewriter and advance to next line or action
+        self.dialogue_char_index = 0.0
+        self.dialogue_sound_timer = 0.0
+        self.dialogue_active_key = None
+
+        if self.oldman_dialogue_state == 1:
+            self.oldman_dialogue_index += 1
+            if self.oldman_dialogue_index >= len(self.dialogue_lines):
+                self.oldman_dialogue_state = 2
+                self.player_following_target = 'oldman'
+                self.player_block_timer = 0
+                if 'O' in self.npc_positions_data:
+                    self.npc_positions_data['O'] = []
+                print("[Old Man] Dialog complete! Old Man starts moving left and player follows.")
+            return True
+
+        if self.skeleton_dialogue_state == 1:
+            self.skeleton_dialogue_index += 1
+            if self.skeleton_dialogue_index >= len(self.skeleton_dialogue_lines):
+                self.skeleton_dialogue_state = 2
+                self.player_following_target = 'skeleton'
+                self.player_block_timer = 0
+                if 'S' in self.npc_positions_data:
+                    self.npc_positions_data['S'] = []
+                print("[Skeleton] Dialog complete! Skeleton starts moving right to portal and player follows.")
+            return True
+
+        if self.knight_dialogue_state == 1:
+            self.knight_dialogue_index += 1
+            if self.knight_dialogue_index >= len(self.knight_dialogue_lines):
+                self.knight_dialogue_state = 2
+                self.player_following_target = 'knight'
+                self.player_block_timer = 0
+                if '1' in self.npc_positions_data:
+                    self.npc_positions_data['1'] = []
+                print("[Knight] Dialog complete! Knight starts moving down to portal and player follows.")
+            return True
+
+        if self.bromen_dialogue_state == 1:
+            self.bromen_dialogue_index += 1
+            if self.bromen_dialogue_index >= len(self.bromen_dialogue_lines):
+                self.bromen_dialogue_state = 2
+                self.player_following_target = 'bromen'
+                self.player_block_timer = 0
+                if 'B' in self.npc_positions_data:
+                    self.npc_positions_data['B'] = []
+                print("* Dialogue complete! Bromen starts moving north to portal and player follows.")
+            return True
+
+        return False
+
+    # ============================================================
     # TRIGGER CLICK (called from main_menu)
     # ============================================================
     def trigger_click(self, pos):
+        if getattr(self, 'portal_transition_active', False):
+            return
+
         # Check Grand Finale modal interaction
         if self.grand_finale_active:
             card_w, card_h = 620, 450
@@ -1287,40 +1521,8 @@ class StageSelect:
                     self.main_menu.audio_manager.play_sfx("victory_fanfare")
                 return
 
-        if self.oldman_dialogue_state == 1:
-            self.oldman_dialogue_index += 1
-            if self.oldman_dialogue_index >= len(self.dialogue_lines):
-                self.oldman_dialogue_state = 2
-                self.player_following_target = 'oldman'
-                self.player_block_timer = 0
-                print("[Old Man] Dialog complete! Old Man starts moving left and player follows.")
-            return
-
-        if self.skeleton_dialogue_state == 1:
-            self.skeleton_dialogue_index += 1
-            if self.skeleton_dialogue_index >= len(self.skeleton_dialogue_lines):
-                self.skeleton_dialogue_state = 2
-                self.player_following_target = 'skeleton'
-                self.player_block_timer = 0
-                print("[Skeleton] Dialog complete! Skeleton starts moving right to portal and player follows.")
-            return
-
-        if self.knight_dialogue_state == 1:
-            self.knight_dialogue_index += 1
-            if self.knight_dialogue_index >= len(self.knight_dialogue_lines):
-                self.knight_dialogue_state = 2
-                self.player_following_target = 'knight'
-                self.player_block_timer = 0
-                print("[Knight] Dialog complete! Knight starts moving down to portal and player follows.")
-            return
-
-        if self.bromen_dialogue_state == 1:
-            self.bromen_dialogue_index += 1
-            if self.bromen_dialogue_index >= len(self.bromen_dialogue_lines):
-                self.bromen_dialogue_state = 2
-                self.player_following_target = 'bromen'
-                self.player_block_timer = 0
-                print("* Dialogue complete! Bromen starts moving north to portal and player follows.")
+        # Advance active dialogue or skip cutscene
+        if self.advance_dialogue():
             return
 
         # Trigger teleport on click/hold when standing on a portal (Only if NPC has been spoken to)
@@ -1332,54 +1534,38 @@ class StageSelect:
         
         if current_portal and self.teleport_cooldown <= 0:
             if current_portal.direction == 'left':
-                if self.oldman_dialogue_state == 0:
+                if self.oldman_dialogue_state == 0 and not self.is_quarter_completed('quarter1'):
                     self.locked_portal_banner_msg = "Talk to the Old Man first to unlock Quarter 1!"
                     self.locked_portal_banner_timer = 1.0
                 else:
-                    map_name = random.choice(["map1.txt", "map2.txt", "map3.txt"])
-                    print(f"[STAGE] Entering Quarter 1 - {map_name}")
-                    self.main_menu.current_screen = "quarter1"
-                    self.main_menu.quarter1 = Quarter1(self.screen, self.main_menu, map_name)
-                    self.main_menu.stage_select = None
+                    self.enter_quarter("quarter1")
             elif current_portal.direction == 'up':
                 if not self.is_quarter_unlocked('quarter2'):
                     self.locked_portal_banner_msg = "Complete Quarter 1 to unlock Quarter 2!"
                     self.locked_portal_banner_timer = 2.0
-                elif self.knight_dialogue_state == 0:
+                elif self.knight_dialogue_state == 0 and not self.is_quarter_completed('quarter2'):
                     self.locked_portal_banner_msg = "Talk to the Knight first to unlock Quarter 2!"
                     self.locked_portal_banner_timer = 1.5
                 else:
-                    map_name = "map5.txt"
-                    print(f"[STAGE] Entering Quarter 2 - {map_name}")
-                    self.main_menu.current_screen = "quarter2"
-                    self.main_menu.quarter2 = Quarter2(self.screen, self.main_menu, map_name)
-                    self.main_menu.stage_select = None
+                    self.enter_quarter("quarter2")
             elif current_portal.direction == 'right':
                 if not self.is_quarter_unlocked('quarter3'):
                     self.locked_portal_banner_msg = "Complete Quarter 2 to unlock Quarter 3!"
                     self.locked_portal_banner_timer = 2.0
-                elif self.skeleton_dialogue_state == 0:
+                elif self.skeleton_dialogue_state == 0 and not self.is_quarter_completed('quarter3'):
                     self.locked_portal_banner_msg = "Talk to the Skeleton first to unlock Quarter 3!"
                     self.locked_portal_banner_timer = 1.5
                 else:
-                    map_name = "map7.txt"
-                    print(f"[STAGE] Entering Quarter 3 - {map_name}")
-                    self.main_menu.current_screen = "quarter3"
-                    self.main_menu.quarter3 = Quarter3(self.screen, self.main_menu, map_name)
-                    self.main_menu.stage_select = None
+                    self.enter_quarter("quarter3")
             elif current_portal.direction == 'down':
                 if not self.is_quarter_unlocked('quarter4'):
                     self.locked_portal_banner_msg = "Complete Quarter 3 to unlock Quarter 4!"
                     self.locked_portal_banner_timer = 2.0
-                elif self.bromen_dialogue_state == 0:
+                elif self.bromen_dialogue_state == 0 and not self.is_quarter_completed('quarter4'):
                     self.locked_portal_banner_msg = "Talk to Bromen first to unlock Quarter 4!"
                     self.locked_portal_banner_timer = 1.5
                 else:
-                    map_name = "map11.txt"
-                    print(f"[STAGE] Entering Quarter 4 - {map_name}")
-                    self.main_menu.current_screen = "quarter4"
-                    self.main_menu.quarter4 = Quarter4(self.screen, self.main_menu, map_name)
-                    self.main_menu.stage_select = None
+                    self.enter_quarter("quarter4")
 
     # ============================================================
     # UPDATE
@@ -1387,6 +1573,14 @@ class StageSelect:
     def update(self):
         dt = self.clock.tick(FPS) / 1000.0
         self.frame_counter += 1
+
+        # Check Portal Warp Screen Transition
+        if self.portal_transition_active:
+            self.portal_transition_timer += dt
+            self._update_portal_transition(dt)
+            if self.portal_transition_timer >= self.portal_transition_duration:
+                self._finish_portal_transition()
+            return
 
         # Update Grand Finale Confetti & Fanfare
         if self.grand_finale_active:
@@ -1427,6 +1621,41 @@ class StageSelect:
         # Update locked portal banner timer
         if self.locked_portal_banner_timer > 0:
             self.locked_portal_banner_timer = max(0.0, self.locked_portal_banner_timer - dt)
+
+        # Update Typewriter Dialogue
+        active_dialogue_text = None
+        current_dialogue_key = None
+        if self.oldman_dialogue_state == 1 and self.oldman_dialogue_index < len(self.dialogue_lines):
+            active_dialogue_text = self.dialogue_lines[self.oldman_dialogue_index][1]
+            current_dialogue_key = ('oldman', self.oldman_dialogue_index)
+        elif self.skeleton_dialogue_state == 1 and self.skeleton_dialogue_index < len(self.skeleton_dialogue_lines):
+            active_dialogue_text = self.skeleton_dialogue_lines[self.skeleton_dialogue_index][1]
+            current_dialogue_key = ('skeleton', self.skeleton_dialogue_index)
+        elif self.knight_dialogue_state == 1 and self.knight_dialogue_index < len(self.knight_dialogue_lines):
+            active_dialogue_text = self.knight_dialogue_lines[self.knight_dialogue_index][1]
+            current_dialogue_key = ('knight', self.knight_dialogue_index)
+        elif self.bromen_dialogue_state == 1 and self.bromen_dialogue_index < len(self.bromen_dialogue_lines):
+            active_dialogue_text = self.bromen_dialogue_lines[self.bromen_dialogue_index][1]
+            current_dialogue_key = ('bromen', self.bromen_dialogue_index)
+
+        if current_dialogue_key != self.dialogue_active_key:
+            self.dialogue_active_key = current_dialogue_key
+            self.dialogue_char_index = 0.0
+            self.dialogue_sound_timer = 0.0
+
+        if active_dialogue_text:
+            text_len = len(active_dialogue_text)
+            if self.dialogue_char_index < text_len:
+                prev_char_int = int(self.dialogue_char_index)
+                self.dialogue_char_index = min(float(text_len), self.dialogue_char_index + self.dialogue_typing_speed * dt)
+                new_char_int = int(self.dialogue_char_index)
+                self.dialogue_sound_timer += dt
+                if new_char_int > prev_char_int and self.dialogue_sound_timer >= 0.045:
+                    self.dialogue_sound_timer = 0.0
+                    char_just_typed = active_dialogue_text[min(new_char_int - 1, text_len - 1)]
+                    if char_just_typed not in (' ', '\t', '\n'):
+                        if hasattr(self.main_menu, 'audio_manager'):
+                            self.main_menu.audio_manager.play_sfx("dialogue_blip")
 
         # Update Bromen NPC idle animation
         if self.npc_bromen_sprites and self.npc_bromen_found and self.bromen_dialogue_state == 0:
@@ -1707,14 +1936,8 @@ class StageSelect:
                 port_rect = pygame.Rect(portal.get_world_x(), portal.get_world_y(), portal.get_width_pixels(), portal.get_height_pixels())
                 if port_rect.colliderect(p_rect) or portal.contains_position(self.player_x + TILE_SIZE // 2, self.player_y + TILE_SIZE // 2):
                     if portal.direction == 'left':
-                        if self.oldman_dialogue_state >= 2 or self.player_following_target == 'oldman':
-                            if hasattr(self.main_menu, 'audio_manager'):
-                                self.main_menu.audio_manager.play_sfx("portal_warp")
-                            map_name = random.choice(["map1.txt", "map2.txt", "map3.txt"])
-                            print(f"[STAGE] Auto-entering Quarter 1 - {map_name}")
-                            self.main_menu.current_screen = "quarter1"
-                            self.main_menu.quarter1 = Quarter1(self.screen, self.main_menu, map_name)
-                            self.main_menu.stage_select = None
+                        if self.oldman_dialogue_state >= 2 or self.player_following_target == 'oldman' or self.is_quarter_completed('quarter1'):
+                            self.enter_quarter("quarter1")
                             return
                         elif self.oldman_dialogue_state == 0 and self.locked_portal_banner_timer <= 0:
                             self.locked_portal_banner_msg = "Talk to the Old Man first to unlock Quarter 1!"
@@ -1724,14 +1947,8 @@ class StageSelect:
                             if self.locked_portal_banner_timer <= 0:
                                 self.locked_portal_banner_msg = "Complete Quarter 2 to unlock Quarter 3!"
                                 self.locked_portal_banner_timer = 2.0
-                        elif self.skeleton_dialogue_state >= 2 or self.player_following_target == 'skeleton':
-                            if hasattr(self.main_menu, 'audio_manager'):
-                                self.main_menu.audio_manager.play_sfx("portal_warp")
-                            map_name = "map7.txt"
-                            print(f"[STAGE] Auto-entering Quarter 3 - {map_name}")
-                            self.main_menu.current_screen = "quarter3"
-                            self.main_menu.quarter3 = Quarter3(self.screen, self.main_menu, map_name)
-                            self.main_menu.stage_select = None
+                        elif self.skeleton_dialogue_state >= 2 or self.player_following_target == 'skeleton' or self.is_quarter_completed('quarter3'):
+                            self.enter_quarter("quarter3")
                             return
                         elif self.skeleton_dialogue_state == 0 and self.locked_portal_banner_timer <= 0:
                             self.locked_portal_banner_msg = "Talk to the Skeleton first to unlock Quarter 3!"
@@ -1741,14 +1958,8 @@ class StageSelect:
                             if self.locked_portal_banner_timer <= 0:
                                 self.locked_portal_banner_msg = "Complete Quarter 1 to unlock Quarter 2!"
                                 self.locked_portal_banner_timer = 2.0
-                        elif self.knight_dialogue_state >= 2 or self.player_following_target == 'knight':
-                            if hasattr(self.main_menu, 'audio_manager'):
-                                self.main_menu.audio_manager.play_sfx("portal_warp")
-                            map_name = "map5.txt"
-                            print(f"[STAGE] Auto-entering Quarter 2 - {map_name}")
-                            self.main_menu.current_screen = "quarter2"
-                            self.main_menu.quarter2 = Quarter2(self.screen, self.main_menu, map_name)
-                            self.main_menu.stage_select = None
+                        elif self.knight_dialogue_state >= 2 or self.player_following_target == 'knight' or self.is_quarter_completed('quarter2'):
+                            self.enter_quarter("quarter2")
                             return
                         elif self.knight_dialogue_state == 0 and self.locked_portal_banner_timer <= 0:
                             self.locked_portal_banner_msg = "Talk to the Knight first to unlock Quarter 2!"
@@ -1758,14 +1969,8 @@ class StageSelect:
                             if self.locked_portal_banner_timer <= 0:
                                 self.locked_portal_banner_msg = "Complete Quarter 3 to unlock Quarter 4!"
                                 self.locked_portal_banner_timer = 2.0
-                        elif self.bromen_dialogue_state >= 2 or self.player_following_target == 'bromen':
-                            if hasattr(self.main_menu, 'audio_manager'):
-                                self.main_menu.audio_manager.play_sfx("portal_warp")
-                            map_name = "map11.txt"
-                            print(f"[STAGE] Auto-entering Quarter 4 - {map_name}")
-                            self.main_menu.current_screen = "quarter4"
-                            self.main_menu.quarter4 = Quarter4(self.screen, self.main_menu, map_name)
-                            self.main_menu.stage_select = None
+                        elif self.bromen_dialogue_state >= 2 or self.player_following_target == 'bromen' or self.is_quarter_completed('quarter4'):
+                            self.enter_quarter("quarter4")
                             return
                         elif self.bromen_dialogue_state == 0 and self.locked_portal_banner_timer <= 0:
                             self.locked_portal_banner_msg = "Talk to Bromen first to unlock Quarter 4!"
@@ -1785,12 +1990,12 @@ class StageSelect:
         if not self.player_following_target:
             return
 
-        follow_speed = 2.0
         moved = False
 
         if self.player_following_target == 'oldman':
             # Follow Old Man leftwards towards Left Portal (x=0, y=13*TILE_SIZE)
             hallway_y = 13 * TILE_SIZE
+            follow_speed = 3.5 if (not self.npc_oldman_found or self.oldman_dialogue_state >= 3) else 2.0
             if abs(self.player_y - hallway_y) > 2:
                 if self.player_y < hallway_y:
                     self.player_y += follow_speed
@@ -1810,10 +2015,15 @@ class StageSelect:
                     self.player_x -= follow_speed
                     self.player_dir = "left"
                     moved = True
+                else:
+                    if not self.npc_oldman_found or self.oldman_dialogue_state >= 3:
+                        self.enter_quarter("quarter1")
+                        return
 
         elif self.player_following_target == 'skeleton':
             # Follow Skeleton rightwards towards Right Portal (x=52*TILE_SIZE, y=13*TILE_SIZE)
             hallway_y = 13 * TILE_SIZE
+            follow_speed = 3.5 if (not self.npc_skeleton_found or self.skeleton_dialogue_state >= 3) else 2.0
             if abs(self.player_y - hallway_y) > 2:
                 if self.player_y < hallway_y:
                     self.player_y += follow_speed
@@ -1833,10 +2043,15 @@ class StageSelect:
                     self.player_x += follow_speed
                     self.player_dir = "right"
                     moved = True
+                else:
+                    if not self.npc_skeleton_found or self.skeleton_dialogue_state >= 3:
+                        self.enter_quarter("quarter3")
+                        return
 
         elif self.player_following_target == 'knight':
             # Follow Knight downwards towards Down Portal (x=25*TILE_SIZE, y=25*TILE_SIZE)
             corridor_x = 25 * TILE_SIZE
+            follow_speed = 3.5 if (not self.npc_knight_found or self.knight_dialogue_state >= 3) else 2.0
             if abs(self.player_x - corridor_x) > 2:
                 if self.player_x < corridor_x:
                     self.player_x += follow_speed
@@ -1856,10 +2071,15 @@ class StageSelect:
                     self.player_y += follow_speed
                     self.player_dir = "down"
                     moved = True
+                else:
+                    if not self.npc_knight_found or self.knight_dialogue_state >= 3:
+                        self.enter_quarter("quarter2")
+                        return
 
         elif self.player_following_target == 'bromen':
             # Follow Bromen upwards towards North Portal (x=25*TILE_SIZE, y=0)
             corridor_x = 25 * TILE_SIZE
+            follow_speed = 3.5 if (not self.npc_bromen_found or self.bromen_dialogue_state >= 3) else 2.0
             if abs(self.player_x - corridor_x) > 2:
                 if self.player_x < corridor_x:
                     self.player_x += follow_speed
@@ -1879,6 +2099,10 @@ class StageSelect:
                     self.player_y -= follow_speed
                     self.player_dir = "up"
                     moved = True
+                else:
+                    if not self.npc_bromen_found or self.bromen_dialogue_state >= 3:
+                        self.enter_quarter("quarter4")
+                        return
 
         # Animate player while moving
         if moved:
@@ -1886,6 +2110,8 @@ class StageSelect:
             if self.anim_timer >= 10:
                 self.anim_timer = 0
                 self.anim_frame = (self.anim_frame + 1) % 2
+                if hasattr(self.main_menu, 'audio_manager'):
+                    self.main_menu.audio_manager.play_sfx("footstep_stone")
         else:
             self.anim_frame = 0
 
@@ -1939,6 +2165,8 @@ class StageSelect:
             if self.anim_timer >= 8:
                 self.anim_timer = 0
                 self.anim_frame = (self.anim_frame + 1) % 2
+                if hasattr(self.main_menu, 'audio_manager'):
+                    self.main_menu.audio_manager.play_sfx("footstep_stone")
         else:
             self.anim_frame = 0
 
@@ -2171,7 +2399,10 @@ class StageSelect:
                 
                 badge_w, badge_h = int(105 * ZOOM), int(24 * ZOOM)
                 bx = sx - badge_w // 2
-                by = sy - badge_h - 8 + bob
+                if portal.direction == 'down':
+                    by = sy + portal.get_height_pixels() * ZOOM + 8 + bob
+                else:
+                    by = sy - badge_h - 8 + bob
                 badge_rect = pygame.Rect(bx, by, badge_w, badge_h)
                 
                 b_font = pygame.font.SysFont("Comic Sans MS", int(11 * ZOOM), bold=True)
@@ -2473,6 +2704,127 @@ class StageSelect:
         # Draw Dialogue Box
         self.draw_dialogue_box()
 
+        # Draw Portal Warp Transition
+        if self.portal_transition_active:
+            self.draw_portal_transition()
+
+    def draw_portal_transition(self):
+        """Renders cinematic portal warp visual effect: expanding dimensional rift, neon shockwaves, hyperspace star streaks, and HUD banner card."""
+        if not self.portal_transition_active or not self.portal_transition_theme:
+            return
+
+        progress = max(0.0, min(1.0, self.portal_transition_timer / self.portal_transition_duration))
+        origin_x, origin_y = self.portal_transition_origin
+        theme = self.portal_transition_theme
+
+        # Ensure surface matches screen size
+        if self.portal_transition_surface.get_size() != (self.width, self.height):
+            self.portal_transition_surface = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
+        surf = self.portal_transition_surface
+        surf.fill((0, 0, 0, 0))
+
+        max_radius = int(math.hypot(max(origin_x, self.width - origin_x), max(origin_y, self.height - origin_y)))
+
+        # 1. Dimensional Rift Expansion
+        if progress >= 0.85:
+            # Full opaque void coverage to guarantee zero flicker when screen flips
+            fade_in_alpha = int(min(255, 230 + ((progress - 0.85) / 0.15) * 25))
+            surf.fill((*theme["void"], fade_in_alpha))
+        else:
+            # Expanding circular portal lens
+            r = int(((progress / 0.85) ** 1.3) * max_radius * 1.1)
+            if r > 0:
+                # Void disk
+                void_alpha = int(min(255, 175 + progress * 80))
+                pygame.draw.circle(surf, (*theme["void"], void_alpha), (origin_x, origin_y), r)
+                # Shimmering border glow rings
+                pygame.draw.circle(surf, (*theme["accent"], 190), (origin_x, origin_y), r, 6)
+                if r > 4:
+                    pygame.draw.circle(surf, (*theme["primary"], 255), (origin_x, origin_y), r - 3, 4)
+                if r > 8:
+                    pygame.draw.circle(surf, (255, 255, 255, 220), (origin_x, origin_y), r - 6, 2)
+
+        # 2. Concentric Shockwave Ripples (ahead of the boundary)
+        for k in range(3):
+            ring_prog = progress * 1.4 - k * 0.16
+            if 0.0 < ring_prog < 1.0:
+                ripple_r = int(ring_prog * max_radius)
+                ripple_alpha = int(220 * ((1.0 - ring_prog) ** 1.5))
+                if ripple_r > 0 and ripple_alpha > 0:
+                    pygame.draw.circle(surf, (*theme["primary"], ripple_alpha), (origin_x, origin_y), ripple_r, max(2, int(6 * (1.0 - ring_prog))))
+
+        # 3. Swirling Vortex Energy Particles
+        p_fade = max(0.0, min(1.0, (1.0 - progress) * 2.0))
+        p_alpha = int(255 * p_fade)
+        if p_alpha > 0:
+            for p in self.portal_transition_particles:
+                px = int(origin_x + math.cos(p["angle"]) * p["dist"])
+                py = int(origin_y + math.sin(p["angle"]) * p["dist"])
+                if 0 <= px < self.width and 0 <= py < self.height:
+                    pygame.draw.circle(surf, (*p["color"], p_alpha), (px, py), p["size"])
+
+        # 4. Hyperspace Star Streaks
+        if progress > 0.12:
+            s_fade = min(1.0, (progress - 0.12) / 0.25) * (1.0 if progress < 0.78 else max(0.0, (0.95 - progress) / 0.17))
+            s_alpha = int(240 * s_fade)
+            if s_alpha > 0:
+                for s in self.portal_transition_stars:
+                    sx1 = int(origin_x + math.cos(s["angle"]) * s["dist"])
+                    sy1 = int(origin_y + math.sin(s["angle"]) * s["dist"])
+                    trail_len = s["length"] * (1.0 + progress * 3.0)
+                    sx2 = int(origin_x + math.cos(s["angle"]) * (s["dist"] + trail_len))
+                    sy2 = int(origin_y + math.sin(s["angle"]) * (s["dist"] + trail_len))
+                    pygame.draw.line(surf, (*s["color"], s_alpha), (sx1, sy1), (sx2, sy2), s["width"])
+
+        # 5. Cinematic HUD Warp Banner Card
+        if progress > 0.18:
+            card_fade = min(1.0, (progress - 0.18) / 0.25) * (1.0 if progress < 0.85 else max(0.0, (1.0 - progress) / 0.15))
+            card_alpha = int(255 * card_fade)
+            if card_alpha > 0:
+                card_w = min(520, self.width - 40)
+                card_h = 88
+                card_x = (self.width - card_w) // 2
+                card_y = self.height - card_h - 45
+
+                card_surf = pygame.Surface((card_w, card_h), pygame.SRCALPHA)
+                # Glassmorphic background
+                pygame.draw.rect(card_surf, (15, 23, 42, int(card_alpha * 0.92)), (0, 0, card_w, card_h), border_radius=14)
+                # Outer glow & border
+                pygame.draw.rect(card_surf, (*theme["primary"], card_alpha), (0, 0, card_w, card_h), 2, border_radius=14)
+
+                # Subtitle pill
+                sub_font = getattr(self, 'small_font', None) or pygame.font.SysFont("Segoe UI", 12)
+                t_sub = sub_font.render(f"✦ DIMENSIONAL WARP ACTIVATED  •  {theme['realm'].upper()} ✦", True, theme["accent"])
+                t_sub_alpha = t_sub.copy()
+                t_sub_alpha.set_alpha(card_alpha)
+                card_surf.blit(t_sub_alpha, ((card_w - t_sub.get_width()) // 2, 12))
+
+                # Bold Title
+                title_font = getattr(self, 'font', None) or pygame.font.SysFont("Segoe UI", 16, bold=True)
+                full_title = f"{theme['name']}: {theme['title']}"
+                t_title = title_font.render(full_title, True, (255, 255, 255))
+                t_title_alpha = t_title.copy()
+                t_title_alpha.set_alpha(card_alpha)
+                card_surf.blit(t_title_alpha, ((card_w - t_title.get_width()) // 2, 34))
+
+                # Energy Bar
+                bar_x = 30
+                bar_y = 66
+                bar_w = card_w - 60
+                bar_h = 6
+                pygame.draw.rect(card_surf, (30, 41, 59, card_alpha), (bar_x, bar_y, bar_w, bar_h), border_radius=3)
+                fill_prog = max(0.0, min(1.0, (progress - 0.18) / 0.77))
+                fill_w = int(bar_w * fill_prog)
+                if fill_w > 0:
+                    pygame.draw.rect(card_surf, (*theme["primary"], card_alpha), (bar_x, bar_y, fill_w, bar_h), border_radius=3)
+                    # Shimmer tip
+                    pygame.draw.circle(card_surf, (*theme["accent"], card_alpha), (bar_x + fill_w, bar_y + bar_h // 2), 4)
+
+                surf.blit(card_surf, (card_x, card_y))
+
+        # Blit final composite onto the display screen
+        self.screen.blit(surf, (0, 0))
+
     # ============================================================
     # DRAW UI
     # ============================================================
@@ -2634,61 +2986,78 @@ class StageSelect:
         if current_line:
             lines.append(" ".join(current_line))
 
-        # Render dialogue lines
+        # Render dialogue lines with typewriter effect
+        chars_remaining = int(self.dialogue_char_index)
         y_offset = box_y + 45
         for line in lines:
-            line_surface = self.font.render(line, True, (255, 255, 255))
+            if chars_remaining <= 0:
+                break
+            visible_line = line[:chars_remaining]
+            chars_remaining -= len(line) + 1
+            line_surface = self.font.render(visible_line, True, (255, 255, 255))
             self.screen.blit(line_surface, (box_x + 20, y_offset))
             y_offset += 24
 
-        # Continue indicator (blinking)
-        if (self.frame_counter // 30) % 2 == 0:
-            prompt = "Hold Fist or Press Space to continue..."
-            prompt_surface = self.small_font.render(prompt, True, (180, 180, 180))
+        # Continue indicator
+        is_finished = (self.dialogue_char_index >= len(text))
+        if is_finished:
+            if (self.frame_counter // 30) % 2 == 0:
+                prompt = "Hold Fist or Press Space to continue ▾"
+                prompt_surface = self.small_font.render(prompt, True, (255, 215, 0))
+                self.screen.blit(prompt_surface, (box_x + box_width - prompt_surface.get_width() - 20, box_y + box_height - 25))
+        else:
+            prompt = "Press Space to skip..."
+            prompt_surface = self.small_font.render(prompt, True, (160, 160, 160))
             self.screen.blit(prompt_surface, (box_x + box_width - prompt_surface.get_width() - 20, box_y + box_height - 25))
 
     # ============================================================
     # HANDLE EVENT
     # ============================================================
     def handle_event(self, event):
+        if getattr(self, 'portal_transition_active', False):
+            return "handled"
+
         if self.grand_finale_active:
             if event.type == pygame.KEYDOWN and event.key in [pygame.K_ESCAPE, pygame.K_SPACE, pygame.K_RETURN]:
                 self.grand_finale_active = False
                 self.grand_finale_dismissed = True
                 return "handled"
+            if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                self.trigger_click(event.pos)
+                return "handled"
+
+        if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+            self.trigger_click(event.pos)
+            return "handled"
 
         if event.type == pygame.KEYDOWN:
-            if self.oldman_dialogue_state == 1:
-                if event.key in [pygame.K_SPACE, pygame.K_RETURN]:
-                    self.oldman_dialogue_index += 1
-                    if self.oldman_dialogue_index >= len(self.dialogue_lines):
-                        self.oldman_dialogue_state = 2
-                        self.player_block_timer = 3.0
-                        print("[Old Man] Dialog complete! Old Man starts moving left.")
+            if event.key in [pygame.K_SPACE, pygame.K_RETURN]:
+                if self.advance_dialogue():
                     return "dialogue_advance"
-            elif self.skeleton_dialogue_state == 1:
-                if event.key in [pygame.K_SPACE, pygame.K_RETURN]:
-                    self.skeleton_dialogue_index += 1
-                    if self.skeleton_dialogue_index >= len(self.skeleton_dialogue_lines):
-                        self.skeleton_dialogue_state = 2
-                        print("[Skeleton] Dialog complete! Skeleton starts moving right.")
-                    return "dialogue_advance"
-            elif self.knight_dialogue_state == 1:
-                if event.key in [pygame.K_SPACE, pygame.K_RETURN]:
-                    self.knight_dialogue_index += 1
-                    if self.knight_dialogue_index >= len(self.knight_dialogue_lines):
-                        self.knight_dialogue_state = 2
-                        print("[Knight] Dialog complete! Knight starts moving down.")
-                    return "dialogue_advance"
-            elif self.bromen_dialogue_state == 1:
-                if event.key in [pygame.K_SPACE, pygame.K_RETURN]:
-                    self.bromen_dialogue_index += 1
-                    if self.bromen_dialogue_index >= len(self.bromen_dialogue_lines):
-                        self.bromen_dialogue_state = 2
-                        self.bromen_teleport_frame = 0
-                        self.bromen_teleport_timer = 0
-                        print("* Dialogue complete! Bromen starts teleporting away.")
-                    return "dialogue_advance"
+
+                # If standing on a portal, allow Space/Enter to enter
+                current_portal = None
+                for portal in self.portals:
+                    if portal.contains_position(self.player_x, self.player_y):
+                        current_portal = portal
+                        break
+                if current_portal and self.teleport_cooldown <= 0:
+                    if current_portal.direction == 'left':
+                        if self.oldman_dialogue_state >= 2 or self.is_quarter_completed('quarter1'):
+                            self.enter_quarter("quarter1")
+                            return "quarter_entered"
+                    elif current_portal.direction == 'up':
+                        if self.is_quarter_unlocked('quarter2') and (self.knight_dialogue_state >= 2 or self.is_quarter_completed('quarter2')):
+                            self.enter_quarter("quarter2")
+                            return "quarter_entered"
+                    elif current_portal.direction == 'right':
+                        if self.is_quarter_unlocked('quarter3') and (self.skeleton_dialogue_state >= 2 or self.is_quarter_completed('quarter3')):
+                            self.enter_quarter("quarter3")
+                            return "quarter_entered"
+                    elif current_portal.direction == 'down':
+                        if self.is_quarter_unlocked('quarter4') and (self.bromen_dialogue_state >= 2 or self.is_quarter_completed('quarter4')):
+                            self.enter_quarter("quarter4")
+                            return "quarter_entered"
 
             if event.key == pygame.K_ESCAPE:
                 if self.main_menu:

@@ -26,6 +26,8 @@ scratch/
 test_*.png
 test_*.py
 db/saves/test_*.json
+db/cache/
+db/reset_records.json
 *.tmp
 
 # Operating system files

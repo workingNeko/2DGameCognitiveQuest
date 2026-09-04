@@ -235,8 +235,15 @@ class MainMenu:
         # MESSAGES
         # ==========================================
 
-        self.show_no_student_message = False
-        self.no_student_timer = 0
+        # ==========================================
+        # AUTOMATIC BACKGROUND OFFLINE EVALUATION SYNC
+        # ==========================================
+        try:
+            from db.connect_db import db
+            if db:
+                threading.Thread(target=db.sync_offline_results, daemon=True).start()
+        except Exception:
+            pass
 
         print(f"[GAME] Simple Gesture Control Active!")
         print(f"   - WRIST movement controls cursor (stable when making fist)")
@@ -579,7 +586,26 @@ class MainMenu:
                 self.exit_game()
             elif self.popup_state == "confirm_new_activity":
                 from db.save_system import delete_student_progress
-                delete_student_progress(self.student_id)
+
+                # Visual feedback card
+                overlay = pygame.Surface(self.screen.get_size(), pygame.SRCALPHA)
+                overlay.fill((0, 0, 0, 180))
+                self.screen.blit(overlay, (0, 0))
+                font = getattr(self, 'dialogue_font', self.button_font)
+                txt_surf = font.render("Resetting Past Progress & Starting New Game...", True, (255, 255, 255))
+                rect = txt_surf.get_rect(center=(self.w // 2, self.h // 2))
+                card_rect = rect.inflate(80, 40)
+                pygame.draw.rect(self.screen, (15, 23, 42), card_rect, border_radius=12)
+                pygame.draw.rect(self.screen, (239, 68, 68), card_rect, 3, border_radius=12)
+                self.screen.blit(txt_surf, rect)
+                pygame.display.flip()
+
+                # Purge past progress in both game save files and live database
+                delete_student_progress(
+                    student_id=self.student_id,
+                    student_db_id=getattr(self, 'student_db_id', None),
+                    main_menu=self
+                )
                 self.popup_state = None
                 
                 # Refresh main menu buttons
@@ -776,7 +802,7 @@ class MainMenu:
         elif self.popup_state == "confirm_new_activity":
             title_text = "Start New Activity"
             body_text1 = "Are you sure to Start a new Activity?"
-            body_text2 = "This will delete any progress you have made."
+            body_text2 = "This will delete past progress in game and database."
         else:
             title_text = "Return to Menu"
             body_text1 = "Are you sure you want to"
@@ -982,7 +1008,14 @@ class MainMenu:
             self.no_student_timer = pygame.time.get_ticks() + 2000
             return
 
-        from db.save_system import is_tutorial_completed
+        from db.save_system import is_tutorial_completed, delete_student_progress
+        # Fresh activity start: purge any leftover stale database/sync records for clean session
+        delete_student_progress(
+            student_id=self.student_id,
+            student_db_id=getattr(self, 'student_db_id', None),
+            main_menu=self
+        )
+
         if not is_tutorial_completed(self.student_id):
             print("[TUTORIAL] New player detected! Launching Tutorial Screen...")
             self.current_screen = "tutorial"
@@ -1197,6 +1230,11 @@ class MainMenu:
                 elif event.key == pygame.K_y:
                     if self.popup_state == "confirm_exit":
                         self.exit_game()
+                    elif self.popup_state == "confirm_new_activity":
+                        box_w, box_h = 500, 260
+                        box_x = (self.w - box_w) // 2
+                        box_y = (self.h - box_h) // 2
+                        self.handle_popup_click((box_x + 80, box_y + 195))
                 elif event.key == pygame.K_n:
                     self.popup_state = None
                     if hasattr(self, 'audio_manager'):
