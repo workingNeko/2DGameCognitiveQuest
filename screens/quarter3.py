@@ -3637,8 +3637,17 @@ class Quarter3:
     # ============================================================
     def load_puzzle_sounds(self):
         try:
-            self.snap_sound = self.generate_snap_sound()
-            self.success_sound = self.generate_success_sound()
+            if hasattr(self, 'main_menu') and hasattr(self.main_menu, 'audio_manager'):
+                self.snap_sound = self.main_menu.audio_manager.get_sound("snap")
+                self.success_sound = self.main_menu.audio_manager.get_sound("success")
+            else:
+                from core.audio_manager import audio_manager
+                self.snap_sound = audio_manager.get_sound("snap")
+                self.success_sound = audio_manager.get_sound("success")
+            if not self.snap_sound:
+                self.snap_sound = self.generate_snap_sound()
+            if not self.success_sound:
+                self.success_sound = self.generate_success_sound()
             print("🔊 Sun Relic sound effects synthesized successfully.")
         except Exception as e:
             print(f"⚠️ Error loading puzzle sounds: {e}")

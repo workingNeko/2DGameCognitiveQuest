@@ -2668,12 +2668,13 @@ class Quarter4:
         self.sound_correct = None
         self.sound_snap = None
         try:
-            correct_path = os.path.join(self.BASE_DIR, "assets", "sounds", "correct.wav")
-            if os.path.exists(correct_path):
-                self.sound_correct = pygame.mixer.Sound(correct_path)
-            snap_path = os.path.join(self.BASE_DIR, "assets", "sounds", "snap.wav")
-            if os.path.exists(snap_path):
-                self.sound_snap = pygame.mixer.Sound(snap_path)
+            if hasattr(self, 'main_menu') and hasattr(self.main_menu, 'audio_manager'):
+                self.sound_correct = self.main_menu.audio_manager.get_sound("correct")
+                self.sound_snap = self.main_menu.audio_manager.get_sound("snap")
+            else:
+                from core.audio_manager import audio_manager
+                self.sound_correct = audio_manager.get_sound("correct")
+                self.sound_snap = audio_manager.get_sound("snap")
         except Exception as e:
             print(f"Sound load warning: {e}")
 

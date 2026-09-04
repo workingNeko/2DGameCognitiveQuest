@@ -1,0 +1,13 @@
+# Core Game Engine
+pygame>=2.5.0,<=2.6.1
+
+# Numerical Computing
+# Note: Keep NumPy < 2.0.0 for compatibility with MediaPipe and OpenCV C-extensions
+numpy>=1.24.0,<2.0.0
+
+# Computer Vision & Hand Gesture Recognition
+opencv-python>=4.8.0
+mediapipe>=0.10.0
+
+# Asset Generation & Image Processing (used in generate_npc_sprites.py)
+Pillow>=10.0.0

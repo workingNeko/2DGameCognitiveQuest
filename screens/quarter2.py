@@ -771,6 +771,24 @@ class Quarter2:
     # ============================================================
     def load_puzzle_sounds(self):
         try:
+            if hasattr(self, 'main_menu') and hasattr(self.main_menu, 'audio_manager'):
+                am = self.main_menu.audio_manager
+            else:
+                from core.audio_manager import audio_manager
+                am = audio_manager
+
+            self.sorbetes_bell = am.get_sound("bell")
+            self.jeepney_horn = am.get_sound("horn")
+            self.coin_clink = am.get_sound("coin")
+            self.cash_register = am.get_sound("cash_register")
+            self.snap_sound = am.get_sound("snap")
+            self.success_sound = am.get_sound("success")
+            self.wood_snap_sound = am.get_sound("wood_snap")
+
+            if self.sorbetes_bell and self.coin_clink and self.snap_sound:
+                print("🔊 Quarter 2 sound effects retrieved from AudioManager.")
+                return
+
             if not pygame.mixer.get_init():
                 pygame.mixer.init(frequency=44100, size=-16, channels=2)
             sr = 44100

@@ -45,13 +45,8 @@ def main():
                 from db.save_system import save_student_progress
                 save_student_progress(main_menu)
                 running = False
-            elif event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_ESCAPE:  # Press ESC to exit
-                    from db.save_system import save_student_progress
-                    save_student_progress(main_menu)
-                    running = False
-                elif event.key == pygame.K_f:  # Press F to toggle fullscreen
-                    pygame.display.toggle_fullscreen()
+            elif event.type == pygame.KEYDOWN and event.key == pygame.K_f:
+                pygame.display.toggle_fullscreen()
             else:
                 main_menu.handle_event(event)
 
