@@ -181,70 +181,37 @@ def test_lol_camera_coordinate_transformations():
     print("PASS: LoLCamera world <-> screen coordinate conversions are reversible and exact.")
 
 
-def test_game_cursor_states_and_hover():
-    cursor = GameCursor()
-    assert cursor.current_state == CursorState.DEFAULT
+def test_original_game_cursor_rendering():
+    from screens.main_menu import MainMenu
+    test_surf = pygame.Surface((1024, 768))
+    menu = MainMenu(test_surf)
 
-    cursor.set_hover_state(CursorState.HOVER_NPC)
-    assert cursor.current_state == CursorState.HOVER_NPC
+    # 1. Mouse / NO HAND mode
+    menu.current_gesture = "NO HAND"
+    menu.cursor_pos = (512, 384)
+    menu.draw_cursor()
 
-    cursor.set_hover_state(CursorState.HOVER_PORTAL)
-    assert cursor.current_state == CursorState.HOVER_PORTAL
+    # 2. OPEN hand mode
+    menu.current_gesture = "OPEN"
+    menu.fist_start_time = 0
+    menu.peace_start_time = 0
+    menu.draw_cursor()
 
-    cursor.set_hover_state(CursorState.HOVER_BUTTON)
-    assert cursor.current_state == CursorState.HOVER_BUTTON
+    # 3. FIST charge mode
+    menu.current_gesture = "FIST"
+    menu.fist_start_time = time.time() - 0.45
+    menu.draw_cursor()
 
-    cursor.set_hover_state(CursorState.HOVER_QUIZ)
-    assert cursor.current_state == CursorState.HOVER_QUIZ
+    # 4. PEACE confirm mode
+    menu.current_gesture = "PEACE"
+    menu.peace_start_time = time.time() - 0.45
+    menu.draw_cursor()
 
-    cursor.set_hover_state(CursorState.DEFAULT)
-    assert cursor.current_state == CursorState.DEFAULT
-    print("PASS: GameCursor contextual hover states transition correctly.")
-
-
-def test_game_cursor_click_ripples():
-    cursor = GameCursor()
-    assert len(cursor.ripples) == 0
-
-    # Add move ping
-    cursor.add_click_ripple((200, 300), "move")
-    assert len(cursor.ripples) == 1
-    ripple = cursor.ripples[0]
-    assert ripple["x"] == 200
-    assert ripple["y"] == 300
-    assert ripple["type"] == "move"
-
-    # Add interact ping
-    cursor.add_click_ripple((400, 500), "interact")
-    assert len(cursor.ripples) == 2
-
-    # Fast-forward time to simulate ripple expiration
-    for r in cursor.ripples:
-        r["start_time"] -= 1.0  # Duration is 0.38s
-
-    cursor.update((200, 300))
-    assert len(cursor.ripples) == 0, "Expired click ripples were not automatically pruned!"
-    print("PASS: GameCursor click ripple lifecycle (spawn, duration, cleanup) verified.")
-
-
-def test_game_cursor_drawing():
-    cursor = GameCursor()
-    test_surf = pygame.Surface((400, 400), pygame.SRCALPHA)
-
-    now = time.time()
-    # Test drawing in each state with active ripples and fist charge
-    for st in [CursorState.DEFAULT, CursorState.HOVER_NPC, CursorState.HOVER_PORTAL, CursorState.HOVER_BUTTON, CursorState.HOVER_QUIZ]:
-        cursor.set_hover_state(st)
-        cursor.add_click_ripple((150, 150), "move")
-        cursor.add_click_ripple((200, 200), "interact")
-        cursor.update((200, 200), current_gesture="FIST", fist_start_time=now - 0.45, click_hold_time=0.9)
-        cursor.draw(test_surf)
-
-    print("PASS: GameCursor renders cleanly on Pygame surface across all states.")
+    print("PASS: Original reticle game cursor renders cleanly across all gesture modes (Mouse, Open, Fist, Peace).")
 
 
 if __name__ == "__main__":
-    print("--- RUNNING LOL CAMERA & MOBA CURSOR UNIT TESTS ---")
+    print("--- RUNNING LOL CAMERA & GAME CURSOR UNIT TESTS ---")
     test_lol_camera_init_and_snap()
     test_lol_camera_damping_and_convergence()
     test_lol_camera_cursor_lead()
@@ -252,7 +219,5 @@ if __name__ == "__main__":
     test_lol_camera_spacebar_recenter()
     test_lol_camera_middle_mouse_drag()
     test_lol_camera_coordinate_transformations()
-    test_game_cursor_states_and_hover()
-    test_game_cursor_click_ripples()
-    test_game_cursor_drawing()
-    print("--- ALL CAMERA & CURSOR UNIT TESTS PASSED (10/10) ---")
+    test_original_game_cursor_rendering()
+    print("--- ALL CAMERA & ORIGINAL CURSOR UNIT TESTS PASSED (8/8) ---")

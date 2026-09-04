@@ -39,9 +39,18 @@ class GameCursor:
         self.trail = deque(maxlen=8)
         self.last_trail_time = 0
 
-        # Fonts
-        self.font_small = pygame.font.SysFont("Comic Sans MS", 12, bold=True)
-        self.font_pct = pygame.font.SysFont("Arial", 11, bold=True)
+        # Fonts (safely initialized)
+        if not pygame.font.get_init():
+            try:
+                pygame.font.init()
+            except Exception:
+                pass
+        try:
+            self.font_small = pygame.font.SysFont("Comic Sans MS", 12, bold=True)
+            self.font_pct = pygame.font.SysFont("Arial", 11, bold=True)
+        except Exception:
+            self.font_small = None
+            self.font_pct = None
 
         # Pulse animation timer
         self.anim_t = 0.0
@@ -307,5 +316,18 @@ class GameCursor:
         surface.blit(active_surf, (cx, cy))
 
 
-# Global singleton instance
-game_cursor = GameCursor()
+# Lazy global instance accessor
+_game_cursor = None
+
+def get_game_cursor():
+    global _game_cursor
+    if _game_cursor is None:
+        _game_cursor = GameCursor()
+    return _game_cursor
+
+class _LazyGameCursorProxy:
+    def __getattr__(self, name):
+        return getattr(get_game_cursor(), name)
+
+game_cursor = _LazyGameCursorProxy()
+

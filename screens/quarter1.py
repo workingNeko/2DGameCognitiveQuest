@@ -10,7 +10,7 @@ import math
 import random
 from .map_loader import MapLoader
 from core.camera_system import LoLCamera
-from core.cursor_system import game_cursor, CursorState
+
 
 # Import db - safe import in case db modules are missing
 try:
@@ -2662,33 +2662,6 @@ class Quarter1:
         for portal in self.portals:
             portal.update_animation()
 
-        # Update contextual cursor hover state for LoL cursor
-        hover_state = CursorState.DEFAULT
-        if getattr(self, 'pause_menu', None) and self.pause_menu.is_hovering(self.cursor_pos):
-            hover_state = CursorState.HOVER_BUTTON
-        elif getattr(self, 'puzzle_active', False):
-            hover_state = CursorState.HOVER_BUTTON
-        else:
-            cx, cy = self.cursor_pos
-            # Check shape/station NPCs
-            for sid, station in getattr(self, 'quiz_stations', {}).items():
-                st_x, st_y = station
-                nsx, nsy = self.lol_camera.world_to_screen(st_x * TILE_SIZE + TILE_SIZE // 2, st_y * TILE_SIZE + TILE_SIZE // 2)
-                if math.hypot(cx - nsx, cy - nsy) < 45:
-                    hover_state = CursorState.HOVER_QUIZ
-                    break
-            if hover_state == CursorState.DEFAULT and getattr(self, 'npc_oldman_found', False):
-                nsx, nsy = self.lol_camera.world_to_screen(self.npc_oldman_x + TILE_SIZE // 2, self.npc_oldman_y + TILE_SIZE // 2)
-                if math.hypot(cx - nsx, cy - nsy) < 45:
-                    hover_state = CursorState.HOVER_NPC
-            if hover_state == CursorState.DEFAULT:
-                for portal in self.portals:
-                    psx, psy = self.lol_camera.world_to_screen(portal.get_center_x(), portal.get_center_y())
-                    if math.hypot(cx - psx, cy - psy) < 48:
-                        hover_state = CursorState.HOVER_PORTAL
-                        break
-        game_cursor.set_hover_state(hover_state)
-
         self.update_camera()
 
     # ============================================================
@@ -3964,7 +3937,6 @@ class Quarter1:
             if self.victory_card.handle_event(event):
                 return "blocked"
             if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
-                game_cursor.add_click_ripple(event.pos, "interact")
                 res = self.victory_card.handle_click(event.pos)
                 if res:
                     return "blocked"
@@ -4037,7 +4009,6 @@ class Quarter1:
                         self.lol_camera.recenter()
         elif event.type == pygame.MOUSEBUTTONDOWN:
             if event.button == 1:  # Left click
-                game_cursor.add_click_ripple(event.pos, "move")
                 self.trigger_click(event.pos)
         return None
 

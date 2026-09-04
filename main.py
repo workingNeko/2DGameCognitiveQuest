@@ -14,13 +14,14 @@ if sys.stderr is not None:
     except Exception:
         pass
 
+# Initialize Pygame and font system before importing any game screens
+pygame.init()
+pygame.font.init()
+
 from screens.main_menu import MainMenu
 
 
 def main():
-    # Initialize Pygame
-    pygame.init()
-
     # Get display info for fullscreen
     display_info = pygame.display.Info()
     screen_width = display_info.current_w

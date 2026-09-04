@@ -14,7 +14,6 @@ from screens.quarter2 import Quarter2
 from screens.quarter3 import Quarter3
 from screens.quarter4 import Quarter4
 from core.camera_system import LoLCamera
-from core.cursor_system import game_cursor, CursorState
 
 # ============================================================
 # SETTINGS
@@ -1972,34 +1971,6 @@ class StageSelect:
         for portal in self.portals:
             portal.update_animation()
 
-        # Update contextual cursor hover state for LoL cursor
-        hover_state = CursorState.DEFAULT
-        if getattr(self, 'pause_menu', None) and self.pause_menu.is_hovering(self.cursor_pos):
-            hover_state = CursorState.HOVER_BUTTON
-        else:
-            cx, cy = self.cursor_pos
-            # Check NPCs
-            npc_targets = [
-                (getattr(self, 'npc_oldman_x', -999), getattr(self, 'npc_oldman_y', -999)),
-                (getattr(self, 'npc_skeleton_x', -999), getattr(self, 'npc_skeleton_y', -999)),
-                (getattr(self, 'npc_knight_x', -999), getattr(self, 'npc_knight_y', -999)),
-                (getattr(self, 'npc_bromen_x', -999), getattr(self, 'npc_bromen_y', -999))
-            ]
-            for (nx, ny) in npc_targets:
-                if nx > -100:
-                    nsx, nsy = self.lol_camera.world_to_screen(nx + TILE_SIZE // 2, ny + TILE_SIZE // 2)
-                    if math.hypot(cx - nsx, cy - nsy) < 45:
-                        hover_state = CursorState.HOVER_NPC
-                        break
-            if hover_state == CursorState.DEFAULT:
-                # Check Portals
-                for portal in self.portals:
-                    psx, psy = self.lol_camera.world_to_screen(portal.get_center_x(), portal.get_center_y())
-                    if math.hypot(cx - psx, cy - psy) < 48:
-                        hover_state = CursorState.HOVER_PORTAL
-                        break
-        game_cursor.set_hover_state(hover_state)
-
         # Update camera
         self.update_camera()
 
@@ -3047,12 +3018,10 @@ class StageSelect:
                 self.grand_finale_dismissed = True
                 return "handled"
             if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
-                game_cursor.add_click_ripple(event.pos, "interact")
                 self.trigger_click(event.pos)
                 return "handled"
 
         if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
-            game_cursor.add_click_ripple(event.pos, "move")
             self.trigger_click(event.pos)
             return "handled"
 

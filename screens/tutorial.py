@@ -17,7 +17,6 @@ import time
 import cv2
 import numpy as np
 from core.camera_system import LoLCamera
-from core.cursor_system import game_cursor, CursorState
 
 TILE_SIZE = 32
 ZOOM = 1.50
@@ -260,48 +259,6 @@ class TutorialScreen:
         )
         self.camera_x = self.lol_camera.camera_x
         self.camera_y = self.lol_camera.camera_y
-
-        # Contextual Cursor Hover State Detection
-        skip_rect = pygame.Rect(self.width - 230, 16, 210, 52)
-        if skip_rect.collidepoint(self.cursor_pos):
-            game_cursor.set_hover_state(CursorState.HOVER_BUTTON)
-        elif self.quiz_state == 1:
-            box_w, box_h = 600, 390
-            box_x = (self.width - box_w) // 2
-            box_y = (self.height - box_h) // 2
-            button_w, button_h = 560, 48
-            button_x = box_x + (box_w - button_w) // 2
-            button_y_start = box_y + 142
-            spacing = 56
-            hovering_choice = False
-            for i in range(4):
-                if i == self.eliminated_choice:
-                    continue
-                btn_rect = pygame.Rect(button_x, button_y_start + i * spacing, button_w, button_h)
-                if btn_rect.collidepoint(self.cursor_pos):
-                    hovering_choice = True
-                    break
-            game_cursor.set_hover_state(CursorState.HOVER_BUTTON if hovering_choice else CursorState.DEFAULT)
-        elif self.quiz_state in [2, 3]:
-            game_cursor.set_hover_state(CursorState.HOVER_BUTTON)
-        elif self.phase in [1, 2]:
-            screen_npc_x = (self.npc_tile_x * TILE_SIZE - self.camera_x) * ZOOM
-            screen_npc_y = (self.npc_tile_y * TILE_SIZE - self.camera_y) * ZOOM
-            npc_rect = pygame.Rect(screen_npc_x - 10, screen_npc_y - 10, TILE_SIZE * ZOOM + 20, TILE_SIZE * ZOOM + 20)
-            if npc_rect.collidepoint(self.cursor_pos):
-                game_cursor.set_hover_state(CursorState.HOVER_NPC)
-            else:
-                game_cursor.set_hover_state(CursorState.DEFAULT)
-        elif self.phase == 4:
-            screen_p_x = (self.portal_tile_x * TILE_SIZE - self.camera_x) * ZOOM
-            screen_p_y = (self.portal_tile_y * TILE_SIZE - self.camera_y) * ZOOM
-            portal_rect = pygame.Rect(screen_p_x, screen_p_y, TILE_SIZE * 3 * ZOOM, TILE_SIZE * 3 * ZOOM)
-            if portal_rect.collidepoint(self.cursor_pos):
-                game_cursor.set_hover_state(CursorState.HOVER_PORTAL)
-            else:
-                game_cursor.set_hover_state(CursorState.DEFAULT)
-        else:
-            game_cursor.set_hover_state(CursorState.DEFAULT)
 
         # Animate NPC & Portal
         self.npc_anim_timer += 0.05

@@ -9,7 +9,6 @@ import random
 import collections
 from .map_loader import MapLoader
 from core.camera_system import LoLCamera
-from core.cursor_system import game_cursor, CursorState
 
 try:
     from db import db
@@ -2227,28 +2226,6 @@ class Quarter3:
         for portal in self.portals:
             portal.update_animation()
 
-        # Update contextual cursor hover state for LoL cursor
-        hover_state = CursorState.DEFAULT
-        if getattr(self, 'pause_menu', None) and self.pause_menu.is_hovering(self.cursor_pos):
-            hover_state = CursorState.HOVER_BUTTON
-        elif self.quiz_state in [1, 2, 3, 4, 5, 8, 9]:
-            hover_state = CursorState.HOVER_BUTTON
-        else:
-            cx, cy = self.cursor_pos
-            for sid, station in getattr(self, 'quiz_stations', {}).items():
-                st_x, st_y = station
-                nsx, nsy = self.lol_camera.world_to_screen(st_x * TILE_SIZE + TILE_SIZE // 2, st_y * TILE_SIZE + TILE_SIZE // 2)
-                if math.hypot(cx - nsx, cy - nsy) < 45:
-                    hover_state = CursorState.HOVER_QUIZ
-                    break
-            if hover_state == CursorState.DEFAULT:
-                for portal in self.portals:
-                    psx, psy = self.lol_camera.world_to_screen(portal.get_center_x(), portal.get_center_y())
-                    if math.hypot(cx - psx, cy - psy) < 48:
-                        hover_state = CursorState.HOVER_PORTAL
-                        break
-        game_cursor.set_hover_state(hover_state)
-
         self.update_camera()
 
     # ============================================================
@@ -3243,7 +3220,6 @@ class Quarter3:
             if self.victory_card.handle_event(event):
                 return "blocked"
             if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
-                game_cursor.add_click_ripple(event.pos, "interact")
                 res = self.victory_card.handle_click(event.pos)
                 if res:
                     return "blocked"
@@ -3252,7 +3228,6 @@ class Quarter3:
             return "blocked"
 
         if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
-            game_cursor.add_click_ripple(event.pos, "move")
             self.trigger_click(event.pos)
             return "handled"
 

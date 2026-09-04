@@ -104,8 +104,6 @@ class StudentSelect:
 
     def trigger_click(self, pos):
         """Handle click at cursor position - called from main_menu"""
-        from core.cursor_system import game_cursor
-        game_cursor.add_click_ripple(pos, "interact")
         # Check cooldown to prevent multiple rapid clicks
         current_time = pygame.time.get_ticks() / 1000.0
         if current_time - self.last_click_time < self.click_cooldown:
@@ -451,14 +449,4 @@ class StudentSelect:
     # =========================================================
     def update(self):
         """Update method - called from main_menu"""
-        from core.cursor_system import game_cursor, CursorState
-        hovered = (
-            self.back_button.collidepoint(self.cursor_pos) or 
-            self.refresh_button.collidepoint(self.cursor_pos) or
-            self.search_rect.collidepoint(self.cursor_pos)
-        )
-        if not hovered:
-            list_rect = pygame.Rect(self.list_x, self.list_y, self.list_width, self.list_height)
-            if list_rect.collidepoint(self.cursor_pos):
-                hovered = True
-        game_cursor.set_hover_state(CursorState.HOVER_BUTTON if hovered else CursorState.DEFAULT)
+        pass
