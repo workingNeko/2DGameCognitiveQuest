@@ -175,9 +175,11 @@ class StageSelect:
         # LOAD TILE IMAGES
         # ============================================================
         self.tile_images = self.load_tile_images()
-        self.fallback_tile = pygame.Surface((TILE_SIZE, TILE_SIZE))
-        self.fallback_tile.fill((100, 100, 100))
-        pygame.draw.rect(self.fallback_tile, (255, 0, 0), self.fallback_tile.get_rect(), 2)
+        # Seamless grass fallback so missing/unmapped characters never show error boxes
+        self.fallback_tile = self.tile_images.get('G')
+        if not self.fallback_tile:
+            self.fallback_tile = pygame.Surface((TILE_SIZE, TILE_SIZE))
+            self.fallback_tile.fill((34, 197, 94))
 
         # ============================================================
         # WALKABLE TILES
@@ -479,8 +481,7 @@ class StageSelect:
                 return image
             except Exception:
                 placeholder = pygame.Surface((TILE_SIZE, TILE_SIZE))
-                placeholder.fill((100, 100, 100))
-                pygame.draw.rect(placeholder, (255, 255, 255), placeholder.get_rect(), 1)
+                placeholder.fill((34, 197, 94))
                 return placeholder
 
         tiles = {}
@@ -882,17 +883,14 @@ class StageSelect:
                 scaled_width = int(self.get_width_pixels() * zoom)
                 scaled_height = int(self.get_height_pixels() * zoom)
 
-                if self.direction == 'right':
-                    color = (0, 255, 0)
-                elif self.direction == 'left':
-                    color = (255, 0, 0)
-                elif self.direction == 'up':
-                    color = (0, 0, 255)
-                else:
-                    color = (255, 255, 0)
-
-                pygame.draw.rect(screen, color, (screen_x, screen_y, scaled_width, scaled_height))
-                pygame.draw.rect(screen, (255, 255, 255), (screen_x, screen_y, scaled_width, scaled_height), 3)
+                glow_surf = pygame.Surface((scaled_width, scaled_height), pygame.SRCALPHA)
+                aura_color = (34, 197, 94, 160) if self.direction == 'left' else (
+                    (59, 130, 246, 160) if self.direction == 'up' else (
+                        (245, 158, 11, 160) if self.direction == 'right' else (168, 85, 247, 160)
+                    )
+                )
+                pygame.draw.ellipse(glow_surf, aura_color, (0, 0, scaled_width, scaled_height))
+                screen.blit(glow_surf, (screen_x, screen_y))
 
         def contains_position(self, world_x, world_y):
             portal_left = self.get_world_x()
@@ -1948,9 +1946,10 @@ class StageSelect:
     # DRAW CORRIDOR FORCEFIELDS / BARRIERS FOR LOCKED QUARTERS
     # ============================================================
     def draw_corridor_barriers(self):
-        """Renders animated glowing magical forcefields and lock badges across locked corridors."""
-        pulse = 0.6 + 0.4 * math.sin(self.frame_counter * 0.1)
-        font = pygame.font.SysFont("Comic Sans MS", max(10, int(10 * ZOOM)), bold=True)
+        """Renders animated glowing magical plasma forcefields, dual crystal pylons, and sleek badges across locked corridors."""
+        t = pygame.time.get_ticks() * 0.001
+        pulse = 0.5 + 0.5 * math.sin(t * 4.0)
+        font = pygame.font.SysFont(["Segoe UI", "Tahoma", "Comic Sans MS", "Arial"], max(11, int(11 * ZOOM)), bold=True)
 
         barriers = []
         # Quarter 2 (South corridor): row 16, cols 25, 26, 27
@@ -1960,8 +1959,9 @@ class StageSelect:
                 'world_y': 16 * TILE_SIZE,
                 'width_tiles': 3,
                 'height_tiles': 1,
-                'label': "🔒 LOCKED: Need Q1",
-                'color': (239, 68, 68)
+                'label': "🔒 COMPLETE Q1 TO UNLOCK",
+                'color': (239, 68, 68),
+                'pylon_axis': 'horizontal'
             })
 
         # Quarter 3 (East corridor): col 28, rows 12, 13, 14
@@ -1971,8 +1971,9 @@ class StageSelect:
                 'world_y': 12 * TILE_SIZE,
                 'width_tiles': 1,
                 'height_tiles': 3,
-                'label': "🔒 LOCKED: Need Q2",
-                'color': (239, 68, 68)
+                'label': "🔒 COMPLETE Q2 TO UNLOCK",
+                'color': (239, 68, 68),
+                'pylon_axis': 'vertical'
             })
 
         # Quarter 4 (North corridor): row 11, cols 25, 26, 27
@@ -1982,8 +1983,9 @@ class StageSelect:
                 'world_y': 11 * TILE_SIZE,
                 'width_tiles': 3,
                 'height_tiles': 1,
-                'label': "🔒 LOCKED: Need Q3",
-                'color': (239, 68, 68)
+                'label': "🔒 COMPLETE Q3 TO UNLOCK",
+                'color': (239, 68, 68),
+                'pylon_axis': 'horizontal'
             })
 
         for b in barriers:
@@ -1994,31 +1996,72 @@ class StageSelect:
 
             # Only draw if on screen
             if -bw <= bx <= self.width + bw and -bh <= by <= self.height + bh:
-                # Glowing translucent forcefield surface
-                alpha_surface = pygame.Surface((bw, bh), pygame.SRCALPHA)
-                alpha_val = int(115 + 75 * pulse)
-                r, g, bl = b['color']
-                alpha_surface.fill((r, g, bl, alpha_val))
+                # 1. Outer Radiant Ambient Forcefield Glow
+                glow_pad = int(8 * ZOOM)
+                glow_surf = pygame.Surface((bw + glow_pad * 2, bh + glow_pad * 2), pygame.SRCALPHA)
+                glow_alpha = int(45 + 30 * pulse)
+                pygame.draw.rect(glow_surf, (239, 68, 68, glow_alpha), (0, 0, bw + glow_pad * 2, bh + glow_pad * 2), border_radius=10)
+                self.screen.blit(glow_surf, (bx - glow_pad, by - glow_pad))
 
-                # Energy beam pulse in the center
-                if b['width_tiles'] > b['height_tiles']:
-                    pygame.draw.line(alpha_surface, (255, 255, 255, 210), (0, bh // 2), (bw, bh // 2), 2)
+                # 2. Main High-Energy Plasma Surface
+                plasma_surf = pygame.Surface((bw, bh), pygame.SRCALPHA)
+                plasma_alpha = int(140 + 70 * pulse)
+                pygame.draw.rect(plasma_surf, (220, 38, 38, plasma_alpha), (0, 0, bw, bh), border_radius=6)
+
+                # 3. Dynamic Moving Laser Grid Scanlines
+                if b['pylon_axis'] == 'horizontal':
+                    laser_y = int(bh * (0.5 + 0.35 * math.sin(t * 6.0)))
+                    pygame.draw.line(plasma_surf, (255, 255, 255, 240), (0, laser_y), (bw, laser_y), 3)
+                    for i in range(4):
+                        scan_x = int((t * 60 + i * (bw / 3.0)) % bw)
+                        pygame.draw.line(plasma_surf, (254, 202, 202, 160), (scan_x, 0), (min(bw, scan_x + int(14 * ZOOM)), bh), 2)
                 else:
-                    pygame.draw.line(alpha_surface, (255, 255, 255, 210), (bw // 2, 0), (bw // 2, bh), 2)
-                self.screen.blit(alpha_surface, (bx, by))
+                    laser_x = int(bw * (0.5 + 0.35 * math.sin(t * 6.0)))
+                    pygame.draw.line(plasma_surf, (255, 255, 255, 240), (laser_x, 0), (laser_x, bh), 3)
+                    for i in range(4):
+                        scan_y = int((t * 60 + i * (bh / 3.0)) % bh)
+                        pygame.draw.line(plasma_surf, (254, 202, 202, 160), (0, scan_y), (bw, min(bh, scan_y + int(14 * ZOOM))), 2)
 
-                # Glowing border
-                pygame.draw.rect(self.screen, (255, 120, 120), (bx, by, bw, bh), 2, border_radius=4)
+                self.screen.blit(plasma_surf, (bx, by))
 
-                # Floating lock badge in center of barrier
-                badge_w, badge_h = int(135 * ZOOM), int(22 * ZOOM)
+                # 4. Vibrant Neon Electric Border
+                pygame.draw.rect(self.screen, (254, 202, 202), (bx, by, bw, bh), 2, border_radius=6)
+
+                # 5. Dual Energy Emitter Pylons on Corridor Walls
+                pylon_size = int(9 * ZOOM)
+                if b['pylon_axis'] == 'horizontal':
+                    pylons = [
+                        (bx - pylon_size // 2, by + bh // 2),
+                        (bx + bw - pylon_size // 2, by + bh // 2)
+                    ]
+                else:
+                    pylons = [
+                        (bx + bw // 2, by - pylon_size // 2),
+                        (bx + bw // 2, by + bh - pylon_size // 2)
+                    ]
+
+                for px, py in pylons:
+                    pygame.draw.circle(self.screen, (30, 41, 59), (int(px), int(py)), pylon_size)
+                    pygame.draw.circle(self.screen, (251, 191, 36), (int(px), int(py)), pylon_size, 2)
+                    crystal_r = int((pylon_size - 3) * (0.8 + 0.3 * pulse))
+                    pygame.draw.circle(self.screen, (239, 68, 68), (int(px), int(py)), crystal_r)
+                    pygame.draw.circle(self.screen, (255, 255, 255), (int(px), int(py)), max(1, crystal_r // 2))
+
+                # 6. Sleek Holographic Security Shield Badge
+                badge_bob = math.sin(t * 4.0) * 3
+                badge_w, badge_h = int(172 * ZOOM), int(26 * ZOOM)
                 center_x = bx + bw / 2
-                center_y = by + bh / 2
+                center_y = by + bh / 2 + badge_bob
                 badge_rect = pygame.Rect(center_x - badge_w // 2, center_y - badge_h // 2, badge_w, badge_h)
-                pygame.draw.rect(self.screen, (15, 23, 42), badge_rect, border_radius=6)
-                pygame.draw.rect(self.screen, (239, 68, 68), badge_rect, 2, border_radius=6)
 
-                lbl_surf = font.render(b['label'], True, (254, 202, 202))
+                shadow_rect = badge_rect.copy()
+                shadow_rect.y += 2
+                pygame.draw.rect(self.screen, (0, 0, 0, 180), shadow_rect, border_radius=8)
+                pygame.draw.rect(self.screen, (15, 23, 42), badge_rect, border_radius=8)
+                border_color = (248, 113, 113) if pulse > 0.5 else (239, 68, 68)
+                pygame.draw.rect(self.screen, border_color, badge_rect, 2, border_radius=8)
+
+                lbl_surf = font.render(b['label'], True, (254, 240, 138) if pulse > 0.5 else (255, 255, 255))
                 self.screen.blit(lbl_surf, lbl_surf.get_rect(center=badge_rect.center))
 
     # ============================================================
@@ -2031,7 +2074,8 @@ class StageSelect:
         margin = TILE_SIZE * ZOOM * 2
         if (-margin <= screen_x <= self.width + margin and
                 -margin <= screen_y <= self.height + margin):
-            image = self.tile_images.get(c, self.fallback_tile)
+            # Gracefully fallback to grass G tile so missing character boxes never render
+            image = self.tile_images.get(c, self.tile_images.get('G', self.fallback_tile))
             scaled_size = int(TILE_SIZE * ZOOM)
             scaled_image = pygame.transform.scale(image, (scaled_size, scaled_size))
             self.screen.blit(scaled_image, (screen_x, screen_y))

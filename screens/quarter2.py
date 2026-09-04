@@ -177,9 +177,10 @@ class Quarter2:
         # LOAD TILE IMAGES
         # ============================================================
         self.tile_images = self.load_tile_images()
-        self.fallback_tile = pygame.Surface((TILE_SIZE, TILE_SIZE))
-        self.fallback_tile.fill((100, 100, 100))
-        pygame.draw.rect(self.fallback_tile, (255, 0, 0), self.fallback_tile.get_rect(), 2)
+        self.fallback_tile = self.tile_images.get('street_asphalt_0', self.tile_images.get('G'))
+        if not self.fallback_tile:
+            self.fallback_tile = pygame.Surface((TILE_SIZE, TILE_SIZE))
+            self.fallback_tile.fill((40, 45, 55))
 
         # ============================================================
         # WALKABLE TILES
@@ -1431,8 +1432,7 @@ class Quarter2:
                 if is_q2:
                     return load_tile(filename, is_q2=False)
                 placeholder = pygame.Surface((TILE_SIZE, TILE_SIZE))
-                placeholder.fill((100, 100, 100))
-                pygame.draw.rect(placeholder, (255, 255, 255), placeholder.get_rect(), 1)
+                placeholder.fill((40, 45, 55))
                 return placeholder
 
         tiles = {}

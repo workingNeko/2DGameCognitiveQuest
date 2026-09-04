@@ -129,31 +129,22 @@ class MapLoader:
         return None
 
     def replace_npc_markers_with_walkable_tiles(self):
-        """Replace NPC markers and player start 'P' with walkable tiles for rendering"""
+        """Replace NPC markers, portal letters, and player start 'P' with walkable tiles for rendering"""
         modified_map = []
         for y, row in enumerate(self.game_map):
             row_list = list(row)
-            modified = False
             for x, char in enumerate(row_list):
-                if char in ['P', 'N'] or char in self.npc_positions:
-                    # Replace with walkable tile
+                if char in ['P', 'N', 'l', 'r', 'u', 'd'] or char in self.npc_positions:
+                    # Replace with proper walkable corridor or grass tile
                     if char == 'P':
-                        if self.current_map_name == "map.txt":
-                            row_list[x] = '#'
-                        else:
-                            row_list[x] = 'G'
+                        row_list[x] = '#' if self.current_map_name == "map.txt" else 'G'
                     elif char in ['B', 'K']:
-                        if self.current_map_name == "map.txt":
-                            row_list[x] = '7'
-                        else:
-                            row_list[x] = 'G'
-                    elif char == 'O':
-                        if self.current_map_name == "map.txt":
-                            row_list[x] = '6'
-                        else:
-                            row_list[x] = 'G'
-                    elif char in ['S', 'N']:
+                        row_list[x] = '7' if self.current_map_name == "map.txt" else 'G'
+                    elif char in ['O', 'S', 'l', 'r']:
+                        row_list[x] = '6' if self.current_map_name == "map.txt" else 'G'
+                    elif char in ['u', 'd']:
+                        row_list[x] = '#' if self.current_map_name == "map.txt" else 'G'
+                    else:
                         row_list[x] = 'G'
-                    modified = True
             modified_map.append(''.join(row_list))
         return modified_map
