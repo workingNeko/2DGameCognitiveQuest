@@ -43,12 +43,19 @@ class MainMenu:
         # ==========================================
 
         # MediaPipe setup
-        self.mp_hands = mp.solutions.hands
-        self.hands = self.mp_hands.Hands(
-            max_num_hands=1,
-            min_detection_confidence=0.5,
-            min_tracking_confidence=0.5
-        )
+        self.mp_hands = None
+        self.hands = None
+        try:
+            if hasattr(mp, 'solutions') and hasattr(mp.solutions, 'hands'):
+                self.mp_hands = mp.solutions.hands
+                self.hands = self.mp_hands.Hands(
+                    max_num_hands=1,
+                    min_detection_confidence=0.5,
+                    min_tracking_confidence=0.5
+                )
+        except Exception as e:
+            print(f"[WARN] MediaPipe hands init exception: {e}")
+            self.hands = None
 
         # Camera setup
         self.camera_size = (160, 120)
@@ -234,6 +241,8 @@ class MainMenu:
         # ==========================================
         # MESSAGES
         # ==========================================
+        self.show_no_student_message = False
+        self.no_student_timer = 0
 
         # ==========================================
         # AUTOMATIC BACKGROUND OFFLINE EVALUATION SYNC
@@ -306,7 +315,7 @@ class MainMenu:
                 rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
                 preview = cv2.resize(img, self.camera_size) if getattr(self, 'show_camera_overlay', False) else None
 
-                results = self.hands.process(rgb)
+                results = self.hands.process(rgb) if self.hands is not None else None
                 coords = None
                 if results and results.multi_hand_landmarks:
                     try:
