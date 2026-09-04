@@ -51,6 +51,7 @@ class MainMenu:
 
         # Camera setup
         self.camera_size = (160, 120)
+        self.show_camera_overlay = False  # Set to False to remove the visual camera overlay box
         self.cap = None
         try:
             self.cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
@@ -301,7 +302,7 @@ class MainMenu:
 
                 img = cv2.flip(img, 1)
                 rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-                preview = cv2.resize(img, self.camera_size)
+                preview = cv2.resize(img, self.camera_size) if getattr(self, 'show_camera_overlay', False) else None
 
                 results = self.hands.process(rgb)
                 coords = None
@@ -985,6 +986,9 @@ class MainMenu:
     # ==========================================
 
     def draw_camera_feed(self):
+        if not getattr(self, 'show_camera_overlay', False):
+            return
+
         if self.camera_frame is not None:
             camera_frame_rgb = cv2.cvtColor(self.camera_frame, cv2.COLOR_BGR2RGB)
             camera_surface = pygame.surfarray.make_surface(np.swapaxes(camera_frame_rgb, 0, 1))
