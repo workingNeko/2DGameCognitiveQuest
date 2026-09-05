@@ -2747,7 +2747,7 @@ class StageSelect:
             self.draw_portal_transition()
 
     def draw_portal_transition(self):
-        """Renders 3-second black loading screen with animated wave LOADING text, energy bar, and themed glows."""
+        """Renders 3-second black loading screen with animated wave LOADING text and glowing energy capsule bar."""
         if not self.portal_transition_active or not self.portal_transition_theme:
             return
 
@@ -2769,7 +2769,7 @@ class StageSelect:
                 self.screen.blit(s_surf, (sx - s["width"], sy - s["width"]))
 
         # 3. Animated "LOADING..." Title (Traveling Sine Wave identical to Quarter Titles)
-        base_y = self.height // 2 - 45
+        base_y = self.height // 2 - 50
         x = self.width // 2 - self.loading_total_width // 2
 
         for i, data in enumerate(self.loading_letters):
@@ -2795,34 +2795,81 @@ class StageSelect:
 
             x += data["width"] + self.loading_spacing
 
-        # 4. Sleek Futuristic Progress Bar
-        bar_w = min(460, self.width - 80)
-        bar_h = 10
+        # 4. Premium Futuristic Energy Loading Bar (Centrally Focused, No Bottom Subtitle)
+        bar_w = min(540, self.width - 100)
+        bar_h = 24
         bar_x = (self.width - bar_w) // 2
-        bar_y = base_y + 85
+        bar_y = base_y + 80
+        primary_col = theme.get("primary", (56, 189, 248))
+        accent_col = theme.get("accent", (250, 204, 21))
 
-        # Track background
-        pygame.draw.rect(self.screen, (20, 24, 38), (bar_x, bar_y, bar_w, bar_h), border_radius=5)
-        pygame.draw.rect(self.screen, (50, 60, 85), (bar_x, bar_y, bar_w, bar_h), 1, border_radius=5)
+        # Soft ambient neon glow under the bar
+        glow_surf = pygame.Surface((bar_w + 32, bar_h + 32), pygame.SRCALPHA)
+        pygame.draw.rect(glow_surf, (*primary_col, 45), (0, 0, bar_w + 32, bar_h + 32), border_radius=18)
+        self.screen.blit(glow_surf, (bar_x - 16, bar_y - 16))
 
-        # Fill progress
-        fill_w = int((bar_w - 4) * progress)
+        # Track background (Deep metallic glass)
+        pygame.draw.rect(self.screen, (15, 23, 42), (bar_x, bar_y, bar_w, bar_h), border_radius=12)
+        pygame.draw.rect(self.screen, (51, 65, 85), (bar_x, bar_y, bar_w, bar_h), 2, border_radius=12)
+        pygame.draw.rect(self.screen, primary_col, (bar_x, bar_y, bar_w, bar_h), 1, border_radius=12)
+
+        # Fill progress with smooth capsule rounding
+        inner_margin = 3
+        max_fill_w = bar_w - inner_margin * 2
+        fill_w = int(max_fill_w * progress)
+
         if fill_w > 0:
-            primary_col = theme.get("primary", (56, 189, 248))
-            accent_col = theme.get("accent", (250, 204, 21))
-            pygame.draw.rect(self.screen, primary_col, (bar_x + 2, bar_y + 2, fill_w, bar_h - 4), border_radius=3)
-            # Energy tip spark
-            spark_x = bar_x + 2 + fill_w
-            spark_y = bar_y + bar_h // 2
-            pygame.draw.circle(self.screen, (255, 255, 255), (spark_x, spark_y), 4)
-            pygame.draw.circle(self.screen, accent_col, (spark_x, spark_y), 7, 1)
+            fill_rect = pygame.Rect(bar_x + inner_margin, bar_y + inner_margin, fill_w, bar_h - inner_margin * 2)
 
-        # 5. Destination Realm Subtitle
-        realm_text = theme.get("realm", "Entering Quarter...")
-        sub_font = pygame.font.SysFont("Comic Sans MS", 13, bold=True)
-        sub_str = f"Transporting to {theme.get('name', 'QUARTER')} • {theme.get('title', '')} ({realm_text})"
-        sub_surf = sub_font.render(sub_str, True, (160, 180, 210))
-        self.screen.blit(sub_surf, (self.width // 2 - sub_surf.get_width() // 2, bar_y + 24))
+            # Draw primary gradient base fill
+            fill_surf = pygame.Surface((fill_w, fill_rect.height), pygame.SRCALPHA)
+            fill_surf.fill(primary_col)
+
+            # Horizontal gradient shading towards accent color
+            for col_i in range(fill_w):
+                ratio = col_i / float(max(1, max_fill_w))
+                blend_r = int(primary_col[0] + (accent_col[0] - primary_col[0]) * ratio)
+                blend_g = int(primary_col[1] + (accent_col[1] - primary_col[1]) * ratio)
+                blend_b = int(primary_col[2] + (accent_col[2] - primary_col[2]) * ratio)
+                pygame.draw.line(fill_surf, (blend_r, blend_g, blend_b), (col_i, 0), (col_i, fill_rect.height))
+
+            # Glassy top specular reflection
+            top_shine = pygame.Surface((fill_w, fill_rect.height // 2), pygame.SRCALPHA)
+            top_shine.fill((255, 255, 255, 65))
+            fill_surf.blit(top_shine, (0, 0))
+
+            # Animated sweeping shimmer streak across the fill
+            shimmer_cycle = (timer * 340) % (max_fill_w + 100) - 50
+            if 0 <= shimmer_cycle < fill_w + 30:
+                s_left = max(0, int(shimmer_cycle - 20))
+                s_right = min(fill_w, int(shimmer_cycle + 20))
+                if s_right > s_left:
+                    shimmer_strip = pygame.Surface((s_right - s_left, fill_rect.height), pygame.SRCALPHA)
+                    shimmer_strip.fill((255, 255, 255, 90))
+                    fill_surf.blit(shimmer_strip, (s_left, 0))
+
+            self.screen.blit(fill_surf, fill_rect.topleft)
+
+            # Glowing energy tip spark at head of the progress bar
+            spark_x = bar_x + inner_margin + fill_w
+            spark_y = bar_y + bar_h // 2
+            pulse_rad = int(math.sin(timer * 12.0) * 2 + 5)
+
+            # Outer aura
+            pygame.draw.circle(self.screen, (*accent_col, 180), (spark_x, spark_y), pulse_rad + 6, 2)
+            pygame.draw.circle(self.screen, accent_col, (spark_x, spark_y), pulse_rad + 3)
+            # Bright white center core
+            pygame.draw.circle(self.screen, (255, 255, 255), (spark_x, spark_y), max(2, pulse_rad - 1))
+
+        # 5. Crisp Centered Percentage Label inside the loading bar
+        percent_str = f"{int(progress * 100)}%"
+        pct_font = pygame.font.SysFont("Comic Sans MS", 12, bold=True)
+        # Drop shadow for readability
+        pct_shadow = pct_font.render(percent_str, True, (0, 0, 0))
+        pct_surf = pct_font.render(percent_str, True, (255, 255, 255))
+        pct_center = (bar_x + bar_w // 2, bar_y + bar_h // 2)
+        self.screen.blit(pct_shadow, pct_shadow.get_rect(center=(pct_center[0] + 1, pct_center[1] + 1)))
+        self.screen.blit(pct_surf, pct_surf.get_rect(center=pct_center))
 
     # ============================================================
     # DRAW UI
