@@ -69,16 +69,18 @@ class StageSelect:
         if is_game_completed(student_id):
             self.grand_finale_active = True
 
-        # Portal Warp Screen Transition State
+        # Portal Warp Screen Transition State (3-Second Black Loading Screen)
         self.portal_transition_active = False
         self.portal_transition_timer = 0.0
-        self.portal_transition_duration = 0.95
+        self.portal_transition_duration = 3.0
         self.portal_transition_target = None
         self.portal_transition_origin = (self.width // 2, self.height // 2)
         self.portal_transition_particles = []
         self.portal_transition_stars = []
         self.portal_transition_theme = None
         self.portal_transition_surface = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
+        self.portal_loaded_screen = None
+        self.portal_loading_done = False
 
         # Typewriter Dialogue State
         self.dialogue_char_index = 0.0
@@ -1093,15 +1095,49 @@ class StageSelect:
                 "player_following_target": self.player_following_target
             }
 
+    def _preload_quarter_worker(self, qid):
+        """Threaded worker that pre-loads the target Quarter during the 3-second black LOADING screen."""
+        try:
+            if qid == "quarter1":
+                map_name = random.choice(["map1.txt", "map2.txt", "map3.txt"])
+                print(f"[STAGE] Background pre-loading Quarter 1 - {map_name}")
+                from screens.quarter1 import Quarter1
+                loaded = Quarter1(self.screen, self.main_menu, map_name)
+            elif qid == "quarter2":
+                map_name = random.choice(["map4.txt", "map5.txt", "map6.txt"])
+                print(f"[STAGE] Background pre-loading Quarter 2 - {map_name}")
+                from screens.quarter2 import Quarter2
+                loaded = Quarter2(self.screen, self.main_menu, map_name)
+            elif qid == "quarter3":
+                map_name = random.choice(["map7.txt", "map8.txt", "map9.txt"])
+                print(f"[STAGE] Background pre-loading Quarter 3 - {map_name}")
+                from screens.quarter3 import Quarter3
+                loaded = Quarter3(self.screen, self.main_menu, map_name)
+            elif qid == "quarter4":
+                map_name = random.choice(["map10.txt", "map11.txt", "map12.txt"])
+                print(f"[STAGE] Background pre-loading Quarter 4 - {map_name}")
+                from screens.quarter4 import Quarter4
+                loaded = Quarter4(self.screen, self.main_menu, map_name)
+            else:
+                loaded = None
+            self.portal_loaded_screen = loaded
+        except Exception as e:
+            print(f"[STAGE WARN] Preload exception for {qid}: {e}")
+            self.portal_loaded_screen = None
+        finally:
+            self.portal_loading_done = True
+
     def enter_quarter(self, qid):
-        """Initiate centralized portal transition to enter a quarter with sound, animation, and state persistence."""
+        """Initiate centralized portal transition with 3-second black LOADING screen and background preload."""
         if getattr(self, 'portal_transition_active', False):
             return
 
         self.portal_transition_active = True
         self.portal_transition_timer = 0.0
-        self.portal_transition_duration = 0.95
+        self.portal_transition_duration = 3.0  # 3 seconds as requested
         self.portal_transition_target = qid
+        self.portal_loading_done = False
+        self.portal_loaded_screen = None
         self.player_following_target = False  # Stop walking follow
 
         # Compute screen position of player/portal for radial effect center
@@ -1111,8 +1147,12 @@ class StageSelect:
             center_x, center_y = self.width // 2, self.height // 2
         self.portal_transition_origin = (center_x, center_y)
 
-        # Initialize particles & theme
+        # Initialize particles, LOADING letter models, and theme
         self._init_portal_transition_fx(qid)
+
+        # Start asynchronous pre-load worker in a background thread to hide all loading delay
+        import threading
+        threading.Thread(target=self._preload_quarter_worker, args=(qid,), daemon=True).start()
 
         # Play transition sound effect
         if hasattr(self.main_menu, 'audio_manager'):
@@ -1129,35 +1169,53 @@ class StageSelect:
         from db.save_system import save_student_progress
         save_student_progress(self.main_menu)
 
+        # Use pre-loaded instance from background thread or fallback to direct load
         if qid == "quarter1":
-            map_name = random.choice(["map1.txt", "map2.txt", "map3.txt"])
-            print(f"[STAGE] Entering Quarter 1 - {map_name}")
+            if self.portal_loaded_screen:
+                self.main_menu.quarter1 = self.portal_loaded_screen
+            else:
+                map_name = random.choice(["map1.txt", "map2.txt", "map3.txt"])
+                print(f"[STAGE] Entering Quarter 1 - {map_name}")
+                from screens.quarter1 import Quarter1
+                self.main_menu.quarter1 = Quarter1(self.screen, self.main_menu, map_name)
             self.main_menu.current_screen = "quarter1"
-            self.main_menu.quarter1 = Quarter1(self.screen, self.main_menu, map_name)
         elif qid == "quarter2":
-            map_name = random.choice(["map4.txt", "map5.txt", "map6.txt"])
-            print(f"[STAGE] Entering Quarter 2 - {map_name}")
+            if self.portal_loaded_screen:
+                self.main_menu.quarter2 = self.portal_loaded_screen
+            else:
+                map_name = random.choice(["map4.txt", "map5.txt", "map6.txt"])
+                print(f"[STAGE] Entering Quarter 2 - {map_name}")
+                from screens.quarter2 import Quarter2
+                self.main_menu.quarter2 = Quarter2(self.screen, self.main_menu, map_name)
             self.main_menu.current_screen = "quarter2"
-            self.main_menu.quarter2 = Quarter2(self.screen, self.main_menu, map_name)
         elif qid == "quarter3":
-            map_name = random.choice(["map7.txt", "map8.txt", "map9.txt"])
-            print(f"[STAGE] Entering Quarter 3 - {map_name}")
+            if self.portal_loaded_screen:
+                self.main_menu.quarter3 = self.portal_loaded_screen
+            else:
+                map_name = random.choice(["map7.txt", "map8.txt", "map9.txt"])
+                print(f"[STAGE] Entering Quarter 3 - {map_name}")
+                from screens.quarter3 import Quarter3
+                self.main_menu.quarter3 = Quarter3(self.screen, self.main_menu, map_name)
             self.main_menu.current_screen = "quarter3"
-            self.main_menu.quarter3 = Quarter3(self.screen, self.main_menu, map_name)
         elif qid == "quarter4":
-            map_name = random.choice(["map10.txt", "map11.txt", "map12.txt"])
-            print(f"[STAGE] Entering Quarter 4 - {map_name}")
+            if self.portal_loaded_screen:
+                self.main_menu.quarter4 = self.portal_loaded_screen
+            else:
+                map_name = random.choice(["map10.txt", "map11.txt", "map12.txt"])
+                print(f"[STAGE] Entering Quarter 4 - {map_name}")
+                from screens.quarter4 import Quarter4
+                self.main_menu.quarter4 = Quarter4(self.screen, self.main_menu, map_name)
             self.main_menu.current_screen = "quarter4"
-            self.main_menu.quarter4 = Quarter4(self.screen, self.main_menu, map_name)
 
+        self.portal_loaded_screen = None
         self.main_menu.stage_select = None
 
     def _init_portal_transition_fx(self, qid):
-        """Initialize theme palettes, swirling energy vortex, and hyperspace star particles."""
+        """Initialize theme palettes, swirling energy vortex, hyperspace star particles, and LOADING text."""
         palettes = {
             "quarter1": {
                 "name": "QUARTER 1",
-                "title": "FOREST OF SHAPES",
+                "title": "GEOMETRY FOREST",
                 "realm": "Geometry & Polygon Realm",
                 "primary": (34, 197, 94),
                 "secondary": (56, 189, 248),
@@ -1166,7 +1224,7 @@ class StageSelect:
             },
             "quarter2": {
                 "name": "QUARTER 2",
-                "title": "BARRIO FIESTA",
+                "title": "BARRIOS' FIESTA",
                 "realm": "Market & Arithmetic Realm",
                 "primary": (245, 158, 11),
                 "secondary": (239, 68, 68),
@@ -1175,7 +1233,7 @@ class StageSelect:
             },
             "quarter3": {
                 "name": "QUARTER 3",
-                "title": "SUN TEMPLE",
+                "title": "MONETARY DESERT",
                 "realm": "Solar Desert & Fractions Realm",
                 "primary": (234, 179, 8),
                 "secondary": (249, 115, 22),
@@ -1184,44 +1242,38 @@ class StageSelect:
             },
             "quarter4": {
                 "name": "QUARTER 4",
-                "title": "CLOCKTOWER CASTLE",
-                "realm": "Temporal Mastery & Grand Finale",
-                "primary": (168, 85, 247),
-                "secondary": (59, 130, 246),
+                "title": "UNDERWATER DUNGEON",
+                "realm": "Aquatic Sluices & Grand Finale",
+                "primary": (56, 189, 248),
+                "secondary": (168, 85, 247),
                 "accent": (216, 180, 254),
-                "void": (20, 10, 42),
+                "void": (10, 20, 42),
             },
         }
         self.portal_transition_theme = palettes.get(qid, palettes["quarter1"])
 
-        # Swirling spiral particles
-        self.portal_transition_particles = []
-        for _ in range(48):
-            angle = random.uniform(0, 2 * math.pi)
-            dist = random.uniform(8, 75)
-            ang_spd = random.uniform(200, 450)
-            radial_spd = random.uniform(40, 140)
-            color = random.choice([
-                self.portal_transition_theme["primary"],
-                self.portal_transition_theme["secondary"],
-                self.portal_transition_theme["accent"],
-                (255, 255, 255)
-            ])
-            size = random.randint(3, 7)
-            self.portal_transition_particles.append({
-                "angle": angle,
-                "dist": dist,
-                "angular_speed": ang_spd,
-                "radial_speed": radial_spd,
-                "color": color,
-                "size": size
+        # Pre-render LOADING... letters in pixel font with theme primary glow
+        theme_glow = self.portal_transition_theme.get("primary", (180, 180, 180))
+        self.loading_text = "LOADING..."
+        self.loading_spacing = 10
+        self.loading_letters = []
+        for ch in self.loading_text:
+            glow = self.title_font.render(ch, False, theme_glow)
+            outline = self.title_font.render(ch, False, (0, 0, 0))
+            main = self.title_font.render(ch, False, (255, 255, 255))
+            self.loading_letters.append({
+                "glow": glow,
+                "outline": outline,
+                "main": main,
+                "width": main.get_width()
             })
+        self.loading_total_width = sum(l["width"] for l in self.loading_letters) + self.loading_spacing * (len(self.loading_text) - 1)
 
-        # Hyperspace warp stars
+        # Ambient floating particle stars
         self.portal_transition_stars = []
-        for _ in range(40):
+        for _ in range(50):
             star_ang = random.uniform(0, 2 * math.pi)
-            speed = random.uniform(280, 700)
+            speed = random.uniform(60, 180)
             color = random.choice([
                 (255, 255, 255),
                 self.portal_transition_theme["accent"],
@@ -1229,23 +1281,17 @@ class StageSelect:
             ])
             self.portal_transition_stars.append({
                 "angle": star_ang,
-                "dist": random.uniform(5, 45),
+                "dist": random.uniform(20, self.width // 2),
                 "speed": speed,
-                "length": random.uniform(8, 24),
+                "length": random.uniform(4, 12),
                 "color": color,
                 "width": random.randint(2, 4)
             })
 
     def _update_portal_transition(self, dt):
-        """Update positions and velocities of portal warp particles and hyperspace stars."""
-        for p in self.portal_transition_particles:
-            p["angle"] += math.radians(p["angular_speed"] * dt)
-            p["dist"] += p["radial_speed"] * dt
-            p["angular_speed"] += 140 * dt
-
+        """Update positions of ambient drifting particles."""
         for s in self.portal_transition_stars:
             s["dist"] += s["speed"] * dt
-            s["speed"] += 380 * dt
 
     # ============================================================
     # CHECK PORTAL TELEPORT - Load Quarter1, Quarter2, Quarter3, or Quarter4
@@ -1565,11 +1611,11 @@ class StageSelect:
         dt = self.clock.tick(FPS) / 1000.0
         self.frame_counter += 1
 
-        # Check Portal Warp Screen Transition
+        # Check Portal Warp Screen Transition (3-second black LOADING screen)
         if self.portal_transition_active:
             self.portal_transition_timer += dt
             self._update_portal_transition(dt)
-            if self.portal_transition_timer >= self.portal_transition_duration:
+            if self.portal_transition_timer >= self.portal_transition_duration and (getattr(self, 'portal_loading_done', False) or self.portal_transition_timer >= 5.0):
                 self._finish_portal_transition()
             return
 
@@ -2701,121 +2747,82 @@ class StageSelect:
             self.draw_portal_transition()
 
     def draw_portal_transition(self):
-        """Renders cinematic portal warp visual effect: expanding dimensional rift, neon shockwaves, hyperspace star streaks, and HUD banner card."""
+        """Renders 3-second black loading screen with animated wave LOADING text, energy bar, and themed glows."""
         if not self.portal_transition_active or not self.portal_transition_theme:
             return
 
-        progress = max(0.0, min(1.0, self.portal_transition_timer / self.portal_transition_duration))
-        origin_x, origin_y = self.portal_transition_origin
+        # 1. Solid Pure Black Background to completely conceal loading delay
+        self.screen.fill((0, 0, 0))
+
         theme = self.portal_transition_theme
+        timer = self.portal_transition_timer
+        progress = max(0.0, min(1.0, timer / self.portal_transition_duration))
 
-        # Ensure surface matches screen size
-        if self.portal_transition_surface.get_size() != (self.width, self.height):
-            self.portal_transition_surface = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
-        surf = self.portal_transition_surface
-        surf.fill((0, 0, 0, 0))
+        # 2. Ambient drifting star sparkles in the dark void
+        for s in self.portal_transition_stars:
+            sx = int(self.width // 2 + math.cos(s["angle"]) * (s["dist"] % (self.width // 2)))
+            sy = int(self.height // 2 + math.sin(s["angle"]) * (s["dist"] % (self.height // 2)))
+            if 0 <= sx < self.width and 0 <= sy < self.height:
+                s_alpha = int(180 * (math.sin(timer * 4.0 + s["dist"]) * 0.4 + 0.6))
+                s_surf = pygame.Surface((s["width"] * 2, s["width"] * 2), pygame.SRCALPHA)
+                pygame.draw.circle(s_surf, (*s["color"], s_alpha), (s["width"], s["width"]), s["width"])
+                self.screen.blit(s_surf, (sx - s["width"], sy - s["width"]))
 
-        max_radius = int(math.hypot(max(origin_x, self.width - origin_x), max(origin_y, self.height - origin_y)))
+        # 3. Animated "LOADING..." Title (Traveling Sine Wave identical to Quarter Titles)
+        base_y = self.height // 2 - 45
+        x = self.width // 2 - self.loading_total_width // 2
 
-        # 1. Dimensional Rift Expansion
-        if progress >= 0.85:
-            # Full opaque void coverage to guarantee zero flicker when screen flips
-            fade_in_alpha = int(min(255, 230 + ((progress - 0.85) / 0.15) * 25))
-            surf.fill((*theme["void"], fade_in_alpha))
-        else:
-            # Expanding circular portal lens
-            r = int(((progress / 0.85) ** 1.3) * max_radius * 1.1)
-            if r > 0:
-                # Void disk
-                void_alpha = int(min(255, 175 + progress * 80))
-                pygame.draw.circle(surf, (*theme["void"], void_alpha), (origin_x, origin_y), r)
-                # Shimmering border glow rings
-                pygame.draw.circle(surf, (*theme["accent"], 190), (origin_x, origin_y), r, 6)
-                if r > 4:
-                    pygame.draw.circle(surf, (*theme["primary"], 255), (origin_x, origin_y), r - 3, 4)
-                if r > 8:
-                    pygame.draw.circle(surf, (255, 255, 255, 220), (origin_x, origin_y), r - 6, 2)
+        for i, data in enumerate(self.loading_letters):
+            phase = timer * 7.0 - i * 0.45
+            offset = math.sin(phase) * 12
 
-        # 2. Concentric Shockwave Ripples (ahead of the boundary)
-        for k in range(3):
-            ring_prog = progress * 1.4 - k * 0.16
-            if 0.0 < ring_prog < 1.0:
-                ripple_r = int(ring_prog * max_radius)
-                ripple_alpha = int(220 * ((1.0 - ring_prog) ** 1.5))
-                if ripple_r > 0 and ripple_alpha > 0:
-                    pygame.draw.circle(surf, (*theme["primary"], ripple_alpha), (origin_x, origin_y), ripple_r, max(2, int(6 * (1.0 - ring_prog))))
+            glow = data["glow"].copy()
+            outline = data["outline"].copy()
+            main = data["main"].copy()
 
-        # 3. Swirling Vortex Energy Particles
-        p_fade = max(0.0, min(1.0, (1.0 - progress) * 2.0))
-        p_alpha = int(255 * p_fade)
-        if p_alpha > 0:
-            for p in self.portal_transition_particles:
-                px = int(origin_x + math.cos(p["angle"]) * p["dist"])
-                py = int(origin_y + math.sin(p["angle"]) * p["dist"])
-                if 0 <= px < self.width and 0 <= py < self.height:
-                    pygame.draw.circle(surf, (*p["color"], p_alpha), (px, py), p["size"])
+            # Thematic Glow
+            for gx in (-5, 0, 5):
+                for gy in (-5, 0, 5):
+                    self.screen.blit(glow, (x + gx, base_y + gy + offset))
 
-        # 4. Hyperspace Star Streaks
-        if progress > 0.12:
-            s_fade = min(1.0, (progress - 0.12) / 0.25) * (1.0 if progress < 0.78 else max(0.0, (0.95 - progress) / 0.17))
-            s_alpha = int(240 * s_fade)
-            if s_alpha > 0:
-                for s in self.portal_transition_stars:
-                    sx1 = int(origin_x + math.cos(s["angle"]) * s["dist"])
-                    sy1 = int(origin_y + math.sin(s["angle"]) * s["dist"])
-                    trail_len = s["length"] * (1.0 + progress * 3.0)
-                    sx2 = int(origin_x + math.cos(s["angle"]) * (s["dist"] + trail_len))
-                    sy2 = int(origin_y + math.sin(s["angle"]) * (s["dist"] + trail_len))
-                    pygame.draw.line(surf, (*s["color"], s_alpha), (sx1, sy1), (sx2, sy2), s["width"])
+            # Outline
+            for ox in (-2, -1, 1, 2):
+                for oy in (-2, -1, 1, 2):
+                    self.screen.blit(outline, (x + ox, base_y + oy + offset))
 
-        # 5. Cinematic HUD Warp Banner Card
-        if progress > 0.18:
-            card_fade = min(1.0, (progress - 0.18) / 0.25) * (1.0 if progress < 0.85 else max(0.0, (1.0 - progress) / 0.15))
-            card_alpha = int(255 * card_fade)
-            if card_alpha > 0:
-                card_w = min(520, self.width - 40)
-                card_h = 88
-                card_x = (self.width - card_w) // 2
-                card_y = self.height - card_h - 45
+            # Main text
+            self.screen.blit(main, (x, base_y + offset))
 
-                card_surf = pygame.Surface((card_w, card_h), pygame.SRCALPHA)
-                # Glassmorphic background
-                pygame.draw.rect(card_surf, (15, 23, 42, int(card_alpha * 0.92)), (0, 0, card_w, card_h), border_radius=14)
-                # Outer glow & border
-                pygame.draw.rect(card_surf, (*theme["primary"], card_alpha), (0, 0, card_w, card_h), 2, border_radius=14)
+            x += data["width"] + self.loading_spacing
 
-                # Subtitle pill
-                sub_font = getattr(self, 'small_font', None) or pygame.font.SysFont("Segoe UI", 12)
-                t_sub = sub_font.render(f"✦ DIMENSIONAL WARP ACTIVATED  •  {theme['realm'].upper()} ✦", True, theme["accent"])
-                t_sub_alpha = t_sub.copy()
-                t_sub_alpha.set_alpha(card_alpha)
-                card_surf.blit(t_sub_alpha, ((card_w - t_sub.get_width()) // 2, 12))
+        # 4. Sleek Futuristic Progress Bar
+        bar_w = min(460, self.width - 80)
+        bar_h = 10
+        bar_x = (self.width - bar_w) // 2
+        bar_y = base_y + 85
 
-                # Bold Title
-                title_font = getattr(self, 'font', None) or pygame.font.SysFont("Segoe UI", 16, bold=True)
-                full_title = f"{theme['name']}: {theme['title']}"
-                t_title = title_font.render(full_title, True, (255, 255, 255))
-                t_title_alpha = t_title.copy()
-                t_title_alpha.set_alpha(card_alpha)
-                card_surf.blit(t_title_alpha, ((card_w - t_title.get_width()) // 2, 34))
+        # Track background
+        pygame.draw.rect(self.screen, (20, 24, 38), (bar_x, bar_y, bar_w, bar_h), border_radius=5)
+        pygame.draw.rect(self.screen, (50, 60, 85), (bar_x, bar_y, bar_w, bar_h), 1, border_radius=5)
 
-                # Energy Bar
-                bar_x = 30
-                bar_y = 66
-                bar_w = card_w - 60
-                bar_h = 6
-                pygame.draw.rect(card_surf, (30, 41, 59, card_alpha), (bar_x, bar_y, bar_w, bar_h), border_radius=3)
-                fill_prog = max(0.0, min(1.0, (progress - 0.18) / 0.77))
-                fill_w = int(bar_w * fill_prog)
-                if fill_w > 0:
-                    pygame.draw.rect(card_surf, (*theme["primary"], card_alpha), (bar_x, bar_y, fill_w, bar_h), border_radius=3)
-                    # Shimmer tip
-                    pygame.draw.circle(card_surf, (*theme["accent"], card_alpha), (bar_x + fill_w, bar_y + bar_h // 2), 4)
+        # Fill progress
+        fill_w = int((bar_w - 4) * progress)
+        if fill_w > 0:
+            primary_col = theme.get("primary", (56, 189, 248))
+            accent_col = theme.get("accent", (250, 204, 21))
+            pygame.draw.rect(self.screen, primary_col, (bar_x + 2, bar_y + 2, fill_w, bar_h - 4), border_radius=3)
+            # Energy tip spark
+            spark_x = bar_x + 2 + fill_w
+            spark_y = bar_y + bar_h // 2
+            pygame.draw.circle(self.screen, (255, 255, 255), (spark_x, spark_y), 4)
+            pygame.draw.circle(self.screen, accent_col, (spark_x, spark_y), 7, 1)
 
-                surf.blit(card_surf, (card_x, card_y))
-
-        # Blit final composite onto the display screen
-        self.screen.blit(surf, (0, 0))
+        # 5. Destination Realm Subtitle
+        realm_text = theme.get("realm", "Entering Quarter...")
+        sub_font = pygame.font.SysFont("Comic Sans MS", 13, bold=True)
+        sub_str = f"Transporting to {theme.get('name', 'QUARTER')} • {theme.get('title', '')} ({realm_text})"
+        sub_surf = sub_font.render(sub_str, True, (160, 180, 210))
+        self.screen.blit(sub_surf, (self.width // 2 - sub_surf.get_width() // 2, bar_y + 24))
 
     # ============================================================
     # DRAW UI
@@ -2908,7 +2915,7 @@ class StageSelect:
                 f"Gesture: {self.current_gesture}",
                 f"Left Portal >> Quarter 1 | Up Portal >> Quarter 4",
                 f"Right Portal >> Quarter 3 | Down Portal >> Quarter 2",
-                f"Press ESC to return to menu"
+                f"Pause: Top-Right / Hold Fist"
             ]
 
             y_offset = 10
@@ -2994,11 +3001,11 @@ class StageSelect:
         is_finished = (self.dialogue_char_index >= len(text))
         if is_finished:
             if (self.frame_counter // 30) % 2 == 0:
-                prompt = "Hold Fist or Press Space to continue ▾"
+                prompt = "Hold Fist to continue ▾"
                 prompt_surface = self.small_font.render(prompt, True, (255, 215, 0))
                 self.screen.blit(prompt_surface, (box_x + box_width - prompt_surface.get_width() - 20, box_y + box_height - 25))
         else:
-            prompt = "Press Space to skip..."
+            prompt = "Hold Fist to advance..."
             prompt_surface = self.small_font.render(prompt, True, (160, 160, 160))
             self.screen.blit(prompt_surface, (box_x + box_width - prompt_surface.get_width() - 20, box_y + box_height - 25))
 

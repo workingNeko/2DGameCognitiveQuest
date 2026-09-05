@@ -234,11 +234,10 @@ class InGamePauseMenu:
         self.screen.blit(title, title.get_rect(center=(self.guide_x + self.guide_w // 2, self.guide_y + 32)))
 
         controls_data = [
-            ("Hand Gestures", "Move open hand to guide cursor / steer player. Stretch out to walk faster.", (100, 255, 150)),
-            ("Closed Fist", "Close and hold fist to select choices, interact with NPCs, and confirm.", (255, 215, 0)),
-            ("Keyboard", "WASD or Arrow Keys to move. Space / Enter to interact or advance dialogue.", (147, 197, 253)),
-            ("Mouse", "Move cursor to aim or steer. Left Click to choose answers and interact.", (244, 114, 182)),
-            ("Pause & Menu", "Press ESC or P anytime to pause the game and adjust sound.", (209, 213, 219))
+            ("Open Hand Steering", "Position open hand in front of camera to steer player & guide cursor.", (100, 255, 150)),
+            ("Closed Fist Action", "Close and hold fist (0.9s) over choices, NPCs, and portals to confirm.", (255, 215, 0)),
+            ("Speed Burst", "Move your hand further from center to accelerate into a sprint.", (147, 197, 253)),
+            ("Pause & Settings", "Hold fist over the on-screen PAUSE button at the top corner anytime.", (244, 114, 182))
         ]
 
         curr_y = self.guide_y + 68

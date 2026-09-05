@@ -546,6 +546,42 @@ class Quarter2:
             "Well done! The Barrio Fiesta continues!"
         ]
 
+        # ============================================================
+        # AREA TITLE ANIMATION
+        # ============================================================
+        self.title_elapsed = 0.0
+        self.title_duration = 5.0
+        self.title_active = True
+
+        # Load Pixelfont
+        self.pixel_font_path = "assets/fonts/Pixelfont.otf"
+        self.pixel_font_size = 72
+        try:
+            self.title_font = pygame.font.Font(self.pixel_font_path, self.pixel_font_size)
+        except Exception:
+            self.title_font = pygame.font.SysFont("Consolas", self.pixel_font_size, bold=True)
+
+        self.title_text = "Barrios' Fiesta"
+        self.title_spacing = 12
+
+        self.title_text_color = (255, 255, 255) # White
+        self.title_outline_color = (0, 0, 0) # Black outline
+        self.title_glow_color = (180, 180, 180) # Grey glow
+
+        # Pre-render letters
+        self.title_letters = []
+        for ch in self.title_text:
+            glow = self.title_font.render(ch, False, self.title_glow_color)
+            outline = self.title_font.render(ch, False, self.title_outline_color)
+            main = self.title_font.render(ch, False, self.title_text_color)
+            self.title_letters.append({
+                "glow": glow,
+                "outline": outline,
+                "main": main,
+                "width": main.get_width()
+            })
+        self.title_total_width = sum(l["width"] for l in self.title_letters) + self.title_spacing * (len(self.title_text) - 1)
+
         # Questions List (DepEd Grade 2 Curriculum: Customized per Map - No NPC Names)
         if self.map_name == "map5.txt":
             self.quiz_questions = [
@@ -2666,6 +2702,12 @@ class Quarter2:
                 self.victory_card.show(total_questions=total_questions, correct_first_try=correct_answers, score=score)
             return
 
+        # Update Area Title animation elapsed time
+        if self.title_active:
+            self.title_elapsed += dt
+            if self.title_elapsed >= self.title_duration:
+                self.title_active = False
+
         # Update speed boost timer & banner timer
         if self.speed_boost_timer > 0:
             self.speed_boost_timer -= dt
@@ -3720,6 +3762,63 @@ class Quarter2:
         elif self.quiz_state == 5:
             self.draw_victory_speech()
 
+        # Draw Area Title Animation
+        if self.title_active:
+            timer = self.title_elapsed
+            
+            # Alpha fading
+            alpha = 255
+            FADE_START = 4.0
+            FADE_DURATION = 1.0
+            if timer >= FADE_START:
+                fade = (timer - FADE_START) / FADE_DURATION
+                fade = max(0, min(fade, 1))
+                alpha = int(255 * (1 - fade))
+                
+            # Slide animation
+            BASE_Y = self.height // 2 - self.pixel_font_size // 2
+            SLIDE_TIME = 0.35
+            if timer < SLIDE_TIME:
+                t = timer / SLIDE_TIME
+                ease = 1 - (1 - t) ** 3
+                y = BASE_Y - (1 - ease) * 40
+            else:
+                y = BASE_Y
+                
+            # Draw letters centered
+            x = self.width // 2 - self.title_total_width // 2
+            
+            for i, data in enumerate(self.title_letters):
+                phase = timer * 8 - i * 0.55
+                offset = 0
+                
+                # Single traveling wave
+                if -math.pi <= phase <= math.pi:
+                    offset = math.sin(phase) * 12
+                    
+                glow = data["glow"].copy()
+                outline = data["outline"].copy()
+                main = data["main"].copy()
+                
+                glow.set_alpha(alpha // 5)
+                outline.set_alpha(alpha)
+                main.set_alpha(alpha)
+                
+                # Glow
+                for gx in (-5, 0, 5):
+                    for gy in (-5, 0, 5):
+                        self.screen.blit(glow, (x + gx, y + gy + offset))
+                        
+                # Outline
+                for ox in (-2, -1, 1, 2):
+                    for oy in (-2, -1, 1, 2):
+                        self.screen.blit(outline, (x + ox, y + oy + offset))
+                        
+                # Main text
+                self.screen.blit(main, (x, y + offset))
+                
+                x += data["width"] + self.title_spacing
+
         # Draw Cinematic Bahay Kubo Award Card Overlay in Map 5
         self.draw_kubo_award_animation()
 
@@ -3823,7 +3922,7 @@ class Quarter2:
                 f"NPCs: {npc_text}",
                 f"Hand: {'YES' if self.hand_detected else 'NO'}",
                 f"Gesture: {self.current_gesture}",
-                f"Press ESC to return to menu"
+                f"Pause: Top-Right / Hold Fist"
             ]
 
             y_offset = 10
@@ -3867,6 +3966,11 @@ class Quarter2:
                 return "back"
             elif event.key == pygame.K_i:
                 self.show_info = not self.show_info
+        elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+            self.cursor_pos = event.pos
+            self.trigger_click(event.pos)
+        elif event.type == pygame.MOUSEMOTION:
+            self.cursor_pos = event.pos
         return None
 
     def draw_stage_timer_hud(self):

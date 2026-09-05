@@ -15,20 +15,41 @@
     "completed_quarters": {
         "quarter1": {
             "completed": true,
-            "score": 60,
-            "percentage": 60.0,
+            "score": 100,
+            "percentage": 100.0,
             "total_questions": 5,
-            "timestamp": 1788582619.0421574
+            "timestamp": 1788622087.007974
+        },
+        "quarter2": {
+            "completed": true,
+            "score": 100,
+            "percentage": 100.0,
+            "total_questions": 5,
+            "timestamp": 1788622130.389209
+        },
+        "quarter3": {
+            "completed": true,
+            "score": 100,
+            "percentage": 100.0,
+            "total_questions": 5,
+            "timestamp": 1788622172.019272
+        },
+        "quarter4": {
+            "completed": true,
+            "score": 80,
+            "percentage": 66.7,
+            "total_questions": 6,
+            "timestamp": 1788622342.9254766
         }
     },
-    "timestamp": 1788582732.5403736,
+    "timestamp": 1788622351.2157714,
     "stage_select": {
-        "player_x": 838.0200000000001,
-        "player_y": 677.3600000000015,
+        "player_x": 803.0400000000004,
+        "player_y": 172.67999999999893,
         "oldman_dialogue_state": 0,
-        "knight_dialogue_state": 2,
+        "knight_dialogue_state": 0,
         "skeleton_dialogue_state": 0,
-        "bromen_dialogue_state": 0,
+        "bromen_dialogue_state": 2,
         "player_following_target": false
     }
 }

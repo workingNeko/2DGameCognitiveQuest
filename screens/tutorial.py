@@ -113,7 +113,16 @@ class TutorialScreen:
         self.ui_font = pygame.font.SysFont(["Segoe UI", "Tahoma", "Comic Sans MS", "Arial"], 12, bold=True)
         self.skip_font = pygame.font.SysFont(["Segoe UI", "Tahoma", "Comic Sans MS", "Arial"], 16, bold=True)
 
+        # Universal In-Stage Pause Menu
+        from core.pause_menu import InGamePauseMenu
+        self.pause_menu = InGamePauseMenu(self.screen, self.width, self.height, self.main_menu, return_callback=self.finish_tutorial, restart_callback=self.restart_tutorial)
+
         print("[TUTORIAL] Live Interactive Gameplay Tutorial Initialized!")
+
+    def restart_tutorial(self):
+        """Restarts the tutorial screen."""
+        from screens.tutorial import TutorialScreen
+        self.main_menu.tutorial = TutorialScreen(self.screen, self.main_menu)
 
     # ============================================================
     # ASSET & MAP LOADERS
@@ -247,6 +256,9 @@ class TutorialScreen:
         self.hand_detected = (current_gesture not in ["NO HAND", "NO HAND (GRACE)"])
 
     def update(self):
+        if hasattr(self, 'pause_menu') and self.pause_menu.is_paused:
+            return
+
         # Update LoL-style camera with cursor lead and edge scrolling
         self.lol_camera.update(
             self.player_x,
@@ -354,6 +366,12 @@ class TutorialScreen:
     # EVENT & CLICK HANDLERS
     # ============================================================
     def handle_event(self, event):
+        if hasattr(self, 'pause_menu') and self.pause_menu.handle_event(event):
+            return "blocked"
+
+        if hasattr(self, 'pause_menu') and self.pause_menu.is_paused:
+            return "blocked"
+
         self.lol_camera.handle_event(event)
         if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
             self.trigger_click(event.pos)
@@ -361,7 +379,10 @@ class TutorialScreen:
             if event.key == pygame.K_SPACE and self.quiz_state == 0:
                 self.lol_camera.recenter()
             elif event.key == pygame.K_ESCAPE:
-                self.finish_tutorial()
+                if hasattr(self, 'pause_menu'):
+                    self.pause_menu.toggle_pause()
+                else:
+                    self.finish_tutorial()
             elif self.quiz_state == 1:
                 # Keyboard quick-answers: 1/A, 2/B, 3/C, 4/D
                 if event.key in [pygame.K_1, pygame.K_a]:
@@ -395,8 +416,12 @@ class TutorialScreen:
         if pos is None:
             pos = self.cursor_pos
 
-        # 1. Skip Button (Top Right)
-        skip_rect = pygame.Rect(self.width - 230, 16, 210, 52)
+        # Check Pause Menu clicks first
+        if hasattr(self, 'pause_menu') and self.pause_menu.handle_click(pos):
+            return
+
+        # 1. Skip Button (Top Right, beside Pause Button)
+        skip_rect = pygame.Rect(self.width - 310, 18, 165, 36)
         if skip_rect.collidepoint(pos):
             self.finish_tutorial()
             return
@@ -522,33 +547,33 @@ class TutorialScreen:
         self.draw_top_banner()
 
         # 8. Prominent Glassmorphism Skip Button
-        skip_rect = pygame.Rect(self.width - 230, 16, 210, 52)
+        skip_rect = pygame.Rect(self.width - 310, 18, 165, 36)
         skip_hov = skip_rect.collidepoint(self.cursor_pos)
 
         # Shadow
         shadow_rect = skip_rect.copy()
-        shadow_rect.y += 3
-        pygame.draw.rect(self.screen, (0, 0, 0, 140), shadow_rect, border_radius=14)
+        shadow_rect.y += 2
+        pygame.draw.rect(self.screen, (0, 0, 0, 140), shadow_rect, border_radius=10)
 
         # Body
         skip_surf = pygame.Surface((skip_rect.width, skip_rect.height), pygame.SRCALPHA)
         skip_bg = (220, 38, 38, 230) if skip_hov else (15, 23, 42, 235)
-        pygame.draw.rect(skip_surf, skip_bg, (0, 0, skip_rect.width, skip_rect.height), border_radius=14)
+        pygame.draw.rect(skip_surf, skip_bg, (0, 0, skip_rect.width, skip_rect.height), border_radius=10)
         self.screen.blit(skip_surf, skip_rect.topleft)
 
         # Border
         border_col = (251, 191, 36) if skip_hov else (148, 163, 184)
-        pygame.draw.rect(self.screen, border_col, skip_rect, 2, border_radius=14)
+        pygame.draw.rect(self.screen, border_col, skip_rect, 2, border_radius=10)
 
         # Text
         skip_txt = self.skip_font.render("Skip Tutorial", True, (255, 255, 255))
-        self.screen.blit(skip_txt, (skip_rect.x + 18, skip_rect.y + 16))
+        self.screen.blit(skip_txt, (skip_rect.x + 14, skip_rect.y + 8))
 
-        # [ESC] Pill badge
-        pill_rect = pygame.Rect(skip_rect.right - 64, skip_rect.y + 13, 50, 26)
+        # [SKIP] Pill badge
+        pill_rect = pygame.Rect(skip_rect.right - 54, skip_rect.y + 6, 44, 24)
         pygame.draw.rect(self.screen, (30, 41, 59), pill_rect, border_radius=6)
         pygame.draw.rect(self.screen, (251, 191, 36) if skip_hov else (100, 116, 139), pill_rect, 1, border_radius=6)
-        esc_txt = self.ui_font.render("ESC", True, (251, 191, 36) if skip_hov else (203, 213, 225))
+        esc_txt = self.ui_font.render("SKIP", True, (251, 191, 36) if skip_hov else (203, 213, 225))
         self.screen.blit(esc_txt, esc_txt.get_rect(center=pill_rect.center))
 
         # 9. Render Quiz Modal Dialogs
@@ -559,6 +584,12 @@ class TutorialScreen:
             self.draw_sample_wrong_dialog()
         elif self.quiz_state == 3:
             self.draw_sample_correct_dialog()
+
+        # 10. In-Game Universal Pause Button & Modal Overlay
+        if hasattr(self, 'pause_menu'):
+            self.pause_menu.draw_button(self.cursor_pos)
+            if self.pause_menu.is_paused:
+                self.pause_menu.draw_modal(self.cursor_pos)
 
     # ============================================================
     # DYNAMIC COMPASS & BADGES
@@ -712,15 +743,15 @@ class TutorialScreen:
             t_radar = self.dialog_btn_font.render("GESTURE RADAR", True, border_col)
             self.screen.blit(t_radar, (card_x + 16, card_y + 10))
 
-            status_text = "[HAND DETECTED]" if self.hand_detected else "[DUAL INPUT READY]"
+            status_text = "[HAND DETECTED]" if self.hand_detected else "[GESTURE SCANNING...]"
             status_col = (74, 222, 128) if self.hand_detected else (56, 189, 248)
             stat_surf = self.ui_font.render(status_text, True, status_col)
             self.screen.blit(stat_surf, (card_x + 16, card_y + 34))
 
-            # Dual input hints
-            t_sub1 = self.ui_font.render("- Hand: Move away from center to steer", True, (226, 232, 240))
-            t_sub2 = self.ui_font.render("- Keys: WASD or Arrow Keys to walk", True, (203, 213, 225))
-            t_sub3 = self.ui_font.render("- Action: Hold Fist (0.9s) or Click", True, (251, 191, 36))
+            # Gesture steering and action hints
+            t_sub1 = self.ui_font.render("- Open Hand: Move away from center to steer", True, (226, 232, 240))
+            t_sub2 = self.ui_font.render("- Sprint: Move hand further from center", True, (203, 213, 225))
+            t_sub3 = self.ui_font.render("- Action: Hold Closed Fist (0.9s) to interact", True, (251, 191, 36))
             self.screen.blit(t_sub1, (card_x + 16, card_y + 54))
             self.screen.blit(t_sub2, (card_x + 16, card_y + 70))
             self.screen.blit(t_sub3, (card_x + 16, card_y + 86))
@@ -798,7 +829,7 @@ class TutorialScreen:
             pygame.draw.rect(self.screen, (251, 191, 36), d_rect, 2, border_radius=12)
 
             t1 = self.ui_font.render("HOW TO SELECT:", True, (255, 215, 0))
-            t2 = self.ui_font.render("Hold Fist (0.9s) or Click", True, (255, 255, 255))
+            t2 = self.ui_font.render("Hold Fist (0.9s) on Choice", True, (255, 255, 255))
             pct = int(hold_charge * 100)
             t3 = self.ui_font.render(f"Charging: {pct}%", True, (254, 240, 138))
             self.screen.blit(t1, (demo_card_x + 12, demo_card_y + 10))
@@ -817,9 +848,9 @@ class TutorialScreen:
     # ============================================================
     def draw_top_banner(self):
         t = pygame.time.get_ticks() * 0.001
-        bw = min(740, self.width - 270)
-        bh = 60
-        bx = 24
+        bw = min(680, self.width - 335)
+        bh = 58
+        bx = 20
         by = 12
 
         banner_rect = pygame.Rect(bx, by, bw, bh)
@@ -839,12 +870,12 @@ class TutorialScreen:
         if self.phase == 1:
             step_tag = "STEP 1/3: NAVIGATION"
             tag_col = (251, 191, 36)
-            txt = "Move hand away from center or press WASD to approach the Guide Sage!"
+            txt = "Move your open hand away from center to approach the Guide Sage!"
             border_col = (245, 158, 11)
         elif self.phase == 3:
             step_tag = "STEP 2/3: WISDOM TRIAL"
             tag_col = (234, 179, 8)
-            txt = "Select your answer by holding a FIST (0.9s) or clicking your choice!"
+            txt = "Select your answer by closing and holding a FIST (0.9s) on your choice!"
             border_col = (234, 179, 8)
         else:
             step_tag = "STEP 3/3: PORTAL ODYSSEY"
@@ -1012,7 +1043,7 @@ class TutorialScreen:
         pygame.draw.rect(self.screen, (220, 38, 38) if is_hov else (153, 27, 27), btn_rect, border_radius=12)
         pygame.draw.rect(self.screen, (255, 255, 255), btn_rect, 2, border_radius=12)
 
-        c_surf = self.dialog_btn_font.render("Try Again  [SPACE]", True, (255, 255, 255))
+        c_surf = self.dialog_btn_font.render("Try Again", True, (255, 255, 255))
         self.screen.blit(c_surf, c_surf.get_rect(center=btn_rect.center))
 
     def draw_sample_correct_dialog(self):
@@ -1054,6 +1085,6 @@ class TutorialScreen:
         pygame.draw.rect(self.screen, (34, 197, 94) if is_hov else (22, 101, 52), btn_rect, border_radius=12)
         pygame.draw.rect(self.screen, (255, 255, 255), btn_rect, 2, border_radius=12)
 
-        c_surf = self.dialog_btn_font.render("Continue >>  [SPACE]", True, (255, 255, 255))
+        c_surf = self.dialog_btn_font.render("Continue >>", True, (255, 255, 255))
         self.screen.blit(c_surf, c_surf.get_rect(center=btn_rect.center))
 

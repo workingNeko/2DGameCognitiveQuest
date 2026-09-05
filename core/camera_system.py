@@ -167,11 +167,21 @@ class LoLCamera:
         self.clamp_to_bounds(map_width, map_height)
 
     def clamp_to_bounds(self, map_width, map_height):
-        """Ensure viewport never reveals out-of-bounds void."""
-        max_cam_x = max(0.0, map_width - self.screen_width / self.zoom)
-        max_cam_y = max(0.0, map_height - self.screen_height / self.zoom)
-        self.camera_x = max(0.0, min(self.camera_x, max_cam_x))
-        self.camera_y = max(0.0, min(self.camera_y, max_cam_y))
+        """Ensure viewport never reveals out-of-bounds void, and center maps smaller than viewport."""
+        view_w = self.screen_width / self.zoom
+        view_h = self.screen_height / self.zoom
+
+        if map_width < view_w:
+            self.camera_x = -(view_w - map_width) / 2.0
+        else:
+            max_cam_x = map_width - view_w
+            self.camera_x = max(0.0, min(self.camera_x, max_cam_x))
+
+        if map_height < view_h:
+            self.camera_y = -(view_h - map_height) / 2.0
+        else:
+            max_cam_y = map_height - view_h
+            self.camera_y = max(0.0, min(self.camera_y, max_cam_y))
 
     def world_to_screen(self, world_x, world_y):
         """Utility to project world coordinate to on-screen pixel coordinate."""

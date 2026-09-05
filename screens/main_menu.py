@@ -1350,7 +1350,7 @@ class MainMenu:
             text_col = (241, 245, 249)
             fill_pct = 0.0
         else:
-            label = "MOUSE / SEEKING HAND"
+            label = "SEEKING HAND..."
             border_col = (100, 116, 139)  # Slate
             text_col = (203, 213, 225)
             fill_pct = 0.0

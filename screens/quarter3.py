@@ -284,6 +284,11 @@ class Quarter3:
         # Goal portal tracking - for map3.txt the goal is 'left' portal
         self.goal_portal_direction = self.portals[0].direction if self.portals else 'left'
 
+        # Seamless portal warp transition variables
+        self.warp_out_active = False
+        self.warp_out_timer = 0.0
+        self.warp_out_duration = 0.65
+
         # ============================================================
         # UI & REUSABLE FONTS
         # ============================================================
@@ -513,6 +518,42 @@ class Quarter3:
         self.drag_offset_y = 0
         self.sun_relic_slabs = []
         self.load_puzzle_sounds()
+
+        # ============================================================
+        # AREA TITLE ANIMATION
+        # ============================================================
+        self.title_elapsed = 0.0
+        self.title_duration = 5.0
+        self.title_active = True
+
+        # Load Pixelfont
+        self.pixel_font_path = "assets/fonts/Pixelfont.otf"
+        self.pixel_font_size = 72
+        try:
+            self.title_font = pygame.font.Font(self.pixel_font_path, self.pixel_font_size)
+        except Exception:
+            self.title_font = pygame.font.SysFont("Consolas", self.pixel_font_size, bold=True)
+
+        self.title_text = "Monetary Desert"
+        self.title_spacing = 12
+
+        self.title_text_color = (255, 255, 255) # White
+        self.title_outline_color = (0, 0, 0) # Black outline
+        self.title_glow_color = (180, 180, 180) # Grey glow
+
+        # Pre-render letters
+        self.title_letters = []
+        for ch in self.title_text:
+            glow = self.title_font.render(ch, False, self.title_glow_color)
+            outline = self.title_font.render(ch, False, self.title_outline_color)
+            main = self.title_font.render(ch, False, self.title_text_color)
+            self.title_letters.append({
+                "glow": glow,
+                "outline": outline,
+                "main": main,
+                "width": main.get_width()
+            })
+        self.title_total_width = sum(l["width"] for l in self.title_letters) + self.title_spacing * (len(self.title_text) - 1)
 
         # ============================================================
         # [QUEST] 3 DISTINCT GAMEPLAY MODES FOR QUARTER 3
@@ -1523,6 +1564,8 @@ class Quarter3:
     # CHECK PORTAL TELEPORT
     # ============================================================
     def check_portal_teleport_on_hold(self):
+        if self.warp_out_active:
+            return False
         if self.quiz_state != 0 and self.quiz_state != 6:
             return False
         current_portal = None
@@ -1531,28 +1574,24 @@ class Quarter3:
                 current_portal = portal
                 break
 
-        if current_portal and self.fist_closed and self.teleport_cooldown <= 0:
-            if current_portal.direction == self.goal_portal_direction:
-                if self.quiz_state < 6:
-                    return False
-                print(f"[TARGET] Goal reached! Showing 3-Star Victory Report Card...")
-                self.save_results_to_database()
-                total_questions = min(5, len(self.quiz_questions)) if hasattr(self, 'quiz_questions') and self.quiz_questions else 5
-                correct_answers = sum(1 for k, v in self.first_attempt_correct.items() if k <= total_questions and v)
-                percentage = (correct_answers / float(total_questions)) * 100.0 if total_questions > 0 else 100.0
-                score = int(correct_answers * 20)
-                from db.save_system import mark_quarter_completed
-                mark_quarter_completed(self.main_menu, "quarter3", score=score, percentage=percentage, total_questions=total_questions)
-                self.victory_card.show(total_questions=total_questions, correct_first_try=correct_answers, score=score)
-                return True
+        if current_portal and self.teleport_cooldown <= 0:
+            if self.quiz_state == 6:
+                if current_portal.direction == self.goal_portal_direction or current_portal.is_static:
+                    print("* Entering Desert Sun Portal - Initiating seamless warp transition...")
+                    if hasattr(self.main_menu, 'audio_manager'):
+                        self.main_menu.audio_manager.play_sfx("portal_transition")
+                    self.warp_out_active = True
+                    self.warp_out_timer = self.warp_out_duration
+                    return True
 
-            other_portals = [p for p in self.portals if p != current_portal]
-            if other_portals:
-                target_portal = other_portals[0]
-                self.player_x = target_portal.get_center_x() - TILE_SIZE // 2
-                self.player_y = target_portal.get_center_y() - TILE_SIZE // 2
-                self.teleport_cooldown = self.TELEPORT_COOLDOWN_TIME
-                return True
+            if self.fist_closed:
+                other_portals = [p for p in self.portals if p != current_portal]
+                if other_portals:
+                    target_portal = other_portals[0]
+                    self.player_x = target_portal.get_center_x() - TILE_SIZE // 2
+                    self.player_y = target_portal.get_center_y() - TILE_SIZE // 2
+                    self.teleport_cooldown = self.TELEPORT_COOLDOWN_TIME
+                    return True
         return False
 
     # ============================================================
@@ -1742,6 +1781,11 @@ class Quarter3:
                 print("All 5 Map 9 Stations Solved! Grand Sun Temple Altar Puzzle Opened!")
             else:
                 self.quiz_state = 5
+                if self.is_caravan_mode:
+                    self.caravan_x = self.player_x
+                    self.caravan_y = self.player_y
+                    self.caravan_dir = self.player_dir
+                    self.speed_boost_timer = 999.0
 
     def trigger_click(self, pos):
         if self.pause_menu.handle_click(pos):
@@ -1885,7 +1929,7 @@ class Quarter3:
                                     self.success_sound.play()
                             break
                 
-        # State 5: Final speech click -> Hop onto Caravan and Ride to Goal Portal!
+        # State 5: Final speech click -> Unlock Goal Portal for manual player guidance!
         elif self.quiz_state == 5:
             box_w, box_h = 640, 340
             box_x = (self.width - box_w) // 2
@@ -1896,21 +1940,16 @@ class Quarter3:
                 self.clear_portal_overlapping_tiles()
                 self.save_results_to_database()
                 save_student_progress(self.main_menu)
-                
-                # Calculate BFS path from current Caravan position to Goal Portal
-                start_tile = (int((self.caravan_x + TILE_SIZE // 2) // TILE_SIZE), 
-                              int((self.caravan_y + TILE_SIZE // 2) // TILE_SIZE))
-                goal_tile = (47, 16)
-                if self.portals:
-                    goal_tile = (self.portals[0].x, self.portals[0].y)
-                
-                self.caravan_ride_path = self.find_path(start_tile, goal_tile)
-                self.caravan_ride_index = 0
-                self.caravan_riding = True
-                self.caravan_upgrade_banner_text = "ROYAL EXPEDITION COMPLETE! "
-                self.caravan_upgrade_banner_sub = "Caravan carrying player to the Portal! "
-                self.caravan_upgrade_banner_timer = 999.0
-                print(f" Caravan Ride Started! Path length: {len(self.caravan_ride_path)} tiles to {goal_tile}")
+                self.caravan_riding = False
+                if self.is_caravan_mode:
+                    self.caravan_x = self.player_x
+                    self.caravan_y = self.player_y
+                    self.caravan_dir = self.player_dir
+                    self.speed_boost_timer = 999.0
+                self.caravan_upgrade_banner_text = "ROYAL EXPEDITION COMPLETE!"
+                self.caravan_upgrade_banner_sub = "Cross to the Eastern Sun Portal to finish!"
+                self.caravan_upgrade_banner_timer = 5.0
+                print("[TARGET] All stations cleared! Guide your Royal Caravan to the Sun Portal!")
 
     # ============================================================
     # UPDATE
@@ -1927,6 +1966,21 @@ class Quarter3:
             self.celebration_particles.update(dt)
         if hasattr(self, 'victory_card') and self.victory_card.active:
             self.victory_card.update(dt)
+            return
+
+        # Handle smooth warp-out transition to stage select
+        if self.warp_out_active:
+            self.warp_out_timer -= dt
+            if self.warp_out_timer <= 0:
+                self.warp_out_active = False
+                self.save_results_to_database()
+                total_questions = min(5, len(self.quiz_questions)) if hasattr(self, 'quiz_questions') and self.quiz_questions else 5
+                correct_answers = sum(1 for k, v in self.first_attempt_correct.items() if k <= total_questions and v)
+                percentage = (correct_answers / float(total_questions)) * 100.0 if total_questions > 0 else 100.0
+                score = int(correct_answers * 20)
+                from db.save_system import mark_quarter_completed
+                mark_quarter_completed(self.main_menu, "quarter3", score=score, percentage=percentage, total_questions=total_questions)
+                self.victory_card.show(total_questions=total_questions, correct_first_try=correct_answers, score=score)
             return
 
         # 10-Minute Stage Timer
@@ -1954,6 +2008,12 @@ class Quarter3:
 
         if hasattr(self, 'player_block_timer') and self.player_block_timer > 0:
             self.player_block_timer -= dt
+
+        # Update Area Title animation elapsed time
+        if self.title_active:
+            self.title_elapsed += dt
+            if self.title_elapsed >= self.title_duration:
+                self.title_active = False
 
 
         # Relic Hunt Active Loop in Map 8
@@ -2159,79 +2219,32 @@ class Quarter3:
                 surviving_notes.append(n)
         self.caravan_music_notes = surviving_notes
 
-        # Automatic Caravan Ride to Goal Portal Sequence
-        if self.caravan_riding and self.quiz_state == 6:
-            if self.caravan_ride_path and self.caravan_ride_index < len(self.caravan_ride_path):
-                t_col, t_row = self.caravan_ride_path[self.caravan_ride_index]
-                target_x = t_col * TILE_SIZE
-                target_y = t_row * TILE_SIZE
-                
-                dx = target_x - self.caravan_x
-                dy = target_y - self.caravan_y
-                ride_speed = 6  # Swift celebratory victory gallop
-                
-                if abs(dx) > abs(dy):
-                    self.caravan_dir = "right" if dx > 0 else "left"
+        if self.is_caravan_mode:
+            if self.quiz_state >= 5 or len(self.caravan_cargo) >= 5:
+                # Player is riding inside the caravan!
+                self.caravan_x = self.player_x
+                self.caravan_y = self.player_y
+                self.caravan_dir = self.player_dir
+                if self.anim_frame > 0:
+                    self.caravan_wheel_rot += 0.35
+                    self.caravan_bob_timer += 0.25
                 else:
-                    self.caravan_dir = "down" if dy > 0 else "up"
-                    
-                if abs(dx) <= ride_speed and abs(dy) <= ride_speed:
-                    self.caravan_x = target_x
-                    self.caravan_y = target_y
-                    self.caravan_ride_index += 1
-                else:
-                    if dx != 0:
-                        self.caravan_x += ride_speed if dx > 0 else -ride_speed
-                    if dy != 0:
-                        self.caravan_y += ride_speed if dy > 0 else -ride_speed
-                        
-                self.caravan_wheel_rot += 0.35
-                self.caravan_bob_timer += 0.25
-                
-                # Player rides comfortably on the Caravan!
-                self.player_x = self.caravan_x
-                self.player_y = self.caravan_y - 8 + math.sin(self.caravan_bob_timer) * 2
-                self.player_dir = self.caravan_dir
-                
-                # Burst celebration sparkles along the ride
-                if random.random() < 0.45:
-                    self.caravan_sparkles.append({
-                        "x": self.caravan_x + random.randint(4, 28),
-                        "y": self.caravan_y + random.randint(10, 24),
-                        "vx": random.uniform(-1.5, 1.5),
-                        "vy": random.uniform(-2.5, -0.5),
-                        "color": random.choice([(255, 255, 255), (251, 191, 36), (56, 189, 248), (239, 68, 68), (34, 197, 94)]),
-                        "life": 0.8,
-                        "rad": random.randint(3, 5)
-                    })
+                    self.caravan_bob_timer += 0.05
             else:
-                # Reached Portal! Finish level and show Victory Report Card
-                print("[TARGET] Caravan safely arrived at Goal Portal! Showing 3-Star Victory Report Card...")
-                self.caravan_riding = False
-                self.save_results_to_database()
-                total_questions = min(5, len(self.quiz_questions)) if hasattr(self, 'quiz_questions') and self.quiz_questions else 5
-                correct_answers = sum(1 for k, v in self.first_attempt_correct.items() if k <= total_questions and v)
-                percentage = (correct_answers / float(total_questions)) * 100.0 if total_questions > 0 else 100.0
-                score = int(correct_answers * 20)
-                from db.save_system import mark_quarter_completed
-                mark_quarter_completed(self.main_menu, "quarter3", score=score, percentage=percentage, total_questions=total_questions)
-                self.victory_card.show(total_questions=total_questions, correct_first_try=correct_answers, score=score)
-                return
-        elif self.is_caravan_mode:
-            # Update Caravan Follower AI during normal gameplay (Map 7 only)
-            if len(self.player_trail) >= 12:
-                tx, ty, tdir = self.player_trail[-12]
-                dx = tx - self.caravan_x
-                dy = ty - self.caravan_y
-                self.caravan_x += dx * 0.16
-                self.caravan_y += dy * 0.16
-                if abs(dx) > abs(dy):
-                    self.caravan_dir = "right" if dx > 0 else "left"
-                elif abs(dy) > 1:
-                    self.caravan_dir = "down" if dy > 0 else "up"
-                if abs(dx) > 0.5 or abs(dy) > 0.5:
-                    self.caravan_wheel_rot += 0.25
-                    self.caravan_bob_timer += 0.20
+                # Update Caravan Follower AI during normal gameplay (Map 7 only)
+                if len(self.player_trail) >= 12:
+                    tx, ty, tdir = self.player_trail[-12]
+                    dx = tx - self.caravan_x
+                    dy = ty - self.caravan_y
+                    self.caravan_x += dx * 0.16
+                    self.caravan_y += dy * 0.16
+                    if abs(dx) > abs(dy):
+                        self.caravan_dir = "right" if dx > 0 else "left"
+                    elif abs(dy) > 1:
+                        self.caravan_dir = "down" if dy > 0 else "up"
+                    if abs(dx) > 0.5 or abs(dy) > 0.5:
+                        self.caravan_wheel_rot += 0.25
+                        self.caravan_bob_timer += 0.20
 
         self.update_player_movement()
         self.check_portal_teleport_on_hold()
@@ -2342,6 +2355,10 @@ class Quarter3:
     # DRAW PLAYER (Direct Pre-Scaled Blit)
     # ============================================================
     def draw_player(self):
+        # When in caravan mode and all questions are finished, player is drawn inside the caravan wagon cart in draw_caravan()
+        if self.is_caravan_mode and (self.quiz_state >= 5 or len(self.caravan_cargo) >= 5):
+            return
+
         screen_x = int((self.player_x - self.camera_x) * ZOOM)
         screen_y = int((self.player_y - self.camera_y) * ZOOM)
 
@@ -2480,7 +2497,77 @@ class Quarter3:
         elif self.quiz_state == 9:
             self.draw_station_mini_puzzle()
 
+        # Draw Area Title Animation
+        if self.title_active:
+            timer = self.title_elapsed
+            
+            # Alpha fading
+            alpha = 255
+            FADE_START = 4.0
+            FADE_DURATION = 1.0
+            if timer >= FADE_START:
+                fade = (timer - FADE_START) / FADE_DURATION
+                fade = max(0, min(fade, 1))
+                alpha = int(255 * (1 - fade))
+                
+            # Slide animation
+            BASE_Y = self.height // 2 - self.pixel_font_size // 2
+            SLIDE_TIME = 0.35
+            if timer < SLIDE_TIME:
+                t = timer / SLIDE_TIME
+                ease = 1 - (1 - t) ** 3
+                y = BASE_Y - (1 - ease) * 40
+            else:
+                y = BASE_Y
+                
+            # Draw letters centered
+            x = self.width // 2 - self.title_total_width // 2
+            
+            for i, data in enumerate(self.title_letters):
+                phase = timer * 8 - i * 0.55
+                offset = 0
+                
+                # Single traveling wave
+                if -math.pi <= phase <= math.pi:
+                    offset = math.sin(phase) * 12
+                    
+                glow = data["glow"].copy()
+                outline = data["outline"].copy()
+                main = data["main"].copy()
+                
+                glow.set_alpha(alpha // 5)
+                outline.set_alpha(alpha)
+                main.set_alpha(alpha)
+                
+                # Glow
+                for gx in (-5, 0, 5):
+                    for gy in (-5, 0, 5):
+                        self.screen.blit(glow, (x + gx, y + gy + offset))
+                        
+                # Outline
+                for ox in (-2, -1, 1, 2):
+                    for oy in (-2, -1, 1, 2):
+                        self.screen.blit(outline, (x + ox, y + oy + offset))
+                        
+                # Main text
+                self.screen.blit(main, (x, y + offset))
+                
+                x += data["width"] + self.title_spacing
+
         self.draw_ui()
+
+        # Draw smooth seamless warp-out transition overlay
+        if self.warp_out_active:
+            progress = max(0.0, min(1.0, 1.0 - (self.warp_out_timer / self.warp_out_duration)))
+            warp_overlay = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
+            warp_overlay.fill((254, 240, 138, int(progress * 255)))
+            center = (self.width // 2, self.height // 2)
+            max_r = int(math.hypot(self.width, self.height) / 2)
+            r = int(progress * max_r)
+            if r > 0:
+                pygame.draw.circle(warp_overlay, (245, 158, 11, int((1.0 - progress) * 230)), center, r, max(3, int(10 * ZOOM)))
+                pygame.draw.circle(warp_overlay, (255, 255, 255, int((1.0 - progress) * 200)), center, max(1, r - 8), max(2, int(4 * ZOOM)))
+            self.screen.blit(warp_overlay, (0, 0))
 
         # In-Game Universal Pause Button & Modal
         self.pause_menu.draw_button(self.cursor_pos)
@@ -2563,7 +2650,7 @@ class Quarter3:
                 f"NPCs: {npc_text}",
                 f"Hand: {'YES' if self.hand_detected else 'NO'}",
                 f"Gesture: {self.current_gesture}",
-                f"Press ESC to return to menu"
+                f"Pause: Top-Right / Hold Fist"
             ]
 
             self.screen.blit(self.info_panel_bg, (6, 6))
@@ -2996,9 +3083,9 @@ class Quarter3:
             rect = scaled.get_rect(center=center_pos)
             self.screen.blit(scaled, rect)
     def draw_caravan(self):
-        """Renders the companion camel/pony and upgradable cargo cart"""
-        cx = (self.caravan_x - self.camera_x) * ZOOM
-        cy = (self.caravan_y - self.camera_y) * ZOOM
+        """Renders the companion camel/pony and upgradable cargo cart (with player seated inside after completing all questions)"""
+        cx = int((self.caravan_x - self.camera_x) * ZOOM)
+        cy = int((self.caravan_y - self.camera_y) * ZOOM)
         
         # Margin culling
         if not (-64 * ZOOM <= cx <= self.width + 64 * ZOOM and -64 * ZOOM <= cy <= self.height + 64 * ZOOM):
@@ -3006,12 +3093,13 @@ class Quarter3:
 
         cart_sz = int(TILE_SIZE * ZOOM)
         bob = math.sin(self.caravan_bob_timer) * 3
-        
+        is_player_riding = (self.quiz_state >= 5 or len(self.caravan_cargo) >= 5)
+
         # 1. Soft ground contact shadow (Pre-rendered cache)
         self.screen.blit(self.caravan_shadow_surf, (cx + cart_sz // 2 - self.caravan_shadow_surf.get_width() // 2, cy + cart_sz - self.caravan_shadow_surf.get_height() // 2 + 2))
 
         # 2. Wooden Cart Base (Rich mahogany box)
-        cart_rect = pygame.Rect(cx + 4, cy + 8 + bob, cart_sz - 8, cart_sz - 12)
+        cart_rect = pygame.Rect(cx + 4, cy + 8 + int(bob), cart_sz - 8, cart_sz - 12)
         pygame.draw.rect(self.screen, (120, 53, 15), cart_rect, border_radius=6)
         pygame.draw.rect(self.screen, (180, 83, 9), cart_rect.inflate(-4, -4), border_radius=4)
         pygame.draw.rect(self.screen, (245, 158, 11), cart_rect, 2, border_radius=6)
@@ -3029,37 +3117,74 @@ class Quarter3:
             spoke_dy = math.sin(self.caravan_wheel_rot) * (wheel_r - 2)
             pygame.draw.line(self.screen, (255, 255, 255), (wx - spoke_dx, w_y - spoke_dy), (wx + spoke_dx, w_y + spoke_dy), 2)
 
-        # 4. Striped Silk Canopy / Roof
-        canopy_rect = pygame.Rect(cart_rect.left - 2, cart_rect.top - 12, cart_rect.width + 4, 14)
-        pygame.draw.rect(self.screen, (220, 38, 38), canopy_rect, border_radius=4)
-        for st_i in range(0, canopy_rect.width, 8):
-            pygame.draw.rect(self.screen, (245, 158, 11), (canopy_rect.left + st_i, canopy_rect.top, 4, canopy_rect.height))
-        pygame.draw.rect(self.screen, (255, 215, 0), canopy_rect, 2, border_radius=4)
-
-        # 5. Visible Loaded Cargo inside the cart!
+        # 4. Visible Loaded Cargo inside the cart
         cargo_count = len(self.caravan_cargo)
         if cargo_count >= 1: # Apples
-            pygame.draw.circle(self.screen, (239, 68, 68), (cart_rect.centerx - 8, cart_rect.centery - 2), 6)
-            pygame.draw.circle(self.screen, (239, 68, 68), (cart_rect.centerx - 2, cart_rect.centery - 5), 5)
-            pygame.draw.circle(self.screen, (34, 197, 94), (cart_rect.centerx - 2, cart_rect.centery - 8), 2)
+            pygame.draw.circle(self.screen, (239, 68, 68), (cart_rect.left + 6, cart_rect.centery - 2), 5)
+            pygame.draw.circle(self.screen, (34, 197, 94), (cart_rect.left + 6, cart_rect.centery - 6), 2)
         if cargo_count >= 2: # Coconuts
-            pygame.draw.circle(self.screen, (120, 53, 15), (cart_rect.centerx + 6, cart_rect.centery - 3), 6)
-            pygame.draw.circle(self.screen, (180, 83, 9), (cart_rect.centerx + 6, cart_rect.centery - 3), 4)
+            pygame.draw.circle(self.screen, (120, 53, 15), (cart_rect.right - 6, cart_rect.centery - 2), 5)
+            pygame.draw.circle(self.screen, (180, 83, 9), (cart_rect.right - 6, cart_rect.centery - 2), 3)
         if cargo_count >= 3: # Golden Chest
-            ch_box = pygame.Rect(cart_rect.centerx - 6, cart_top := cart_rect.top + 2, 14, 10)
+            ch_box = pygame.Rect(cart_rect.left + 2, cart_rect.top + 2, 10, 8)
             pygame.draw.rect(self.screen, (245, 158, 11), ch_box, border_radius=2)
             pygame.draw.rect(self.screen, (255, 255, 255), ch_box, 1, border_radius=2)
         if cargo_count >= 4: # Pizza Feast
-            pygame.draw.circle(self.screen, (217, 119, 6), (cart_rect.left + 6, cart_rect.centery - 4), 6)
-            pygame.draw.circle(self.screen, (239, 68, 68), (cart_rect.left + 5, cart_rect.centery - 5), 2)
-        if cargo_count >= 5: # Legendary Sun Relic Gem
+            pygame.draw.circle(self.screen, (217, 119, 6), (cart_rect.right - 6, cart_rect.top + 5), 5)
+            pygame.draw.circle(self.screen, (239, 68, 68), (cart_rect.right - 6, cart_rect.top + 4), 2)
+        if cargo_count >= 5: # Legendary Sun Relic Gem (atop canopy or radiant center)
             gem_pulse = math.sin(pygame.time.get_ticks() / 150) * 3
-            pygame.draw.circle(self.screen, (168, 85, 247), (cart_rect.centerx, canopy_rect.top - 8), int(8 + gem_pulse), 2)
-            pygame.draw.circle(self.screen, (255, 215, 0), (cart_rect.centerx, canopy_rect.top - 8), 5)
+            pygame.draw.circle(self.screen, (168, 85, 247), (cart_rect.centerx, cart_rect.top - 18), int(8 + gem_pulse), 2)
+            pygame.draw.circle(self.screen, (255, 215, 0), (cart_rect.centerx, cart_rect.top - 18), 5)
 
-        # 6. Chibi Desert Companion (Camel/Pony Mascot in front)
-        companion_offset_x = 18 if self.caravan_dir == "right" else (-18 if self.caravan_dir == "left" else 0)
-        companion_offset_y = 16 if self.caravan_dir == "down" else (-16 if self.caravan_dir == "up" else 4)
+        # 5. PLAYER SPRITE SEATED INSIDE THE CARAVAN CART (When all questions completed!)
+        if is_player_riding:
+            p_sprite = self.scaled_player_sprites[self.player_dir][self.anim_frame]
+            px = cx + (cart_sz - p_sprite.get_width()) // 2
+            py = cy + int(bob) - int(6 * ZOOM)
+            
+            # Draw player sitting inside cart
+            self.screen.blit(p_sprite, (px, py))
+
+            # Draw Front Guard Rail & Brass Trim over bottom of cart to seat player inside cleanly
+            front_rail_rect = pygame.Rect(cart_rect.left, cart_rect.centery + 2, cart_rect.width, cart_rect.height // 2)
+            pygame.draw.rect(self.screen, (146, 64, 14), front_rail_rect, border_radius=3)
+            pygame.draw.rect(self.screen, (245, 158, 11), front_rail_rect, 2, border_radius=3)
+            
+            # Gold rivets on wagon rim
+            pygame.draw.circle(self.screen, (255, 215, 0), (front_rail_rect.left + 4, front_rail_rect.centery), 2)
+            pygame.draw.circle(self.screen, (255, 215, 0), (front_rail_rect.centerx, front_rail_rect.centery), 2)
+            pygame.draw.circle(self.screen, (255, 215, 0), (front_rail_rect.right - 4, front_rail_rect.centery), 2)
+
+            # Golden Navigator Crown / Sparkles above the player
+            crown_cx = px + p_sprite.get_width() // 2
+            crown_cy = py - 4
+            pts_crown = [
+                (crown_cx - 8, crown_cy),
+                (crown_cx - 6, crown_cy - 6),
+                (crown_cx - 3, crown_cy - 2),
+                (crown_cx, crown_cy - 8),
+                (crown_cx + 3, crown_cy - 2),
+                (crown_cx + 6, crown_cy - 6),
+                (crown_cx + 8, crown_cy)
+            ]
+            pygame.draw.polygon(self.screen, (255, 215, 0), pts_crown)
+            pygame.draw.polygon(self.screen, (255, 255, 255), pts_crown, 1)
+
+        # 6. Canopy Pillars & Striped Silk Canopy / Roof
+        pillar_h = 16
+        pygame.draw.line(self.screen, (180, 83, 9), (cart_rect.left + 2, cart_rect.top), (cart_rect.left + 2, cart_rect.top - pillar_h), 2)
+        pygame.draw.line(self.screen, (180, 83, 9), (cart_rect.right - 2, cart_rect.top), (cart_rect.right - 2, cart_rect.top - pillar_h), 2)
+
+        canopy_rect = pygame.Rect(cart_rect.left - 4, cart_rect.top - pillar_h - 4, cart_rect.width + 8, 14)
+        pygame.draw.rect(self.screen, (220, 38, 38), canopy_rect, border_radius=5)
+        for st_i in range(0, canopy_rect.width, 8):
+            pygame.draw.rect(self.screen, (245, 158, 11), (canopy_rect.left + st_i, canopy_rect.top, 4, canopy_rect.height))
+        pygame.draw.rect(self.screen, (255, 215, 0), canopy_rect, 2, border_radius=5)
+
+        # 7. Chibi Desert Companion (Camel/Pony Mascot in front pulling the cart)
+        companion_offset_x = 22 if self.caravan_dir == "right" else (-22 if self.caravan_dir == "left" else 0)
+        companion_offset_y = 18 if self.caravan_dir == "down" else (-18 if self.caravan_dir == "up" else 4)
         m_cx = cx + cart_sz // 2 + companion_offset_x
         m_cy = cy + cart_sz // 2 + companion_offset_y + bob * 0.5
         
@@ -3073,7 +3198,7 @@ class Quarter3:
         # Gold Halter / Reins
         pygame.draw.line(self.screen, (245, 158, 11), (int(m_cx), int(m_cy)), (int(cart_rect.centerx), int(cart_rect.centery)), 2)
 
-        # 7. Happy Music Notes (Crisp geometric vector notes & stars - zero missing font boxes)
+        # 8. Happy Music Notes (Crisp geometric vector notes & stars - zero missing font boxes)
         for note in self.caravan_music_notes:
             n_x = int((note["x"] - self.camera_x) * ZOOM)
             n_y = int((note["y"] - self.camera_y) * ZOOM)
@@ -3945,7 +4070,7 @@ class Quarter3:
         if station_num == 1:
             # Station 1: 3x4 Multiplication Array Builder
             self.mini_puzzle_title = "PUZZLE 1 - BUILD THE 3 x 4 ARRAY"
-            self.mini_puzzle_sub = "Click or drag 12 Golden Apples to fill the 3 rows of 4 grid!"
+            self.mini_puzzle_sub = "Hold fist and drag 12 Golden Apples to fill the 3 rows of 4 grid!"
             self.mini_puzzle_math_target = "3 Rows x 4 Apples = 12 Total Apples"
             self.mini_puzzle_type = "array"
             
@@ -4299,7 +4424,7 @@ class Quarter3:
         t_rack = pygame.Rect(box_x + 24, tray_y, box_w - 48, 75)
         pygame.draw.rect(self.screen, (10, 15, 28), t_rack, border_radius=12)
         pygame.draw.rect(self.screen, (51, 65, 85), t_rack, 1, border_radius=12)
-        tray_lbl = self.small_font.render("ITEM TRAY (Click or drag items to place in slots):", True, (148, 163, 184))
+        tray_lbl = self.small_font.render("ITEM TRAY (Hold fist to grab and place items into slots):", True, (148, 163, 184))
         self.screen.blit(tray_lbl, (box_x + 36, tray_y - 18))
 
         # Draw Items (Non-dragged first)
@@ -4441,8 +4566,6 @@ class Quarter3:
 
     def draw_offscreen_compass_pointer(self):
         """Draw Active Objective NPC Indicator and Off-Screen Compass Pointer for Quarter 3"""
-        import math
-        
         # 1. Target determination for Active Station NPC
         if self.quiz_state == 0 and hasattr(self, 'quiz_stations') and self.quiz_station_index in self.quiz_stations:
             st_x, st_y = self.quiz_stations[self.quiz_station_index]

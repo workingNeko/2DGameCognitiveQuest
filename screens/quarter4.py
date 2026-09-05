@@ -78,6 +78,18 @@ class Quarter4:
                                               replay_callback=self.restart_level,
                                               continue_callback=self.finish_and_return_to_hub)
 
+        # Key / Emblem Puzzle State Defaults
+        self.key_puzzle_active = False
+        self.emblem_puzzle_active = False
+        self.key_puzzle_solved = False
+        self.emblem_puzzle_solved = False
+        self.dragged_key = None
+        self.drag_offset_x = 0
+        self.drag_offset_y = 0
+        self.key_puzzle_pieces = []
+        self.key_puzzle_slots = []
+        self.dragged_addition_piece = None
+
         # ============================================================
         # PATHS
         # ============================================================
@@ -309,6 +321,11 @@ class Quarter4:
         # Goal portal tracking
         self.goal_portal_direction = self.portals[0].direction if self.portals else 'right'
 
+        # Seamless portal warp transition variables
+        self.warp_out_active = False
+        self.warp_out_timer = 0.0
+        self.warp_out_duration = 0.65
+
         # ============================================================
         # UI & QUIZ STATE SYSTEM
         # ============================================================
@@ -421,6 +438,42 @@ class Quarter4:
                 "correct": 2  # C
             }
         ]
+
+        # ============================================================
+        # AREA TITLE ANIMATION
+        # ============================================================
+        self.title_elapsed = 0.0
+        self.title_duration = 5.0
+        self.title_active = True
+
+        # Load Pixelfont
+        self.pixel_font_path = "assets/fonts/Pixelfont.otf"
+        self.pixel_font_size = 72
+        try:
+            self.title_font = pygame.font.Font(self.pixel_font_path, self.pixel_font_size)
+        except Exception:
+            self.title_font = pygame.font.SysFont("Consolas", self.pixel_font_size, bold=True)
+
+        self.title_text = "Underwater Dungeon"
+        self.title_spacing = 12
+
+        self.title_text_color = (255, 255, 255) # White
+        self.title_outline_color = (0, 0, 0) # Black outline
+        self.title_glow_color = (180, 180, 180) # Grey glow
+
+        # Pre-render letters
+        self.title_letters = []
+        for ch in self.title_text:
+            glow = self.title_font.render(ch, False, self.title_glow_color)
+            outline = self.title_font.render(ch, False, self.title_outline_color)
+            main = self.title_font.render(ch, False, self.title_text_color)
+            self.title_letters.append({
+                "glow": glow,
+                "outline": outline,
+                "main": main,
+                "width": main.get_width()
+            })
+        self.title_total_width = sum(l["width"] for l in self.title_letters) + self.title_spacing * (len(self.title_text) - 1)
 
         print(f"[OK] Quarter4 initialized with map: {self.map_name}")
         print(f"   Goal portal: {self.goal_portal_direction}")
@@ -1120,6 +1173,8 @@ class Quarter4:
     # CHECK PORTAL TELEPORT
     # ============================================================
     def check_portal_teleport_on_hold(self):
+        if self.warp_out_active:
+            return False
         # Allow portal check when waiting (state 0) or completed (state 6 or puzzle solved)
         if self.quiz_state not in [0, 6] and not getattr(self, 'key_puzzle_solved', False) and not getattr(self, 'addition_puzzle_solved', False):
             return False
@@ -1145,15 +1200,11 @@ class Quarter4:
                 )
                 if not is_unlocked:
                     return False
-                print(f"[TARGET] Goal reached! Showing 3-Star Victory Report Card in Quarter 4...")
-                self.save_quarter4_game_result()
-                total_questions = min(6, len(self.quiz_questions)) if hasattr(self, 'quiz_questions') and self.quiz_questions else 6
-                correct_answers = sum(1 for k, v in self.first_attempt_correct.items() if k <= total_questions and v)
-                percentage = (correct_answers / float(total_questions)) * 100.0 if total_questions > 0 else 100.0
-                score = int(correct_answers * 20)
-                from db.save_system import mark_quarter_completed
-                mark_quarter_completed(self.main_menu, "quarter4", score=score, percentage=percentage, total_questions=total_questions)
-                self.victory_card.show(total_questions=total_questions, correct_first_try=correct_answers, score=score)
+                print(f"[TARGET] Goal reached! Initiating portal warp transition in Quarter 4...")
+                if hasattr(self.main_menu, 'audio_manager'):
+                    self.main_menu.audio_manager.play_sfx("portal_transition")
+                self.warp_out_active = True
+                self.warp_out_timer = self.warp_out_duration
                 return True
 
             # Regular portal teleport (to another portal on same map) - requires fist hold or space
@@ -1293,6 +1344,12 @@ class Quarter4:
             if btn_rect.collidepoint(pos):
                 self.quiz_state = 0
                 self.trigger_award_animation(self.quiz_station_index)
+                if self.quiz_station_index < len(self.quiz_stations):
+                    self.quiz_station_index += 1
+                    print(f"[OK] Advanced to Station {self.quiz_station_index}")
+                else:
+                    self.quiz_station_index = len(self.quiz_stations) + 1
+                    print(f"[OK] All Stations cleared!")
                 save_student_progress(self.main_menu)
 
         # State 4: Out of tries reveal screen click (Player gets key and continues)
@@ -1304,6 +1361,12 @@ class Quarter4:
             if btn_rect.collidepoint(pos):
                 self.quiz_state = 0
                 self.trigger_award_animation(self.quiz_station_index)
+                if self.quiz_station_index < len(self.quiz_stations):
+                    self.quiz_station_index += 1
+                    print(f"[OK] Advanced to Station {self.quiz_station_index}")
+                else:
+                    self.quiz_station_index = len(self.quiz_stations) + 1
+                    print(f"[OK] All Stations cleared!")
                 save_student_progress(self.main_menu)
                 
         # State 5: Final speech click
@@ -1398,6 +1461,21 @@ class Quarter4:
             self.victory_card.update(dt)
             return
 
+        # Handle smooth warp-out transition to stage select
+        if self.warp_out_active:
+            self.warp_out_timer -= dt
+            if self.warp_out_timer <= 0:
+                self.warp_out_active = False
+                self.save_quarter4_game_result()
+                total_questions = min(6, len(self.quiz_questions)) if hasattr(self, 'quiz_questions') and self.quiz_questions else 6
+                correct_answers = sum(1 for k, v in self.first_attempt_correct.items() if k <= total_questions and v)
+                percentage = (correct_answers / float(total_questions)) * 100.0 if total_questions > 0 else 100.0
+                score = int(correct_answers * 20)
+                from db.save_system import mark_quarter_completed
+                mark_quarter_completed(self.main_menu, "quarter4", score=score, percentage=percentage, total_questions=total_questions)
+                self.victory_card.show(total_questions=total_questions, correct_first_try=correct_answers, score=score)
+            return
+
         # Update Map 12 water particles
         if getattr(self, 'is_map12', False):
             self.update_particles()
@@ -1423,6 +1501,12 @@ class Quarter4:
         if hasattr(self, 'player_block_timer') and self.player_block_timer > 0:
             self.player_block_timer -= dt
 
+        # Update Area Title animation elapsed time
+        if self.title_active:
+            self.title_elapsed += dt
+            if self.title_elapsed >= self.title_duration:
+                self.title_active = False
+
         # Update animations for all 6 Shape/Number Station NPCs
         if hasattr(self, 'station_npcs') and self.station_npcs:
             for num, data in self.station_npcs.items():
@@ -1432,30 +1516,21 @@ class Quarter4:
                         data["anim_timer"] = 0
                         data["anim_frame"] = (data["anim_frame"] + 1) % len(data["frames"])
 
-        # Proximity interaction check for any unanswered Station NPC
-        if self.quiz_state == 0 and hasattr(self, 'quiz_stations'):
-            player_center_x = self.player_x + TILE_SIZE // 2
-            player_center_y = self.player_y + TILE_SIZE // 2
-            for num, pos in self.quiz_stations.items():
-                is_answered = num in self.answered_stations
-                if num == 5 and (6 not in self.quiz_stations):
-                    is_answered = (5 in self.answered_stations) and (6 in self.answered_stations)
-                
-                if not is_answered:
-                    npc_center_x = pos[0] * TILE_SIZE + TILE_SIZE // 2
-                    npc_center_y = pos[1] * TILE_SIZE + TILE_SIZE // 2
-                    dist = math.hypot(player_center_x - npc_center_x, player_center_y - npc_center_y)
-                    if dist < TILE_SIZE * 1.5:
-                        if num == 5 and 5 in self.answered_stations and (6 not in self.quiz_stations):
-                            self.quiz_station_index = 6
-                            self.current_question_index = 5
-                        else:
-                            self.quiz_station_index = num
-                            self.current_question_index = num - 1
-                        self.quiz_state = 1
-                        self.selected_choice_index = -1
-                        print(f"[Bromen] Interacting with Station {self.quiz_station_index} NPC!")
-                        break
+        # Proximity interaction check for currently active sequential station NPC (1 to 5 hierarchy)
+        if self.quiz_state == 0 and hasattr(self, 'quiz_stations') and self.quiz_station_index in self.quiz_stations:
+            pos = self.quiz_stations[self.quiz_station_index]
+            is_answered = self.quiz_station_index in self.answered_stations
+            if not is_answered:
+                player_center_x = self.player_x + TILE_SIZE // 2
+                player_center_y = self.player_y + TILE_SIZE // 2
+                npc_center_x = pos[0] * TILE_SIZE + TILE_SIZE // 2
+                npc_center_y = pos[1] * TILE_SIZE + TILE_SIZE // 2
+                dist = math.hypot(player_center_x - npc_center_x, player_center_y - npc_center_y)
+                if dist < TILE_SIZE * 1.5:
+                    self.current_question_index = self.quiz_station_index - 1
+                    self.quiz_state = 1
+                    self.selected_choice_index = -1
+                    print(f"[Bromen] Interacting with Station {self.quiz_station_index} NPC!")
 
         # Map 12: Lotus Raft sailing logic
         if getattr(self, 'is_map12', False):
@@ -1933,11 +2008,13 @@ class Quarter4:
                     if is_answered:
                         pygame.draw.circle(ring_surf, (56, 232, 198, 90), center_pt, base_r, 3)
                         pygame.draw.circle(ring_surf, (56, 232, 198, 40), center_pt, base_r - 4)
-                    else:
+                    elif num == self.quiz_station_index and self.quiz_state == 0:
                         pulse = int(math.sin(self.frame_counter * 0.12) * 3)
                         r = base_r + pulse
-                        pygame.draw.circle(ring_surf, (255, 215, 0, 140), center_pt, r, 3)
-                        pygame.draw.circle(ring_surf, (0, 240, 255, 50), center_pt, max(1, r - 5))
+                        pygame.draw.circle(ring_surf, (255, 215, 0, 160), center_pt, r, 3)
+                        pygame.draw.circle(ring_surf, (0, 240, 255, 70), center_pt, max(1, r - 5))
+                    else:
+                        pygame.draw.circle(ring_surf, (100, 116, 139, 60), center_pt, base_r, 1)
                     self.screen.blit(ring_surf, (cx - base_r - 6, cy - base_r - 6))
 
         # Only draw portals when quiz is complete
@@ -1956,17 +2033,18 @@ class Quarter4:
                     data = self.station_npcs[num]
                     frame = data["frames"][data["anim_frame"]]
 
-                    # Shimmering water pedestal aura under water guardian
-                    aura_w = int(TILE_SIZE * ZOOM * 1.3)
-                    aura_h = int(TILE_SIZE * ZOOM * 0.6)
-                    aura_surf = pygame.Surface((aura_w, aura_h), pygame.SRCALPHA)
-                    pulse = math.sin(self.frame_counter * 0.1 + num) * 0.25 + 0.75
-                    g_color = self.valve_colors[num - 1] if hasattr(self, 'valve_colors') and 1 <= num <= len(self.valve_colors) else (56, 189, 248)
-                    pygame.draw.ellipse(aura_surf, (*g_color, int(45 * pulse)), (0, 0, aura_w, aura_h))
-                    pygame.draw.ellipse(aura_surf, (255, 255, 255, int(70 * pulse)), (aura_w // 4, aura_h // 4, aura_w // 2, aura_h // 2))
-                    ax = int((pos[0] * TILE_SIZE - self.camera_x) * ZOOM + (TILE_SIZE * ZOOM - aura_w) / 2)
-                    ay = int((pos[1] * TILE_SIZE - self.camera_y) * ZOOM + TILE_SIZE * ZOOM * 0.65)
-                    self.screen.blit(aura_surf, (ax, ay))
+                    # Shimmering water pedestal aura under currently active water guardian
+                    if num == self.quiz_station_index and self.quiz_state == 0:
+                        aura_w = int(TILE_SIZE * ZOOM * 1.3)
+                        aura_h = int(TILE_SIZE * ZOOM * 0.6)
+                        aura_surf = pygame.Surface((aura_w, aura_h), pygame.SRCALPHA)
+                        pulse = math.sin(self.frame_counter * 0.1 + num) * 0.25 + 0.75
+                        g_color = self.valve_colors[num - 1] if hasattr(self, 'valve_colors') and 1 <= num <= len(self.valve_colors) else (56, 189, 248)
+                        pygame.draw.ellipse(aura_surf, (*g_color, int(45 * pulse)), (0, 0, aura_w, aura_h))
+                        pygame.draw.ellipse(aura_surf, (255, 255, 255, int(70 * pulse)), (aura_w // 4, aura_h // 4, aura_w // 2, aura_h // 2))
+                        ax = int((pos[0] * TILE_SIZE - self.camera_x) * ZOOM + (TILE_SIZE * ZOOM - aura_w) / 2)
+                        ay = int((pos[1] * TILE_SIZE - self.camera_y) * ZOOM + TILE_SIZE * ZOOM * 0.65)
+                        self.screen.blit(aura_surf, (ax, ay))
 
                     self.draw_npc_static(pos[0] * TILE_SIZE, pos[1] * TILE_SIZE, frame)
 
@@ -2015,6 +2093,63 @@ class Quarter4:
             else:
                 self.draw_key_puzzle()
 
+        # Draw Area Title Animation
+        if self.title_active:
+            timer = self.title_elapsed
+            
+            # Alpha fading
+            alpha = 255
+            FADE_START = 4.0
+            FADE_DURATION = 1.0
+            if timer >= FADE_START:
+                fade = (timer - FADE_START) / FADE_DURATION
+                fade = max(0, min(fade, 1))
+                alpha = int(255 * (1 - fade))
+                
+            # Slide animation
+            BASE_Y = self.height // 2 - self.pixel_font_size // 2
+            SLIDE_TIME = 0.35
+            if timer < SLIDE_TIME:
+                t = timer / SLIDE_TIME
+                ease = 1 - (1 - t) ** 3
+                y = BASE_Y - (1 - ease) * 40
+            else:
+                y = BASE_Y
+                
+            # Draw letters centered
+            x = self.width // 2 - self.title_total_width // 2
+            
+            for i, data in enumerate(self.title_letters):
+                phase = timer * 8 - i * 0.55
+                offset = 0
+                
+                # Single traveling wave
+                if -math.pi <= phase <= math.pi:
+                    offset = math.sin(phase) * 12
+                    
+                glow = data["glow"].copy()
+                outline = data["outline"].copy()
+                main = data["main"].copy()
+                
+                glow.set_alpha(alpha // 5)
+                outline.set_alpha(alpha)
+                main.set_alpha(alpha)
+                
+                # Glow
+                for gx in (-5, 0, 5):
+                    for gy in (-5, 0, 5):
+                        self.screen.blit(glow, (x + gx, y + gy + offset))
+                        
+                # Outline
+                for ox in (-2, -1, 1, 2):
+                    for oy in (-2, -1, 1, 2):
+                        self.screen.blit(outline, (x + ox, y + oy + offset))
+                        
+                # Main text
+                self.screen.blit(main, (x, y + offset))
+                
+                x += data["width"] + self.title_spacing
+
         self.draw_ui()
 
         # Draw Golden Key award animation (flies down to Objectives HUD)
@@ -2026,6 +2161,19 @@ class Quarter4:
         # Draw Time's Up modal dialog if timer expired
         if self.time_up_dialog_active:
             self.draw_time_up_dialog()
+
+        # Draw smooth seamless warp-out transition overlay
+        if self.warp_out_active:
+            progress = max(0.0, min(1.0, 1.0 - (self.warp_out_timer / self.warp_out_duration)))
+            warp_overlay = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
+            warp_overlay.fill((186, 230, 253, int(progress * 255)))
+            center = (self.width // 2, self.height // 2)
+            max_r = int(math.hypot(self.width, self.height) / 2)
+            r = int(progress * max_r)
+            if r > 0:
+                pygame.draw.circle(warp_overlay, (56, 189, 248, int((1.0 - progress) * 230)), center, r, max(3, int(10 * ZOOM)))
+                pygame.draw.circle(warp_overlay, (255, 255, 255, int((1.0 - progress) * 200)), center, max(1, r - 8), max(2, int(4 * ZOOM)))
+            self.screen.blit(warp_overlay, (0, 0))
 
         # In-Game Universal Pause Button & Modal
         self.pause_menu.draw_button(self.cursor_pos)
@@ -2157,7 +2305,7 @@ class Quarter4:
                 f"NPCs: {npc_text}",
                 f"Hand: {'YES' if self.hand_detected else 'NO'}",
                 f"Gesture: {self.current_gesture}",
-                f"Press ESC to return to menu"
+                f"Pause: Top-Right / Hold Fist"
             ]
 
             y_offset = 10
@@ -2206,7 +2354,7 @@ class Quarter4:
             self.cursor_pos = event.pos
             self.trigger_click(event.pos)
             
-            if (self.key_puzzle_active or self.emblem_puzzle_active) and not (self.key_puzzle_solved or self.emblem_puzzle_solved):
+            if (getattr(self, 'key_puzzle_active', False) or getattr(self, 'emblem_puzzle_active', False)) and not (getattr(self, 'key_puzzle_solved', False) or getattr(self, 'emblem_puzzle_solved', False)):
                 if getattr(self, 'is_map12', False):
                     if not getattr(self, 'addition_is_correct', False):
                         for piece in reversed(getattr(self, 'addition_pieces', [])):
@@ -2217,8 +2365,8 @@ class Quarter4:
                                 self.drag_offset_y = piece["y"] - event.pos[1]
                                 break
                 else:
-                    for piece in self.key_puzzle_pieces:
-                        if not piece["is_placed"]:
+                    for piece in getattr(self, 'key_puzzle_pieces', []):
+                        if not piece.get("is_placed", False):
                             piece_rect = pygame.Rect(piece["x"], piece["y"], 48, 92)
                             if piece_rect.collidepoint(event.pos):
                                 self.dragged_key = piece
@@ -2229,14 +2377,14 @@ class Quarter4:
         elif event.type == pygame.MOUSEBUTTONUP and event.button == 1:
             if getattr(self, 'is_map12', False) and getattr(self, 'dragged_addition_piece', None):
                 self.drop_addition_piece()
-            elif (self.key_puzzle_active or self.emblem_puzzle_active) and self.dragged_key:
+            elif (getattr(self, 'key_puzzle_active', False) or getattr(self, 'emblem_puzzle_active', False)) and getattr(self, 'dragged_key', None):
                 now = pygame.time.get_ticks()
                 key_center_x = self.dragged_key["x"] + 24
                 key_center_y = self.dragged_key["y"] + 46
                 
                 target_slot = None
-                for slot in self.key_puzzle_slots:
-                    if not slot["is_filled"]:
+                for slot in getattr(self, 'key_puzzle_slots', []):
+                    if not slot.get("is_filled", False):
                         dist = math.hypot(key_center_x - slot["target_x"], key_center_y - slot["target_y"])
                         if dist < 55:
                             target_slot = slot
@@ -2254,18 +2402,18 @@ class Quarter4:
                     target_slot["is_filled"] = True
                     target_slot["key_id"] = self.dragged_key["id"]
                 else:
-                    self.dragged_key["x"] = self.dragged_key["deck_x"]
-                    self.dragged_key["y"] = self.dragged_key["deck_y"]
+                    self.dragged_key["x"] = self.dragged_key.get("deck_x", self.dragged_key["x"])
+                    self.dragged_key["y"] = self.dragged_key.get("deck_y", self.dragged_key["y"])
                 self.dragged_key = None
                 
         elif event.type == pygame.MOUSEMOTION:
             self.cursor_pos = event.pos
             if getattr(self, 'is_map12', False) and getattr(self, 'dragged_addition_piece', None):
-                self.dragged_addition_piece["x"] = event.pos[0] + self.drag_offset_x
-                self.dragged_addition_piece["y"] = event.pos[1] + self.drag_offset_y
-            elif (self.key_puzzle_active or self.emblem_puzzle_active) and self.dragged_key:
-                self.dragged_key["x"] = event.pos[0] + self.drag_offset_x
-                self.dragged_key["y"] = event.pos[1] + self.drag_offset_y
+                self.dragged_addition_piece["x"] = event.pos[0] + getattr(self, 'drag_offset_x', 0)
+                self.dragged_addition_piece["y"] = event.pos[1] + getattr(self, 'drag_offset_y', 0)
+            elif (getattr(self, 'key_puzzle_active', False) or getattr(self, 'emblem_puzzle_active', False)) and getattr(self, 'dragged_key', None):
+                self.dragged_key["x"] = event.pos[0] + getattr(self, 'drag_offset_x', 0)
+                self.dragged_key["y"] = event.pos[1] + getattr(self, 'drag_offset_y', 0)
                 
         return None
 
@@ -2288,7 +2436,9 @@ class Quarter4:
 
         speaker_font = pygame.font.SysFont("Comic Sans MS", 18, bold=True)
         npc_data = self.station_npcs.get(self.quiz_station_index, {})
-        speaker_name = npc_data.get("name", "Water Guardian")
+        tot_stations = len(self.quiz_stations) if hasattr(self, 'quiz_stations') and self.quiz_stations else 5
+        raw_speaker_name = npc_data.get("name", "Water Guardian")
+        speaker_name = f"Station {self.quiz_station_index}/{tot_stations}: {raw_speaker_name}"
         speaker_title = npc_data.get("title", "")
 
         speaker_surf = speaker_font.render(speaker_name, True, (218, 165, 32))
@@ -2298,9 +2448,9 @@ class Quarter4:
             sub_font = pygame.font.SysFont("Comic Sans MS", 12)
             sub_surf = sub_font.render(speaker_title, True, (148, 163, 184))
             self.screen.blit(sub_surf, (box_x + 25, box_y + 40))
-            pygame.draw.line(self.screen, (218, 165, 32), (box_x + 25, box_y + 58), (box_x + 240, box_y + 58), 2)
+            pygame.draw.line(self.screen, (218, 165, 32), (box_x + 25, box_y + 58), (box_x + 25 + speaker_surf.get_width(), box_y + 58), 2)
         else:
-            pygame.draw.line(self.screen, (218, 165, 32), (box_x + 25, box_y + 48), (box_x + 180, box_y + 48), 2)
+            pygame.draw.line(self.screen, (218, 165, 32), (box_x + 25, box_y + 48), (box_x + 25 + speaker_surf.get_width(), box_y + 48), 2)
 
         # Draw animated avatar in top right corner of dialog
         if "frames" in npc_data and npc_data["frames"]:
@@ -3704,8 +3854,6 @@ class Quarter4:
 
     def draw_offscreen_compass_pointer(self):
         """Draw Active Objective NPC Indicator and Off-Screen Compass Pointer for Quarter 4"""
-        import math
-
         target_info = None
 
         # 1. Target Determination

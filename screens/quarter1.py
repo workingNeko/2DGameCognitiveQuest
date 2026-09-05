@@ -328,6 +328,11 @@ class Quarter1:
         self.current_question_index = 0
         self.selected_choice_index = -1  # choice highlighted
 
+        # Seamless portal warp transition variables
+        self.warp_out_active = False
+        self.warp_out_timer = 0.0
+        self.warp_out_duration = 0.65
+
         # Shape NPC animations
         self.shape_npc_anim_frame = 0
         self.shape_npc_anim_timer = 0
@@ -1408,7 +1413,6 @@ class Quarter1:
         border_color = (40, 40, 40)
         border_w = max(2, size // 25)
         
-        import math
         S = size
         
         if shape_id == 1:  # Circle
@@ -1831,7 +1835,6 @@ class Quarter1:
             target_y = board_y
         
         # Check if piece is released close to its correct target slot (within 35 pixels)
-        import math
         dist = math.hypot(piece["x"] - target_x, piece["y"] - target_y)
         if dist < 35:
             # Snap to target slot
@@ -2124,6 +2127,8 @@ class Quarter1:
     # CHECK PORTAL TELEPORT
     # ============================================================
     def check_portal_teleport_on_hold(self):
+        if self.warp_out_active:
+            return False
         if self.quiz_state != 0 and self.quiz_state != 6:
             return False
         current_portal = None
@@ -2143,15 +2148,11 @@ class Quarter1:
                         self.show_bridge_warning("I should gather all 5 shape pieces first!")
                     return False
 
-                print(f"[TARGET] Goal reached! Displaying 3-Star Victory Report Card...")
-                self.save_results_to_database()
-                total_questions = 5
-                correct_answers = sum(1 for v in self.first_attempt_correct.values() if v)
-                percentage = (correct_answers / float(total_questions)) * 100.0 if total_questions > 0 else 100.0
-                score = int(correct_answers * 20)
-                from db.save_system import mark_quarter_completed
-                mark_quarter_completed(self.main_menu, "quarter1", score=score, percentage=percentage, total_questions=total_questions)
-                self.victory_card.show(total_questions=total_questions, correct_first_try=correct_answers, score=score)
+                print(f"[TARGET] Goal reached! Initiating portal warp transition...")
+                if hasattr(self.main_menu, 'audio_manager'):
+                    self.main_menu.audio_manager.play_sfx("portal_transition")
+                self.warp_out_active = True
+                self.warp_out_timer = self.warp_out_duration
                 return True
 
             # Regular portal teleport (to another portal on same map)
@@ -2347,13 +2348,20 @@ class Quarter1:
                     self.shape_npcs[self.active_shape_id]['answered'] = True
                     answered_count = sum(1 for s in self.shape_npcs.values() if s['answered'])
                     
+                    if self.active_shape_id < 5:
+                        self.quiz_station_index = self.active_shape_id + 1
+                        print(f"[OK] Advanced to Shape Station {self.quiz_station_index}")
+                    else:
+                        self.quiz_station_index = 6
+                        print(f"[OK] All 5 Shape Stations restored!")
+
                     # Trigger collect animations or bridge pan sequences
                     if self.map_name.lower() == 'map1.txt':
                         self.trigger_bridge_pan_sequence()
                     elif self.map_name.lower() in ['map2.txt', 'map3.txt']:
                         self.trigger_award_animation()
                         
-                    if answered_count == 5:
+                    if answered_count >= 5:
                         self.spawn_portals()
                         self.quiz_state = 0
                     else:
@@ -2379,13 +2387,20 @@ class Quarter1:
                     self.shape_npcs[self.active_shape_id]['answered'] = True
                     answered_count = sum(1 for s in self.shape_npcs.values() if s['answered'])
                     
+                    if self.active_shape_id < 5:
+                        self.quiz_station_index = self.active_shape_id + 1
+                        print(f"[OK] Advanced to Shape Station {self.quiz_station_index}")
+                    else:
+                        self.quiz_station_index = 6
+                        print(f"[OK] All 5 Shape Stations restored!")
+
                     # Trigger collect animations or bridge pan sequences
                     if self.map_name.lower() == 'map1.txt':
                         self.trigger_bridge_pan_sequence()
                     elif self.map_name.lower() in ['map2.txt', 'map3.txt']:
                         self.trigger_award_animation()
                         
-                    if answered_count == 5:
+                    if answered_count >= 5:
                         self.spawn_portals()
                         self.quiz_state = 0
                     else:
@@ -2534,6 +2549,21 @@ class Quarter1:
             self.victory_card.update(dt)
             return
 
+        # Handle smooth warp-out transition to stage select
+        if self.warp_out_active:
+            self.warp_out_timer -= dt
+            if self.warp_out_timer <= 0:
+                self.warp_out_active = False
+                self.save_results_to_database()
+                total_questions = 5
+                correct_answers = sum(1 for v in self.first_attempt_correct.values() if v)
+                percentage = (correct_answers / float(total_questions)) * 100.0 if total_questions > 0 else 100.0
+                score = int(correct_answers * 20)
+                from db.save_system import mark_quarter_completed
+                mark_quarter_completed(self.main_menu, "quarter1", score=score, percentage=percentage, total_questions=total_questions)
+                self.victory_card.show(total_questions=total_questions, correct_first_try=correct_answers, score=score)
+            return
+
         # 10-Minute Stage Timer
         if not getattr(self, 'completed', False) and not self.time_up_dialog_active:
             self.stage_time_remaining = max(0.0, self.stage_time_remaining - dt)
@@ -2578,34 +2608,30 @@ class Quarter1:
                 self.shape_npc_anim_timer = 0
                 self.shape_npc_anim_frame = (self.shape_npc_anim_frame + 1) % 8
 
-        # Proximity interaction check for Shape NPCs
-        if self.quiz_state == 0 and self.is_quiz_map:
-            import math
-            player_center_x = self.player_x + TILE_SIZE // 2
-            player_center_y = self.player_y + TILE_SIZE // 2
-            
-            for num, npc in self.shape_npcs.items():
-                if not npc["answered"]:
-                    npc_center_x = npc["x"] + TILE_SIZE // 2
-                    npc_center_y = npc["y"] + TILE_SIZE // 2
-                    dist = math.hypot(player_center_x - npc_center_x, player_center_y - npc_center_y)
-                    if dist < TILE_SIZE * 1.5:
-                        p_dx = npc["x"] - self.player_x
-                        p_dy = npc["y"] - self.player_y
-                        if abs(p_dx) > abs(p_dy):
-                            self.player_dir = "right" if p_dx > 0 else "left"
-                        else:
-                            self.player_dir = "down" if p_dy > 0 else "up"
-                        
-                        self.active_shape_id = num
-                        self.current_question_index = num - 1
-                        self.quiz_state = 1
-                        self.selected_choice_index = -1
-                        break
+        # Proximity interaction check for active Shape Station NPC (Strict 1 to 5 Hierarchy)
+        if self.quiz_state == 0 and self.is_quiz_map and hasattr(self, 'shape_npcs') and self.quiz_station_index in self.shape_npcs:
+            npc = self.shape_npcs[self.quiz_station_index]
+            if not npc["answered"]:
+                player_center_x = self.player_x + TILE_SIZE // 2
+                player_center_y = self.player_y + TILE_SIZE // 2
+                npc_center_x = npc["x"] + TILE_SIZE // 2
+                npc_center_y = npc["y"] + TILE_SIZE // 2
+                dist = math.hypot(player_center_x - npc_center_x, player_center_y - npc_center_y)
+                if dist < TILE_SIZE * 1.5:
+                    p_dx = npc["x"] - self.player_x
+                    p_dy = npc["y"] - self.player_y
+                    if abs(p_dx) > abs(p_dy):
+                        self.player_dir = "right" if p_dx > 0 else "left"
+                    else:
+                        self.player_dir = "down" if p_dy > 0 else "up"
+                    
+                    self.active_shape_id = self.quiz_station_index
+                    self.current_question_index = self.quiz_station_index - 1
+                    self.quiz_state = 1
+                    self.selected_choice_index = -1
 
         # Proximity interaction check for Old Man NPC (map1.txt)
         if self.quiz_state == 0 and self.map_name.lower() == 'map1.txt' and self.npc_oldman_found and self.player_block_timer <= 0 and not self.oldman_riddle_answered and getattr(self, 'oldman_interaction_cooldown', 0.0) <= 0:
-            import math
             player_center_x = self.player_x + TILE_SIZE // 2
             player_center_y = self.player_y + TILE_SIZE // 2
             oldman_center_x = self.npc_oldman_x + TILE_SIZE // 2
@@ -2632,7 +2658,6 @@ class Quarter1:
 
         # Proximity interaction check for Old Man NPC (map2.txt and map3.txt)
         if self.quiz_state == 0 and self.map_name.lower() in ['map2.txt', 'map3.txt'] and self.npc_oldman_found and self.player_block_timer <= 0 and not self.puzzle_solved and getattr(self, 'oldman_interaction_cooldown', 0.0) <= 0:
-            import math
             player_center_x = self.player_x + TILE_SIZE // 2
             player_center_y = self.player_y + TILE_SIZE // 2
             oldman_center_x = self.npc_oldman_x + TILE_SIZE // 2
@@ -2845,9 +2870,19 @@ class Quarter1:
                 portal.draw(self.screen, self.camera_x, self.camera_y, ZOOM, self.width, self.height)
 
 
-        # Draw Shape NPCs
+        # Draw Shape NPCs (1 to 5 hierarchy with glowing active station ring)
         if self.is_quiz_map:
             for num, npc in self.shape_npcs.items():
+                # Shimmering green interaction aura ring under currently active shape station
+                if num == self.quiz_station_index and not npc["answered"] and self.quiz_state == 0:
+                    cx = (npc["x"] + TILE_SIZE // 2 - self.camera_x) * ZOOM
+                    cy = (npc["y"] + TILE_SIZE - self.camera_y) * ZOOM
+                    pulse = math.sin(self.frame_counter * 0.15) * 3 * ZOOM + 16 * ZOOM
+                    aura_surf = pygame.Surface((int(pulse * 2), int(pulse)), pygame.SRCALPHA)
+                    pygame.draw.ellipse(aura_surf, (34, 197, 94, 90), aura_surf.get_rect())
+                    pygame.draw.ellipse(aura_surf, (250, 204, 21, 140), aura_surf.get_rect(), 2)
+                    self.screen.blit(aura_surf, (cx - aura_surf.get_width() // 2, cy - aura_surf.get_height() // 2))
+
                 sprite_data = self.shape_sprites.get(num)
                 if sprite_data:
                     if isinstance(sprite_data, list) and len(sprite_data) > 0:
@@ -3025,7 +3060,6 @@ class Quarter1:
 
         # Draw Area Title Animation
         if self.title_active:
-            import math
             timer = self.title_elapsed
             
             # Alpha fading
@@ -3092,6 +3126,19 @@ class Quarter1:
         if self.time_up_dialog_active:
             self.draw_time_up_dialog()
 
+        # Draw smooth seamless warp-out transition overlay
+        if self.warp_out_active:
+            progress = max(0.0, min(1.0, 1.0 - (self.warp_out_timer / self.warp_out_duration)))
+            warp_overlay = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
+            warp_overlay.fill((220, 252, 231, int(progress * 255)))
+            center = (self.width // 2, self.height // 2)
+            max_r = int(math.hypot(self.width, self.height) / 2)
+            r = int(progress * max_r)
+            if r > 0:
+                pygame.draw.circle(warp_overlay, (34, 197, 94, int((1.0 - progress) * 230)), center, r, max(3, int(10 * ZOOM)))
+                pygame.draw.circle(warp_overlay, (250, 204, 21, int((1.0 - progress) * 200)), center, max(1, r - 8), max(2, int(4 * ZOOM)))
+            self.screen.blit(warp_overlay, (0, 0))
+
         # In-Game Universal Pause Button & Modal
         self.pause_menu.draw_button(self.cursor_pos)
         if self.pause_menu.is_paused:
@@ -3124,7 +3171,7 @@ class Quarter1:
         if self.is_quiz_map and self.active_shape_id is not None:
             npc_data = self.shape_npcs.get(self.active_shape_id)
             if npc_data:
-                speaker_name = f"{npc_data['name'].capitalize()} NPC"
+                speaker_name = f"Station {self.quiz_station_index}/5: {npc_data['name'].capitalize()} Guardian"
         
         speaker_surf = speaker_font.render(speaker_name, True, (218, 165, 32))
         self.screen.blit(speaker_surf, (box_x + 25, box_y + 20))
@@ -3913,7 +3960,7 @@ class Quarter1:
                 f"NPCs: {npc_text}",
                 f"Hand: {'YES' if self.hand_detected else 'NO'}",
                 f"Gesture: {self.current_gesture}",
-                f"Press ESC to return to menu"
+                f"Pause: Top-Right / Hold Fist"
             ]
 
             y_offset = 10
@@ -4018,23 +4065,20 @@ class Quarter1:
 
     def draw_offscreen_compass_pointer(self):
         """Draw Active Objective NPC Indicator and Off-Screen Compass Pointer for Quarter 1"""
-        import math
-        
         # 1. Target determination
         target_info = None
         
         if self.quiz_state == 0 and self.is_quiz_map:
-            if self.map_name.lower() == 'map1.txt':
-                if not self.oldman_riddle_answered and self.npc_oldman_found:
-                    target_info = (self.npc_oldman_tile_x, self.npc_oldman_tile_y, "Old Man")
-            else:
-                # Shape quiz maps (map2, map3, etc.)
-                if self.quiz_station_index in self.shape_npcs:
-                    npc_data = self.shape_npcs[self.quiz_station_index]
-                    target_info = (npc_data["tile_x"], npc_data["tile_y"], f"{npc_data['name'].capitalize()} NPC")
-                elif hasattr(self, 'quiz_stations') and self.quiz_station_index in self.quiz_stations:
-                    pos = self.quiz_stations[self.quiz_station_index]
-                    target_info = (pos[0], pos[1], f"Station {self.quiz_station_index}")
+            # 1 to 5 sequential hierarchy target determination across all maps
+            if hasattr(self, 'shape_npcs') and self.quiz_station_index in self.shape_npcs and not self.shape_npcs[self.quiz_station_index]['answered']:
+                npc_data = self.shape_npcs[self.quiz_station_index]
+                target_info = (npc_data["tile_x"], npc_data["tile_y"], f"Station {self.quiz_station_index}: {npc_data['name'].capitalize()}")
+            elif self.map_name.lower() == 'map1.txt' and not self.oldman_riddle_answered and self.npc_oldman_found:
+                target_info = (self.npc_oldman_tile_x, self.npc_oldman_tile_y, "Old Man")
+            elif self.map_name.lower() in ['map2.txt', 'map3.txt'] and not self.puzzle_solved and self.npc_oldman_found:
+                target_info = (self.npc_oldman_tile_x, self.npc_oldman_tile_y, "Old Man")
+            elif self.portals:
+                target_info = (self.portals[0].get_world_x() // TILE_SIZE, self.portals[0].get_world_y() // TILE_SIZE, "Exit Portal")
 
         if target_info:
             st_x, st_y, npc_name = target_info
