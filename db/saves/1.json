@@ -15,16 +15,16 @@
     "completed_quarters": {
         "quarter1": {
             "completed": true,
-            "score": 20,
-            "percentage": 20.0,
+            "score": 60,
+            "percentage": 60.0,
             "total_questions": 5,
-            "timestamp": 1788546370.3470387
+            "timestamp": 1788582619.0421574
         }
     },
-    "timestamp": 1788546478.501607,
+    "timestamp": 1788582732.5403736,
     "stage_select": {
-        "player_x": 804.8199999999998,
-        "player_y": 659.5400000000012,
+        "player_x": 838.0200000000001,
+        "player_y": 677.3600000000015,
         "oldman_dialogue_state": 0,
         "knight_dialogue_state": 2,
         "skeleton_dialogue_state": 0,

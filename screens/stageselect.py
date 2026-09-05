@@ -1135,17 +1135,17 @@ class StageSelect:
             self.main_menu.current_screen = "quarter1"
             self.main_menu.quarter1 = Quarter1(self.screen, self.main_menu, map_name)
         elif qid == "quarter2":
-            map_name = "map5.txt"
+            map_name = random.choice(["map4.txt", "map5.txt", "map6.txt"])
             print(f"[STAGE] Entering Quarter 2 - {map_name}")
             self.main_menu.current_screen = "quarter2"
             self.main_menu.quarter2 = Quarter2(self.screen, self.main_menu, map_name)
         elif qid == "quarter3":
-            map_name = "map7.txt"
+            map_name = random.choice(["map7.txt", "map8.txt", "map9.txt"])
             print(f"[STAGE] Entering Quarter 3 - {map_name}")
             self.main_menu.current_screen = "quarter3"
             self.main_menu.quarter3 = Quarter3(self.screen, self.main_menu, map_name)
         elif qid == "quarter4":
-            map_name = "map11.txt"
+            map_name = random.choice(["map10.txt", "map11.txt", "map12.txt"])
             print(f"[STAGE] Entering Quarter 4 - {map_name}")
             self.main_menu.current_screen = "quarter4"
             self.main_menu.quarter4 = Quarter4(self.screen, self.main_menu, map_name)

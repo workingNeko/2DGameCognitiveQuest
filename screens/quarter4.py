@@ -917,8 +917,11 @@ class Quarter4:
     # LOAD STATIC PORTALS
     # ============================================================
     def load_static_portals(self):
-        for y, row in enumerate(self.render_map):
-            row_list = list(row)
+        self.portals = []
+        # Use game_map for portal detection so markers are never lost
+        for y, row in enumerate(self.game_map):
+            row_list = list(self.render_map[y]) if y < len(self.render_map) else []
+            game_row_list = list(row)
             modified = False
             for x, c in enumerate(row):
                 if c in ['r', 'l', 'u', 'd']:
@@ -933,10 +936,14 @@ class Quarter4:
                         portal = self.Portal(x, y, p_dir, is_static=True)
                         portal.set_animation(self.portal_frames_cache[p_dir])
                         self.portals.append(portal)
-                    row_list[x] = 'G'
+                    if row_list and x < len(row_list):
+                        row_list[x] = 'G'
+                    game_row_list[x] = 'G'
                     modified = True
             if modified:
-                self.render_map[y] = ''.join(row_list)
+                if row_list and y < len(self.render_map):
+                    self.render_map[y] = ''.join(row_list)
+                self.game_map[y] = ''.join(game_row_list)
 
     # ============================================================
     # COLLISION

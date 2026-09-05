@@ -1333,36 +1333,49 @@ class Quarter3:
                     self.render_map[r] = ''.join(row_list)
 
     def load_static_portals(self):
-        for y, row in enumerate(self.render_map):
-            row_list = list(row)
+        self.portals = []
+        # Use game_map for portal detection so markers are never lost
+        for y, row in enumerate(self.game_map):
+            row_list = list(self.render_map[y]) if y < len(self.render_map) else []
+            game_row_list = list(row)
             modified = False
             for x, c in enumerate(row):
                 if c == 'r':
                     portal = self.Portal(x, y, 'right', is_static=True)
                     portal.set_animation(self.portal_frames_cache['right'])
                     self.portals.append(portal)
-                    row_list[x] = 'G'
+                    if row_list and x < len(row_list):
+                        row_list[x] = 'G'
+                    game_row_list[x] = 'G'
                     modified = True
                 elif c == 'l':
                     portal = self.Portal(x, y, 'left', is_static=True)
                     portal.set_animation(self.portal_frames_cache['left'])
                     self.portals.append(portal)
-                    row_list[x] = 'G'
+                    if row_list and x < len(row_list):
+                        row_list[x] = 'G'
+                    game_row_list[x] = 'G'
                     modified = True
                 elif c == 'u':
                     portal = self.Portal(x, y, 'up', is_static=True)
                     portal.set_animation(self.portal_frames_cache['up'])
                     self.portals.append(portal)
-                    row_list[x] = 'G'
+                    if row_list and x < len(row_list):
+                        row_list[x] = 'G'
+                    game_row_list[x] = 'G'
                     modified = True
                 elif c == 'd':
                     portal = self.Portal(x, y, 'down', is_static=True)
                     portal.set_animation(self.portal_frames_cache['down'])
                     self.portals.append(portal)
-                    row_list[x] = 'G'
+                    if row_list and x < len(row_list):
+                        row_list[x] = 'G'
+                    game_row_list[x] = 'G'
                     modified = True
             if modified:
-                self.render_map[y] = ''.join(row_list)
+                if row_list and y < len(self.render_map):
+                    self.render_map[y] = ''.join(row_list)
+                self.game_map[y] = ''.join(game_row_list)
 
     def find_path(self, start, end):
         """BFS pathfinder from start (col, row) to end (col, row) on the grid"""
@@ -1744,7 +1757,7 @@ class Quarter3:
                 self.stage_time_remaining = 600.0
                 self.time_up_dialog_active = False
                 from screens.quarter3 import Quarter3
-                self.main_menu.quarter3 = Quarter3(self.screen, self.main_menu, "map7.txt")
+                self.main_menu.quarter3 = Quarter3(self.screen, self.main_menu, self.map_name)
                 return
             elif exit_rect.collidepoint(pos):
                 self.time_up_dialog_active = False

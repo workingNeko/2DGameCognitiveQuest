@@ -2264,7 +2264,7 @@ class Quarter1:
                 self.stage_time_remaining = 600.0
                 self.time_up_dialog_active = False
                 from screens.quarter1 import Quarter1
-                self.main_menu.quarter1 = Quarter1(self.screen, self.main_menu, "map1.txt")
+                self.main_menu.quarter1 = Quarter1(self.screen, self.main_menu, self.map_name)
                 return
             elif exit_rect.collidepoint(pos):
                 self.time_up_dialog_active = False
