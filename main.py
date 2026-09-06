@@ -18,6 +18,9 @@ if sys.stderr is not None:
 pygame.init()
 pygame.font.init()
 
+from core.font_manager import install_font_cache
+install_font_cache()
+
 from screens.main_menu import MainMenu
 
 

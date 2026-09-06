@@ -78,6 +78,11 @@ class Quarter1:
                                               replay_callback=self.restart_level,
                                               continue_callback=self.finish_and_return_to_hub)
 
+        # Performance Caches
+        self._scaled_tile_cache = {}
+        self._scaled_sprite_cache = {}
+        self._dim_overlay = None
+
         # ============================================================
         # PATHS
         # ============================================================
@@ -2604,7 +2609,7 @@ class Quarter1:
         # Update Shape NPC animation frame
         if self.is_quiz_map:
             self.shape_npc_anim_timer += 1
-            if self.shape_npc_anim_timer >= 5:
+            if self.shape_npc_anim_timer >= 14:
                 self.shape_npc_anim_timer = 0
                 self.shape_npc_anim_frame = (self.shape_npc_anim_frame + 1) % 8
 
@@ -2749,7 +2754,7 @@ class Quarter1:
 
         if vx != 0 or vy != 0:
             self.anim_timer += 1
-            if self.anim_timer >= 8:
+            if self.anim_timer >= 16:
                 self.anim_timer = 0
                 self.anim_frame = (self.anim_frame + 1) % 2
                 if hasattr(self.main_menu, 'audio_manager'):
@@ -2777,12 +2782,19 @@ class Quarter1:
                 if c in ['X', 'Y', 'Z']:
                     w = int(64 * ZOOM)
                     h = int(96 * ZOOM)
-                    scaled_image = pygame.transform.scale(image, (w, h))
+                    k = (image, w, h)
+                    scaled_image = self._scaled_tile_cache.get(k)
+                    if scaled_image is None:
+                        scaled_image = pygame.transform.scale(image, (w, h))
+                        self._scaled_tile_cache[k] = scaled_image
                     screen_y_shifted = screen_y - int(64 * ZOOM)
                     self.screen.blit(scaled_image, (screen_x, screen_y_shifted))
                 else:
                     scaled_size = int(TILE_SIZE * ZOOM)
-                    scaled_image = pygame.transform.scale(image, (scaled_size, scaled_size))
+                    scaled_image = self._scaled_tile_cache.get(image)
+                    if scaled_image is None:
+                        scaled_image = pygame.transform.scale(image, (scaled_size, scaled_size))
+                        self._scaled_tile_cache[image] = scaled_image
                     self.screen.blit(scaled_image, (screen_x, screen_y))
 
     # ============================================================
@@ -2800,7 +2812,10 @@ class Quarter1:
             frame_index = min(anim_frame, len(sprites) - 1)
             sprite = sprites[frame_index]
             scaled_size = int(TILE_SIZE * ZOOM)
-            scaled_sprite = pygame.transform.scale(sprite, (scaled_size, scaled_size))
+            scaled_sprite = self._scaled_sprite_cache.get(sprite)
+            if scaled_sprite is None:
+                scaled_sprite = pygame.transform.scale(sprite, (scaled_size, scaled_size))
+                self._scaled_sprite_cache[sprite] = scaled_sprite
             self.screen.blit(scaled_sprite, (screen_x, screen_y))
 
     def draw_npc_static(self, x, y, sprite):
@@ -2813,7 +2828,10 @@ class Quarter1:
         if (-TILE_SIZE * ZOOM <= screen_x <= self.width + TILE_SIZE * ZOOM and
                 -TILE_SIZE * ZOOM <= screen_y <= self.height + TILE_SIZE * ZOOM):
             scaled_size = int(TILE_SIZE * ZOOM)
-            scaled_sprite = pygame.transform.scale(sprite, (scaled_size, scaled_size))
+            scaled_sprite = self._scaled_sprite_cache.get(sprite)
+            if scaled_sprite is None:
+                scaled_sprite = pygame.transform.scale(sprite, (scaled_size, scaled_size))
+                self._scaled_sprite_cache[sprite] = scaled_sprite
             self.screen.blit(scaled_sprite, (screen_x, screen_y))
 
     def draw_answered_checkmark(self, x, y):
@@ -2839,8 +2857,12 @@ class Quarter1:
                 -TILE_SIZE * ZOOM <= screen_y <= self.height + TILE_SIZE * ZOOM):
             sprite = self.player_sprites[self.player_dir][self.anim_frame]
             scaled_size = int(TILE_SIZE * ZOOM)
-            scaled_sprite = pygame.transform.scale(sprite, (scaled_size, scaled_size))
+            scaled_sprite = self._scaled_sprite_cache.get(sprite)
+            if scaled_sprite is None:
+                scaled_sprite = pygame.transform.scale(sprite, (scaled_size, scaled_size))
+                self._scaled_sprite_cache[sprite] = scaled_sprite
             self.screen.blit(scaled_sprite, (screen_x, screen_y))
+
 
     # ============================================================
     # DRAW
@@ -4056,12 +4078,16 @@ class Quarter1:
                         self.lol_camera.recenter()
         elif event.type == pygame.MOUSEBUTTONDOWN:
             if event.button == 1:  # Left click
+                self.cursor_pos = event.pos
                 self.trigger_click(event.pos)
+        elif event.type == pygame.MOUSEMOTION:
+            self.cursor_pos = event.pos
         return None
 
     def get_ui_font(self, size, bold=False):
         """Returns a high-legibility system font for UI elements"""
-        return pygame.font.SysFont(["Segoe UI", "Tahoma", "Verdana", "Calibri", "Arial", "Comic Sans MS"], size, bold=bold)
+        from core.font_manager import get_font
+        return get_font(["Segoe UI", "Tahoma", "Verdana", "Calibri", "Arial", "Comic Sans MS"], size, bold=bold)
 
     def draw_offscreen_compass_pointer(self):
         """Draw Active Objective NPC Indicator and Off-Screen Compass Pointer for Quarter 1"""
@@ -4216,9 +4242,10 @@ class Quarter1:
 
     def draw_time_up_dialog(self):
         """Draws a modal dialog when the 10-minute timer runs out"""
-        dim = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
-        dim.fill((0, 0, 0, 180))
-        self.screen.blit(dim, (0, 0))
+        if self._dim_overlay is None or self._dim_overlay.get_size() != (self.width, self.height):
+            self._dim_overlay = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
+            self._dim_overlay.fill((0, 0, 0, 180))
+        self.screen.blit(self._dim_overlay, (0, 0))
 
         box_w, box_h = 560, 260
         box_x = (self.width - box_w) // 2

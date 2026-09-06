@@ -117,6 +117,11 @@ class TutorialScreen:
         from core.pause_menu import InGamePauseMenu
         self.pause_menu = InGamePauseMenu(self.screen, self.width, self.height, self.main_menu, return_callback=self.finish_tutorial, restart_callback=self.restart_tutorial)
 
+        # Performance Caches
+        self._scaled_tile_cache = {}
+        self._scaled_sprite_cache = {}
+        self._dim_overlay = None
+
         print("[TUTORIAL] Live Interactive Gameplay Tutorial Initialized!")
 
     def restart_tutorial(self):
@@ -345,7 +350,7 @@ class TutorialScreen:
 
         if vx != 0 or vy != 0:
             self.anim_timer += 1
-            if self.anim_timer >= 8:
+            if self.anim_timer >= 16:
                 self.anim_timer = 0
                 self.anim_frame = (self.anim_frame + 1) % 2
         else:
@@ -374,7 +379,10 @@ class TutorialScreen:
 
         self.lol_camera.handle_event(event)
         if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+            self.cursor_pos = event.pos
             self.trigger_click(event.pos)
+        elif event.type == pygame.MOUSEMOTION:
+            self.cursor_pos = event.pos
         elif event.type == pygame.KEYDOWN:
             if event.key == pygame.K_SPACE and self.quiz_state == 0:
                 self.lol_camera.recenter()
@@ -404,12 +412,16 @@ class TutorialScreen:
             return
         if choice_idx == self.sample_question["correct"]:
             self.quiz_state = 3  # Correct
+            if hasattr(self.main_menu, 'audio_manager') and self.main_menu.audio_manager:
+                self.main_menu.audio_manager.play_sfx("correct")
             print("[OK] Correct Answer in Tutorial Quiz!")
         else:
             self.quiz_attempts += 1
             self.eliminated_choice = choice_idx
             self.wrong_feedback_msg = "Almost! You have 1 try remaining. Pick again!"
             self.quiz_state = 2 if self.quiz_attempts < 2 else 3
+            if hasattr(self.main_menu, 'audio_manager') and self.main_menu.audio_manager:
+                self.main_menu.audio_manager.play_sfx("wrong")
             print("[FAIL] Wrong Answer in Tutorial Quiz -> Showing 2-Attempt Mechanics!")
 
     def trigger_click(self, pos=None):
@@ -423,6 +435,8 @@ class TutorialScreen:
         # 1. Skip Button (Top Right, beside Pause Button)
         skip_rect = pygame.Rect(self.width - 310, 18, 165, 36)
         if skip_rect.collidepoint(pos):
+            if hasattr(self.main_menu, 'audio_manager') and self.main_menu.audio_manager:
+                self.main_menu.audio_manager.play_sfx("click")
             self.finish_tutorial()
             return
 
@@ -432,6 +446,8 @@ class TutorialScreen:
             screen_npc_y = (self.npc_tile_y * TILE_SIZE - self.camera_y) * ZOOM
             npc_rect = pygame.Rect(screen_npc_x - 20, screen_npc_y - 20, TILE_SIZE * ZOOM + 40, TILE_SIZE * ZOOM + 40)
             if npc_rect.collidepoint(pos) or math.hypot(self.player_x - self.npc_tile_x * TILE_SIZE, self.player_y - self.npc_tile_y * TILE_SIZE) < 3.0 * TILE_SIZE:
+                if hasattr(self.main_menu, 'audio_manager') and self.main_menu.audio_manager:
+                    self.main_menu.audio_manager.play_sfx("dialogue_blip")
                 self.phase = 3
                 self.quiz_state = 1
                 print("[TUTORIAL] Opening Sample Quiz Modal!")
@@ -462,6 +478,8 @@ class TutorialScreen:
             box_y = (self.height - box_h) // 2
             btn_rect = pygame.Rect(box_x + (box_w - 230) // 2, box_y + 180, 230, 48)
             if btn_rect.collidepoint(pos):
+                if hasattr(self.main_menu, 'audio_manager') and self.main_menu.audio_manager:
+                    self.main_menu.audio_manager.play_sfx("click")
                 self.quiz_state = 1
                 return
 
@@ -471,6 +489,8 @@ class TutorialScreen:
             box_y = (self.height - box_h) // 2
             btn_rect = pygame.Rect(box_x + (box_w - 240) // 2, box_y + 195, 240, 48)
             if btn_rect.collidepoint(pos):
+                if hasattr(self.main_menu, 'audio_manager') and self.main_menu.audio_manager:
+                    self.main_menu.audio_manager.play_sfx("click")
                 self.quiz_state = 0
                 self.phase = 4
                 print("[TUTORIAL] Tutorial Phase 4: Portal Unlocked! Guide student to Exit Portal.")
@@ -505,7 +525,10 @@ class TutorialScreen:
                 t_surf = self.tile_sprites.get(tile_char, self.tile_sprites['G'])
                 sx = (c * TILE_SIZE - self.camera_x) * ZOOM
                 sy = (r * TILE_SIZE - self.camera_y) * ZOOM
-                scaled_t = pygame.transform.scale(t_surf, (int(TILE_SIZE * ZOOM), int(TILE_SIZE * ZOOM)))
+                scaled_t = self._scaled_tile_cache.get(t_surf)
+                if scaled_t is None:
+                    scaled_t = pygame.transform.scale(t_surf, (int(TILE_SIZE * ZOOM), int(TILE_SIZE * ZOOM)))
+                    self._scaled_tile_cache[t_surf] = scaled_t
                 self.screen.blit(scaled_t, (sx, sy))
 
         # 2. Render Exit Portal (Only appears after question is answered)
@@ -514,7 +537,10 @@ class TutorialScreen:
             p_sy = (self.portal_tile_y * TILE_SIZE - self.camera_y) * ZOOM
             if self.portal_frames:
                 p_frame = self.portal_frames[self.portal_anim_frame]
-                scaled_p = pygame.transform.scale(p_frame, (int(TILE_SIZE * 3 * ZOOM), int(TILE_SIZE * 3 * ZOOM)))
+                scaled_p = self._scaled_sprite_cache.get(p_frame)
+                if scaled_p is None:
+                    scaled_p = pygame.transform.scale(p_frame, (int(TILE_SIZE * 3 * ZOOM), int(TILE_SIZE * 3 * ZOOM)))
+                    self._scaled_sprite_cache[p_frame] = scaled_p
                 self.screen.blit(scaled_p, (p_sx - int(TILE_SIZE * ZOOM), p_sy - int(TILE_SIZE * ZOOM)))
 
                 # Glowing portal magic aura ring
@@ -526,7 +552,10 @@ class TutorialScreen:
         npc_sy = (self.npc_tile_y * TILE_SIZE - self.camera_y) * ZOOM
         if self.npc_frames:
             npc_f = self.npc_frames[self.npc_anim_frame]
-            scaled_npc = pygame.transform.scale(npc_f, (int(TILE_SIZE * ZOOM), int(TILE_SIZE * ZOOM)))
+            scaled_npc = self._scaled_sprite_cache.get(npc_f)
+            if scaled_npc is None:
+                scaled_npc = pygame.transform.scale(npc_f, (int(TILE_SIZE * ZOOM), int(TILE_SIZE * ZOOM)))
+                self._scaled_sprite_cache[npc_f] = scaled_npc
             self.screen.blit(scaled_npc, (npc_sx, npc_sy))
 
         # 4. Render Player Character
@@ -534,7 +563,10 @@ class TutorialScreen:
         pl_sy = (self.player_y - self.camera_y) * ZOOM
         dir_sprites = self.player_sprites.get(self.player_dir, self.player_sprites["down"])
         pl_f = dir_sprites[self.anim_frame]
-        scaled_pl = pygame.transform.scale(pl_f, (int(TILE_SIZE * ZOOM), int(TILE_SIZE * ZOOM)))
+        scaled_pl = self._scaled_sprite_cache.get(pl_f)
+        if scaled_pl is None:
+            scaled_pl = pygame.transform.scale(pl_f, (int(TILE_SIZE * ZOOM), int(TILE_SIZE * ZOOM)))
+            self._scaled_sprite_cache[pl_f] = scaled_pl
         self.screen.blit(scaled_pl, (pl_sx, pl_sy))
 
         # 5. Demonstration Animation Overlay (Visual guide trail, animated steering, and fist hold demo)
@@ -913,9 +945,10 @@ class TutorialScreen:
         box_y = (self.height - box_h) // 2
 
         # Dimmed backdrop
-        dim = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
-        dim.fill((0, 0, 0, 160))
-        self.screen.blit(dim, (0, 0))
+        if self._dim_overlay is None or self._dim_overlay.get_size() != (self.width, self.height):
+            self._dim_overlay = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
+            self._dim_overlay.fill((0, 0, 0, 160))
+        self.screen.blit(self._dim_overlay, (0, 0))
 
         # Card shadow
         sh_rect = pygame.Rect(box_x, box_y + 4, box_w, box_h)
@@ -1011,9 +1044,10 @@ class TutorialScreen:
         box_x = (self.width - box_w) // 2
         box_y = (self.height - box_h) // 2
 
-        dim = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
-        dim.fill((0, 0, 0, 160))
-        self.screen.blit(dim, (0, 0))
+        if self._dim_overlay is None or self._dim_overlay.get_size() != (self.width, self.height):
+            self._dim_overlay = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
+            self._dim_overlay.fill((0, 0, 0, 160))
+        self.screen.blit(self._dim_overlay, (0, 0))
 
         sh_rect = pygame.Rect(box_x, box_y + 4, box_w, box_h)
         pygame.draw.rect(self.screen, (0, 0, 0, 180), sh_rect, border_radius=18)
@@ -1051,9 +1085,10 @@ class TutorialScreen:
         box_x = (self.width - box_w) // 2
         box_y = (self.height - box_h) // 2
 
-        dim = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
-        dim.fill((0, 0, 0, 160))
-        self.screen.blit(dim, (0, 0))
+        if self._dim_overlay is None or self._dim_overlay.get_size() != (self.width, self.height):
+            self._dim_overlay = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
+            self._dim_overlay.fill((0, 0, 0, 160))
+        self.screen.blit(self._dim_overlay, (0, 0))
 
         sh_rect = pygame.Rect(box_x, box_y + 4, box_w, box_h)
         pygame.draw.rect(self.screen, (0, 0, 0, 180), sh_rect, border_radius=18)

@@ -88,6 +88,11 @@ class StageSelect:
         self.dialogue_active_key = None
         self.dialogue_sound_timer = 0.0
 
+        # Performance Caches
+        self._scaled_tile_cache = {}
+        self._scaled_sprite_cache = {}
+        self._dim_overlay = None
+
         # ============================================================
         # PATHS
         # ============================================================
@@ -1623,8 +1628,12 @@ class StageSelect:
         if self.grand_finale_active:
             if not self.grand_finale_fanfare_played:
                 self.grand_finale_fanfare_played = True
-                if hasattr(self.main_menu, 'audio_manager'):
-                    self.main_menu.audio_manager.play_sfx("victory_fanfare")
+                mgr = getattr(self.main_menu, 'audio_manager', None)
+                if mgr is not None:
+                    try:
+                        mgr.play_sfx("victory_fanfare")
+                    except Exception:
+                        pass
             if len(self.confetti_particles) < 60:
                 self.confetti_particles.append({
                     "x": random.randint(0, self.width),
@@ -1697,7 +1706,7 @@ class StageSelect:
         # Update Bromen NPC idle animation
         if self.npc_bromen_sprites and self.npc_bromen_found and self.bromen_dialogue_state == 0:
             self.npc_bromen_anim_timer += 1
-            if self.npc_bromen_anim_timer >= 5:
+            if self.npc_bromen_anim_timer >= 14:
                 self.npc_bromen_anim_timer = 0
                 self.npc_bromen_anim_frame = (self.npc_bromen_anim_frame + 1) % len(self.npc_bromen_sprites)
 
@@ -1732,7 +1741,7 @@ class StageSelect:
                 self.npc_bromen_y -= 2
                 self.npc_bromen_dir = "up"
                 self.npc_bromen_anim_timer += 1
-                if self.npc_bromen_anim_timer >= 10:
+                if self.npc_bromen_anim_timer >= 15:
                     self.npc_bromen_anim_timer = 0
                     if self.npc_bromen_up_sprites:
                         self.npc_bromen_anim_frame = (self.npc_bromen_anim_frame + 1) % len(self.npc_bromen_up_sprites)
@@ -1791,7 +1800,7 @@ class StageSelect:
                 self.npc_oldman_y += 2
                 self.npc_oldman_dir = "down"
                 self.npc_oldman_anim_timer += 1
-                if self.npc_oldman_anim_timer >= 10:
+                if self.npc_oldman_anim_timer >= 15:
                     self.npc_oldman_anim_timer = 0
                     if self.npc_oldman_down_sprites:
                         self.npc_oldman_anim_frame = (self.npc_oldman_anim_frame + 1) % len(self.npc_oldman_down_sprites)
@@ -1800,10 +1809,11 @@ class StageSelect:
                 self.npc_oldman_x -= 2
                 self.npc_oldman_dir = "left"
                 self.npc_oldman_anim_timer += 1
-                if self.npc_oldman_anim_timer >= 10:
+                if self.npc_oldman_anim_timer >= 15:
                     self.npc_oldman_anim_timer = 0
                     if self.npc_oldman_left_sprites:
                         self.npc_oldman_anim_frame = (self.npc_oldman_anim_frame + 1) % len(self.npc_oldman_left_sprites)
+
 
             if self.npc_oldman_x <= 0:
                 self.npc_oldman_x = 0
@@ -1866,7 +1876,7 @@ class StageSelect:
                 self.npc_skeleton_y += 2
                 self.npc_skeleton_dir = "down"
                 self.npc_skeleton_anim_timer += 1
-                if self.npc_skeleton_anim_timer >= 10:
+                if self.npc_skeleton_anim_timer >= 15:
                     self.npc_skeleton_anim_timer = 0
                     if self.npc_skeleton_down_sprites:
                         self.npc_skeleton_anim_frame = (self.npc_skeleton_anim_frame + 1) % len(self.npc_skeleton_down_sprites)
@@ -1875,7 +1885,7 @@ class StageSelect:
                 self.npc_skeleton_x += 2
                 self.npc_skeleton_dir = "right"
                 self.npc_skeleton_anim_timer += 1
-                if self.npc_skeleton_anim_timer >= 10:
+                if self.npc_skeleton_anim_timer >= 15:
                     self.npc_skeleton_anim_timer = 0
                     if self.npc_skeleton_right_sprites:
                         self.npc_skeleton_anim_frame = (self.npc_skeleton_anim_frame + 1) % len(self.npc_skeleton_right_sprites)
@@ -1938,7 +1948,7 @@ class StageSelect:
                 self.npc_knight_y += 2
                 self.npc_knight_dir = "down"
                 self.npc_knight_anim_timer += 1
-                if self.npc_knight_anim_timer >= 10:
+                if self.npc_knight_anim_timer >= 15:
                     self.npc_knight_anim_timer = 0
                     if self.npc_knight_down_sprites:
                         self.npc_knight_anim_frame = (self.npc_knight_anim_frame + 1) % len(self.npc_knight_down_sprites)
@@ -2144,7 +2154,7 @@ class StageSelect:
         # Animate player while moving
         if moved:
             self.anim_timer += 1
-            if self.anim_timer >= 10:
+            if self.anim_timer >= 16:
                 self.anim_timer = 0
                 self.anim_frame = (self.anim_frame + 1) % 2
                 if hasattr(self.main_menu, 'audio_manager'):
@@ -2200,7 +2210,7 @@ class StageSelect:
         # Animation
         if vx != 0 or vy != 0:
             self.anim_timer += 1
-            if self.anim_timer >= 8:
+            if self.anim_timer >= 16:
                 self.anim_timer = 0
                 self.anim_frame = (self.anim_frame + 1) % 2
                 if hasattr(self.main_menu, 'audio_manager'):
@@ -2343,7 +2353,10 @@ class StageSelect:
             # Gracefully fallback to grass G tile so missing character boxes never render
             image = self.tile_images.get(c, self.tile_images.get('G', self.fallback_tile))
             scaled_size = int(TILE_SIZE * ZOOM)
-            scaled_image = pygame.transform.scale(image, (scaled_size, scaled_size))
+            scaled_image = self._scaled_tile_cache.get(image)
+            if scaled_image is None:
+                scaled_image = pygame.transform.scale(image, (scaled_size, scaled_size))
+                self._scaled_tile_cache[image] = scaled_image
             self.screen.blit(scaled_image, (screen_x, screen_y))
 
     # ============================================================
@@ -2361,7 +2374,10 @@ class StageSelect:
             frame_index = min(anim_frame, len(sprites) - 1)
             sprite = sprites[frame_index]
             scaled_size = int(TILE_SIZE * ZOOM)
-            scaled_sprite = pygame.transform.scale(sprite, (scaled_size, scaled_size))
+            scaled_sprite = self._scaled_sprite_cache.get(sprite)
+            if scaled_sprite is None:
+                scaled_sprite = pygame.transform.scale(sprite, (scaled_size, scaled_size))
+                self._scaled_sprite_cache[sprite] = scaled_sprite
             self.screen.blit(scaled_sprite, (screen_x, screen_y))
 
     def draw_npc_static(self, x, y, sprite):
@@ -2374,7 +2390,10 @@ class StageSelect:
         if (-TILE_SIZE * ZOOM <= screen_x <= self.width + TILE_SIZE * ZOOM and
                 -TILE_SIZE * ZOOM <= screen_y <= self.height + TILE_SIZE * ZOOM):
             scaled_size = int(TILE_SIZE * ZOOM)
-            scaled_sprite = pygame.transform.scale(sprite, (scaled_size, scaled_size))
+            scaled_sprite = self._scaled_sprite_cache.get(sprite)
+            if scaled_sprite is None:
+                scaled_sprite = pygame.transform.scale(sprite, (scaled_size, scaled_size))
+                self._scaled_sprite_cache[sprite] = scaled_sprite
             self.screen.blit(scaled_sprite, (screen_x, screen_y))
 
     # ============================================================
@@ -2388,7 +2407,10 @@ class StageSelect:
                 -TILE_SIZE * ZOOM <= screen_y <= self.height + TILE_SIZE * ZOOM):
             sprite = self.player_sprites[self.player_dir][self.anim_frame]
             scaled_size = int(TILE_SIZE * ZOOM)
-            scaled_sprite = pygame.transform.scale(sprite, (scaled_size, scaled_size))
+            scaled_sprite = self._scaled_sprite_cache.get(sprite)
+            if scaled_sprite is None:
+                scaled_sprite = pygame.transform.scale(sprite, (scaled_size, scaled_size))
+                self._scaled_sprite_cache[sprite] = scaled_sprite
             self.screen.blit(scaled_sprite, (screen_x, screen_y))
 
     # ============================================================
@@ -3076,8 +3098,11 @@ class StageSelect:
                 return "handled"
 
         if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+            self.cursor_pos = event.pos
             self.trigger_click(event.pos)
             return "handled"
+        elif event.type == pygame.MOUSEMOTION:
+            self.cursor_pos = event.pos
 
         if event.type == pygame.KEYDOWN:
             if event.key in [pygame.K_SPACE, pygame.K_RETURN]:
@@ -3109,6 +3134,8 @@ class StageSelect:
                             return "quarter_entered"
 
             if event.key == pygame.K_ESCAPE:
+                if hasattr(self.main_menu, 'audio_manager') and self.main_menu.audio_manager:
+                    self.main_menu.audio_manager.play_sfx("click")
                 if self.main_menu:
                     self.main_menu.current_screen = "menu"
                     self.main_menu.stage_select = None
@@ -3122,9 +3149,10 @@ class StageSelect:
     # ============================================================
     def draw_grand_finale_popup(self):
         # 1. Semi-transparent backdrop overlay
-        dim = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
-        dim.fill((0, 0, 0, 205))
-        self.screen.blit(dim, (0, 0))
+        if self._dim_overlay is None or self._dim_overlay.get_size() != (self.width, self.height):
+            self._dim_overlay = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
+            self._dim_overlay.fill((0, 0, 0, 205))
+        self.screen.blit(self._dim_overlay, (0, 0))
 
         # 2. Render Confetti & Celebration Sparkles
         for p in self.confetti_particles:

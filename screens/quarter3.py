@@ -77,6 +77,9 @@ class Quarter3:
                                               replay_callback=self.restart_level,
                                               continue_callback=self.finish_and_return_to_hub)
 
+        # Performance Overlay Cache
+        self._dim_overlay = None
+
         # ============================================================
         # PATHS
         # ============================================================
@@ -2002,7 +2005,7 @@ class Quarter3:
         if hasattr(self, 'station_npcs'):
             for num, data in self.station_npcs.items():
                 data["anim_timer"] += 1
-                if data["anim_timer"] >= 6:
+                if data["anim_timer"] >= 14:
                     data["anim_timer"] = 0
                     data["anim_frame"] = (data["anim_frame"] + 1) % len(data["frames"])
 
@@ -2085,7 +2088,7 @@ class Quarter3:
                         self.npc_skeleton_y += move_speed if dy > 0 else -move_speed
                 
                 self.npc_skeleton_anim_timer += 1
-                if self.npc_skeleton_anim_timer >= 10:
+                if self.npc_skeleton_anim_timer >= 15:
                     self.npc_skeleton_anim_timer = 0
                     self.npc_skeleton_anim_frame = (self.npc_skeleton_anim_frame + 1) % 3
             else:
@@ -2301,7 +2304,7 @@ class Quarter3:
         if vx != 0 or vy != 0:
             self.player_trail.append((self.player_x, self.player_y, self.player_dir))
             self.anim_timer += 1
-            if self.anim_timer >= (5 if self.speed_boost_timer > 0 else 8):
+            if self.anim_timer >= (10 if self.speed_boost_timer > 0 else 16):
                 self.anim_timer = 0
                 self.anim_frame = (self.anim_frame + 1) % 2
                 if hasattr(self.main_menu, 'audio_manager'):
@@ -3366,8 +3369,11 @@ class Quarter3:
             return "blocked"
 
         if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+            self.cursor_pos = event.pos
             self.trigger_click(event.pos)
             return "handled"
+        elif event.type == pygame.MOUSEMOTION:
+            self.cursor_pos = event.pos
 
         if event.type == pygame.KEYDOWN:
             if event.key in [pygame.K_SPACE, pygame.K_RETURN]:
@@ -4562,7 +4568,8 @@ class Quarter3:
 
     def get_ui_font(self, size, bold=False):
         """Returns a high-legibility system font for UI elements"""
-        return pygame.font.SysFont(["Segoe UI", "Tahoma", "Verdana", "Calibri", "Arial", "Comic Sans MS"], size, bold=bold)
+        from core.font_manager import get_font
+        return get_font(["Segoe UI", "Tahoma", "Verdana", "Calibri", "Arial", "Comic Sans MS"], size, bold=bold)
 
     def draw_offscreen_compass_pointer(self):
         """Draw Active Objective NPC Indicator and Off-Screen Compass Pointer for Quarter 3"""
@@ -4703,9 +4710,10 @@ class Quarter3:
 
     def draw_time_up_dialog(self):
         """Draws a modal dialog when the 10-minute timer runs out"""
-        dim = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
-        dim.fill((0, 0, 0, 180))
-        self.screen.blit(dim, (0, 0))
+        if self._dim_overlay is None or self._dim_overlay.get_size() != (self.width, self.height):
+            self._dim_overlay = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
+            self._dim_overlay.fill((0, 0, 0, 180))
+        self.screen.blit(self._dim_overlay, (0, 0))
 
         box_w, box_h = 560, 260
         box_x = (self.width - box_w) // 2

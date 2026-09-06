@@ -29,7 +29,7 @@ class StudentSelect:
 
         # For tracking clicks to prevent multiple triggers
         self.last_click_time = 0
-        self.click_cooldown = 0.5  # seconds between clicks
+        self.click_cooldown = 0.2  # seconds between clicks
 
         # =====================================================
         # BACKGROUND
@@ -103,55 +103,72 @@ class StudentSelect:
         self.current_gesture = current_gesture
 
     def trigger_click(self, pos):
-        """Handle click at cursor position - called from main_menu"""
+        """Handle click at cursor position - called from main_menu or handle_event"""
         # Check cooldown to prevent multiple rapid clicks
         current_time = pygame.time.get_ticks() / 1000.0
         if current_time - self.last_click_time < self.click_cooldown:
-            return
+            return None
 
+        self.last_click_time = current_time
         self.cursor_pos = pos
 
         # Check BACK button
         if self.back_button.collidepoint(pos):
             print("[BACK] Back to main menu")
-            self.last_click_time = current_time
+            if hasattr(self.main_menu, 'audio_manager') and self.main_menu.audio_manager:
+                self.main_menu.audio_manager.play_sfx("click")
             if self.main_menu:
                 self.main_menu.current_screen = "menu"
                 self.main_menu.student_select = None
-            return
+            return "back"
 
         # Check REFRESH button
         if self.refresh_button.collidepoint(pos):
             print("[REFRESH] Refresh students")
-            self.last_click_time = current_time
+            if hasattr(self.main_menu, 'audio_manager') and self.main_menu.audio_manager:
+                self.main_menu.audio_manager.play_sfx("click")
             self.load_students()
-            return
+            return "refresh"
 
-        # Check student list items
-        self.check_student_click(pos)
+        # Check student list items and scrollbar
+        return self.check_student_click(pos)
 
     def check_student_click(self, pos):
-        """Check if a student item was clicked"""
+        """Check if a student item or scrollbar was clicked"""
         list_rect = pygame.Rect(70, 130, self.width - 140, self.height - 220)
 
         # Check if click is within list area
         if not list_rect.collidepoint(pos):
-            return
+            return None
 
-        # Calculate which student was clicked
-        y_offset = pos[1] - (list_rect.y + 15)
-        if y_offset < 0:
-            return
+        # Check scrollbar click
+        total_height = len(self.students) * self.item_height
+        visible_height = list_rect.height
+        visible_count = max(1, visible_height // self.item_height)
+        max_scroll = max(0, len(self.students) - visible_count)
 
-        clicked_index = self.scroll_offset + (y_offset // self.item_height)
+        if total_height > visible_height and pos[0] >= list_rect.right - 25:
+            ratio = max(0.0, min(1.0, (pos[1] - list_rect.y) / float(visible_height)))
+            self.scroll_offset = max(0, min(max_scroll, int(ratio * (max_scroll + 1))))
+            return "scroll"
 
-        if 0 <= clicked_index < len(self.students):
-            self.selected_index = clicked_index
-            self.select_student(self.students[clicked_index])
+        # Check each visible student card
+        y = list_rect.y + 15
+        for index, student in enumerate(self.students):
+            draw_y = y + ((index - self.scroll_offset) * self.item_height)
+            if draw_y < list_rect.y - 100 or draw_y > list_rect.bottom:
+                continue
 
-            # Visual feedback - show selected message
-            student = self.students[clicked_index]
-            print(f"[USER] Selected student: {student['first_name']} {student['last_name']}")
+            item_rect = pygame.Rect(list_rect.x + 15, draw_y, list_rect.width - 35, 78)
+            row_rect = pygame.Rect(list_rect.x, draw_y, list_rect.width, self.item_height)
+
+            if item_rect.collidepoint(pos) or row_rect.collidepoint(pos):
+                self.selected_index = index
+                self.select_student(student)
+                print(f"[USER] Selected student: {student['first_name']} {student['last_name']}")
+                return "select"
+
+        return None
 
     # =========================================================
     # LOAD GENDER ICONS
@@ -229,6 +246,29 @@ class StudentSelect:
             print(f"API Student Roster Error: {e}")
             self.load_mock_students()
 
+        # Connect with saved progress if available to reflect real scores & progress
+        try:
+            from db.save_system import load_student_progress
+            for s in self.students:
+                sid = s.get("student_id")
+                if sid:
+                    save_data = load_student_progress(sid)
+                    if save_data:
+                        q_data = save_data.get("completed_quarters", {})
+                        completed_count = sum(1 for q, d in q_data.items() if isinstance(d, dict) and d.get("completed"))
+                        s["progress"] = int((completed_count / 4.0) * 100)
+                        s["score"] = sum(d.get("score", 0) for q, d in q_data.items() if isinstance(d, dict))
+        except Exception as e:
+            print(f"Student progress sync error: {e}")
+
+        # Pre-select currently active student if one is already selected
+        if getattr(self.main_menu, 'student_id', None):
+            for idx, s in enumerate(self.students):
+                if s.get("student_id") == self.main_menu.student_id:
+                    self.selected_index = idx
+                    self.selected_student = s
+                    break
+
         if not self.students:
             self.show_message("No students found.", 3000)
 
@@ -259,20 +299,25 @@ class StudentSelect:
     # SELECT STUDENT
     # =========================================================
     def select_student(self, student):
+        if hasattr(self.main_menu, 'audio_manager') and self.main_menu.audio_manager:
+            self.main_menu.audio_manager.play_sfx("click")
         self.selected_student = student
         self.main_menu.selected_student = student
         self.main_menu.student_id = student['student_id']
         self.main_menu.student_db_id = student.get('id')  # Store the primary key ID from database
 
         self.main_menu.current_screen = "menu"
+        self.main_menu.student_select = None
         
         # Refresh main menu buttons dynamically to check for saved progress
         if hasattr(self.main_menu, 'setup_buttons'):
             self.main_menu.setup_buttons()
 
-        display_name = f"{student['first_name']} {student['last_name']}".strip()
+        first = student.get('first_name') or ""
+        last = student.get('last_name') or ""
+        display_name = f"{first} {last}".strip()
         self.show_message(f"Selected: {display_name}", 2000)
-        print(f"Selected Student: {display_name} (ID: {student['student_id']}, DB ID: {student.get('id')})")
+        print(f"Selected Student: {display_name} (ID: {student.get('student_id')}, DB ID: {student.get('id')})")
 
     # =========================================================
     # DRAW BUTTON (with hover detection from cursor)
@@ -416,12 +461,35 @@ class StudentSelect:
     # HANDLE EVENTS
     # =========================================================
     def handle_event(self, event):
-        if event.type == pygame.KEYDOWN:
+        if event.type == pygame.MOUSEMOTION:
+            self.cursor_pos = event.pos
+            return None
+
+        elif event.type == pygame.MOUSEBUTTONDOWN:
+            if event.button == 1:
+                self.cursor_pos = event.pos
+                return self.trigger_click(event.pos)
+            elif event.button == 4:  # Wheel up
+                self.scroll_offset = max(0, self.scroll_offset - 1)
+                return "scroll"
+            elif event.button == 5:  # Wheel down
+                visible_count = max(1, (self.height - 220) // self.item_height)
+                max_scroll = max(0, len(self.students) - visible_count)
+                self.scroll_offset = min(max_scroll, self.scroll_offset + 1)
+                return "scroll"
+
+        elif event.type == pygame.MOUSEWHEEL:
+            visible_count = max(1, (self.height - 220) // self.item_height)
+            max_scroll = max(0, len(self.students) - visible_count)
+            self.scroll_offset = max(0, min(max_scroll, self.scroll_offset - event.y))
+            return "scroll"
+
+        elif event.type == pygame.KEYDOWN:
             # DOWN
             if event.key == pygame.K_DOWN:
                 if self.selected_index < len(self.students) - 1:
                     self.selected_index += 1
-                    visible_count = (self.height - 220) // self.item_height
+                    visible_count = max(1, (self.height - 220) // self.item_height)
                     if self.selected_index >= self.scroll_offset + visible_count:
                         self.scroll_offset += 1
 
@@ -440,6 +508,9 @@ class StudentSelect:
 
             # ESCAPE
             elif event.key == pygame.K_ESCAPE:
+                if self.main_menu:
+                    self.main_menu.current_screen = "menu"
+                    self.main_menu.student_select = None
                 return "back"
 
         return None

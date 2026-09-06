@@ -49,12 +49,8 @@ class InGamePauseMenu:
         self.guide_back_rect = pygame.Rect(self.guide_x + (self.guide_w - 220) // 2, self.guide_y + self.guide_h - 58, 220, 42)
 
     def get_font(self, size, bold=False):
-        for name in ["Comic Sans MS", "Segoe UI", "Arial"]:
-            try:
-                return pygame.font.SysFont(name, size, bold=bold)
-            except Exception:
-                pass
-        return pygame.font.Font(None, size)
+        from .font_manager import get_font as fm_get_font
+        return fm_get_font("Comic Sans MS", size, bold=bold)
 
     def handle_event(self, event):
         """Processes keyboard toggle for pause (ESC or P)."""
@@ -159,9 +155,10 @@ class InGamePauseMenu:
             return
 
         # Semi-transparent overlay
-        dim = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
-        dim.fill((0, 0, 0, 195))
-        self.screen.blit(dim, (0, 0))
+        if not hasattr(self, '_dim_surf') or self._dim_surf is None or self._dim_surf.get_size() != (self.width, self.height):
+            self._dim_surf = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
+            self._dim_surf.fill((0, 0, 0, 195))
+        self.screen.blit(self._dim_surf, (0, 0))
 
         # Check if showing Controls Guide
         if self.showing_controls:
@@ -236,8 +233,8 @@ class InGamePauseMenu:
         controls_data = [
             ("Open Hand Steering", "Position open hand in front of camera to steer player & guide cursor.", (100, 255, 150)),
             ("Closed Fist Action", "Close and hold fist (0.9s) over choices, NPCs, and portals to confirm.", (255, 215, 0)),
+            ("Peace Sign Pause", "Show a peace sign (V-sign) to camera to pop up this Pause Menu anytime.", (34, 197, 94)),
             ("Speed Burst", "Move your hand further from center to accelerate into a sprint.", (147, 197, 253)),
-            ("Pause & Settings", "Hold fist over the on-screen PAUSE button at the top corner anytime.", (244, 114, 182))
         ]
 
         curr_y = self.guide_y + 68

@@ -119,12 +119,8 @@ class VictoryReportCard:
         self.continue_rect = pygame.Rect(self.card_x + self.card_w - btn_w - 55, btn_y, btn_w, btn_h)
 
     def get_font(self, size, bold=False):
-        for name in ["Comic Sans MS", "Segoe UI", "Arial"]:
-            try:
-                return pygame.font.SysFont(name, size, bold=bold)
-            except Exception:
-                pass
-        return pygame.font.Font(None, size)
+        from .font_manager import get_font as fm_get_font
+        return fm_get_font("Comic Sans MS", size, bold=bold)
 
     def _play_sfx(self, name):
         mgr = getattr(self.main_menu, 'audio_manager', None)
@@ -225,9 +221,10 @@ class VictoryReportCard:
             return
 
         # Dimmed backdrop
-        dim = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
-        dim.fill((0, 0, 0, 205))
-        self.screen.blit(dim, (0, 0))
+        if not hasattr(self, '_dim_surf') or self._dim_surf is None or self._dim_surf.get_size() != (self.width, self.height):
+            self._dim_surf = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
+            self._dim_surf.fill((0, 0, 0, 205))
+        self.screen.blit(self._dim_surf, (0, 0))
 
         # Main Card Panel
         card_rect = pygame.Rect(self.card_x, self.card_y, self.card_w, self.card_h)

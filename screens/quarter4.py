@@ -78,6 +78,11 @@ class Quarter4:
                                               replay_callback=self.restart_level,
                                               continue_callback=self.finish_and_return_to_hub)
 
+        # Performance Caches
+        self._scaled_tile_cache = {}
+        self._scaled_sprite_cache = {}
+        self._dim_overlay = None
+
         # Key / Emblem Puzzle State Defaults
         self.key_puzzle_active = False
         self.emblem_puzzle_active = False
@@ -1512,7 +1517,7 @@ class Quarter4:
             for num, data in self.station_npcs.items():
                 if len(data["frames"]) > 1:
                     data["anim_timer"] += 1
-                    if data["anim_timer"] >= 6:
+                    if data["anim_timer"] >= 14:
                         data["anim_timer"] = 0
                         data["anim_frame"] = (data["anim_frame"] + 1) % len(data["frames"])
 
@@ -1618,7 +1623,7 @@ class Quarter4:
         # Update Bromen animation
         if self.npc_bromen_found and self.npc_bromen_sprites:
             self.npc_bromen_anim_timer += 1
-            if self.npc_bromen_anim_timer >= 6:
+            if self.npc_bromen_anim_timer >= 14:
                 self.npc_bromen_anim_timer = 0
                 self.npc_bromen_anim_frame = (self.npc_bromen_anim_frame + 1) % len(self.npc_bromen_sprites)
 
@@ -1683,7 +1688,7 @@ class Quarter4:
 
         if vx != 0 or vy != 0:
             self.anim_timer += 1
-            if self.anim_timer >= 8:
+            if self.anim_timer >= 16:
                 self.anim_timer = 0
                 self.anim_frame = (self.anim_frame + 1) % 2
                 if hasattr(self.main_menu, 'audio_manager'):
@@ -1706,12 +1711,20 @@ class Quarter4:
             # For transparent floor props (fountains, statues, pots, pillars, braziers, chests, banners, doors), draw clean floor first
             if c in ["F", "*", "S", "C", "|", "R", "$", "H", "[", "]", "{", "}"]:
                 floor_img = self.tile_images.get("G", self.fallback_tile)
-                scaled_floor = pygame.transform.scale(floor_img, (scaled_size, scaled_size))
+                k_floor = (floor_img, scaled_size, scaled_size)
+                scaled_floor = self._scaled_tile_cache.get(k_floor)
+                if scaled_floor is None:
+                    scaled_floor = pygame.transform.scale(floor_img, (scaled_size, scaled_size))
+                    self._scaled_tile_cache[k_floor] = scaled_floor
                 self.screen.blit(scaled_floor, (screen_x, screen_y))
             # For lily pads on water, draw water first
             elif c == "L":
                 water_img = self.tile_images.get("W", self.fallback_tile)
-                scaled_water = pygame.transform.scale(water_img, (scaled_size, scaled_size))
+                k_water = (water_img, scaled_size, scaled_size)
+                scaled_water = self._scaled_tile_cache.get(k_water)
+                if scaled_water is None:
+                    scaled_water = pygame.transform.scale(water_img, (scaled_size, scaled_size))
+                    self._scaled_tile_cache[k_water] = scaled_water
                 self.screen.blit(scaled_water, (screen_x, screen_y))
 
             image = self.tile_images.get(c, self.fallback_tile)
@@ -1719,31 +1732,50 @@ class Quarter4:
             # ONLY the door tiles are stretched (2 blocks in length, 1 block in width/thickness)
             if c == "[":
                 # Left closed door: 2 blocks horizontally, 1 block vertically
-                scaled_image = pygame.transform.scale(image, (scaled_size * 2, scaled_size))
+                k = (image, scaled_size * 2, scaled_size)
+                scaled_image = self._scaled_tile_cache.get(k)
+                if scaled_image is None:
+                    scaled_image = pygame.transform.scale(image, (scaled_size * 2, scaled_size))
+                    self._scaled_tile_cache[k] = scaled_image
                 self.screen.blit(scaled_image, (screen_x, screen_y))
             elif c == "]":
                 # Right closed door: 2 blocks horizontally, 1 block vertically, anchored on right wall
-                scaled_image = pygame.transform.scale(image, (scaled_size * 2, scaled_size))
+                k = (image, scaled_size * 2, scaled_size)
+                scaled_image = self._scaled_tile_cache.get(k)
+                if scaled_image is None:
+                    scaled_image = pygame.transform.scale(image, (scaled_size * 2, scaled_size))
+                    self._scaled_tile_cache[k] = scaled_image
                 self.screen.blit(scaled_image, (screen_x - scaled_size, screen_y))
             elif c == "{":
                 # Left open door: 1 block horizontally, 2 blocks vertically along left wall
-                scaled_image = pygame.transform.scale(image, (scaled_size, scaled_size * 2))
+                k = (image, scaled_size, scaled_size * 2)
+                scaled_image = self._scaled_tile_cache.get(k)
+                if scaled_image is None:
+                    scaled_image = pygame.transform.scale(image, (scaled_size, scaled_size * 2))
+                    self._scaled_tile_cache[k] = scaled_image
                 self.screen.blit(scaled_image, (screen_x, screen_y - scaled_size))
             elif c == "}":
                 # Right open door: 1 block horizontally, 2 blocks vertically along right wall
-                scaled_image = pygame.transform.scale(image, (scaled_size, scaled_size * 2))
+                k = (image, scaled_size, scaled_size * 2)
+                scaled_image = self._scaled_tile_cache.get(k)
+                if scaled_image is None:
+                    scaled_image = pygame.transform.scale(image, (scaled_size, scaled_size * 2))
+                    self._scaled_tile_cache[k] = scaled_image
                 self.screen.blit(scaled_image, (screen_x, screen_y - scaled_size))
             else:
                 # ALL other standard tiles are strictly 1 block x 1 block
-                scaled_image = pygame.transform.scale(image, (scaled_size, scaled_size))
+                scaled_image = self._scaled_tile_cache.get(image)
+                if scaled_image is None:
+                    scaled_image = pygame.transform.scale(image, (scaled_size, scaled_size))
+                    self._scaled_tile_cache[image] = scaled_image
                 self.screen.blit(scaled_image, (screen_x, screen_y))
 
             # Stardew Valley animated wave glints on water tiles
             if c in ['W', 'L']:
-                shimmer = pygame.Surface((scaled_size, scaled_size), pygame.SRCALPHA)
-                alpha = int(12 + 8 * math.sin((world_x * 0.03 + self.frame_counter * 0.05)))
-                shimmer.fill((180, 230, 255, alpha))
-                self.screen.blit(shimmer, (screen_x, screen_y))
+                if not hasattr(self, '_water_shimmer_surf') or self._water_shimmer_surf is None:
+                    self._water_shimmer_surf = pygame.Surface((scaled_size, scaled_size), pygame.SRCALPHA)
+                    self._water_shimmer_surf.fill((180, 230, 255, 16))
+                self.screen.blit(self._water_shimmer_surf, (screen_x, screen_y))
 
             # Temple Aqua Brazier Pulsing Glow
             if c == 'R':
@@ -1769,7 +1801,10 @@ class Quarter4:
             frame_index = min(anim_frame, len(sprites) - 1)
             sprite = sprites[frame_index]
             scaled_size = int(TILE_SIZE * ZOOM)
-            scaled_sprite = pygame.transform.scale(sprite, (scaled_size, scaled_size))
+            scaled_sprite = self._scaled_sprite_cache.get(sprite)
+            if scaled_sprite is None:
+                scaled_sprite = pygame.transform.scale(sprite, (scaled_size, scaled_size))
+                self._scaled_sprite_cache[sprite] = scaled_sprite
             self.screen.blit(scaled_sprite, (screen_x, screen_y))
 
     def draw_npc_static(self, x, y, sprite):
@@ -1782,8 +1817,12 @@ class Quarter4:
         if (-TILE_SIZE * ZOOM <= screen_x <= self.width + TILE_SIZE * ZOOM and
                 -TILE_SIZE * ZOOM <= screen_y <= self.height + TILE_SIZE * ZOOM):
             scaled_size = int(TILE_SIZE * ZOOM)
-            scaled_sprite = pygame.transform.scale(sprite, (scaled_size, scaled_size))
+            scaled_sprite = self._scaled_sprite_cache.get(sprite)
+            if scaled_sprite is None:
+                scaled_sprite = pygame.transform.scale(sprite, (scaled_size, scaled_size))
+                self._scaled_sprite_cache[sprite] = scaled_sprite
             self.screen.blit(scaled_sprite, (screen_x, screen_y))
+
 
     def update_particles(self):
         # When all 6 stations answered on map12, spray particles from twin fountains at (22, 8) and (22, 10)
@@ -1958,7 +1997,10 @@ class Quarter4:
                 -TILE_SIZE * ZOOM <= screen_y <= self.height + TILE_SIZE * ZOOM):
             sprite = self.player_sprites[self.player_dir][self.anim_frame]
             scaled_size = int(TILE_SIZE * ZOOM)
-            scaled_sprite = pygame.transform.scale(sprite, (scaled_size, scaled_size))
+            scaled_sprite = self._scaled_sprite_cache.get(sprite)
+            if scaled_sprite is None:
+                scaled_sprite = pygame.transform.scale(sprite, (scaled_size, scaled_size))
+                self._scaled_sprite_cache[sprite] = scaled_sprite
             self.screen.blit(scaled_sprite, (screen_x, screen_y))
 
     # ============================================================
@@ -3850,7 +3892,8 @@ class Quarter4:
 
     def get_ui_font(self, size, bold=False):
         """Returns a high-legibility system font for UI elements"""
-        return pygame.font.SysFont(["Segoe UI", "Tahoma", "Verdana", "Calibri", "Arial", "Comic Sans MS"], size, bold=bold)
+        from core.font_manager import get_font
+        return get_font(["Segoe UI", "Tahoma", "Verdana", "Calibri", "Arial", "Comic Sans MS"], size, bold=bold)
 
     def draw_offscreen_compass_pointer(self):
         """Draw Active Objective NPC Indicator and Off-Screen Compass Pointer for Quarter 4"""
@@ -4011,9 +4054,10 @@ class Quarter4:
 
     def draw_time_up_dialog(self):
         """Draws a modal dialog when the 10-minute timer runs out"""
-        dim = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
-        dim.fill((0, 0, 0, 180))
-        self.screen.blit(dim, (0, 0))
+        if self._dim_overlay is None or self._dim_overlay.get_size() != (self.width, self.height):
+            self._dim_overlay = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
+            self._dim_overlay.fill((0, 0, 0, 180))
+        self.screen.blit(self._dim_overlay, (0, 0))
 
         box_w, box_h = 560, 260
         box_x = (self.width - box_w) // 2

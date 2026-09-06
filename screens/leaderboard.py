@@ -136,6 +136,8 @@ class LeaderboardScreen:
         """Handle click actions from gesture fist or mouse."""
         # 1. Back button
         if self.back_btn_rect.collidepoint(pos):
+            if hasattr(self.main_menu, 'audio_manager') and self.main_menu.audio_manager:
+                self.main_menu.audio_manager.play_sfx("click")
             self.main_menu.current_screen = "menu"
             self.main_menu.leaderboard = None
             self.main_menu.setup_buttons()
@@ -143,6 +145,8 @@ class LeaderboardScreen:
 
         # 2. Refresh button
         if self.refresh_btn_rect.collidepoint(pos):
+            if hasattr(self.main_menu, 'audio_manager') and self.main_menu.audio_manager:
+                self.main_menu.audio_manager.play_sfx("click")
             self.refresh_data()
             return
 
@@ -156,6 +160,8 @@ class LeaderboardScreen:
             t_rect = pygame.Rect(tab_start_x + i * (tab_w + 10), tab_y, tab_w, tab_h)
             if t_rect.collidepoint(pos):
                 if self.active_tab != i:
+                    if hasattr(self.main_menu, 'audio_manager') and self.main_menu.audio_manager:
+                        self.main_menu.audio_manager.play_sfx("click")
                     self.active_tab = i
                     self.apply_filter()
                 return
@@ -196,6 +202,8 @@ class LeaderboardScreen:
         elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
             self.cursor_pos = event.pos
             self.trigger_click(event.pos)
+        elif event.type == pygame.MOUSEMOTION:
+            self.cursor_pos = event.pos
         return None
 
     def update(self):

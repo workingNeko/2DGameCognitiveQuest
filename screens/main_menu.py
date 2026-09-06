@@ -433,17 +433,24 @@ class MainMenu:
                 if peace_detected:
                     if self.peace_start_time == 0:
                         self.peace_start_time = time.time()
-                        print("[PEACE] Peace sign detected! Hold to trigger confirmation...")
+                        print("[PEACE] Peace sign detected! Hold to pause/trigger...")
 
                     hold_time = time.time() - self.peace_start_time
                     if hold_time >= self.CLICK_HOLD_TIME:
                         self.peace_start_time = 0
-                        if not self.popup_state:
-                            if self.current_screen == "menu":
-                                self.popup_state = "confirm_exit"
-                            else:
-                                self.popup_state = "confirm_menu"
-                            print(f"[OK] PEACE SIGN TRIGGERED! Popup state: {self.popup_state}")
+                        # When in active gameplay stage, pop up the universal in-game pause menu!
+                        if self.current_screen in ["quarter1", "quarter2", "quarter3", "quarter4", "tutorial"]:
+                            active_stage = getattr(self, self.current_screen, None)
+                            if active_stage and hasattr(active_stage, 'pause_menu'):
+                                active_stage.pause_menu.toggle_pause()
+                                print(f"[PAUSE] Toggled in-game pause menu via Peace Sign on {self.current_screen} (is_paused={active_stage.pause_menu.is_paused})")
+                        else:
+                            if not self.popup_state:
+                                if self.current_screen == "menu":
+                                    self.popup_state = "confirm_exit"
+                                else:
+                                    self.popup_state = "confirm_menu"
+                                print(f"[OK] PEACE SIGN TRIGGERED! Popup state: {self.popup_state}")
                 else:
                     self.peace_start_time = 0
 
@@ -574,6 +581,9 @@ class MainMenu:
             elif test_rect.collidepoint(pos):
                 self.audio_manager.play_sfx("success")
             elif done_rect.collidepoint(pos):
+                self.audio_manager.play_sfx("click")
+                self.popup_state = None
+            elif not dialog_rect.collidepoint(pos):
                 self.audio_manager.play_sfx("click")
                 self.popup_state = None
             return
@@ -1013,9 +1023,14 @@ class MainMenu:
     def start_activity(self):
         print(f"[GAME] START ACTIVITY clicked!")
         if not self.selected_student:
+            if hasattr(self, 'audio_manager') and self.audio_manager:
+                self.audio_manager.play_sfx("wrong")
             self.show_no_student_message = True
             self.no_student_timer = pygame.time.get_ticks() + 2000
             return
+
+        if hasattr(self, 'audio_manager') and self.audio_manager:
+            self.audio_manager.play_sfx("click")
 
         from db.save_system import is_tutorial_completed, delete_student_progress
         # Fresh activity start: purge any leftover stale database/sync records for clean session
@@ -1037,9 +1052,14 @@ class MainMenu:
     def continue_activity(self):
         print("[GAME] CONTINUE ACTIVITY clicked!")
         if not self.selected_student:
+            if hasattr(self, 'audio_manager') and self.audio_manager:
+                self.audio_manager.play_sfx("wrong")
             self.show_no_student_message = True
             self.no_student_timer = pygame.time.get_ticks() + 2000
             return
+
+        if hasattr(self, 'audio_manager') and self.audio_manager:
+            self.audio_manager.play_sfx("click")
             
         from db.save_system import load_student_progress, apply_student_progress
         save_data = load_student_progress(self.student_id)
@@ -1052,9 +1072,13 @@ class MainMenu:
     def confirm_start_new_activity(self):
         print("[REFRESH] START NEW ACTIVITY clicked! Requesting confirmation popup...")
         if not self.selected_student:
+            if hasattr(self, 'audio_manager') and self.audio_manager:
+                self.audio_manager.play_sfx("wrong")
             self.show_no_student_message = True
             self.no_student_timer = pygame.time.get_ticks() + 2000
             return
+        if hasattr(self, 'audio_manager') and self.audio_manager:
+            self.audio_manager.play_sfx("click")
         self.popup_state = "confirm_new_activity"
 
     def confirm_exit_game(self):
@@ -1228,7 +1252,10 @@ class MainMenu:
         # If popup is active, intercept clicks and key events!
         if self.popup_state:
             if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                self.cursor_pos = event.pos
                 self.handle_popup_click(event.pos)
+            elif event.type == pygame.MOUSEMOTION:
+                self.cursor_pos = event.pos
             elif event.type == pygame.KEYDOWN:
                 if event.key in [pygame.K_SPACE, pygame.K_RETURN]:
                     self.handle_popup_click(self.cursor_pos)
@@ -1254,6 +1281,10 @@ class MainMenu:
             if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                 self.cursor_pos = event.pos
                 self.trigger_click()
+            elif event.type == pygame.MOUSEMOTION:
+                self.cursor_pos = event.pos
+                for b in self.buttons:
+                    b.hovered = b.rect.collidepoint(self.cursor_pos)
             elif event.type == pygame.KEYDOWN:
                 if event.key in [pygame.K_SPACE, pygame.K_RETURN]:
                     self.trigger_click()
@@ -1266,7 +1297,7 @@ class MainMenu:
                 self.stage_select = None
         elif self.current_screen == "student_select" and self.student_select:
             result = self.student_select.handle_event(event)
-            if result == "back":
+            if result in ["back", "select"]:
                 self.current_screen = "menu"
                 self.student_select = None
         elif self.current_screen == "tutorial" and self.tutorial:
@@ -1335,7 +1366,10 @@ class MainMenu:
         elif self.current_gesture == "PEACE":
             hold_time = time.time() - getattr(self, 'peace_start_time', 0) if getattr(self, 'peace_start_time', 0) > 0 else 0
             pct = min(100, int((hold_time / self.CLICK_HOLD_TIME) * 100))
-            label = f"PEACE: CONFIRM {pct}%"
+            if self.current_screen in ["quarter1", "quarter2", "quarter3", "quarter4", "tutorial"]:
+                label = f"PEACE: PAUSE {pct}%"
+            else:
+                label = f"PEACE: CONFIRM {pct}%"
             border_col = (34, 197, 94)    # Emerald green
             text_col = (187, 247, 208)
             fill_pct = pct / 100.0

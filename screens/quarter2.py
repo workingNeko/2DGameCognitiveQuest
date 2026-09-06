@@ -79,6 +79,11 @@ class Quarter2:
                                               replay_callback=self.restart_level,
                                               continue_callback=self.finish_and_return_to_hub)
 
+        # Performance Caches
+        self._scaled_tile_cache = {}
+        self._scaled_sprite_cache = {}
+        self._dim_overlay = None
+
         # ============================================================
         # PATHS
         # ============================================================
@@ -905,7 +910,8 @@ class Quarter2:
     # ============================================================
     def get_ui_font(self, size, bold=False):
         """Returns a high-legibility system font with full Philippine Peso (P) character support"""
-        return pygame.font.SysFont(["Segoe UI", "Tahoma", "Verdana", "Calibri", "Arial"], size, bold=bold)
+        from core.font_manager import get_font
+        return get_font(["Segoe UI", "Tahoma", "Verdana", "Calibri", "Arial"], size, bold=bold)
 
     # ============================================================
     # VECTOR PHILIPPINE CURRENCY & MEASUREMENT ENGINE
@@ -2577,10 +2583,10 @@ class Quarter2:
             
         # State 3: Correct answer transition screen click -> Award Speed Rush & In-World Banner!
         elif self.quiz_state == 3:
-            box_w, box_h = 520, 250
+            box_w, box_h = 540, 260
             box_x = (self.width - box_w) // 2
             box_y = (self.height - box_h) // 2
-            btn_rect = pygame.Rect(box_x + (box_w - 220) // 2, box_y + 160, 220, 44)
+            btn_rect = pygame.Rect(box_x + (box_w - 240) // 2, box_y + 175, 240, 44)
             if btn_rect.collidepoint(pos):
                 # Award 2-second Festive Sprint Speed Boost (SPEED = 4)!
                 self.speed_boost_timer = 2.0
@@ -2643,7 +2649,7 @@ class Quarter2:
             box_w, box_h = 620, 340
             box_x = (self.width - box_w) // 2
             box_y = (self.height - box_h) // 2
-            btn_rect = pygame.Rect(box_x + (box_w - 220) // 2, box_y + 245, 220, 44)
+            btn_rect = pygame.Rect(box_x + (box_w - 240) // 2, box_y + 245, 240, 44)
             if btn_rect.collidepoint(pos):
                 self.quiz_state = 6
                 self.save_results_to_database()
@@ -2735,7 +2741,7 @@ class Quarter2:
         for num, info in self.station_npc_info.items():
             if info.get("frames"):
                 info["anim_timer"] += 1
-                if info["anim_timer"] >= 6:
+                if info["anim_timer"] >= 14:
                     info["anim_timer"] = 0
                     info["anim_frame"] = (info["anim_frame"] + 1) % len(info["frames"])
 
@@ -3385,7 +3391,7 @@ class Quarter2:
 
         if vx != 0 or vy != 0:
             self.anim_timer += 1
-            if self.anim_timer >= (5 if self.speed_boost_timer > 0 else 8):
+            if self.anim_timer >= (10 if self.speed_boost_timer > 0 else 16):
                 self.anim_timer = 0
                 self.anim_frame = (self.anim_frame + 1) % 2
                 if hasattr(self.main_menu, 'audio_manager'):
@@ -3422,7 +3428,11 @@ class Quarter2:
             # Draw paver underlay first
             screen_x = (world_x - self.camera_x) * ZOOM
             screen_y = (world_y - self.camera_y) * ZOOM
-            scaled_paver = pygame.transform.scale(base_paver, (int(TILE_SIZE * ZOOM), int(TILE_SIZE * ZOOM)))
+            paver_size = int(TILE_SIZE * ZOOM)
+            scaled_paver = self._scaled_tile_cache.get((base_paver, paver_size, paver_size))
+            if scaled_paver is None:
+                scaled_paver = pygame.transform.scale(base_paver, (paver_size, paver_size))
+                self._scaled_tile_cache[(base_paver, paver_size, paver_size)] = scaled_paver
             self.screen.blit(scaled_paver, (screen_x, screen_y))
             
             image = prop_img
@@ -3449,7 +3459,11 @@ class Quarter2:
         margin = max(scaled_w, scaled_h) * 2
         if (-margin <= screen_x <= self.width + margin and
                 -margin <= screen_y <= self.height + margin):
-            scaled_image = pygame.transform.scale(image, (scaled_w, scaled_h))
+            k = (image, scaled_w, scaled_h)
+            scaled_image = self._scaled_tile_cache.get(k)
+            if scaled_image is None:
+                scaled_image = pygame.transform.scale(image, (scaled_w, scaled_h))
+                self._scaled_tile_cache[k] = scaled_image
             self.screen.blit(scaled_image, (screen_x, screen_y))
 
     # ============================================================
@@ -3467,7 +3481,10 @@ class Quarter2:
             frame_index = min(anim_frame, len(sprites) - 1)
             sprite = sprites[frame_index]
             scaled_size = int(TILE_SIZE * ZOOM)
-            scaled_sprite = pygame.transform.scale(sprite, (scaled_size, scaled_size))
+            scaled_sprite = self._scaled_sprite_cache.get(sprite)
+            if scaled_sprite is None:
+                scaled_sprite = pygame.transform.scale(sprite, (scaled_size, scaled_size))
+                self._scaled_sprite_cache[sprite] = scaled_sprite
             self.screen.blit(scaled_sprite, (screen_x, screen_y))
 
     def draw_npc_static(self, x, y, sprite):
@@ -3480,7 +3497,10 @@ class Quarter2:
         if (-TILE_SIZE * ZOOM <= screen_x <= self.width + TILE_SIZE * ZOOM and
                 -TILE_SIZE * ZOOM <= screen_y <= self.height + TILE_SIZE * ZOOM):
             scaled_size = int(TILE_SIZE * ZOOM)
-            scaled_sprite = pygame.transform.scale(sprite, (scaled_size, scaled_size))
+            scaled_sprite = self._scaled_sprite_cache.get(sprite)
+            if scaled_sprite is None:
+                scaled_sprite = pygame.transform.scale(sprite, (scaled_size, scaled_size))
+                self._scaled_sprite_cache[sprite] = scaled_sprite
             self.screen.blit(scaled_sprite, (screen_x, screen_y))
 
     # ============================================================
@@ -3494,8 +3514,12 @@ class Quarter2:
                 -TILE_SIZE * ZOOM <= screen_y <= self.height + TILE_SIZE * ZOOM):
             sprite = self.player_sprites[self.player_dir][self.anim_frame]
             scaled_size = int(TILE_SIZE * ZOOM)
-            scaled_sprite = pygame.transform.scale(sprite, (scaled_size, scaled_size))
+            scaled_sprite = self._scaled_sprite_cache.get(sprite)
+            if scaled_sprite is None:
+                scaled_sprite = pygame.transform.scale(sprite, (scaled_size, scaled_size))
+                self._scaled_sprite_cache[sprite] = scaled_sprite
             self.screen.blit(scaled_sprite, (screen_x, screen_y))
+
 
     # ============================================================
     # DRAW
@@ -4017,9 +4041,10 @@ class Quarter2:
 
     def draw_time_up_dialog(self):
         """Draws a modal dialog when the 10-minute timer runs out"""
-        dim = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
-        dim.fill((0, 0, 0, 180))
-        self.screen.blit(dim, (0, 0))
+        if self._dim_overlay is None or self._dim_overlay.get_size() != (self.width, self.height):
+            self._dim_overlay = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
+            self._dim_overlay.fill((0, 0, 0, 180))
+        self.screen.blit(self._dim_overlay, (0, 0))
 
         box_w, box_h = 560, 260
         box_x = (self.width - box_w) // 2
