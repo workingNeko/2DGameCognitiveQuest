@@ -4,6 +4,7 @@ import math
 import time
 import re
 from .font_manager import get_font
+from .vector_icons import draw_vector_star, draw_vector_lightbulb, draw_vector_gem
 
 def clean_choice_text(choice_text):
     """
@@ -214,14 +215,16 @@ class RPGQuizDialog:
         for s in range(1, total_st + 1):
             gx = gem_start_x + (s - 1) * 26
             if s < station_idx:
-                # Completed: Bright glowing emerald gem
-                pygame.draw.circle(self.screen, (16, 185, 129), (gx, gem_y), 8)
-                pygame.draw.circle(self.screen, (255, 255, 255), (gx, gem_y), 8, 1)
+                # Completed: Bright glowing emerald gem with crisp vector star
+                pygame.draw.circle(self.screen, (16, 185, 129), (gx, gem_y), 9)
+                pygame.draw.circle(self.screen, (255, 255, 255), (gx, gem_y), 9, 1)
+                draw_vector_star(self.screen, gx, gem_y, radius=5, color=(255, 255, 255))
             elif s == station_idx:
-                # Active Station: Radiant pulsing amber gem
+                # Active Station: Radiant pulsing amber gem with vector sparkle diamond
                 glow_r = int(10 + pulse * 2)
                 pygame.draw.circle(self.screen, (245, 158, 11), (gx, gem_y), glow_r, 2)
-                pygame.draw.circle(self.screen, (251, 191, 36), (gx, gem_y), 8)
+                pygame.draw.circle(self.screen, (251, 191, 36), (gx, gem_y), 9)
+                draw_vector_gem(self.screen, gx, gem_y, radius=5, color=(15, 23, 42), highlight_color=(254, 240, 138))
             else:
                 # Locked upcoming station: Dark slate socket
                 pygame.draw.circle(self.screen, (30, 41, 59), (gx, gem_y), 7)
@@ -240,8 +243,9 @@ class RPGQuizDialog:
         # 9. Pedagogical / 50:50 Hint Banner
         if hint_msg:
             hint_font = get_font(["Segoe UI", "Comic Sans MS"], 13)
+            draw_vector_lightbulb(self.screen, box_x + 38, y_text + 13, size=6)
             hint_surf = hint_font.render(f"Hint: {hint_msg}", True, (252, 211, 77))
-            self.screen.blit(hint_surf, (box_x + 30, y_text + 4))
+            self.screen.blit(hint_surf, (box_x + 50, y_text + 4))
 
         # 10. Game-Show Style Choice Buttons ([A], [B], [C], [D])
         choices = q_data.get("choices", [])[:4]

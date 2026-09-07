@@ -2,6 +2,7 @@
 import pygame
 import math
 import random
+from .vector_icons import draw_vector_star, draw_vector_replay, draw_vector_arrow
 
 class CelebrationParticleSystem:
     """Lightweight particle system for star sparkles and celebration bursts."""
@@ -273,7 +274,15 @@ class VictoryReportCard:
             badge_color = (251, 146, 60)
 
         badge_surf = h_font.render(badge_text, True, badge_color)
-        self.screen.blit(badge_surf, badge_surf.get_rect(center=(self.card_x + self.card_w // 2, self.card_y + 205)))
+        badge_rect = badge_surf.get_rect(center=(self.card_x + self.card_w // 2, self.card_y + 205))
+        self.screen.blit(badge_surf, badge_rect)
+
+        # Flank mastery badge with crisp vector stars corresponding to stars earned
+        star_count = max(1, min(3, self.stars_earned))
+        for s_i in range(star_count):
+            offset_x = (s_i + 1) * 16
+            draw_vector_star(self.screen, badge_rect.left - offset_x, badge_rect.centery, radius=6, color=badge_color)
+            draw_vector_star(self.screen, badge_rect.right + offset_x, badge_rect.centery, radius=6, color=badge_color)
 
         # Stats Card inside modal
         stat_box = pygame.Rect(self.card_x + 55, self.card_y + 235, self.card_w - 110, 130)
@@ -303,21 +312,27 @@ class VictoryReportCard:
         tip_surf = b_font.render(tip_msg, True, (203, 213, 225))
         self.screen.blit(tip_surf, tip_surf.get_rect(center=(stat_box.centerx, stat_box.y + 102)))
 
-        # 1. Replay Button
+        # 1. Replay Button with Vector Replay Arc Icon
         rep_hov = self.replay_rect.collidepoint(cursor_pos)
         rep_bg = (59, 130, 246) if rep_hov else (37, 99, 235)
         pygame.draw.rect(self.screen, rep_bg, self.replay_rect, border_radius=10)
         pygame.draw.rect(self.screen, (191, 219, 254), self.replay_rect, 2, border_radius=10)
         rep_txt = h_font.render("Replay Stage", True, (255, 255, 255))
-        self.screen.blit(rep_txt, rep_txt.get_rect(center=self.replay_rect.center))
+        rep_content_w = rep_txt.get_width() + 20
+        rep_start_x = self.replay_rect.centerx - rep_content_w // 2
+        draw_vector_replay(self.screen, rep_start_x + 6, self.replay_rect.centery, radius=6, color=(255, 255, 255))
+        self.screen.blit(rep_txt, (rep_start_x + 20, self.replay_rect.centery - rep_txt.get_height() // 2))
 
-        # 2. Continue Button
+        # 2. Continue Button with Vector Arrow Icon
         con_hov = self.continue_rect.collidepoint(cursor_pos)
         con_bg = (34, 197, 94) if con_hov else (22, 163, 74)
         pygame.draw.rect(self.screen, con_bg, self.continue_rect, border_radius=10)
         pygame.draw.rect(self.screen, (134, 239, 172), self.continue_rect, 2, border_radius=10)
         con_txt = h_font.render("Continue to Hub", True, (255, 255, 255))
-        self.screen.blit(con_txt, con_txt.get_rect(center=self.continue_rect.center))
+        con_content_w = con_txt.get_width() + 20
+        con_start_x = self.continue_rect.centerx - con_content_w // 2
+        self.screen.blit(con_txt, (con_start_x, self.continue_rect.centery - con_txt.get_height() // 2))
+        draw_vector_arrow(self.screen, con_start_x + con_txt.get_width() + 10, self.continue_rect.centery, size=10, direction="right", color=(255, 255, 255))
 
         # Draw celebratory particles
         self.particles.draw(self.screen)

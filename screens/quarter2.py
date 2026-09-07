@@ -2825,6 +2825,7 @@ class Quarter2:
 
         # Pedagogical Educational Hint Box
         from core.hints import get_educational_hint
+        from core.vector_icons import draw_vector_lightbulb
         current_q = self.quiz_questions[self.current_question_index] if self.current_question_index < len(self.quiz_questions) else {}
         q_text = current_q.get("question", "")
         hint_text = get_educational_hint("quarter2", q_text)
@@ -2835,8 +2836,9 @@ class Quarter2:
 
         hint_title_font = pygame.font.SysFont("Comic Sans MS", 14, bold=True)
         hint_body_font = pygame.font.SysFont("Comic Sans MS", 13)
+        draw_vector_lightbulb(self.screen, hint_box.x + 20, hint_box.y + 15, size=6)
         h_title = hint_title_font.render("Pedagogical Hint:", True, (255, 215, 0))
-        self.screen.blit(h_title, (hint_box.x + 12, hint_box.y + 6))
+        self.screen.blit(h_title, (hint_box.x + 32, hint_box.y + 6))
 
         # Text wrap
         words = hint_text.split(" ")
