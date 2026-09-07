@@ -263,13 +263,13 @@ class VictoryReportCard:
 
         # Mastery Badge
         if self.stars_earned == 3:
-            badge_text = "⭐⭐⭐ OUTSTANDING MASTER!"
+            badge_text = "OUTSTANDING MASTER!"
             badge_color = (255, 215, 0)
         elif self.stars_earned == 2:
-            badge_text = "⭐⭐ GREAT EFFORT - ALMOST PERFECT!"
+            badge_text = "GREAT EFFORT - ALMOST PERFECT!"
             badge_color = (56, 189, 248)
         else:
-            badge_text = "⭐ STAGE COMPLETE - KEEP PRACTICING!"
+            badge_text = "STAGE COMPLETE - KEEP PRACTICING!"
             badge_color = (251, 146, 60)
 
         badge_surf = h_font.render(badge_text, True, badge_color)
@@ -308,7 +308,7 @@ class VictoryReportCard:
         rep_bg = (59, 130, 246) if rep_hov else (37, 99, 235)
         pygame.draw.rect(self.screen, rep_bg, self.replay_rect, border_radius=10)
         pygame.draw.rect(self.screen, (191, 219, 254), self.replay_rect, 2, border_radius=10)
-        rep_txt = h_font.render("↺ Replay Stage", True, (255, 255, 255))
+        rep_txt = h_font.render("Replay Stage", True, (255, 255, 255))
         self.screen.blit(rep_txt, rep_txt.get_rect(center=self.replay_rect.center))
 
         # 2. Continue Button
@@ -316,7 +316,7 @@ class VictoryReportCard:
         con_bg = (34, 197, 94) if con_hov else (22, 163, 74)
         pygame.draw.rect(self.screen, con_bg, self.continue_rect, border_radius=10)
         pygame.draw.rect(self.screen, (134, 239, 172), self.continue_rect, 2, border_radius=10)
-        con_txt = h_font.render("Continue to Hub →", True, (255, 255, 255))
+        con_txt = h_font.render("Continue to Hub", True, (255, 255, 255))
         self.screen.blit(con_txt, con_txt.get_rect(center=self.continue_rect.center))
 
         # Draw celebratory particles

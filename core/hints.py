@@ -34,7 +34,7 @@ def get_educational_hint(quarter_id, question_text, choices=None, correct_idx=No
         if "p" in q_lower or "peso" in q_lower or "coin" in q_lower or "bill" in q_lower or "change" in q_lower:
             return "Add the values of each coin or bill, then find the difference from the total price."
         if "meter" in q_lower or "perimeter" in q_lower or "length" in q_lower:
-            return "Perimeter is the total boundary distance—add together the lengths of all outer sides."
+            return "Perimeter is the total boundary distance - add together the lengths of all outer sides."
         if "solid" in q_lower or "cube" in q_lower or "cylinder" in q_lower or "cone" in q_lower or "sphere" in q_lower:
             return "3D figures have volume: spheres are round, cylinders have circles on ends, cubes have square faces."
         return "Carefully check the numbers and units before selecting your answer!"
@@ -42,7 +42,7 @@ def get_educational_hint(quarter_id, question_text, choices=None, correct_idx=No
     # Quarter 3: Operations (Multiplication, Division, Time)
     elif quarter_id == "quarter3":
         if "multiply" in q_lower or "times" in q_lower or "product" in q_lower or "x" in q_lower:
-            return "Multiplication is repeated addition of equal groups: 4 × 3 means 3 + 3 + 3 + 3!"
+            return "Multiplication is repeated addition of equal groups: 4 x 3 means 3 + 3 + 3 + 3!"
         if "divide" in q_lower or "quotient" in q_lower or "split" in q_lower:
             return "Think: what number multiplied by the divisor equals the starting number?"
         if "clock" in q_lower or "time" in q_lower or "hour" in q_lower or "minute" in q_lower:

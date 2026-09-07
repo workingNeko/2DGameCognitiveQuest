@@ -11,7 +11,7 @@ def clean_choice_text(choice_text):
     since the jewel badge [A], [B], [C], [D] already displays the letter.
     """
     s = str(choice_text).strip()
-    cleaned = re.sub(r'^(?:\[[A-Da-d]\]|\([A-Da-d]\)|[A-Da-d]\s*[.:\-\–\—\)])\s*', '', s)
+    cleaned = re.sub(r'^(?:\[[A-Da-d]\]|\([A-Da-d]\)|[A-Da-d]\s*[.:\-\u2013\u2014\)])\s*', '', s)
     return cleaned if cleaned else s
 
 
@@ -157,18 +157,19 @@ class RPGQuizDialog:
         pygame.draw.line(self.screen, (71, 85, 105), (box_x + 6, box_y + 6 + header_h), (box_x + box_w - 6, box_y + 6 + header_h), 2)
 
         # 5. Live Character Portrait Frame (Top Left)
-        avatar_center_x = box_x + 48
-        avatar_center_y = box_y + 42
-        avatar_radius = 26
-
-        # Deep velvet circle backdrop
-        pygame.draw.circle(self.screen, (10, 15, 29), (avatar_center_x, avatar_center_y), avatar_radius + 2)
-        # Golden Frame Rings
-        pygame.draw.circle(self.screen, (245, 158, 11), (avatar_center_x, avatar_center_y), avatar_radius + 2, 2)
-        pygame.draw.circle(self.screen, (253, 224, 71), (avatar_center_x, avatar_center_y), avatar_radius, 1)
-
-        # Blit Live Animated Sprite
+        text_x = box_x + 30
         if sprite_frame is not None:
+            avatar_center_x = box_x + 48
+            avatar_center_y = box_y + 42
+            avatar_radius = 26
+
+            # Deep velvet circle backdrop
+            pygame.draw.circle(self.screen, (10, 15, 29), (avatar_center_x, avatar_center_y), avatar_radius + 2)
+            # Golden Frame Rings
+            pygame.draw.circle(self.screen, (245, 158, 11), (avatar_center_x, avatar_center_y), avatar_radius + 2, 2)
+            pygame.draw.circle(self.screen, (253, 224, 71), (avatar_center_x, avatar_center_y), avatar_radius, 1)
+
+            # Blit Live Animated Sprite
             try:
                 # Scale smoothly to fit circle while keeping aspect
                 orig_w, orig_h = sprite_frame.get_size()
@@ -181,16 +182,17 @@ class RPGQuizDialog:
                 self.screen.blit(scaled_avatar, (dest_x, dest_y))
             except Exception:
                 pass
+            text_x = box_x + 88
 
         # 6. Speaker Typography
         title_font = get_font(["Comic Sans MS", "Segoe UI"], 18, bold=True)
         sub_font = get_font(["Segoe UI", "Tahoma", "Comic Sans MS"], 13)
 
         name_surf = title_font.render(speaker_name, True, (251, 191, 36))
-        self.screen.blit(name_surf, (box_x + 88, box_y + 20))
+        self.screen.blit(name_surf, (text_x, box_y + 20))
 
         sub_surf = sub_font.render(speaker_subtitle, True, (148, 163, 184))
-        self.screen.blit(sub_surf, (box_x + 88, box_y + 46))
+        self.screen.blit(sub_surf, (text_x, box_y + 46))
 
         # 7. Station Gem Progress Bar (Top Right)
         total_st = max(1, total_stations)
@@ -207,24 +209,32 @@ class RPGQuizDialog:
                 3
             )
 
-        gem_font = get_font(["Segoe UI Symbol", "Segoe UI", "Arial"], 14, bold=True)
         pulse = 0.5 + 0.5 * math.sin(time.time() * 5.0)
 
         for s in range(1, total_st + 1):
             gx = gem_start_x + (s - 1) * 26
             if s < station_idx:
-                # Completed: Bright glowing emerald/gold star
+                # Completed: Bright glowing emerald/gold geometric star
                 pygame.draw.circle(self.screen, (16, 185, 129), (gx, gem_y), 9)
                 pygame.draw.circle(self.screen, (255, 255, 255), (gx, gem_y), 9, 1)
-                star_txt = gem_font.render("★", True, (255, 255, 255))
-                self.screen.blit(star_txt, star_txt.get_rect(center=(gx, gem_y)))
+                star_pts = []
+                for pt_i in range(10):
+                    angle = pt_i * math.pi / 5.0 - math.pi / 2.0
+                    r = 5.0 if pt_i % 2 == 0 else 2.2
+                    star_pts.append((gx + r * math.cos(angle), gem_y + r * math.sin(angle)))
+                pygame.draw.polygon(self.screen, (255, 255, 255), star_pts)
             elif s == station_idx:
-                # Active Station: Radiant pulsing amber gem
+                # Active Station: Radiant pulsing amber gem sparkle
                 glow_r = int(11 + pulse * 2)
                 pygame.draw.circle(self.screen, (245, 158, 11), (gx, gem_y), glow_r, 2)
                 pygame.draw.circle(self.screen, (251, 191, 36), (gx, gem_y), 9)
-                star_txt = gem_font.render("✦", True, (15, 23, 42))
-                self.screen.blit(star_txt, star_txt.get_rect(center=(gx, gem_y)))
+                sparkle_pts = [
+                    (gx, gem_y - 5),
+                    (gx + 3.5, gem_y),
+                    (gx, gem_y + 5),
+                    (gx - 3.5, gem_y)
+                ]
+                pygame.draw.polygon(self.screen, (15, 23, 42), sparkle_pts)
             else:
                 # Locked upcoming station: Dark slate socket
                 pygame.draw.circle(self.screen, (30, 41, 59), (gx, gem_y), 7)
@@ -243,7 +253,7 @@ class RPGQuizDialog:
         # 9. Pedagogical / 50:50 Hint Banner
         if hint_msg:
             hint_font = get_font(["Segoe UI", "Comic Sans MS"], 13)
-            hint_surf = hint_font.render(f"💡 Hint: {hint_msg}", True, (252, 211, 77))
+            hint_surf = hint_font.render(f"Hint: {hint_msg}", True, (252, 211, 77))
             self.screen.blit(hint_surf, (box_x + 30, y_text + 4))
 
         # 10. Game-Show Style Choice Buttons ([A], [B], [C], [D])
@@ -295,7 +305,7 @@ class RPGQuizDialog:
             if is_elim:
                 pygame.draw.rect(self.screen, (30, 41, 59), badge_rect, border_radius=8)
                 pygame.draw.rect(self.screen, (71, 85, 105), badge_rect, 1, border_radius=8)
-                x_surf = badge_font.render("✕", True, (100, 116, 139))
+                x_surf = badge_font.render("X", True, (100, 116, 139))
                 self.screen.blit(x_surf, x_surf.get_rect(center=badge_rect.center))
             else:
                 badge_bg = badge_cfg["bg"]

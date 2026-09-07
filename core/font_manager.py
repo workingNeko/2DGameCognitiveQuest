@@ -13,6 +13,33 @@ _ORIG_FONT = None
 _PATCHED = False
 
 
+GLYPH_REPLACEMENTS = {
+    "\U0001f4a1": "",      # lightbulb
+    "\u2b50": "*",         # star emoji
+    "\u2605": "*",         # black star
+    "\u2726": "+",         # 4-point star
+    "\u21ba": "",          # counterclockwise arrow
+    "\u2192": "->",        # right arrow
+    "\u25be": ">",         # small down triangle
+    "\u2715": "X",         # multiplication X
+    "\u2014": "-",         # em dash
+    "\u2013": "-",         # en dash
+    "\u00d7": "x",         # multiplication sign
+}
+
+def sanitize_text(text):
+    """
+    Strips unrenderable emojis, symbols, and non-ASCII characters that cause
+    'missing character boxes' (tofu boxes) in Pygame fonts.
+    """
+    if not isinstance(text, str):
+        return text
+    for char, rep in GLYPH_REPLACEMENTS.items():
+        if char in text:
+            text = text.replace(char, rep)
+    return text
+
+
 def _normalize_name(name):
     if isinstance(name, list):
         return tuple(str(x) for x in name)

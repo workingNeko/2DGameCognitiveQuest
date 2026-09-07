@@ -3070,7 +3070,7 @@ class StageSelect:
         is_finished = (self.dialogue_char_index >= len(text))
         if is_finished:
             if (self.frame_counter // 30) % 2 == 0:
-                prompt = "Hold Fist to continue ▾"
+                prompt = "Hold Fist to continue >>"
                 prompt_surface = self.small_font.render(prompt, True, (255, 215, 0))
                 self.screen.blit(prompt_surface, (box_x + box_width - prompt_surface.get_width() - 20, box_y + box_height - 25))
         else:
