@@ -2,7 +2,18 @@
 import pygame
 import math
 import time
+import re
 from .font_manager import get_font
+
+def clean_choice_text(choice_text):
+    """
+    Strips redundant leading 'A. ', 'B) ', '[C]', etc. from choice text
+    since the jewel badge [A], [B], [C], [D] already displays the letter.
+    """
+    s = str(choice_text).strip()
+    cleaned = re.sub(r'^(?:\[[A-Da-d]\]|\([A-Da-d]\)|[A-Da-d]\s*[.:\-\–\—\)])\s*', '', s)
+    return cleaned if cleaned else s
+
 
 class RPGQuizDialog:
     """
@@ -298,8 +309,9 @@ class RPGQuizDialog:
                 b_lbl = badge_font.render(badge_cfg["label"], True, (255, 255, 255))
                 self.screen.blit(b_lbl, b_lbl.get_rect(center=badge_rect.center))
 
-            # Choice text next to badge
-            txt_surf = choice_font.render(str(choice_text), True, text_color)
+            # Choice text next to badge (stripped of redundant leading letter)
+            display_text = clean_choice_text(choice_text)
+            txt_surf = choice_font.render(display_text, True, text_color)
             txt_rect = txt_surf.get_rect(midleft=(btn_rect.x + 50, btn_rect.centery))
             self.screen.blit(txt_surf, txt_rect)
 
