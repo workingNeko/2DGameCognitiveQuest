@@ -214,27 +214,14 @@ class RPGQuizDialog:
         for s in range(1, total_st + 1):
             gx = gem_start_x + (s - 1) * 26
             if s < station_idx:
-                # Completed: Bright glowing emerald/gold geometric star
-                pygame.draw.circle(self.screen, (16, 185, 129), (gx, gem_y), 9)
-                pygame.draw.circle(self.screen, (255, 255, 255), (gx, gem_y), 9, 1)
-                star_pts = []
-                for pt_i in range(10):
-                    angle = pt_i * math.pi / 5.0 - math.pi / 2.0
-                    r = 5.0 if pt_i % 2 == 0 else 2.2
-                    star_pts.append((gx + r * math.cos(angle), gem_y + r * math.sin(angle)))
-                pygame.draw.polygon(self.screen, (255, 255, 255), star_pts)
+                # Completed: Bright glowing emerald gem
+                pygame.draw.circle(self.screen, (16, 185, 129), (gx, gem_y), 8)
+                pygame.draw.circle(self.screen, (255, 255, 255), (gx, gem_y), 8, 1)
             elif s == station_idx:
-                # Active Station: Radiant pulsing amber gem sparkle
-                glow_r = int(11 + pulse * 2)
+                # Active Station: Radiant pulsing amber gem
+                glow_r = int(10 + pulse * 2)
                 pygame.draw.circle(self.screen, (245, 158, 11), (gx, gem_y), glow_r, 2)
-                pygame.draw.circle(self.screen, (251, 191, 36), (gx, gem_y), 9)
-                sparkle_pts = [
-                    (gx, gem_y - 5),
-                    (gx + 3.5, gem_y),
-                    (gx, gem_y + 5),
-                    (gx - 3.5, gem_y)
-                ]
-                pygame.draw.polygon(self.screen, (15, 23, 42), sparkle_pts)
+                pygame.draw.circle(self.screen, (251, 191, 36), (gx, gem_y), 8)
             else:
                 # Locked upcoming station: Dark slate socket
                 pygame.draw.circle(self.screen, (30, 41, 59), (gx, gem_y), 7)
