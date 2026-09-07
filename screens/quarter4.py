@@ -78,6 +78,10 @@ class Quarter4:
                                               replay_callback=self.restart_level,
                                               continue_callback=self.finish_and_return_to_hub)
 
+        # Universal RPG Quest Question Dialog
+        from core.quiz_dialog import RPGQuizDialog
+        self.quiz_dialog = RPGQuizDialog(self.screen, self.width, self.height, getattr(self.main_menu, 'audio_manager', None))
+
         # Performance Caches
         self._scaled_tile_cache = {}
         self._scaled_sprite_cache = {}
@@ -1287,48 +1291,38 @@ class Quarter4:
         
         # State 1: Quiz Question dialogue click
         if self.quiz_state == 1:
-            box_w, box_h = 580, 370
-            box_x = (self.width - box_w) // 2
-            box_y = (self.height - box_h) // 2
-            
-            button_w, button_h = 500, 42
-            button_x = box_x + (box_w - button_w) // 2
-            button_y_start = box_y + 125
-            spacing = 52
-            
             q_data = self.quiz_questions[self.current_question_index]
-            for i in range(len(q_data["choices"])):
-                b_y = button_y_start + i * spacing
-                btn_rect = pygame.Rect(button_x, b_y, button_w, button_h)
-                if btn_rect.collidepoint(pos):
-                    if i == q_data["correct"]:
-                        self.current_correct_phrase = random.choice(self.correct_phrases)
-                        self.quiz_state = 3
-                        self.answered_stations.add(self.quiz_station_index)
-                        if hasattr(self.main_menu, 'audio_manager'):
-                            self.main_menu.audio_manager.play_sfx("correct")
-                            self.main_menu.audio_manager.play_sfx("star_chime")
-                        if hasattr(self, 'celebration_particles'):
-                            self.celebration_particles.spawn_burst(self.width // 2, self.height // 2, count=30)
-                        print(f"* Correct answer selected for Station {self.quiz_station_index}!")
-                    else:
-                        self.first_attempt_correct[self.current_question_index + 1] = False
-                        self.station_attempts[self.quiz_station_index] = self.station_attempts.get(self.quiz_station_index, 0) + 1
-                        
-                        if hasattr(self.main_menu, 'audio_manager'):
-                            self.main_menu.audio_manager.play_sfx("wrong")
-                        if self.station_attempts[self.quiz_station_index] < 2:
-                            # 1st wrong attempt: Give player 1 more try
-                            self.quiz_state = 2
-                            print(f"[FAIL] Incorrect answer selected! (Attempt 1 of 2)")
-                        else:
-                            # 2nd wrong attempt: Out of tries! Recorded as wrong, but award emblem so game proceeds
-                            self.quiz_state = 4
-                            self.answered_stations.add(self.quiz_station_index)
-                            print(f"[FAIL] Incorrect answer on 2nd try! Out of tries. Station {self.quiz_station_index} emblem awarded.")
+            clicked_idx = self.quiz_dialog.get_clicked_choice(pos)
+
+            if clicked_idx is not None and clicked_idx < len(q_data["choices"]):
+                i = clicked_idx
+                if i == q_data["correct"]:
+                    self.current_correct_phrase = random.choice(self.correct_phrases)
+                    self.quiz_state = 3
+                    self.answered_stations.add(self.quiz_station_index)
+                    if hasattr(self.main_menu, 'audio_manager'):
+                        self.main_menu.audio_manager.play_sfx("correct")
+                        self.main_menu.audio_manager.play_sfx("star_chime")
+                    if hasattr(self, 'celebration_particles'):
+                        self.celebration_particles.spawn_burst(self.width // 2, self.height // 2, count=30)
+                    print(f"* Correct answer selected for Station {self.quiz_station_index}!")
+                else:
+                    self.first_attempt_correct[self.current_question_index + 1] = False
+                    self.station_attempts[self.quiz_station_index] = self.station_attempts.get(self.quiz_station_index, 0) + 1
                     
-                    save_student_progress(self.main_menu)
-                    break
+                    if hasattr(self.main_menu, 'audio_manager'):
+                        self.main_menu.audio_manager.play_sfx("wrong")
+                    if self.station_attempts[self.quiz_station_index] < 2:
+                        # 1st wrong attempt: Give player 1 more try
+                        self.quiz_state = 2
+                        print(f"[FAIL] Incorrect answer selected! (Attempt 1 of 2)")
+                    else:
+                        # 2nd wrong attempt: Out of tries! Recorded as wrong, but award emblem so game proceeds
+                        self.quiz_state = 4
+                        self.answered_stations.add(self.quiz_station_index)
+                        print(f"[FAIL] Incorrect answer on 2nd try! Out of tries. Station {self.quiz_station_index} emblem awarded.")
+                
+                save_student_progress(self.main_menu)
  
         # State 2: Incorrect answer feedback click (1 try remaining)
         elif self.quiz_state == 2:
@@ -2463,77 +2457,30 @@ class Quarter4:
     # QUIZ DIALOGUE DRAWING METHODS
     # ============================================================
     def draw_quiz_dialog(self):
-        overlay = pygame.Surface((self.width, self.height))
-        overlay.fill((0, 0, 0))
-        overlay.set_alpha(150)
-        self.screen.blit(overlay, (0, 0))
-
-        box_w, box_h = 580, 370
-        box_x = (self.width - box_w) // 2
-        box_y = (self.height - box_h) // 2
-
-        dialog_rect = pygame.Rect(box_x, box_y, box_w, box_h)
-        pygame.draw.rect(self.screen, (15, 23, 42), dialog_rect)
-        pygame.draw.rect(self.screen, (218, 165, 32), dialog_rect, 3, border_radius=8)
-
-        speaker_font = pygame.font.SysFont("Comic Sans MS", 18, bold=True)
+        q_data = self.quiz_questions[self.current_question_index]
         npc_data = self.station_npcs.get(self.quiz_station_index, {})
         tot_stations = len(self.quiz_stations) if hasattr(self, 'quiz_stations') and self.quiz_stations else 5
         raw_speaker_name = npc_data.get("name", "Water Guardian")
-        speaker_name = f"Station {self.quiz_station_index}/{tot_stations}: {raw_speaker_name}"
-        speaker_title = npc_data.get("title", "")
+        speaker_title = npc_data.get("title", "Sunken Depths")
+        speaker_subtitle = f"Station {self.quiz_station_index} of {tot_stations} - {speaker_title}"
 
-        speaker_surf = speaker_font.render(speaker_name, True, (218, 165, 32))
-        self.screen.blit(speaker_surf, (box_x + 25, box_y + 16))
-
-        if speaker_title:
-            sub_font = pygame.font.SysFont("Comic Sans MS", 12)
-            sub_surf = sub_font.render(speaker_title, True, (148, 163, 184))
-            self.screen.blit(sub_surf, (box_x + 25, box_y + 40))
-            pygame.draw.line(self.screen, (218, 165, 32), (box_x + 25, box_y + 58), (box_x + 25 + speaker_surf.get_width(), box_y + 58), 2)
-        else:
-            pygame.draw.line(self.screen, (218, 165, 32), (box_x + 25, box_y + 48), (box_x + 25 + speaker_surf.get_width(), box_y + 48), 2)
-
-        # Draw animated avatar in top right corner of dialog
+        # Get animated sprite frame
+        sprite_frame = None
         if "frames" in npc_data and npc_data["frames"]:
-            avatar = pygame.transform.scale(npc_data["frames"][npc_data.get("anim_frame", 0)], (44, 44))
-            pygame.draw.circle(self.screen, (30, 58, 138), (box_x + box_w - 45, box_y + 35), 24)
-            pygame.draw.circle(self.screen, (56, 189, 248), (box_x + box_w - 45, box_y + 35), 24, 2)
-            self.screen.blit(avatar, (box_x + box_w - 67, box_y + 13))
+            frames = npc_data["frames"]
+            anim_idx = npc_data.get("anim_frame", 0) % len(frames)
+            sprite_frame = frames[anim_idx]
 
-        q_data = self.quiz_questions[self.current_question_index]
-        q_font = pygame.font.SysFont("Comic Sans MS", 16)
-        wrapped_q = self.wrap_text(q_data["question"], q_font, box_w - 50)
-        
-        y_text = box_y + 68
-        for line in wrapped_q:
-            txt_surf = q_font.render(line, True, (255, 255, 255))
-            self.screen.blit(txt_surf, (box_x + 25, y_text))
-            y_text += 22
-
-        button_w, button_h = 500, 42
-        button_x = box_x + (box_w - button_w) // 2
-        button_y_start = box_y + 130
-        spacing = 52
-        
-        for i, choice in enumerate(q_data["choices"]):
-            b_y = button_y_start + i * spacing
-            btn_rect = pygame.Rect(button_x, b_y, button_w, button_h)
-            is_hovered = btn_rect.collidepoint(self.cursor_pos)
-            
-            if is_hovered:
-                bg_color = (255, 215, 0)
-                text_color = (0, 0, 0)
-            else:
-                bg_color = (30, 41, 59)
-                text_color = (255, 255, 255)
-            
-            pygame.draw.rect(self.screen, bg_color, btn_rect, border_radius=12)
-            pygame.draw.rect(self.screen, (0, 0, 0), btn_rect, 3, border_radius=12)
-            
-            c_surf = q_font.render(choice, True, text_color)
-            c_rect = c_surf.get_rect(center=btn_rect.center)
-            self.screen.blit(c_surf, c_rect)
+        self.quiz_dialog.update(0.016)
+        self.quiz_dialog.draw(
+            cursor_pos=self.cursor_pos,
+            q_data=q_data,
+            speaker_name=raw_speaker_name,
+            speaker_subtitle=speaker_subtitle,
+            sprite_frame=sprite_frame,
+            station_idx=self.quiz_station_index,
+            total_stations=tot_stations
+        )
 
     def draw_wrong_dialog(self):
         overlay = pygame.Surface((self.width, self.height))

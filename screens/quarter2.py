@@ -79,6 +79,10 @@ class Quarter2:
                                               replay_callback=self.restart_level,
                                               continue_callback=self.finish_and_return_to_hub)
 
+        # Universal RPG Quest Question Dialog
+        from core.quiz_dialog import RPGQuizDialog
+        self.quiz_dialog = RPGQuizDialog(self.screen, self.width, self.height, getattr(self.main_menu, 'audio_manager', None))
+
         # Performance Caches
         self._scaled_tile_cache = {}
         self._scaled_sprite_cache = {}
@@ -2500,76 +2504,63 @@ class Quarter2:
         
         # State 1: Choice Button Selection (No icons)
         if self.quiz_state == 1:
-            box_w, box_h = 580, 380
-            box_x = (self.width - box_w) // 2
-            box_y = (self.height - box_h) // 2
             q_data = self.quiz_questions[self.current_question_index]
+            clicked_idx = self.quiz_dialog.get_clicked_choice(pos, self.eliminated_choices)
             
-            button_w, button_h = 500, 44
-            button_x = box_x + (box_w - button_w) // 2
-            button_y_start = box_y + 130
-            spacing = 52
-            
-            for i, choice in enumerate(q_data["choices"][:4]):
-                if i in self.eliminated_choices:
-                    continue
-                b_y = button_y_start + i * spacing
-                btn_rect = pygame.Rect(button_x, b_y, button_w, button_h)
-
-                if btn_rect.collidepoint(pos):
-                    if i == q_data["correct"]:
-                        self.current_correct_phrase = random.choice(self.correct_phrases)
-                        self.quiz_state = 3
-                        self.eliminated_choices.clear()
-                        self.wrong_feedback_msg = ""
-                        
-                        if hasattr(self.main_menu, 'audio_manager'):
-                            self.main_menu.audio_manager.play_sfx("correct")
-                            self.main_menu.audio_manager.play_sfx("star_chime")
-                        if hasattr(self, 'celebration_particles'):
-                            self.celebration_particles.spawn_burst(self.width // 2, self.height // 2, count=30)
-
-                        # Trigger station-specific authentic sounds
-                        if self.quiz_station_index == 1 and self.cash_register:
-                            self.cash_register.play()
-                        elif self.quiz_station_index == 2 and self.sorbetes_bell:
-                            self.sorbetes_bell.play()
-                        elif self.quiz_station_index == 3 and self.jeepney_horn:
-                            self.jeepney_horn.play()
-                        elif self.quiz_station_index == 4 and self.coin_clink:
-                            self.coin_clink.play()
-                        elif self.quiz_station_index == 5 and self.success_sound:
-                            self.success_sound.play()
-                        elif self.coin_clink:
-                            self.coin_clink.play()
-                        
-                        print(f"[OK] Correct answer selected: {q_data['choices'][i]}")
-                    else:
-                        # 50:50 Wizard Hint: eliminate clicked choice with gentle encouragement
-                        self.eliminated_choices.add(i)
-                        info = self.station_npc_info.get(self.quiz_station_index, {})
-                        speaker = info.get("name", "Guardian")
-                        self.wrong_feedback_msg = f"{speaker}: Almost there! Try picking again!"
-                        if hasattr(self, 'first_attempt_correct') and (self.current_question_index + 1) in self.first_attempt_correct:
-                            self.first_attempt_correct[self.current_question_index + 1] = False
-                        
-                        self.station_attempts[self.quiz_station_index] = self.station_attempts.get(self.quiz_station_index, 0) + 1
-                        if hasattr(self.main_menu, 'audio_manager'):
-                            self.main_menu.audio_manager.play_sfx("wrong")
-                        if self.station_attempts[self.quiz_station_index] < 2:
-                            # 1st wrong attempt: Give player 1 more try
-                            self.quiz_state = 2
-                            print(f"[FAIL] Incorrect choice selected: {q_data['choices'][i]} (Attempt 1 of 2)")
-                        else:
-                            # 2nd wrong attempt: Out of tries! Recorded as wrong, but award progression item
-                            self.quiz_state = 4
-                            print(f"[FAIL] Incorrect choice on 2nd try! Out of tries. Station {self.quiz_station_index} cleared for progression.")
-                        
-                        if self.snap_sound:
-                            self.snap_sound.play()
+            if clicked_idx is not None and clicked_idx < len(q_data["choices"]):
+                i = clicked_idx
+                if i == q_data["correct"]:
+                    self.current_correct_phrase = random.choice(self.correct_phrases)
+                    self.quiz_state = 3
+                    self.eliminated_choices.clear()
+                    self.wrong_feedback_msg = ""
                     
-                    save_student_progress(self.main_menu)
-                    break
+                    if hasattr(self.main_menu, 'audio_manager'):
+                        self.main_menu.audio_manager.play_sfx("correct")
+                        self.main_menu.audio_manager.play_sfx("star_chime")
+                    if hasattr(self, 'celebration_particles'):
+                        self.celebration_particles.spawn_burst(self.width // 2, self.height // 2, count=30)
+
+                    # Trigger station-specific authentic sounds
+                    if self.quiz_station_index == 1 and self.cash_register:
+                        self.cash_register.play()
+                    elif self.quiz_station_index == 2 and self.sorbetes_bell:
+                        self.sorbetes_bell.play()
+                    elif self.quiz_station_index == 3 and self.jeepney_horn:
+                        self.jeepney_horn.play()
+                    elif self.quiz_station_index == 4 and self.coin_clink:
+                        self.coin_clink.play()
+                    elif self.quiz_station_index == 5 and self.success_sound:
+                        self.success_sound.play()
+                    elif self.coin_clink:
+                        self.coin_clink.play()
+                    
+                    print(f"[OK] Correct answer selected: {q_data['choices'][i]}")
+                else:
+                    # 50:50 Wizard Hint: eliminate clicked choice with gentle encouragement
+                    self.eliminated_choices.add(i)
+                    info = self.station_npc_info.get(self.quiz_station_index, {})
+                    speaker = info.get("name", "Guardian")
+                    self.wrong_feedback_msg = f"{speaker}: Almost there! Try picking again!"
+                    if hasattr(self, 'first_attempt_correct') and (self.current_question_index + 1) in self.first_attempt_correct:
+                        self.first_attempt_correct[self.current_question_index + 1] = False
+                    
+                    self.station_attempts[self.quiz_station_index] = self.station_attempts.get(self.quiz_station_index, 0) + 1
+                    if hasattr(self.main_menu, 'audio_manager'):
+                        self.main_menu.audio_manager.play_sfx("wrong")
+                    if self.station_attempts[self.quiz_station_index] < 2:
+                        # 1st wrong attempt: Give player 1 more try
+                        self.quiz_state = 2
+                        print(f"[FAIL] Incorrect choice selected: {q_data['choices'][i]} (Attempt 1 of 2)")
+                    else:
+                        # 2nd wrong attempt: Out of tries! Recorded as wrong, but award progression item
+                        self.quiz_state = 4
+                        print(f"[FAIL] Incorrect choice on 2nd try! Out of tries. Station {self.quiz_station_index} cleared for progression.")
+                    
+                    if self.snap_sound:
+                        self.snap_sound.play()
+                
+                save_student_progress(self.main_menu)
                     
         # State 2: Wrong answer retry screen click (1 try remaining)
         elif self.quiz_state == 2:
@@ -2778,87 +2769,33 @@ class Quarter2:
     # QUIZ DIALOGUE DRAWING METHODS (Glassmorphism & Live Visualizer)
     # ============================================================
     def draw_quiz_dialog(self):
-        overlay = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
-        overlay.fill((10, 15, 29, 175))
-        self.screen.blit(overlay, (0, 0))
-
-        box_w, box_h = 580, 380
-        box_x = (self.width - box_w) // 2
-        box_y = (self.height - box_h) // 2
-
-        # Outer shadow
-        shadow_rect = pygame.Rect(box_x + 6, box_y + 6, box_w, box_h)
-        pygame.draw.rect(self.screen, (0, 0, 0, 160), shadow_rect, border_radius=16)
-
-        # Dialog main box (Dark Midnight Slate with Gold Trim)
-        dialog_rect = pygame.Rect(box_x, box_y, box_w, box_h)
-        pygame.draw.rect(self.screen, (15, 23, 42), dialog_rect, border_radius=16)
-        pygame.draw.rect(self.screen, (218, 165, 32), dialog_rect, 3, border_radius=16)
-        pygame.draw.rect(self.screen, (255, 215, 0), dialog_rect.inflate(-6, -6), 1, border_radius=12)
-
-        # Speaker header ribbon
-        header_surf = pygame.Surface((box_w - 36, 40), pygame.SRCALPHA)
-        header_surf.fill((30, 41, 59, 230))
-        self.screen.blit(header_surf, (box_x + 18, box_y + 12))
-        pygame.draw.rect(self.screen, (218, 165, 32), (box_x + 18, box_y + 12, box_w - 36, 40), 1, border_radius=8)
-
         info = self.station_npc_info.get(self.quiz_station_index, {})
+        d_name = info.get("name", "Barangay Character")
         d_title = info.get("title", f"Station {self.quiz_station_index}")
-        speaker_surf = self.dialog_header_font.render(f"{d_title}", True, (255, 215, 0))
-        self.screen.blit(speaker_surf, (box_x + 30, box_y + 18))
+        speaker_name = d_name
+        speaker_subtitle = f"{d_title} - Barangay Fiesta"
 
-        # Station progress pill (Top Right)
-        st_pill = pygame.Rect(box_x + box_w - 140, box_y + 16, 120, 30)
-        pygame.draw.rect(self.screen, (15, 23, 42), st_pill, border_radius=6)
-        pygame.draw.rect(self.screen, (245, 158, 11), st_pill, 1, border_radius=6)
-        st_txt = self.dialog_stat_font.render(f"STATION {self.quiz_station_index}/5", True, (254, 240, 138))
-        self.screen.blit(st_txt, st_txt.get_rect(center=st_pill.center))
+        # Get animated sprite frame
+        sprite_frame = None
+        if info.get("frames"):
+            frames = info["frames"]
+            anim_idx = info.get("anim_frame", 0) % len(frames)
+            sprite_frame = frames[anim_idx]
 
-        # Question Prompt
         q_data = self.quiz_questions[self.current_question_index]
-        wrapped_q = self.wrap_text(q_data["question"], self.dialog_q_font, box_w - 50)
-        y_text = box_y + 62
-        for line in wrapped_q:
-            txt_surf = self.dialog_q_font.render(line, True, (255, 255, 255))
-            self.screen.blit(txt_surf, (box_x + 25, y_text))
-            y_text += 22
 
-        # 50:50 Hint feedback bubble if a choice was eliminated
-        if self.wrong_feedback_msg:
-            fb_surf = self.dialog_hint_font.render(self.wrong_feedback_msg, True, (252, 211, 77))
-            self.screen.blit(fb_surf, (box_x + 25, y_text + 4))
-
-        # Clean vertical stacked choice buttons (No icons)
-        button_w, button_h = 500, 44
-        button_x = box_x + (box_w - button_w) // 2
-        button_y_start = box_y + 130
-        spacing = 52
-
-        for i, choice in enumerate(q_data["choices"][:4]):
-            b_y = button_y_start + i * spacing
-            btn_rect = pygame.Rect(button_x, b_y, button_w, button_h)
-            is_elim = i in self.eliminated_choices
-            is_hov = btn_rect.collidepoint(self.cursor_pos) and not is_elim
-
-            if is_elim:
-                bg_color = (20, 25, 35)
-                text_color = (100, 110, 120)
-                border_color = (50, 55, 65)
-            elif is_hov:
-                bg_color = (255, 215, 0)
-                text_color = (15, 23, 42)
-                border_color = (255, 255, 255)
-            else:
-                bg_color = (30, 41, 59)
-                text_color = (255, 255, 255)
-                border_color = (71, 85, 105)
-
-            pygame.draw.rect(self.screen, bg_color, btn_rect, border_radius=10)
-            pygame.draw.rect(self.screen, border_color, btn_rect, 2, border_radius=10)
-
-            c_surf = self.dialog_choice_font.render(choice, True, text_color)
-            c_rect = c_surf.get_rect(center=btn_rect.center)
-            self.screen.blit(c_surf, c_rect)
+        self.quiz_dialog.update(0.016)
+        self.quiz_dialog.draw(
+            cursor_pos=self.cursor_pos,
+            q_data=q_data,
+            speaker_name=speaker_name,
+            speaker_subtitle=speaker_subtitle,
+            sprite_frame=sprite_frame,
+            station_idx=self.quiz_station_index,
+            total_stations=5,
+            eliminated_choices=self.eliminated_choices,
+            hint_msg=self.wrong_feedback_msg
+        )
 
     def draw_wrong_dialog(self):
         overlay = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
