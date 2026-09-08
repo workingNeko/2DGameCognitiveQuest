@@ -3797,7 +3797,7 @@ class Quarter3:
 
         speech_lines = [
             "Outstanding, young mathematician! You solved all my challenges.",
-            "Your mastery of multiplication, division, and fractions is amazing!",
+            "Your mathematical skills and logical wisdom are outstanding!",
             "I will now activate the portal. Step through to continue your quest!"
         ]
         

@@ -309,6 +309,72 @@ class Quarter1:
             self.oldman_state = 0  # 0: idle, 10: warning, 11: riddle, 12: wrong, 13: correct, 14: final speech, 20: warning map3
             self.oldman_riddle_answered = False
             self.oldman_interaction_cooldown = 0.0
+            
+            # Pool of 10 Shape Riddles for Map 1 Old Man
+            self.oldman_riddle_pool = [
+                {
+                    "riddle": "I am perfectly round with no straight lines. I have no corners and no beginning or end. You can see me on a coin, a clock, or a wheel. What am I?",
+                    "choices": ["A. Triangle", "B. Square", "C. Circle", "D. Rectangle"],
+                    "correct": 2,
+                    "shape_name": "Circle"
+                },
+                {
+                    "riddle": "I have four straight sides that are all equal in length. I have four sturdy corners like a box or a picture frame. What am I?",
+                    "choices": ["A. Circle", "B. Square", "C. Triangle", "D. Star"],
+                    "correct": 1,
+                    "shape_name": "Square"
+                },
+                {
+                    "riddle": "I have exactly three straight sides and three pointy corners, just like a slice of pizza or the roof of a house. What am I?",
+                    "choices": ["A. Rectangle", "B. Circle", "C. Triangle", "D. Diamond"],
+                    "correct": 2,
+                    "shape_name": "Triangle"
+                },
+                {
+                    "riddle": "I have four straight sides. My opposite sides are equal in length, with two long sides and two short sides like a door. What am I?",
+                    "choices": ["A. Rectangle", "B. Triangle", "C. Circle", "D. Heart"],
+                    "correct": 0,
+                    "shape_name": "Rectangle"
+                },
+                {
+                    "riddle": "I am a square standing tall on one of my sharp points. You can see me dancing high in the wind as a kite. What am I?",
+                    "choices": ["A. Star", "B. Diamond", "C. Circle", "D. Rectangle"],
+                    "correct": 1,
+                    "shape_name": "Diamond"
+                },
+                {
+                    "riddle": "I have five pointy tips shining bright like crystals in the night sky. Children make a wish upon me. What am I?",
+                    "choices": ["A. Star", "B. Triangle", "C. Square", "D. Diamond"],
+                    "correct": 0,
+                    "shape_name": "Star"
+                },
+                {
+                    "riddle": "I have two curved bumps on top that meet in a point at the bottom. I am the universal symbol of love and caring. What am I?",
+                    "choices": ["A. Circle", "B. Square", "C. Heart", "D. Triangle"],
+                    "correct": 2,
+                    "shape_name": "Heart"
+                },
+                {
+                    "riddle": "I am shaped like a stretched-out circle. I am smooth and curved with no corners, just like an egg. What am I?",
+                    "choices": ["A. Oval", "B. Square", "C. Diamond", "D. Triangle"],
+                    "correct": 0,
+                    "shape_name": "Oval"
+                },
+                {
+                    "riddle": "I am what you get when you slice a full circle straight down the middle into two equal parts. What am I?",
+                    "choices": ["A. Quarter Circle", "B. Half Circle", "C. Triangle", "D. Square"],
+                    "correct": 1,
+                    "shape_name": "Half Circle"
+                },
+                {
+                    "riddle": "When a whole circle is cut into four equal pieces for sharing, I am just one of those four pieces. What am I?",
+                    "choices": ["A. Half Circle", "B. Quarter Circle", "C. Rectangle", "D. Triangle"],
+                    "correct": 1,
+                    "shape_name": "Quarter Circle"
+                }
+            ]
+            self.selected_riddle = random.choice(self.oldman_riddle_pool)
+            
             shape_names = {
                 1: "circle",
                 2: "heart",
@@ -2446,8 +2512,9 @@ class Quarter1:
             button_y_start = box_y + 155
             spacing = 52
             
-            choices = ["A. Triangle", "B. Square", "C. Circle", "D. Rectangle"]
-            correct_idx = 2  # Circle
+            riddle_data = getattr(self, 'selected_riddle', self.oldman_riddle_pool[0])
+            choices = riddle_data.get("choices", ["A. Triangle", "B. Square", "C. Circle", "D. Rectangle"])
+            correct_idx = riddle_data.get("correct", 2)
             
             for i in range(len(choices)):
                 b_y = button_y_start + i * spacing
@@ -3497,7 +3564,8 @@ class Quarter1:
         pygame.draw.line(self.screen, (218, 165, 32), (box_x + 25, box_y + 48), (box_x + 120, box_y + 48), 2)
 
         q_font = pygame.font.SysFont("Comic Sans MS", 16)
-        riddle_text = "I am perfectly round with no straight lines. I have no corners and no beginning or end. You can see me on a coin, a clock, or a wheel."
+        riddle_data = getattr(self, 'selected_riddle', self.oldman_riddle_pool[0])
+        riddle_text = riddle_data.get("riddle", "I am perfectly round with no straight lines. What am I?")
         wrapped_q = self.wrap_text(riddle_text, q_font, box_w - 50)
         
         y_text = box_y + 60
@@ -3511,7 +3579,7 @@ class Quarter1:
         button_y_start = box_y + 155
         spacing = 52
         
-        choices = ["A. Triangle", "B. Square", "C. Circle", "D. Rectangle"]
+        choices = riddle_data.get("choices", ["A. Triangle", "B. Square", "C. Circle", "D. Rectangle"])
         for i, choice in enumerate(choices):
             b_y = button_y_start + i * spacing
             btn_rect = pygame.Rect(button_x, b_y, button_w, button_h)
@@ -3553,7 +3621,7 @@ class Quarter1:
         q_font = pygame.font.SysFont("Comic Sans MS", 15)
         speech_lines = [
             "That is incorrect, young adventurer!",
-            "Think about a shape with no corners and no straight lines.",
+            "Think carefully and try again.",
             "Would you like to try again?"
         ]
         
@@ -3603,10 +3671,12 @@ class Quarter1:
         pygame.draw.line(self.screen, (34, 197, 94), (box_x + 25, box_y + 48), (box_x + 120, box_y + 48), 2)
 
         q_font = pygame.font.SysFont("Comic Sans MS", 15)
+        riddle_data = getattr(self, 'selected_riddle', self.oldman_riddle_pool[0])
+        shape_name = riddle_data.get("shape_name", "Shape")
         speech_lines = [
-            "Correct! A circle is perfectly round.",
-            "It has no corners and no straight lines.",
-            "Outstanding wisdom!"
+            f"Correct! That is a {shape_name}!",
+            "Outstanding wisdom!",
+            "You have solved my riddle!"
         ]
         
         y_text = box_y + 65

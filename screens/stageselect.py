@@ -264,13 +264,13 @@ class StageSelect:
         self.npc_oldman_anim_timer = 0
         self.player_block_timer = 0
         self.dialogue_lines = [
-            ("Old Man", "Ah, young adventurer! You look brave and clever."),
-            ("Old Man", "Deep inside the Geometry Forest, the magical Shapes have become lost. Only a true student adventurer can help them find their way."),
-            ("Old Man", "Do you want to explore the Geometry Forest?"),
-            ("Student", "Yes! I'll help!"),
-            ("Old Man", "Excellent! Along the way, you must answer my questions about shapes and angles. If you answer correctly, the forest will guide you safely to the next path."),
-            ("Old Man", "Stay sharp, observe carefully, and remember what you have learned."),
-            ("Old Man", "Now... Follow me!")
+            ("Old Man", "Stop right there!"),
+            ("Student", "Huh? Why?"),
+            ("Old Man", "I see in you such greatness! Someday you will do these lands great good. But only when trained. For now, it is only potential."),
+            ("Student", "What shall I do?"),
+            ("Old Man", "Come! Come! Join me in my realm. Enter this portal and let's train your mind. You shall learn the ways of math! You see, it is like magic, but it runs on logic instead of spells!"),
+            ("Student", "That's amazing! I want to learn!"),
+            ("Old Man", "I like your enthusiasm! Follow me into the portal!")
         ]
 
         # Skeleton NPC (static & interactive)
