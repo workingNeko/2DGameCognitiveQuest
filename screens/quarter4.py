@@ -1103,7 +1103,10 @@ class Quarter4:
             if not db:
                 return
             student_db_id = getattr(self.main_menu, 'student_db_id', None)
+            if not student_db_id and getattr(self.main_menu, 'selected_student', None):
+                student_db_id = self.main_menu.selected_student.get('id')
             if not student_db_id:
+                print("[WARN] No student_db_id available in main_menu. Skipping database record.")
                 return
             total_questions = min(6, len(self.quiz_questions))
             correct_answers = sum(1 for k, v in self.first_attempt_correct.items() if k <= total_questions and v)

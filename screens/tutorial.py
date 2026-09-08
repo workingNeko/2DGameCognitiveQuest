@@ -91,6 +91,8 @@ class TutorialScreen:
         self.phase = 1
         self.phase_banner_timer = 0.0
         self.phase_transition_timer = 0.0
+        self.click_dest = None
+        self._fist_click_triggered = False
 
         # Quiz Modal State for Phase 3
         self.quiz_state = 0 # 0=closed, 1=question open, 2=wrong retry, 3=correct
@@ -264,6 +266,16 @@ class TutorialScreen:
         if hasattr(self, 'pause_menu') and self.pause_menu.is_paused:
             return
 
+        # Proactive gesture fist-hold click trigger
+        if self.fist_start_time > 0 and self.current_gesture == "FIST":
+            hold = time.time() - self.fist_start_time
+            if hold >= self.CLICK_HOLD_TIME and not getattr(self, '_fist_click_triggered', False):
+                self._fist_click_triggered = True
+                print(f"[TUTORIAL] Fist click triggered in Tutorial at {self.cursor_pos}")
+                self.trigger_click(self.cursor_pos)
+        else:
+            self._fist_click_triggered = False
+
         # Update LoL-style camera with cursor lead and edge scrolling
         self.lol_camera.update(
             self.player_x,
@@ -293,9 +305,10 @@ class TutorialScreen:
         portal_dist = math.hypot(self.player_x - self.portal_tile_x * TILE_SIZE, self.player_y - self.portal_tile_y * TILE_SIZE)
 
         # Proximity to NPC immediately triggers the question dialogue
-        if self.phase == 1 and npc_dist < 2.5 * TILE_SIZE:
+        if self.phase in [1, 2] and npc_dist < 2.5 * TILE_SIZE:
             self.phase = 3
             self.quiz_state = 1
+            self.click_dest = None
             print("[TUTORIAL] Player approached Guide NPC: Automatically Triggered Question Dialogue!")
 
         if self.phase == 4 and portal_dist < 1.8 * TILE_SIZE:
@@ -306,38 +319,58 @@ class TutorialScreen:
         vx, vy = 0, 0
         current_speed = SPEED
 
-        # 1. Gesture / Cursor Steering (relative to on-screen player position)
-        player_screen_x = (self.player_x - self.camera_x + TILE_SIZE / 2) * ZOOM
-        player_screen_y = (self.player_y - self.camera_y + TILE_SIZE / 2) * ZOOM
-        cursor_x, cursor_y = self.cursor_pos
-        dx = cursor_x - player_screen_x
-        dy = cursor_y - player_screen_y
-
-        dist_factor = 1.3 if (abs(dx) > 160 or abs(dy) > 160) else 1.0
-        g_speed = current_speed * dist_factor
-
-        if abs(dx) > 45:
-            vx = g_speed if dx > 0 else -g_speed
-            self.player_dir = "right" if dx > 0 else "left"
-
-        if abs(dy) > 45:
-            vy = g_speed if dy > 0 else -g_speed
-            self.player_dir = "down" if dy > 0 else "up"
-
-        # 2. Dual Keyboard Control (WASD / Arrow Keys)
+        # Check keyboard controls first
         keys = pygame.key.get_pressed()
-        if keys[pygame.K_LEFT] or keys[pygame.K_a]:
-            vx = -current_speed
-            self.player_dir = "left"
-        elif keys[pygame.K_RIGHT] or keys[pygame.K_d]:
-            vx = current_speed
-            self.player_dir = "right"
-        if keys[pygame.K_UP] or keys[pygame.K_w]:
-            vy = -current_speed
-            self.player_dir = "up"
-        elif keys[pygame.K_DOWN] or keys[pygame.K_s]:
-            vy = current_speed
-            self.player_dir = "down"
+        has_key_input = (keys[pygame.K_LEFT] or keys[pygame.K_a] or keys[pygame.K_RIGHT] or keys[pygame.K_d] or
+                         keys[pygame.K_UP] or keys[pygame.K_w] or keys[pygame.K_DOWN] or keys[pygame.K_s])
+        if has_key_input:
+            self.click_dest = None
+            if keys[pygame.K_LEFT] or keys[pygame.K_a]:
+                vx = -current_speed
+                self.player_dir = "left"
+            elif keys[pygame.K_RIGHT] or keys[pygame.K_d]:
+                vx = current_speed
+                self.player_dir = "right"
+            if keys[pygame.K_UP] or keys[pygame.K_w]:
+                vy = -current_speed
+                self.player_dir = "up"
+            elif keys[pygame.K_DOWN] or keys[pygame.K_s]:
+                vy = current_speed
+                self.player_dir = "down"
+
+        # Check Click-to-Move Destination
+        elif getattr(self, 'click_dest', None) is not None:
+            cdx = self.click_dest[0] - self.player_x
+            cdy = self.click_dest[1] - self.player_y
+            cd_dist = math.hypot(cdx, cdy)
+            if cd_dist > 6.0:
+                vx = (cdx / cd_dist) * current_speed
+                vy = (cdy / cd_dist) * current_speed
+                if abs(cdx) > abs(cdy):
+                    self.player_dir = "right" if cdx > 0 else "left"
+                else:
+                    self.player_dir = "down" if cdy > 0 else "up"
+            else:
+                self.click_dest = None
+
+        # Gesture / Hand Cursor Steering (relative to on-screen player position)
+        elif self.hand_detected:
+            player_screen_x = (self.player_x - self.camera_x + TILE_SIZE / 2) * ZOOM
+            player_screen_y = (self.player_y - self.camera_y + TILE_SIZE / 2) * ZOOM
+            cursor_x, cursor_y = self.cursor_pos
+            dx = cursor_x - player_screen_x
+            dy = cursor_y - player_screen_y
+
+            dist_factor = 1.3 if (abs(dx) > 160 or abs(dy) > 160) else 1.0
+            g_speed = current_speed * dist_factor
+
+            if abs(dx) > 45:
+                vx = g_speed if dx > 0 else -g_speed
+                self.player_dir = "right" if dx > 0 else "left"
+
+            if abs(dy) > 45:
+                vy = g_speed if dy > 0 else -g_speed
+                self.player_dir = "down" if dy > 0 else "up"
 
         new_x = self.player_x + vx
         new_y = self.player_y + vy
@@ -374,9 +407,6 @@ class TutorialScreen:
         if hasattr(self, 'pause_menu') and self.pause_menu.handle_event(event):
             return "blocked"
 
-        if hasattr(self, 'pause_menu') and self.pause_menu.is_paused:
-            return "blocked"
-
         self.lol_camera.handle_event(event)
         if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
             self.cursor_pos = event.pos
@@ -384,8 +414,27 @@ class TutorialScreen:
         elif event.type == pygame.MOUSEMOTION:
             self.cursor_pos = event.pos
         elif event.type == pygame.KEYDOWN:
-            if event.key == pygame.K_SPACE and self.quiz_state == 0:
-                self.lol_camera.recenter()
+            if event.key in [pygame.K_SPACE, pygame.K_RETURN]:
+                if self.quiz_state == 0:
+                    npc_dist = math.hypot(self.player_x - self.npc_tile_x * TILE_SIZE, self.player_y - self.npc_tile_y * TILE_SIZE)
+                    portal_dist = math.hypot(self.player_x - self.portal_tile_x * TILE_SIZE, self.player_y - self.portal_tile_y * TILE_SIZE)
+                    if npc_dist < 3.5 * TILE_SIZE and self.phase in [1, 2, 3]:
+                        if hasattr(self.main_menu, 'audio_manager') and self.main_menu.audio_manager:
+                            self.main_menu.audio_manager.play_sfx("dialogue_blip")
+                        self.phase = 3
+                        self.quiz_state = 1
+                        self.click_dest = None
+                    elif portal_dist < 3.0 * TILE_SIZE and self.phase == 4:
+                        self.finish_tutorial()
+                    else:
+                        self.lol_camera.recenter()
+                elif self.quiz_state == 1:
+                    self.trigger_click(self.cursor_pos)
+                elif self.quiz_state == 2:
+                    self.quiz_state = 1
+                elif self.quiz_state == 3:
+                    self.quiz_state = 0
+                    self.phase = 4
             elif event.key == pygame.K_ESCAPE:
                 if hasattr(self, 'pause_menu'):
                     self.pause_menu.toggle_pause()
@@ -401,11 +450,6 @@ class TutorialScreen:
                     self.submit_quiz_answer(2)
                 elif event.key in [pygame.K_4, pygame.K_d]:
                     self.submit_quiz_answer(3)
-            elif self.quiz_state == 2 and event.key in [pygame.K_SPACE, pygame.K_RETURN]:
-                self.quiz_state = 1
-            elif self.quiz_state == 3 and event.key in [pygame.K_SPACE, pygame.K_RETURN]:
-                self.quiz_state = 0
-                self.phase = 4
 
     def submit_quiz_answer(self, choice_idx):
         if choice_idx == self.eliminated_choice:
@@ -432,6 +476,10 @@ class TutorialScreen:
         if hasattr(self, 'pause_menu') and self.pause_menu.handle_click(pos):
             return
 
+        # If pause menu is active, do not allow clicks through to gameplay
+        if hasattr(self, 'pause_menu') and self.pause_menu.is_paused:
+            return
+
         # 1. Skip Button (Top Right, beside Pause Button)
         skip_rect = pygame.Rect(self.width - 310, 18, 165, 36)
         if skip_rect.collidepoint(pos):
@@ -440,61 +488,94 @@ class TutorialScreen:
             self.finish_tutorial()
             return
 
-        # 2. Phase 2: NPC Click Interaction
-        if self.phase == 2 and self.quiz_state == 0:
+        # 2. Guide Sage NPC Interaction (Active whenever quiz modal is closed)
+        if self.quiz_state == 0 and self.phase in [1, 2, 3]:
             screen_npc_x = (self.npc_tile_x * TILE_SIZE - self.camera_x) * ZOOM
             screen_npc_y = (self.npc_tile_y * TILE_SIZE - self.camera_y) * ZOOM
-            npc_rect = pygame.Rect(screen_npc_x - 20, screen_npc_y - 20, TILE_SIZE * ZOOM + 40, TILE_SIZE * ZOOM + 40)
-            if npc_rect.collidepoint(pos) or math.hypot(self.player_x - self.npc_tile_x * TILE_SIZE, self.player_y - self.npc_tile_y * TILE_SIZE) < 3.0 * TILE_SIZE:
+            npc_rect = pygame.Rect(screen_npc_x - 30, screen_npc_y - 30, TILE_SIZE * ZOOM + 60, TILE_SIZE * ZOOM + 60)
+            player_npc_dist = math.hypot(self.player_x - self.npc_tile_x * TILE_SIZE, self.player_y - self.npc_tile_y * TILE_SIZE)
+            if npc_rect.collidepoint(pos) or player_npc_dist < 3.5 * TILE_SIZE:
                 if hasattr(self.main_menu, 'audio_manager') and self.main_menu.audio_manager:
                     self.main_menu.audio_manager.play_sfx("dialogue_blip")
                 self.phase = 3
                 self.quiz_state = 1
-                print("[TUTORIAL] Opening Sample Quiz Modal!")
+                self.click_dest = None
+                print("[TUTORIAL] Opening Sample Quiz Modal via click/interact!")
                 return
 
-        # 3. Phase 3: Sample Quiz Dialog Clicks
+        # 3. Phase 4: Exit Portal Click Interaction
+        if self.phase == 4 and self.quiz_state == 0:
+            p_sx = (self.portal_tile_x * TILE_SIZE - self.camera_x) * ZOOM
+            p_sy = (self.portal_tile_y * TILE_SIZE - self.camera_y) * ZOOM
+            portal_rect = pygame.Rect(p_sx - 40, p_sy - 40, TILE_SIZE * 3 * ZOOM + 80, TILE_SIZE * 3 * ZOOM + 80)
+            portal_dist = math.hypot(self.player_x - self.portal_tile_x * TILE_SIZE, self.player_y - self.portal_tile_y * TILE_SIZE)
+            if portal_rect.collidepoint(pos) or portal_dist < 3.0 * TILE_SIZE:
+                print("[WIN] Exit Portal Clicked/Entered! Tutorial Complete!")
+                self.finish_tutorial()
+                return
+
+        # 4. Phase 3: Sample Quiz Dialog Clicks
         if self.quiz_state == 1:
             box_w, box_h = 600, 390
             box_x = (self.width - box_w) // 2
             box_y = (self.height - box_h) // 2
-            button_w, button_h = 560, 48
+            button_w, button_h = 560, 50
             button_x = box_x + (box_w - button_w) // 2
             button_y_start = box_y + 142
             spacing = 56
 
+            # Check floating demonstration card click (selecting Option B)
+            target_btn_y = button_y_start + 1 * spacing
+            demo_card_x = box_x + box_w + 16
+            demo_card_y = target_btn_y - 24
+            demo_card_rect = pygame.Rect(demo_card_x, demo_card_y, 220, 100)
+            if demo_card_rect.collidepoint(pos):
+                self.submit_quiz_answer(1)
+                return
+
             for i in range(4):
                 if i == self.eliminated_choice:
                     continue
-                btn_rect = pygame.Rect(button_x, button_y_start + i * spacing, button_w, button_h)
+                btn_rect = pygame.Rect(button_x, button_y_start + i * spacing - 2, button_w, button_h + 4)
                 if btn_rect.collidepoint(pos):
                     self.submit_quiz_answer(i)
                     return
 
-        # Retry / Continue Dialog Clicks
+        # 5. Retry Dialog Clicks
         elif self.quiz_state == 2:
             box_w, box_h = 600, 270
             box_x = (self.width - box_w) // 2
             box_y = (self.height - box_h) // 2
             btn_rect = pygame.Rect(box_x + (box_w - 230) // 2, box_y + 180, 230, 48)
-            if btn_rect.collidepoint(pos):
+            card_rect = pygame.Rect(box_x, box_y, box_w, box_h)
+            if btn_rect.collidepoint(pos) or card_rect.collidepoint(pos):
                 if hasattr(self.main_menu, 'audio_manager') and self.main_menu.audio_manager:
                     self.main_menu.audio_manager.play_sfx("click")
                 self.quiz_state = 1
                 return
 
+        # 6. Correct Dialog Clicks
         elif self.quiz_state == 3:
             box_w, box_h = 600, 280
             box_x = (self.width - box_w) // 2
             box_y = (self.height - box_h) // 2
             btn_rect = pygame.Rect(box_x + (box_w - 240) // 2, box_y + 195, 240, 48)
-            if btn_rect.collidepoint(pos):
+            card_rect = pygame.Rect(box_x, box_y, box_w, box_h)
+            if btn_rect.collidepoint(pos) or card_rect.collidepoint(pos):
                 if hasattr(self.main_menu, 'audio_manager') and self.main_menu.audio_manager:
                     self.main_menu.audio_manager.play_sfx("click")
                 self.quiz_state = 0
                 self.phase = 4
                 print("[TUTORIAL] Tutorial Phase 4: Portal Unlocked! Guide student to Exit Portal.")
                 return
+
+        # 7. Click-to-Move Navigation (Walk to clicked location on map)
+        if self.quiz_state == 0:
+            world_target_x = (pos[0] / ZOOM + self.camera_x) - TILE_SIZE / 2
+            world_target_y = (pos[1] / ZOOM + self.camera_y) - TILE_SIZE / 2
+            world_target_x = max(TILE_SIZE, min(self.MAP_WIDTH - 2 * TILE_SIZE, world_target_x))
+            world_target_y = max(TILE_SIZE, min(self.MAP_HEIGHT - 2 * TILE_SIZE, world_target_y))
+            self.click_dest = (world_target_x, world_target_y)
 
     def finish_tutorial(self):
         from db.save_system import set_tutorial_completed

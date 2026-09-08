@@ -783,6 +783,8 @@ class Quarter1:
                 return
 
             student_db_id = getattr(self.main_menu, 'student_db_id', None)
+            if not student_db_id and getattr(self.main_menu, 'selected_student', None):
+                student_db_id = self.main_menu.selected_student.get('id')
             if not student_db_id:
                 print("[WARN] No student_db_id available in main_menu. Skipping database record.")
                 return
@@ -2157,6 +2159,24 @@ class Quarter1:
                         self.show_bridge_warning("I should gather all 5 shape pieces first!")
                     return False
 
+                # Require answering the Old Man's question near the portal first
+                if self.map_name.lower() == 'map1.txt' and not self.oldman_riddle_answered:
+                    self.show_bridge_warning("Answer the Old Man's riddle near the portal first!")
+                    if self.npc_oldman_found and self.quiz_state == 0:
+                        p_dx = self.npc_oldman_x - self.player_x
+                        p_dy = self.npc_oldman_y - self.player_y
+                        if abs(p_dx) > abs(p_dy):
+                            self.player_dir = "right" if p_dx > 0 else "left"
+                        else:
+                            self.player_dir = "down" if p_dy > 0 else "up"
+                        self.quiz_state = 11  # Riddle dialog state
+                    return False
+                elif self.map_name.lower() in ['map2.txt', 'map3.txt'] and not self.puzzle_solved:
+                    self.show_bridge_warning("Complete the Old Man's puzzle near the portal first!")
+                    if self.npc_oldman_found and self.quiz_state == 0:
+                        self.quiz_state = 22  # Jigsaw puzzle intro dialog state
+                    return False
+
                 print(f"[TARGET] Goal reached! Initiating portal warp transition...")
                 if hasattr(self.main_menu, 'audio_manager'):
                     self.main_menu.audio_manager.play_sfx("portal_transition")
@@ -2490,7 +2510,7 @@ class Quarter1:
                 self.quiz_state = 0
                 self.oldman_interaction_cooldown = 5.0  # 5 seconds to walk away
                 self.player_block_timer = 0.0
-                self.teleport_cooldown = 3.0  # Cooldown to walk away before teleporting
+                self.teleport_cooldown = 0.5  # Ready to enter portal promptly
 
         # State 20: Old Man map3 Warning Dialog OK Click
         elif self.quiz_state == 20:
@@ -2633,7 +2653,9 @@ class Quarter1:
             oldman_center_x = self.npc_oldman_x + TILE_SIZE // 2
             oldman_center_y = self.npc_oldman_y + TILE_SIZE // 2
             dist = math.hypot(player_center_x - oldman_center_x, player_center_y - oldman_center_y)
-            if dist < TILE_SIZE * 1.5:
+            answered_count = sum(1 for s in self.shape_npcs.values() if s['answered']) if self.is_quiz_map else 5
+            trigger_dist = TILE_SIZE * 3.5 if answered_count >= 5 else TILE_SIZE * 1.5
+            if dist < trigger_dist:
                 # Face player towards Old Man
                 p_dx = self.npc_oldman_x - self.player_x
                 p_dy = self.npc_oldman_y - self.player_y
@@ -2643,7 +2665,6 @@ class Quarter1:
                     self.player_dir = "down" if p_dy > 0 else "up"
 
                 # Check if bridge is built (all 5 shapes answered)
-                answered_count = sum(1 for s in self.shape_npcs.values() if s['answered'])
                 if answered_count < 5:
                     self.quiz_state = 10  # Warning dialog state
                 else:
@@ -2659,7 +2680,9 @@ class Quarter1:
             oldman_center_x = self.npc_oldman_x + TILE_SIZE // 2
             oldman_center_y = self.npc_oldman_y + TILE_SIZE // 2
             dist = math.hypot(player_center_x - oldman_center_x, player_center_y - oldman_center_y)
-            if dist < TILE_SIZE * 1.5:
+            answered_count = sum(1 for s in self.shape_npcs.values() if s['answered']) if self.is_quiz_map else 5
+            trigger_dist = TILE_SIZE * 3.5 if answered_count >= 5 else TILE_SIZE * 1.5
+            if dist < trigger_dist:
                 # Face player towards Old Man
                 p_dx = self.npc_oldman_x - self.player_x
                 p_dy = self.npc_oldman_y - self.player_y
@@ -2669,7 +2692,6 @@ class Quarter1:
                     self.player_dir = "down" if p_dy > 0 else "up"
 
                 # Check if 5 shapes are answered
-                answered_count = sum(1 for s in self.shape_npcs.values() if s['answered'])
                 if answered_count < 5:
                     self.quiz_state = 20  # Warning dialog state (need to gather pieces)
                 else:

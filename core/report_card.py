@@ -135,6 +135,15 @@ class VictoryReportCard:
         """Activates and initializes the victory report card."""
         self.active = True
         self.elapsed = 0.0
+        self.width = self.screen.get_width()
+        self.height = self.screen.get_height()
+        self.card_x = (self.width - self.card_w) // 2
+        self.card_y = (self.height - self.card_h) // 2
+        btn_w = 230
+        btn_h = 48
+        btn_y = self.card_y + self.card_h - 75
+        self.replay_rect = pygame.Rect(self.card_x + 55, btn_y, btn_w, btn_h)
+        self.continue_rect = pygame.Rect(self.card_x + self.card_w - btn_w - 55, btn_y, btn_w, btn_h)
         self.total_questions = max(1, total_questions)
         self.correct_first_try = max(0, min(correct_first_try, self.total_questions))
         self.percentage = (self.correct_first_try / float(self.total_questions)) * 100.0

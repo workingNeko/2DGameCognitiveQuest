@@ -153,6 +153,14 @@ class Database:
         if quarter in self._assessment_cache:
             return self._assessment_cache[quarter]
 
+        quarter_unit_map = {
+            1: [4, 5, 6, 7, 17],
+            2: [8, 9, 16],
+            3: [10, 11, 12],
+            4: [13, 14, 15]
+        }
+        matching_units = quarter_unit_map.get(quarter, [4])
+
         url = f"{BASE_URL}/assessments"
         try:
             req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
@@ -163,14 +171,17 @@ class Database:
             q_full_str = f"Quarter {quarter}"
             for ass in assessments:
                 title = str(ass.get("title", "")).upper()
-                if q_str in title or q_full_str.upper() in title:
+                u_id = ass.get("unitId") or ass.get("unit_id")
+                if q_str in title or q_full_str.upper() in title or u_id in matching_units:
                     ass_id = ass.get("id")
                     self._assessment_cache[quarter] = ass_id
                     return ass_id
-            return None
+            fallback_map = {1: 1, 2: 5, 3: 3, 4: 6}
+            return fallback_map.get(quarter, 1)
         except Exception as e:
             print(f"[API ERROR] Failed to fetch assessment_id: {e}")
-            return None
+            fallback_map = {1: 1, 2: 5, 3: 3, 4: 6}
+            return fallback_map.get(quarter, 1)
 
     def queue_offline_result(self, payload):
         """Save un-synced game result to local persistent queue for automatic retry."""
@@ -668,7 +679,28 @@ class Database:
                             s_id = alias_map.get(raw_id) or alias_map.get(str(sel.get("id", ""))) or alias_map.get(str(sel.get("studentId", "")))
                             
                             if s_id and s_id in student_map:
-                                # Parse local quarter completion
+                                # First parse completed_quarters record
+                                comp_qs = sdata.get("completed_quarters", {})
+                                if isinstance(comp_qs, dict):
+                                    for q_key, q_val in comp_qs.items():
+                                        if isinstance(q_val, dict) and q_val.get("completed"):
+                                            q_num = 1
+                                            if "2" in str(q_key): q_num = 2
+                                            elif "3" in str(q_key): q_num = 3
+                                            elif "4" in str(q_key): q_num = 4
+                                            score = int(q_val.get("score", 100))
+                                            pct = float(q_val.get("percentage", 100.0))
+                                            tot = int(q_val.get("total_questions", 5))
+                                            corr = int(score // 20) if score <= 100 else tot
+                                            student_map[s_id]["quarters"][q_num] = {
+                                                "score": score,
+                                                "correct": corr,
+                                                "total": tot,
+                                                "percentage": pct,
+                                                "completed": True
+                                            }
+
+                                # Also parse active quarter_data if present
                                 q_data = sdata.get("quarter_data") or {}
                                 q_name = q_data.get("quarter_name") or ""
                                 if q_name:
@@ -683,13 +715,14 @@ class Database:
                                     pct = (correct / total * 100) if total > 0 else 0
                                     score = correct * 20  # 20 pts per question -> 100 max
                                     
-                                    student_map[s_id]["quarters"][q_num] = {
-                                        "score": score,
-                                        "correct": correct,
-                                        "total": total,
-                                        "percentage": pct,
-                                        "completed": bool(q_data.get("completed", False) or correct > 0)
-                                    }
+                                    if not student_map[s_id]["quarters"][q_num]:
+                                        student_map[s_id]["quarters"][q_num] = {
+                                            "score": score,
+                                            "correct": correct,
+                                            "total": total,
+                                            "percentage": pct,
+                                            "completed": bool(q_data.get("completed", False) or correct > 0)
+                                        }
                     except Exception as e:
                         print(f"[SAVE ERROR] Error reading local save {fname}: {e}")
 

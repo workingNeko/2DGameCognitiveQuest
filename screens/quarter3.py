@@ -566,7 +566,7 @@ class Quarter3:
         # [QUEST] 3 DISTINCT GAMEPLAY MODES FOR QUARTER 3
         # ============================================================
         self.is_caravan_mode = (self.map_name == "map7.txt")       # Map 7: Explorer's Royal Caravan
-        self.is_relic_hunt_mode = (self.map_name == "map8.txt")    # Map 8: In-World Relic Hunt & Causeway Bridge
+        self.is_relic_hunt_mode = False                            # In-world orb collection removed so gameplay is clean and not complicated
         self.is_puzzle_hybrid_mode = (self.map_name == "map9.txt") # Map 9: Sacred Citadel Mini-Puzzles & Altar
 
         # Map 8 Relic Hunt Data
@@ -619,9 +619,6 @@ class Quarter3:
 
         # Initialize High-Performance Surface & Sprite Cache for Raspberry Pi (60 FPS)
         self.init_cached_surfaces()
-
-        if self.is_relic_hunt_mode:
-            self.spawn_relic_stage(1)
 
         print(f"[OK] Quarter3 initialized with map: {self.map_name}")
         print(f"   Goal portal: {self.goal_portal_direction}")
@@ -833,6 +830,8 @@ class Quarter3:
             if not db:
                 return
             student_db_id = getattr(self.main_menu, 'student_db_id', None)
+            if not student_db_id and getattr(self.main_menu, 'selected_student', None):
+                student_db_id = self.main_menu.selected_student.get('id')
             if not student_db_id:
                 print("[WARN] No student_db_id available in main_menu. Skipping database record.")
                 return
@@ -1741,7 +1740,7 @@ class Quarter3:
                 })
             print(f"Citadel Keystone {st_num} Acquired: {keystone['name']}")
 
-        elif self.is_relic_hunt_mode:
+        elif self.map_name == "map8.txt":
             self.speed_boost_timer = 6.0
 
         # In-World Bridge Construction and Camera Pan for Map 8
@@ -2009,10 +2008,6 @@ class Quarter3:
                 self.title_active = False
 
 
-        # Relic Hunt Active Loop in Map 8
-        if self.is_relic_hunt_mode and self.quiz_state == 0:
-            self.update_relic_hunt(dt)
-
         # Proximity interaction check for active Station NPC (Exact 42px radius)
         if self.quiz_state == 0 and hasattr(self, 'quiz_stations') and self.quiz_station_index in self.quiz_stations:
             st_x, st_y = self.quiz_stations[self.quiz_station_index]
@@ -2022,31 +2017,14 @@ class Quarter3:
             player_center_y = self.player_y + TILE_SIZE // 2
             dist = math.hypot(player_center_x - npc_center_x, player_center_y - npc_center_y)
             if dist < 42:
-                if self.is_relic_hunt_mode:
-                    if self.relic_collected_count >= self.relic_target_count:
-                        # Collectibles complete -> Open Guardian Question Trial
-                        self.quiz_state = 1
-                        self.current_question_index = self.quiz_station_index - 1
-                        self.selected_choice_index = -1
-                        self.eliminated_choices.clear()
-                        self.wrong_feedback_msg = ""
-                        self.ident_input_text = ""
-                        print(f"[SCROLL] Guardian {self.quiz_station_index} Challenge Opened! (Type: {self.quiz_questions[self.current_question_index].get('q_type', 'multiple_choice')})")
-                    else:
-                        # Still missing required supplies in the maze
-                        needed = self.relic_target_count - self.relic_collected_count
-                        self.relic_banner_text = f"Shrine Needs {needed} more {self.relic_item_type.upper()}S!"
-                        self.relic_banner_sub = f"Collect all supplies in the desert maze before taking the Guardian's Trial!"
-                        self.relic_banner_timer = 2.0
-                else:
-                    # Pure Multiple Choice Question Mode (Map 7 & Map 9)
-                    self.quiz_state = 1
-                    self.current_question_index = self.quiz_station_index - 1
-                    self.selected_choice_index = -1
-                    self.eliminated_choices.clear()
-                    self.wrong_feedback_msg = ""
-                    self.ident_input_text = ""
-                    print(f"[SCROLL] Station {self.quiz_station_index} Multiple Choice Challenge Opened!")
+                # Direct interaction without requiring floating orbs/items!
+                self.quiz_state = 1
+                self.current_question_index = self.quiz_station_index - 1
+                self.selected_choice_index = -1
+                self.eliminated_choices.clear()
+                self.wrong_feedback_msg = ""
+                self.ident_input_text = ""
+                print(f"[SCROLL] Station {self.quiz_station_index} Challenge Opened!")
 
         # Skeleton walking sequence along BFS path
         if self.quiz_state == 4:
@@ -2134,20 +2112,20 @@ class Quarter3:
                     self.quiz_station_index += 1
                     self.current_question_index += 1
                     self.quiz_state = 0
-                    if self.is_relic_hunt_mode:
-                        self.spawn_relic_stage(self.quiz_station_index)
                 else:
-                    if self.is_relic_hunt_mode:
+                    if self.map_name == "map8.txt":
                         self.quiz_state = 6
                         self.quiz_station_index = 6
                         self.clear_portal_overlapping_tiles()
                         self.relic_banner_text = "GOLDEN CAUSEWAY COMPLETE!"
                         self.relic_banner_sub = "The bridge is open! Cross to the Eastern Sun Portal Sanctum!"
                         self.relic_banner_timer = 5.0
-                    else:
-                        # Station 5 answered and 5th bridge tile built -> Open Sun Relic Altar!
+                    elif self.is_puzzle_hybrid_mode:
+                        # Station 5 answered -> Open Sun Relic Altar!
                         self.quiz_state = 8
                         self.init_sun_relic_puzzle()
+                    else:
+                        self.quiz_state = 5
 
         # State 8: Sun Relic Altar Jigsaw Update
         if self.quiz_state == 8:
@@ -2192,7 +2170,7 @@ class Quarter3:
         self.caravan_sparkles = surviving_sparkles
 
         # Update Caravan Music Notes (Map 7 only)
-        if not self.is_relic_hunt_mode and len(self.caravan_cargo) > 0 and random.random() < 0.04:
+        if self.is_caravan_mode and len(self.caravan_cargo) > 0 and random.random() < 0.04:
             self.caravan_music_notes.append({
                 "x": self.caravan_x + random.randint(8, 24),
                 "y": self.caravan_y - 6,
@@ -2431,11 +2409,6 @@ class Quarter3:
         if self.is_caravan_mode:
             self.draw_caravan()
 
-        # Draw in-world Relic Items & Pickup Sparks for Map 8
-        if self.is_relic_hunt_mode:
-            self.draw_relic_items()
-            self.draw_relic_pickup_particles()
-
         self.draw_player()
 
         # Draw Sparkle Particles
@@ -2455,8 +2428,7 @@ class Quarter3:
                 portal.draw(self.screen, self.camera_x, self.camera_y, ZOOM, self.width, self.height)
 
         # Draw Top HUD
-        if self.is_relic_hunt_mode:
-            self.draw_relic_quest_hud()
+        if self.map_name == "map8.txt":
             if self.relic_banner_timer > 0:
                 self.draw_relic_stage_banner()
         elif self.is_puzzle_hybrid_mode:

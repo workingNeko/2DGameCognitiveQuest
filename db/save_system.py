@@ -8,6 +8,7 @@ def atomic_save_json(path, data):
     Safely writes JSON data atomically:
     Writes to a temporary file first and replaces the target file,
     preventing corrupt/empty (0-byte) save files during crashes or interruptions.
+    Includes retry and fallback for Windows file lock contention ([WinError 5]).
     """
     directory = os.path.dirname(path)
     if directory:
@@ -18,8 +19,25 @@ def atomic_save_json(path, data):
             json.dump(data, f, indent=4)
             f.flush()
             os.fsync(f.fileno())
-        os.replace(tmp_path, path)
-        return True
+            
+        # Attempt atomic replace with retries for Windows file locking
+        for attempt in range(5):
+            try:
+                os.replace(tmp_path, path)
+                return True
+            except (PermissionError, OSError) as err:
+                if attempt < 4:
+                    time.sleep(0.05 * (attempt + 1))
+                else:
+                    # Fallback to direct write if os.replace is repeatedly locked
+                    with open(path, "w", encoding="utf-8") as target_f:
+                        json.dump(data, target_f, indent=4)
+                    if os.path.exists(tmp_path):
+                        try:
+                            os.remove(tmp_path)
+                        except Exception:
+                            pass
+                    return True
     except Exception as e:
         if os.path.exists(tmp_path):
             try:
@@ -35,7 +53,20 @@ def get_save_path(student_id):
 def check_save_exists(student_id):
     if not student_id:
         return False
-    return os.path.exists(get_save_path(student_id))
+    path = get_save_path(student_id)
+    if not os.path.exists(path):
+        return False
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+            # Verify actual gameplay progress exists (completed quarters, tutorial, or stage data)
+            q = data.get("completed_quarters", {})
+            has_completed_q = any(isinstance(v, dict) and v.get("completed") for v in q.values())
+            has_tutorial = bool(data.get("tutorial_completed"))
+            has_stage = bool(data.get("stage_select"))
+            return has_completed_q or has_tutorial or has_stage
+    except Exception:
+        return False
 
 def is_tutorial_completed(student_id):
     """Check if the given student has completed the controls/gameplay tutorial"""
@@ -134,12 +165,49 @@ def delete_student_progress(student_id, student_db_id=None, main_menu=None):
     except Exception as e:
         print(f"[WARN] Could not purge database records: {e}")
 
+    # Write a clean initialized fresh save file with 0 score and 0% progress
+    for tid in target_ids:
+        if str(tid).isdigit() or str(tid).startswith("S-") or str(tid).startswith("MOCK-"):
+            clean_path = get_save_path(tid)
+            try:
+                sel_obj = getattr(main_menu, 'selected_student', None) or {}
+                first_n = sel_obj.get("first_name") or "Student"
+                student_clean_data = {
+                    "student_id": str(tid),
+                    "selected_student": {
+                        "id": int(student_db_id) if student_db_id and str(student_db_id).isdigit() else (sel_obj.get("id") or 9),
+                        "student_id": str(tid),
+                        "first_name": first_n,
+                        "last_name": sel_obj.get("last_name") or "",
+                        "score": 0,
+                        "progress": 0,
+                        "level": sel_obj.get("level") or "Grade 2",
+                        "gender": sel_obj.get("gender") or "male"
+                    },
+                    "current_screen": "menu",
+                    "tutorial_completed": False,
+                    "completed_quarters": {},
+                    "timestamp": time.time()
+                }
+                atomic_save_json(clean_path, student_clean_data)
+                print(f"[CLEAN SAVE] Created initialized fresh save for student {tid}")
+            except Exception as se:
+                print(f"[WARN] Error creating clean save file for {tid}: {se}")
+
     # Reset in-memory session states on main_menu
     if main_menu:
         main_menu.last_stage_select_data = None
         main_menu.tutorial_completed = False
         if hasattr(main_menu, 'completed_quarters'):
             main_menu.completed_quarters = {}
+        if getattr(main_menu, 'selected_student', None):
+            main_menu.selected_student["score"] = 0
+            main_menu.selected_student["progress"] = 0
+        if getattr(main_menu, 'student_select', None) and hasattr(main_menu.student_select, 'students'):
+            for s in main_menu.student_select.students:
+                if str(s.get("student_id")) in target_ids or str(s.get("id")) in target_ids:
+                    s["score"] = 0
+                    s["progress"] = 0
         if main_menu.quarter1 and hasattr(main_menu.quarter1, 'cleanup'):
             main_menu.quarter1.cleanup()
         main_menu.quarter1 = None
@@ -161,6 +229,8 @@ def delete_student_progress(student_id, student_db_id=None, main_menu=None):
 def mark_quarter_completed(main_menu, quarter_name, score=100, percentage=100.0, total_questions=5):
     """Marks a specific quarter as completed in the student's persistent save data."""
     student_id = getattr(main_menu, 'student_id', None)
+    if not student_id and getattr(main_menu, 'selected_student', None):
+        student_id = main_menu.selected_student.get('student_id') or main_menu.selected_student.get('studentId')
     if not student_id:
         return
     save_data = load_student_progress(student_id) or {}
@@ -176,10 +246,37 @@ def mark_quarter_completed(main_menu, quarter_name, score=100, percentage=100.0,
     }
     save_data["timestamp"] = time.time()
     
+    # Calculate cumulative score and progress percentage across all quarters
+    comp_qs = save_data["completed_quarters"]
+    cum_score = sum(d.get("score", 0) for d in comp_qs.values() if isinstance(d, dict))
+    comp_count = sum(1 for d in comp_qs.values() if isinstance(d, dict) and d.get("completed"))
+    cum_prog = int((comp_count / 4.0) * 100)
+
+    # Sync selected_student in save data
+    if "selected_student" in save_data and isinstance(save_data["selected_student"], dict):
+        save_data["selected_student"]["score"] = cum_score
+        save_data["selected_student"]["progress"] = cum_prog
+    elif main_menu and getattr(main_menu, 'selected_student', None):
+        save_data["selected_student"] = dict(main_menu.selected_student)
+        save_data["selected_student"]["score"] = cum_score
+        save_data["selected_student"]["progress"] = cum_prog
+
+    # Sync in-memory selected_student on main_menu
+    if main_menu and getattr(main_menu, 'selected_student', None):
+        main_menu.selected_student["score"] = cum_score
+        main_menu.selected_student["progress"] = cum_prog
+
+    # Sync student_select roster if active
+    if main_menu and getattr(main_menu, 'student_select', None):
+        for s in getattr(main_menu.student_select, 'students', []):
+            if str(s.get('student_id')) == str(student_id) or str(s.get('id')) == str(getattr(main_menu, 'student_db_id', None)):
+                s["score"] = cum_score
+                s["progress"] = cum_prog
+    
     path = get_save_path(student_id)
     try:
         atomic_save_json(path, save_data)
-        print(f"[STAR] Quarter '{quarter_name}' marked as COMPLETED for student {student_id}! ({score} pts, {percentage:.1f}%)")
+        print(f"[STAR] Quarter '{quarter_name}' marked as COMPLETED for student {student_id}! ({score} pts, {percentage:.1f}%) [Total: {cum_score} pts, {cum_prog}%]")
     except Exception as e:
         print(f"[WARN] Error marking quarter completed: {e}")
 
@@ -203,14 +300,25 @@ def save_student_progress(main_menu):
         return False
     
     student_id = main_menu.student_id
+    if not student_id and getattr(main_menu, 'selected_student', None):
+        student_id = main_menu.selected_student.get('student_id') or main_menu.selected_student.get('studentId')
     if not student_id:
         return False
         
     existing_save = load_student_progress(student_id) or {}
     completed_quarters = existing_save.get("completed_quarters", {})
 
+    # Sync cumulative score and progress percentage
+    cum_score = sum(d.get("score", 0) for d in completed_quarters.values() if isinstance(d, dict))
+    comp_count = sum(1 for d in completed_quarters.values() if isinstance(d, dict) and d.get("completed"))
+    cum_prog = int((comp_count / 4.0) * 100)
+    
+    if getattr(main_menu, 'selected_student', None):
+        main_menu.selected_student["score"] = cum_score
+        main_menu.selected_student["progress"] = cum_prog
+
     save_data = {
-        "student_id": student_id,
+        "student_id": str(student_id),
         "selected_student": main_menu.selected_student,
         "current_screen": main_menu.current_screen,
         "tutorial_completed": getattr(main_menu, 'tutorial_completed', True if check_save_exists(student_id) else False),
@@ -323,6 +431,14 @@ def load_student_progress(student_id):
 def apply_student_progress(main_menu, save_data):
     if not save_data:
         return
+
+    # Restore student identifiers and object references
+    if save_data.get("student_id"):
+        main_menu.student_id = str(save_data["student_id"])
+    if save_data.get("selected_student"):
+        main_menu.selected_student = save_data["selected_student"]
+        if save_data["selected_student"].get("id"):
+            main_menu.student_db_id = save_data["selected_student"]["id"]
         
     current_screen = save_data.get("current_screen")
     main_menu.current_screen = current_screen
@@ -338,7 +454,7 @@ def apply_student_progress(main_menu, save_data):
         main_menu.stage_select = ss
         
         # Apply StageSelect coordinates and dialogue states
-        ss_data = save_data["stage_select"]
+        ss_data = save_data.get("stage_select", {})
         ss.player_x = ss_data.get("player_x", ss.player_x)
         ss.player_y = ss_data.get("player_y", ss.player_y)
         ss.oldman_dialogue_state = ss_data.get("oldman_dialogue_state", 0)
@@ -432,6 +548,26 @@ def apply_student_progress(main_menu, save_data):
             q.camera_y = q.player_y + 16 - (q.height // 2) / ZOOM_FACTOR
             
             print(f"[GAME] Resumed {current_screen} state at Question {q.current_question_index + 1}.")
+    else:
+        # Fallback: When saved screen is 'menu' or anything else, continuing activity enters Stage Select hub!
+        from screens.stageselect import StageSelect
+        main_menu.current_screen = "stage_select"
+        ss = StageSelect(main_menu.screen, main_menu)
+        main_menu.stage_select = ss
+        
+        ss_data = save_data.get("stage_select", {})
+        if ss_data:
+            ss.player_x = ss_data.get("player_x", ss.player_x)
+            ss.player_y = ss_data.get("player_y", ss.player_y)
+            ss.oldman_dialogue_state = ss_data.get("oldman_dialogue_state", 0)
+            ss.knight_dialogue_state = ss_data.get("knight_dialogue_state", 0)
+            ss.skeleton_dialogue_state = ss_data.get("skeleton_dialogue_state", 0)
+            ss.bromen_dialogue_state = ss_data.get("bromen_dialogue_state", 0)
+            ss.player_following_target = ss_data.get("player_following_target", None)
+            
+            ss.camera_x = ss.player_x + 16 - (ss.width // 2) / 1.50
+            ss.camera_y = ss.player_y + 16 - (ss.height // 2) / 1.50
+        print("[MAP] Continued activity into Stage Select screen.")
 
 def show_saving_and_exit(main_menu, target_screen="menu"):
     # Intercept return to Main Menu

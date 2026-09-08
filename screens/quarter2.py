@@ -785,6 +785,8 @@ class Quarter2:
             if not db:
                 return
             student_db_id = getattr(self.main_menu, 'student_db_id', None)
+            if not student_db_id and getattr(self.main_menu, 'selected_student', None):
+                student_db_id = self.main_menu.selected_student.get('id')
             if not student_db_id:
                 print("[WARN] No student_db_id available in main_menu. Skipping database record.")
                 return

@@ -1123,6 +1123,12 @@ class MainMenu:
             self.audio_manager.play_scene_music(self.current_screen)
 
         if self.current_screen == "menu":
+            from db.save_system import check_save_exists
+            curr_has_save = check_save_exists(self.student_id) if self.selected_student else False
+            if getattr(self, '_last_has_save_state', None) != curr_has_save:
+                self._last_has_save_state = curr_has_save
+                self.setup_buttons()
+
             self.update_gesture()
             if not self.popup_state:
                 # Update sound button dynamic text
@@ -1249,6 +1255,11 @@ class MainMenu:
                 print(f"[CAM] Webcam preview box toggled: {self.show_camera_overlay}")
                 return
 
+        # Always synchronize mouse coordinates on hardware mouse motion and clicks
+        if event.type in [pygame.MOUSEMOTION, pygame.MOUSEBUTTONDOWN]:
+            self.cursor_pos = event.pos
+            self.cursor_x, self.cursor_y = float(event.pos[0]), float(event.pos[1])
+
         # If popup is active, intercept clicks and key events!
         if self.popup_state:
             if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
@@ -1258,7 +1269,18 @@ class MainMenu:
                 self.cursor_pos = event.pos
             elif event.type == pygame.KEYDOWN:
                 if event.key in [pygame.K_SPACE, pygame.K_RETURN]:
-                    self.handle_popup_click(self.cursor_pos)
+                    if self.popup_state == "confirm_exit":
+                        self.exit_game()
+                    elif self.popup_state == "confirm_new_activity":
+                        box_w, box_h = 500, 260
+                        box_x = (self.w - box_w) // 2
+                        box_y = (self.h - box_h) // 2
+                        self.handle_popup_click((box_x + 80, box_y + 195))
+                    elif self.popup_state == "confirm_menu":
+                        from db.save_system import show_saving_and_exit
+                        show_saving_and_exit(self)
+                    else:
+                        self.handle_popup_click(self.cursor_pos)
                 elif event.key == pygame.K_ESCAPE:
                     self.popup_state = None
                     if hasattr(self, 'audio_manager'):
@@ -1522,13 +1544,17 @@ class MainMenu:
 
             # SELECTED STUDENT INFO
             if self.selected_student:
-                student_name = f"{self.selected_student['first_name']} {self.selected_student['last_name']}"
-                info_bg = pygame.Surface((400, 40))
+                student_name = f"{self.selected_student.get('first_name', '')} {self.selected_student.get('last_name', '')}".strip()
+                score = self.selected_student.get("score", 0)
+                prog = self.selected_student.get("progress", 0)
+                info_w = 480
+                info_h = 42
+                info_bg = pygame.Surface((info_w, info_h))
                 info_bg.fill((0, 0, 0))
                 info_bg.set_alpha(180)
-                self.screen.blit(info_bg, (self.w // 2 - 200, self.student_info_y))
-                student_text = self.small_font.render(f"Selected Student: {student_name}", True, (255, 215, 0))
-                self.screen.blit(student_text, (self.w // 2 - student_text.get_width() // 2, self.student_info_y + 5))
+                self.screen.blit(info_bg, (self.w // 2 - info_w // 2, self.student_info_y))
+                student_text = self.small_font.render(f"Student: {student_name}  |  Score: {score} pts  |  Progress: {prog}%", True, (255, 215, 0))
+                self.screen.blit(student_text, (self.w // 2 - student_text.get_width() // 2, self.student_info_y + 7))
 
             # ERROR MESSAGE (commented out for testing)
             if self.show_no_student_message and pygame.time.get_ticks() < self.no_student_timer:

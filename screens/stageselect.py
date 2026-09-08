@@ -210,7 +210,7 @@ class StageSelect:
         # ============================================================
         # WALKABLE TILES
         # ============================================================
-        self.WALKABLE_TILES = {"G", "#", "1", "2", "3", "4", "5", "6", "7", "8", "P", "l", "r", "u", "d"}
+        self.WALKABLE_TILES = {"G", "#", "1", "2", "3", "4", "5", "6", "7", "8", "P", "l", "r", "u", "d", "+", "-", "/", "*", "E"}
 
         # ============================================================
         # LOAD PLAYER SPRITES
@@ -419,6 +419,155 @@ class StageSelect:
                 "width": main.get_width()
             })
         self.title_total_width = sum(l["width"] for l in self.title_letters) + self.title_spacing * (len(self.title_text) - 1)
+
+        # ============================================================
+        # INTERACTIVE OBJECTS IN ENHANCED SPACES
+        # ============================================================
+        self._init_interactive_objects()
+
+    def _init_interactive_objects(self):
+        """Initializes rich interactive entities across the hub's quadrants."""
+        def safe_load_scale(rel_path, target_size):
+            p = os.path.join(self.BASE_DIR, *rel_path.split("/"))
+            try:
+                img = pygame.image.load(p).convert_alpha()
+                return pygame.transform.scale(img, target_size)
+            except Exception:
+                surf = pygame.Surface(target_size, pygame.SRCALPHA)
+                surf.fill((251, 191, 36))
+                return surf
+
+        self.interactable_fountain_sprite = safe_load_scale(
+            "assets/images/sprites/objects/tiles/quarter4tiles/fountain.png", (44, 44)
+        )
+        self.interactable_statue_sprite = safe_load_scale(
+            "assets/images/sprites/objects/tiles/quarter4tiles/statue.png", (42, 50)
+        )
+        self.interactable_chest_frames = [
+            safe_load_scale(f"assets/images/sprites/objects/tiles/quarter2tiles/chest_green_{i}.png", (36, 32))
+            for i in range(4)
+        ]
+
+        self.interactables = [
+            {
+                "id": "fountain",
+                "name": "Fountain of Clarity",
+                "world_x": 7 * TILE_SIZE - 6,
+                "world_y": 6 * TILE_SIZE - 6,
+                "width": 44,
+                "height": 44,
+                "type": "fountain",
+                "prompt": "Gaze into Fountain of Clarity",
+                "sfx": "chime",
+                "dialogue": [
+                    ("Fountain of Clarity", "The crystalline water reflects the golden sky, radiating ancient mathematical clarity..."),
+                    ("Fountain of Clarity", "'Geometry Secret: A polygon with 5 sides is a Pentagon, 6 is a Hexagon, and 8 is an Octagon! All triangles have interior angles that sum to 180°.'"),
+                    ("Student", "My mind feels crystal clear!")
+                ]
+            },
+            {
+                "id": "chest",
+                "name": "Explorer's Supply Chest",
+                "world_x": 9 * TILE_SIZE,
+                "world_y": 20 * TILE_SIZE + 2,
+                "width": 36,
+                "height": 32,
+                "type": "chest",
+                "opened": False,
+                "opening": False,
+                "frame": 0,
+                "anim_timer": 0.0,
+                "prompt": "Open Explorer's Supply Chest",
+                "sfx": "wood_snap",
+                "dialogue": [
+                    ("Supply Chest", "You pop open the brass latch of the weathered merchant's chest..."),
+                    ("Supply Chest", "Inside lies an old market receipt: 'Barrio Fiesta Tip: When paying with a 50-peso bill for a 35-peso treat, subtract 35 from 50. Your sukli (change) is exactly 15 pesos!'"),
+                    ("Student", "That will come in handy at the market!")
+                ]
+            },
+            {
+                "id": "monolith",
+                "name": "Sun Monolith Statue",
+                "world_x": 40 * TILE_SIZE - 5,
+                "world_y": 20 * TILE_SIZE - 10,
+                "width": 42,
+                "height": 50,
+                "type": "statue",
+                "prompt": "Read Ancient Sun Monolith",
+                "sfx": "portal_warp",
+                "dialogue": [
+                    ("Sun Monolith", "Ancient hieroglyphic carvings carved into the sun-warmed stone glow with solar energy..."),
+                    ("Sun Monolith", "'Tablet of Fractions: A fraction represents parts of a whole! The numerator counts the pieces you hold, while the denominator tells how many equal pieces make the complete whole.'"),
+                    ("Student", "The ancient builders truly understood fractions!")
+                ]
+            },
+            {
+                "id": "lake",
+                "name": "Wishing Lake Pier",
+                "world_x": 37 * TILE_SIZE,
+                "world_y": 5 * TILE_SIZE + 4,
+                "width": 32,
+                "height": 32,
+                "type": "lake",
+                "prompt": "Toss Coin into Wishing Lake",
+                "sfx": "coin",
+                "dialogue": [
+                    ("Wishing Lake", "You stand at the edge of the pier and cast a lucky copper coin into the azure water..."),
+                    ("Wishing Lake", "PLINK! Concentric ripple rings spread outwards. An inspiring whisper echoes: 'Mental Math Secret: To multiply any number by 5 with lightning speed, divide it by 2 and multiply by 10! (e.g. 48 x 5 = 24 x 10 = 240).'"),
+                    ("Student", "What a clever shortcut! I feel energized.")
+                ]
+            }
+        ]
+
+        self.nearby_interactable = None
+        self.active_interactable = None
+        self.interactable_dialogue_state = 0  # 0: idle, 1: dialogue active
+        self.interactable_dialogue_index = 0
+        self.hub_particles = []
+
+    def trigger_interactable(self, obj):
+        """Starts interaction with a nearby interactive object in the hub."""
+        if not obj or self.interactable_dialogue_state != 0:
+            return
+
+        self.active_interactable = obj
+        self.interactable_dialogue_state = 1
+        self.interactable_dialogue_index = 0
+        self.dialogue_char_index = 0.0
+        self.dialogue_sound_timer = 0.0
+        self.dialogue_active_key = None
+
+        if hasattr(self.main_menu, 'audio_manager') and self.main_menu.audio_manager:
+            sfx = obj.get("sfx")
+            if sfx:
+                try:
+                    self.main_menu.audio_manager.play_sfx(sfx)
+                except Exception:
+                    pass
+
+        if obj.get("type") == "chest":
+            obj["opened"] = True
+            obj["opening"] = True
+            obj["frame"] = 1
+            obj["anim_timer"] = 0.0
+
+        # Burst particles on interaction
+        cx = obj["world_x"] + obj["width"] // 2
+        cy = obj["world_y"] + obj["height"] // 2
+        p_col = (56, 189, 248) if obj["type"] in ("fountain", "lake") else (251, 191, 36)
+        for _ in range(12):
+            ang = random.uniform(0, 2 * math.pi)
+            spd = random.uniform(20, 60)
+            self.hub_particles.append({
+                "x": cx,
+                "y": cy,
+                "vx": math.cos(ang) * spd,
+                "vy": math.sin(ang) * spd,
+                "color": p_col,
+                "life": 0.8,
+                "max_life": 0.8,
+                "radius": random.randint(2, 4)
+            })
 
     # ============================================================
     # NEW METHOD - Create default map
@@ -1478,6 +1627,10 @@ class StageSelect:
             active_line_len = len(self.knight_dialogue_lines[self.knight_dialogue_index][1])
         elif self.bromen_dialogue_state == 1 and self.bromen_dialogue_index < len(self.bromen_dialogue_lines):
             active_line_len = len(self.bromen_dialogue_lines[self.bromen_dialogue_index][1])
+        elif self.interactable_dialogue_state == 1 and self.active_interactable:
+            lines = self.active_interactable.get("dialogue", [])
+            if self.interactable_dialogue_index < len(lines):
+                active_line_len = len(lines[self.interactable_dialogue_index][1])
 
         if active_line_len is not None and self.dialogue_char_index < active_line_len:
             self.dialogue_char_index = float(active_line_len)
@@ -1532,6 +1685,14 @@ class StageSelect:
                 print("* Dialogue complete! Bromen starts moving north to portal and player follows.")
             return True
 
+        if self.interactable_dialogue_state == 1 and self.active_interactable:
+            self.interactable_dialogue_index += 1
+            lines = self.active_interactable.get("dialogue", [])
+            if self.interactable_dialogue_index >= len(lines):
+                self.interactable_dialogue_state = 0
+                self.active_interactable = None
+            return True
+
         return False
 
     # ============================================================
@@ -1566,6 +1727,15 @@ class StageSelect:
         # Advance active dialogue or skip cutscene
         if self.advance_dialogue():
             return
+
+        # Trigger interaction if clicking nearby interactable object
+        if self.nearby_interactable and self.interactable_dialogue_state == 0:
+            obj = self.nearby_interactable
+            screen_ox = (obj["world_x"] - self.camera_x + obj["width"] / 2) * ZOOM
+            screen_oy = (obj["world_y"] - self.camera_y + obj["height"] / 2) * ZOOM
+            if math.hypot(pos[0] - screen_ox, pos[1] - screen_oy) < 70 * ZOOM:
+                self.trigger_interactable(obj)
+                return
 
         # Trigger teleport on click/hold when standing on a portal (Only if NPC has been spoken to)
         current_portal = None
@@ -1683,6 +1853,11 @@ class StageSelect:
         elif self.bromen_dialogue_state == 1 and self.bromen_dialogue_index < len(self.bromen_dialogue_lines):
             active_dialogue_text = self.bromen_dialogue_lines[self.bromen_dialogue_index][1]
             current_dialogue_key = ('bromen', self.bromen_dialogue_index)
+        elif self.interactable_dialogue_state == 1 and self.active_interactable:
+            lines = self.active_interactable.get("dialogue", [])
+            if self.interactable_dialogue_index < len(lines):
+                active_dialogue_text = lines[self.interactable_dialogue_index][1]
+                current_dialogue_key = (self.active_interactable["id"], self.interactable_dialogue_index)
 
         if current_dialogue_key != self.dialogue_active_key:
             self.dialogue_active_key = current_dialogue_key
@@ -1969,6 +2144,70 @@ class StageSelect:
                         
                 print("[Knight] Knight reached down portal and disappeared from stage select!")
 
+        # Update interactable animations (e.g. chest opening)
+        for obj in self.interactables:
+            if obj.get("type") == "chest" and obj.get("opening"):
+                obj["anim_timer"] += dt
+                if obj["anim_timer"] >= 0.12:
+                    obj["anim_timer"] = 0.0
+                    if obj["frame"] < len(self.interactable_chest_frames) - 1:
+                        obj["frame"] += 1
+                    else:
+                        obj["opening"] = False
+
+        # Update ambient hub particles
+        dt_part = dt
+        for p in self.hub_particles[:]:
+            p["life"] -= dt_part
+            p["x"] += p.get("vx", 0) * dt_part
+            p["y"] += p.get("vy", 0) * dt_part
+            if p["life"] <= 0:
+                self.hub_particles.remove(p)
+
+        # Ambiently spawn gentle sparkles around fountain and sun monolith
+        if random.random() < 0.25:
+            self.hub_particles.append({
+                "x": 7 * TILE_SIZE + random.uniform(8, 28),
+                "y": 6 * TILE_SIZE + random.uniform(8, 28),
+                "vx": random.uniform(-6, 6),
+                "vy": random.uniform(-15, -5),
+                "color": (56, 189, 248),
+                "life": 0.9,
+                "max_life": 0.9,
+                "radius": random.randint(1, 3)
+            })
+        if random.random() < 0.2:
+            self.hub_particles.append({
+                "x": 40 * TILE_SIZE + random.uniform(6, 30),
+                "y": 20 * TILE_SIZE + random.uniform(6, 36),
+                "vx": random.uniform(-4, 4),
+                "vy": random.uniform(-10, -2),
+                "color": (251, 191, 36),
+                "life": 1.1,
+                "max_life": 1.1,
+                "radius": random.randint(1, 2)
+            })
+
+        # Proximity check for interactive objects
+        if self.interactable_dialogue_state == 0:
+            p_cx = self.player_x + TILE_SIZE // 2
+            p_cy = self.player_y + TILE_SIZE // 2
+            closest_obj = None
+            closest_dist = TILE_SIZE * 2.8
+            for obj in self.interactables:
+                obj_cx = obj["world_x"] + obj["width"] // 2
+                obj_cy = obj["world_y"] + obj["height"] // 2
+                d = math.hypot(p_cx - obj_cx, p_cy - obj_cy)
+                if d < closest_dist:
+                    closest_dist = d
+                    closest_obj = obj
+            self.nearby_interactable = closest_obj
+
+            # If player holds fist near interactable, trigger interaction
+            if self.nearby_interactable and self.fist_closed and self.teleport_cooldown <= 0:
+                self.trigger_interactable(self.nearby_interactable)
+                self.teleport_cooldown = 1.0
+
         # Update player following NPC
         if self.player_following_target:
             self.update_player_following()
@@ -2167,7 +2406,7 @@ class StageSelect:
     # ============================================================
     def update_player_movement(self):
         # Block manual movement during active dialogue, while following an NPC, or during block timer
-        if self.oldman_dialogue_state == 1 or self.skeleton_dialogue_state == 1 or self.knight_dialogue_state == 1 or self.bromen_dialogue_state == 1 or self.player_following_target or self.player_block_timer > 0:
+        if self.oldman_dialogue_state == 1 or self.skeleton_dialogue_state == 1 or self.knight_dialogue_state == 1 or self.bromen_dialogue_state == 1 or self.interactable_dialogue_state == 1 or self.player_following_target or self.player_block_timer > 0:
             return
 
         vx, vy = 0, 0
@@ -2485,6 +2724,82 @@ class StageSelect:
                     pygame.draw.rect(self.screen, (239, 68, 68), badge_rect, 2, border_radius=6)
                     b_txt = b_font.render("LOCKED", True, (248, 113, 113))
                     self.screen.blit(b_txt, b_txt.get_rect(center=badge_rect.center))
+
+        # Draw Interactive Objects & Lore Artifacts
+        t_ticks = pygame.time.get_ticks() * 0.001
+        for obj in self.interactables:
+            ox = (obj["world_x"] - self.camera_x) * ZOOM
+            oy = (obj["world_y"] - self.camera_y) * ZOOM
+            ow = int(obj["width"] * ZOOM)
+            oh = int(obj["height"] * ZOOM)
+
+            # Check screen visibility
+            if -ow <= ox <= self.width + ow and -oh <= oy <= self.height + oh:
+                if obj["type"] == "fountain":
+                    fglow = pygame.Surface((ow + 16, oh + 16), pygame.SRCALPHA)
+                    pygame.draw.ellipse(fglow, (56, 189, 248, 40 + int(20 * math.sin(t_ticks * 3.0))), (0, 0, ow + 16, oh + 16))
+                    self.screen.blit(fglow, (ox - 8, oy - 8))
+                    scaled_fountain = pygame.transform.scale(self.interactable_fountain_sprite, (ow, oh))
+                    self.screen.blit(scaled_fountain, (ox, oy))
+                elif obj["type"] == "statue":
+                    sglow = pygame.Surface((ow + 16, oh + 16), pygame.SRCALPHA)
+                    pygame.draw.ellipse(sglow, (251, 191, 36, 45 + int(25 * math.sin(t_ticks * 2.5))), (0, 0, ow + 16, oh + 16))
+                    self.screen.blit(sglow, (ox - 8, oy - 8))
+                    scaled_statue = pygame.transform.scale(self.interactable_statue_sprite, (ow, oh))
+                    self.screen.blit(scaled_statue, (ox, oy))
+                elif obj["type"] == "chest":
+                    pygame.draw.ellipse(self.screen, (0, 0, 0, 80), (ox + 2, oy + oh - 6, ow - 4, 8))
+                    frame_idx = min(len(self.interactable_chest_frames) - 1, obj.get("frame", 0))
+                    scaled_chest = pygame.transform.scale(self.interactable_chest_frames[frame_idx], (ow, oh))
+                    self.screen.blit(scaled_chest, (ox, oy))
+                elif obj["type"] == "lake":
+                    # Expanding ripples
+                    for r_i in range(3):
+                        r_phase = (t_ticks * 0.8 + r_i * 0.4) % 1.2
+                        r_rad = int(r_phase * 20 * ZOOM)
+                        r_alpha = max(0, int((1.0 - r_phase / 1.2) * 160))
+                        r_surf = pygame.Surface((r_rad * 2 + 4, r_rad * 2 + 4), pygame.SRCALPHA)
+                        pygame.draw.ellipse(r_surf, (94, 234, 212, r_alpha), (2, 2, r_rad * 2, max(2, int(r_rad * 1.3))), 2)
+                        self.screen.blit(r_surf, (ox + ow // 2 - r_rad - 2, oy + oh // 2 - int(r_rad * 0.65) - 2))
+                    lotus_rad = max(4, int(5 * ZOOM))
+                    pygame.draw.circle(self.screen, (251, 191, 36), (int(ox + ow // 2), int(oy + oh // 2)), lotus_rad)
+                    pygame.draw.circle(self.screen, (254, 240, 138), (int(ox + ow // 2), int(oy + oh // 2)), max(2, lotus_rad - 2))
+
+        # Draw Ambient Hub Particles (water drops, solar glints)
+        for p in self.hub_particles:
+            px = (p["x"] - self.camera_x) * ZOOM
+            py = (p["y"] - self.camera_y) * ZOOM
+            alpha = max(0, min(255, int(255 * (p["life"] / p["max_life"]))))
+            p_surf = pygame.Surface((p["radius"] * 2, p["radius"] * 2), pygame.SRCALPHA)
+            pygame.draw.circle(p_surf, (*p["color"], alpha), (p["radius"], p["radius"]), p["radius"])
+            self.screen.blit(p_surf, (px - p["radius"], py - p["radius"]))
+
+        # Draw Proximity Inspection Prompt Badge above active nearby interactable
+        if self.nearby_interactable and self.interactable_dialogue_state == 0:
+            n_obj = self.nearby_interactable
+            nx = (n_obj["world_x"] - self.camera_x + n_obj["width"] / 2) * ZOOM
+            ny = (n_obj["world_y"] - self.camera_y) * ZOOM
+            prompt_bob = math.sin(self.frame_counter * 0.12) * 4
+            prompt_font = pygame.font.SysFont("Comic Sans MS", max(11, int(12 * ZOOM)), bold=True)
+            prompt_str = f"[Space / Click] {n_obj['prompt']}"
+            p_text = prompt_font.render(prompt_str, True, (255, 255, 255))
+
+            pw = p_text.get_width() + 24
+            ph = p_text.get_height() + 10
+            px = nx - pw // 2
+            py = ny - ph - 12 + prompt_bob
+            badge_r = pygame.Rect(px, py, pw, ph)
+
+            # Drop shadow
+            sh_rect = badge_r.copy()
+            sh_rect.y += 2
+            pygame.draw.rect(self.screen, (0, 0, 0, 180), sh_rect, border_radius=10)
+
+            # Pill Badge Body
+            pygame.draw.rect(self.screen, (15, 23, 42), badge_r, border_radius=10)
+            pygame.draw.rect(self.screen, (251, 191, 36), badge_r, 2, border_radius=10)
+
+            self.screen.blit(p_text, p_text.get_rect(center=badge_r.center))
 
         # Draw NPCs (before player so player is on top)
         # Bromen - Idle, Walking Up, or Quest Exclamation
@@ -2915,17 +3230,17 @@ class StageSelect:
         t_surf = hud_font.render(f"Quarters Mastered: {num_cleared}/4", True, (241, 245, 249))
         self.screen.blit(t_surf, (hud_x + 14, hud_y + 7))
 
-        # 4 Golden Stars / Gem Medals
+        # 4 Golden Stars / Gem Medals (Native Vector Iconography Engine)
+        from core.vector_icons import draw_vector_star
         star_x = hud_x + 212
         for i in range(4):
             is_on = i < num_cleared
             cx = star_x + i * 20
             cy = hud_y + hud_h // 2
-            s_col = (255, 215, 0) if is_on else (71, 85, 105)
-            pygame.draw.circle(self.screen, s_col, (cx, cy), 6)
             if is_on:
-                pygame.draw.circle(self.screen, (254, 240, 138), (cx, cy), 3)
-            pygame.draw.circle(self.screen, (255, 255, 255) if is_on else (51, 65, 85), (cx, cy), 6, 1)
+                draw_vector_star(self.screen, cx, cy, radius=7, color=(255, 215, 0), outline_color=(254, 240, 138))
+            else:
+                draw_vector_star(self.screen, cx, cy, radius=6, color=(51, 65, 85), outline_color=(71, 85, 105))
 
         # Draw Locked Notification Banner if active
         if self.locked_portal_banner_timer > 0 and self.locked_portal_banner_msg:
@@ -3009,6 +3324,12 @@ class StageSelect:
             speaker, text = self.knight_dialogue_lines[self.knight_dialogue_index]
         elif self.bromen_dialogue_state == 1:
             speaker, text = self.bromen_dialogue_lines[self.bromen_dialogue_index]
+        elif self.interactable_dialogue_state == 1 and self.active_interactable:
+            lines = self.active_interactable.get("dialogue", [])
+            if self.interactable_dialogue_index < len(lines):
+                speaker, text = lines[self.interactable_dialogue_index]
+            else:
+                return
         else:
             return
 
@@ -3033,6 +3354,14 @@ class StageSelect:
             name_color = (100, 200, 255) # Cyan/Blue for Knight
         elif speaker == "Bromen":
             name_color = (255, 180, 50) # Orange/Gold for Bromen
+        elif speaker == "Fountain of Clarity":
+            name_color = (56, 189, 248) # Celestial Cyan
+        elif speaker == "Supply Chest":
+            name_color = (245, 158, 11) # Amber / Merchant Gold
+        elif speaker == "Sun Monolith":
+            name_color = (251, 191, 36) # Solar Gold
+        elif speaker == "Wishing Lake":
+            name_color = (94, 234, 212) # Emerald / Aqua
         else:
             name_color = (100, 255, 100) # Green for Student / Player
 
@@ -3070,11 +3399,11 @@ class StageSelect:
         is_finished = (self.dialogue_char_index >= len(text))
         if is_finished:
             if (self.frame_counter // 30) % 2 == 0:
-                prompt = "Hold Fist to continue >>"
+                prompt = "Hold Fist / Space / Click to continue >>"
                 prompt_surface = self.small_font.render(prompt, True, (255, 215, 0))
                 self.screen.blit(prompt_surface, (box_x + box_width - prompt_surface.get_width() - 20, box_y + box_height - 25))
         else:
-            prompt = "Hold Fist to advance..."
+            prompt = "Hold Fist / Space to advance..."
             prompt_surface = self.small_font.render(prompt, True, (160, 160, 160))
             self.screen.blit(prompt_surface, (box_x + box_width - prompt_surface.get_width() - 20, box_y + box_height - 25))
 
@@ -3109,6 +3438,11 @@ class StageSelect:
                 if self.advance_dialogue():
                     return "dialogue_advance"
 
+                # Trigger nearby interactive element if present
+                if self.nearby_interactable and self.interactable_dialogue_state == 0:
+                    self.trigger_interactable(self.nearby_interactable)
+                    return "interactable_triggered"
+
                 # If standing on a portal, allow Space/Enter to enter
                 current_portal = None
                 for portal in self.portals:
@@ -3137,8 +3471,12 @@ class StageSelect:
                 if hasattr(self.main_menu, 'audio_manager') and self.main_menu.audio_manager:
                     self.main_menu.audio_manager.play_sfx("click")
                 if self.main_menu:
+                    from db.save_system import save_student_progress
                     self.main_menu.current_screen = "menu"
+                    save_student_progress(self.main_menu)
                     self.main_menu.stage_select = None
+                    if hasattr(self.main_menu, 'setup_buttons'):
+                        self.main_menu.setup_buttons()
                 return "back"
             elif event.key == pygame.K_i:
                 self.show_info = not self.show_info
