@@ -680,62 +680,265 @@ Proceed, champion!”
 
 ---
 
-## 🗺️ Maps 10, 11, & 12: "The Temple Aqueduct, Lotus Raft, & Final Sanctum"
+## 🗺️ Map 10: "The Submerged Aqueduct & Fountain Halls"
 
-### 📋 Quarter 4 Instructions Popup
+### 📋 Map 10 Instructions Popup
 ```text
 ╔══════════════════════════════════════════════════════════════════════╗
-║                     THE WATER TEMPLE SANCTUARY                       ║
+║                   THE SUBMERGED AQUEDUCT CHALLENGE                   ║
 ╠══════════════════════════════════════════════════════════════════════╣
-║ Dive deep into the sunken sanctum, [Player Name]!                    ║
+║ Welcome to the Water Temple, [Player Name]!                          ║
 ║                                                                      ║
-║ 1. Locate the 5 Water Temple Guardians:                              ║
-║    • Find each guardian stationed along the submerged aqueducts.     ║
-║    • Hold a CLOSED FIST to solve advanced grade-level challenges.    ║
+║ 1. Meet the 6 Elemental Water Guardians:                             ║
+║    • Explore the flooded stone corridors and fountain basins.        ║
+║    • Approach each guardian and HOLD FIST to view their challenge.   ║
 ║                                                                      ║
-║ 2. Collect 5 Golden Keys:                                            ║
-║    • Watch each key fly into your Objectives HUD upon success!       ║
+║ 2. Collect 6 Golden Keys:                                            ║
+║    • Each correct answer awards 1 gleaming Golden Key that flies     ║
+║      directly into your Objectives HUD!                              ║
 ║                                                                      ║
-║ 3. Activate the Lotus Raft & Floodgate Controls:                     ║
-║    • Unlock the Master Temple Sanctum to complete Cognitive Quest!   ║
+║ 3. Unlock the Aqueduct Gateway:                                      ║
+║    • Once all 6 Golden Keys are collected, the water gates lower     ║
+║      and the passage to the Sunken Vault opens!                      ║
 ╚══════════════════════════════════════════════════════════════════════╝
 ```
 
-### 💬 Stations 1–5: Water Temple Guardians
+---
+
+## 🗺️ Map 11: "The Sunken Vault & The Ancient Key Lock"
+
+### 📋 Map 11 Instructions Popup
+```text
+╔══════════════════════════════════════════════════════════════════════╗
+║                     THE ANCIENT KEY LOCK VAULT                       ║
+╠══════════════════════════════════════════════════════════════════════╣
+║ Deep within the flooded sanctuary, [Player Name]!                    ║
+║                                                                      ║
+║ 1. Gather all 6 Golden Keys from the 6 Water Guardians.             ║
+║ 2. Approach Guardian Bromen at the Ancient Lock Block.               ║
+║ 3. Drag & turn each Golden Key into its corresponding keyhole.       ║
+║ 4. Watch the heavy dungeon double doors swing open and enter!        ║
+╚══════════════════════════════════════════════════════════════════════╝
+```
+
+---
+
+## 🗺️ Map 12: "The Grand Canal Rapids & The Lotus Raft"
+
+### 📋 Map 12 Instructions Popup
+```text
+╔══════════════════════════════════════════════════════════════════════╗
+║                  THE LOTUS RAFT & RAPIDS CRUISE                      ║
+╠══════════════════════════════════════════════════════════════════════╣
+║ The final challenge of Cognitive Quest awaits, [Player Name]!        ║
+║                                                                      ║
+║ 1. Open the 6 Canal Water Sluices:                                   ║
+║    • Solve math challenges with the 6 Temple Guardians to fill       ║
+║      the dry canal basin with rushing crystal water!                 ║
+║                                                                      ║
+║ 2. Restore the Helm Equation with Guardian Bromen:                   ║
+║    • Arrange scattered stone runes into a balanced addition equation ║
+║      [ Number ] + [ Number ] = [ Sum ] to unlock the rudder!         ║
+║                                                                      ║
+║ 3. Sail the Lotus Raft Across the Rapids:                            ║
+║    • Board the Lotus Raft to cruise across the turbulent rapids!     ║
+║                                                                      ║
+║ 4. Enter the Grand Exit Portal to complete Cognitive Quest!          ║
+╚══════════════════════════════════════════════════════════════════════╝
+```
+
+---
+
+### 💬 Stations 1–6: The 6 Elemental Water Guardians
+
+#### 🌊 Station 1: Aqua Sprite Marina (Guardian of the Azure Fountain)
 ```
 [Proximity Trigger]:
-Water Guardian:
-“Greetings, seeker of the deep! The clear waters flow according to perfect mathematical harmony. Hold a Closed Fist to channel your logical power!”
+Aqua Sprite Marina:
+“Splash! Welcome, diver! I am Marina, guardian of the crystalline azure fountain. The water currents dance to the rhythm of numbers! Hold a Closed Fist to test your math flow!”
 
 [Gesture: Fist Closed]:
 → Pop up Dynamic Question from Database
 
 [Feedback - Wrong / Retry]:
-Water Guardian:
-“Think carefully! Try again.”
+Aqua Sprite Marina:
+“Hmm, that is not quite correct. You have 1 try remaining! Think carefully.”
 
 [Feedback - Out of Tries]:
-Water Guardian:
-“The ocean rewards perseverance. Here is your Golden Key so your quest can proceed!”
+Aqua Sprite Marina:
+“Out of tries! The correct answer was displayed above. Keep going—the water fountain still opened for you!”
 
 [Feedback - Correct]:
-Water Guardian:
-“Splendid! The waters shine bright! A Golden Key flies into your Objectives HUD!”
-*(Golden Key award animation flies smoothly down to the Objectives HUD!)*
+Aqua Sprite Marina:
+“Splendid! Your mathematical intellect is top-tier! The fountain shines bright!”
+*(Golden Key / Sluice Emblem flies smoothly down to the Objectives HUD!)*
 ```
 
-### 🔱 Temple Elder (Master Floodgate Altar)
+#### 🪸 Station 2: Coral Sage Sheldon (Elder of the Geyser Basin)
 ```
-[If Keys < 5]:
-Temple Elder:
-“Halt, brave diver! The master floodgate remains sealed.
-Collect all 5 Golden Keys from the Water Guardians to calm the currents!”
+[Proximity Trigger]:
+Coral Sage Sheldon:
+“Greetings, patient student. I am Sheldon, keeper of the deep coral reefs. True understanding grows steadily, branch by branch. Hold a Closed Fist to consult the coral tablets!”
 
-[If Keys == 5]:
-Temple Elder:
-“Incredible, [Player Name]! All 5 Golden Keys are in place!
-The aqueducts align, the lotus raft glides forward, and the grand sanctuary is unlocked!
-You have mastered mathematics from the tallest forest trees to the deepest ocean temples!”
+[Gesture: Fist Closed]:
+→ Pop up Dynamic Question from Database
+
+[Feedback - Wrong / Retry]:
+Coral Sage Sheldon:
+“Hmm, that is not quite correct. You have 1 try remaining! Think carefully.”
+
+[Feedback - Out of Tries]:
+Coral Sage Sheldon:
+“Out of tries! The correct answer was displayed above. Coral wisdom rewards persistence—take this key and continue onward!”
+
+[Feedback - Correct]:
+Coral Sage Sheldon:
+“Excellent! That's correct, onto the next challenge! The geyser basin pulses with energy!”
+*(Golden Key / Sluice Emblem flies smoothly down to the Objectives HUD!)*
+```
+
+#### 🛡️ Station 3: Tide Knight Finneas (Champion of the Torrent Gate)
+```
+[Proximity Trigger]:
+Tide Knight Finneas:
+“Halt, young warrior! I am Finneas, champion of the torrent gate. Sharp logic is stronger than any trident! Are your counting skills ready? Hold a Closed Fist to begin the trial!”
+
+[Gesture: Fist Closed]:
+→ Pop up Dynamic Question from Database
+
+[Feedback - Wrong / Retry]:
+Tide Knight Finneas:
+“Hmm, that is not quite correct. You have 1 try remaining! Think carefully.”
+
+[Feedback - Out of Tries]:
+Tide Knight Finneas:
+“Out of tries! The correct answer was displayed above. Stand tall—a brave student learns from every trial! Take the gate key!”
+
+[Feedback - Correct]:
+Tide Knight Finneas:
+“Superb! Your logic is unbreakable, adventurer! The torrent gate opens wide!”
+*(Golden Key / Sluice Emblem flies smoothly down to the Objectives HUD!)*
+```
+
+#### 🦎 Station 4: Axolotl Scholar Lani (Keeper of the Pearl Falls)
+```
+[Proximity Trigger]:
+Axolotl Scholar Lani:
+“Bloop! Hello there! I am Lani, scholar of the pearl waterfalls. I love discovering patterns in the ripples! Hold a Closed Fist to see what math mystery we can solve together!”
+
+[Gesture: Fist Closed]:
+→ Pop up Dynamic Question from Database
+
+[Feedback - Wrong / Retry]:
+Axolotl Scholar Lani:
+“Hmm, that is not quite correct. You have 1 try remaining! Think carefully.”
+
+[Feedback - Out of Tries]:
+Axolotl Scholar Lani:
+“Out of tries! The correct answer was displayed above. Don't worry, friend—the pearl waterfall still reveals its treasure!”
+
+[Feedback - Correct]:
+Axolotl Scholar Lani:
+“Splendid! Your mathematical intellect is top-tier! The pearl falls shimmer with golden light!”
+*(Golden Key / Sluice Emblem flies smoothly down to the Objectives HUD!)*
+```
+
+#### 🐉 Station 5: River Drake Coral (Sentinel of the Grand Aqueduct)
+```
+[Proximity Trigger]:
+River Drake Coral:
+“Rumble! I am Coral the River Drake, sentinel of the grand aqueduct. Only sharp minds can navigate my aquatic channels. Hold a Closed Fist to show me your mathematical power!”
+
+[Gesture: Fist Closed]:
+→ Pop up Dynamic Question from Database
+
+[Feedback - Wrong / Retry]:
+River Drake Coral:
+“Hmm, that is not quite correct. You have 1 try remaining! Think carefully.”
+
+[Feedback - Out of Tries]:
+River Drake Coral:
+“Out of tries! The correct answer was displayed above. Your courage is recognized! Take this aqueduct key and swim forward!”
+
+[Feedback - Correct]:
+River Drake Coral:
+“Excellent! That's correct, onto the next challenge! The grand aqueduct flows without hindrance!”
+*(Golden Key / Sluice Emblem flies smoothly down to the Objectives HUD!)*
+```
+
+#### 🌀 Station 6: Whirlpool Elder Glaucus (Master of Oceanic Currents)
+```
+[Proximity Trigger]:
+Whirlpool Elder Glaucus:
+“Welcome to the heart of the sanctum, master student. I am Glaucus, master of oceanic currents. You have reached the pinnacle of Quarter 4! Hold a Closed Fist for your final elemental test!”
+
+[Gesture: Fist Closed]:
+→ Pop up Dynamic Question from Database
+
+[Feedback - Wrong / Retry]:
+Whirlpool Elder Glaucus:
+“Hmm, that is not quite correct. You have 1 try remaining! Think carefully.”
+
+[Feedback - Out of Tries]:
+Whirlpool Elder Glaucus:
+“Out of tries! The correct answer was displayed above. The ocean embraces your whole journey! Take the final Golden Key!”
+
+[Feedback - Correct]:
+Whirlpool Elder Glaucus:
+“Superb! Your logic is unbreakable, adventurer! All 6 oceanic currents are in perfect balance!”
+*(Golden Key / Sluice Emblem flies smoothly down to the Objectives HUD!)*
+```
+
+---
+
+### 🗝️ Guardian Bromen Dialogues (Map 10 & 11: Ancient Lock Block)
+
+```
+[If Keys < 6]:
+Guardian Bromen:
+“Halt, student! The double doors and portal are sealed.
+You must first collect all 6 Golden Keys from the guardians in this chamber. (Current: [X]/6 Keys)”
+[Button]: “I will go search for them”
+
+[If Keys == 6]:
+Guardian Bromen:
+“Excellent! You have collected all 6 Golden Keys.
+To unlock the double doors, you must now insert and turn the keys into the 6 slots on the Ancient Lock Block.”
+[Button]: “Unlock the Ancient Box”
+
+[After Solving Key Puzzle]:
+Guardian Bromen:
+“Outstanding work, student! The Ancient Lock Block has been solved.
+The heavy double doors have swung open!
+Proceed through the doorway and step into the portal to finish.”
+[Button]: “Pass Through Doors”
+```
+
+---
+
+### ⛵ Guardian Bromen & Lotus Raft Dialogues (Map 12: Rapids Cruise)
+
+```
+[If Sluices < 6]:
+Guardian Bromen (Lotus Raft Guardian):
+“Halt, young voyager! The Lotus Raft is safely moored.
+The canal is not yet full enough to carry us across.
+Open all 6 Aqueduct Sluices in the temple chambers! ([X]/6 Sluices Opened)”
+[Button]: “I will go open the sluices!”
+
+[If Sluices == 6]:
+Guardian Bromen (Lotus Raft Guardian):
+“Marvelous! All 6 Aqueduct Sluices are open and the canal is full!
+Before we sail, the ancient rudder equation was scattered by the rapids!
+Arrange the scattered runes into a correct addition equation to unlock the helm!”
+[Button]: “Solve Addition Puzzle”
+
+[After Solving Addition Altar]:
+Guardian Bromen (Lotus Raft Guardian):
+“Splendid addition, young voyager! The helm's rune equation is restored!
+The Lotus Raft is untethered and floating on the rapids!
+Walk onto the pier and hop aboard the raft to sail to the portal!”
+[Button]: “Step Aboard the Raft”
 ```
 
 ---
