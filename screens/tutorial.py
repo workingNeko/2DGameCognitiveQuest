@@ -340,21 +340,30 @@ class TutorialScreen:
 
         # Check Click-to-Move Destination
         elif getattr(self, 'click_dest', None) is not None:
-            cdx = self.click_dest[0] - self.player_x
-            cdy = self.click_dest[1] - self.player_y
-            cd_dist = math.hypot(cdx, cdy)
-            if cd_dist > 6.0:
-                vx = (cdx / cd_dist) * current_speed
-                vy = (cdy / cd_dist) * current_speed
-                if abs(cdx) > abs(cdy):
-                    self.player_dir = "right" if cdx > 0 else "left"
-                else:
-                    self.player_dir = "down" if cdy > 0 else "up"
-            else:
+            # If the user actively steers with cursor/hand, override click_dest
+            player_screen_x = (self.player_x - self.camera_x + TILE_SIZE / 2) * ZOOM
+            player_screen_y = (self.player_y - self.camera_y + TILE_SIZE / 2) * ZOOM
+            cursor_x, cursor_y = self.cursor_pos
+            cd_dx = cursor_x - player_screen_x
+            cd_dy = cursor_y - player_screen_y
+            if abs(cd_dx) > 65 or abs(cd_dy) > 65:
                 self.click_dest = None
+            else:
+                cdx = self.click_dest[0] - self.player_x
+                cdy = self.click_dest[1] - self.player_y
+                cd_dist = math.hypot(cdx, cdy)
+                if cd_dist > 6.0:
+                    vx = (cdx / cd_dist) * current_speed
+                    vy = (cdy / cd_dist) * current_speed
+                    if abs(cdx) > abs(cdy):
+                        self.player_dir = "right" if cdx > 0 else "left"
+                    else:
+                        self.player_dir = "down" if cdy > 0 else "up"
+                else:
+                    self.click_dest = None
 
-        # Gesture / Hand Cursor Steering (relative to on-screen player position)
-        elif self.hand_detected:
+        # Universal Cursor / Gesture Steering (Works seamlessly for both Hand Tracking and Mouse Cursor!)
+        if getattr(self, 'click_dest', None) is None and not has_key_input:
             player_screen_x = (self.player_x - self.camera_x + TILE_SIZE / 2) * ZOOM
             player_screen_y = (self.player_y - self.camera_y + TILE_SIZE / 2) * ZOOM
             cursor_x, cursor_y = self.cursor_pos
@@ -375,17 +384,28 @@ class TutorialScreen:
         new_x = self.player_x + vx
         new_y = self.player_y + vy
 
+        moved_x = False
+        moved_y = False
         # Collision with map boundaries & trees
         if self.can_move(new_x, self.player_y):
             self.player_x = new_x
+            moved_x = True
         if self.can_move(self.player_x, new_y):
             self.player_y = new_y
+            moved_y = True
+
+        # Clear click_dest if player is blocked by an obstacle
+        if getattr(self, 'click_dest', None) is not None and (vx != 0 or vy != 0):
+            if not moved_x and not moved_y:
+                self.click_dest = None
 
         if vx != 0 or vy != 0:
             self.anim_timer += 1
             if self.anim_timer >= 16:
                 self.anim_timer = 0
                 self.anim_frame = (self.anim_frame + 1) % 2
+                if hasattr(self.main_menu, 'audio_manager') and self.main_menu.audio_manager:
+                    self.main_menu.audio_manager.play_sfx("footstep_stone")
         else:
             self.anim_frame = 0
 
@@ -494,7 +514,8 @@ class TutorialScreen:
             screen_npc_y = (self.npc_tile_y * TILE_SIZE - self.camera_y) * ZOOM
             npc_rect = pygame.Rect(screen_npc_x - 30, screen_npc_y - 30, TILE_SIZE * ZOOM + 60, TILE_SIZE * ZOOM + 60)
             player_npc_dist = math.hypot(self.player_x - self.npc_tile_x * TILE_SIZE, self.player_y - self.npc_tile_y * TILE_SIZE)
-            if npc_rect.collidepoint(pos) or player_npc_dist < 3.5 * TILE_SIZE:
+            is_fist_interact = (self.current_gesture == "FIST" and player_npc_dist < 3.5 * TILE_SIZE)
+            if npc_rect.collidepoint(pos) or is_fist_interact:
                 if hasattr(self.main_menu, 'audio_manager') and self.main_menu.audio_manager:
                     self.main_menu.audio_manager.play_sfx("dialogue_blip")
                 self.phase = 3
@@ -509,7 +530,8 @@ class TutorialScreen:
             p_sy = (self.portal_tile_y * TILE_SIZE - self.camera_y) * ZOOM
             portal_rect = pygame.Rect(p_sx - 40, p_sy - 40, TILE_SIZE * 3 * ZOOM + 80, TILE_SIZE * 3 * ZOOM + 80)
             portal_dist = math.hypot(self.player_x - self.portal_tile_x * TILE_SIZE, self.player_y - self.portal_tile_y * TILE_SIZE)
-            if portal_rect.collidepoint(pos) or portal_dist < 3.0 * TILE_SIZE:
+            is_fist_portal = (self.current_gesture == "FIST" and portal_dist < 3.0 * TILE_SIZE)
+            if portal_rect.collidepoint(pos) or is_fist_portal or portal_dist < 1.8 * TILE_SIZE:
                 print("[WIN] Exit Portal Clicked/Entered! Tutorial Complete!")
                 self.finish_tutorial()
                 return
@@ -856,15 +878,20 @@ class TutorialScreen:
             t_radar = self.dialog_btn_font.render("GESTURE RADAR", True, border_col)
             self.screen.blit(t_radar, (card_x + 16, card_y + 10))
 
-            status_text = "[HAND DETECTED]" if self.hand_detected else "[GESTURE SCANNING...]"
+            status_text = "[HAND DETECTED]" if self.hand_detected else "[MOUSE / KEYBOARD MODE]"
             status_col = (74, 222, 128) if self.hand_detected else (56, 189, 248)
             stat_surf = self.ui_font.render(status_text, True, status_col)
             self.screen.blit(stat_surf, (card_x + 16, card_y + 34))
 
-            # Gesture steering and action hints
-            t_sub1 = self.ui_font.render("- Open Hand: Move away from center to steer", True, (226, 232, 240))
-            t_sub2 = self.ui_font.render("- Sprint: Move hand further from center", True, (203, 213, 225))
-            t_sub3 = self.ui_font.render("- Action: Hold Closed Fist (0.9s) to interact", True, (251, 191, 36))
+            # Adaptive steering and action hints
+            if self.hand_detected:
+                t_sub1 = self.ui_font.render("- Open Hand: Move away from player to steer", True, (226, 232, 240))
+                t_sub2 = self.ui_font.render("- Sprint: Move hand further from player", True, (203, 213, 225))
+                t_sub3 = self.ui_font.render("- Action: Hold Closed Fist (0.9s) to interact", True, (251, 191, 36))
+            else:
+                t_sub1 = self.ui_font.render("- Move Cursor: Steers character in any direction", True, (226, 232, 240))
+                t_sub2 = self.ui_font.render("- Click Ground: Walks to clicked destination", True, (203, 213, 225))
+                t_sub3 = self.ui_font.render("- Keys: WASD or Arrow Keys walk character", True, (251, 191, 36))
             self.screen.blit(t_sub1, (card_x + 16, card_y + 54))
             self.screen.blit(t_sub2, (card_x + 16, card_y + 70))
             self.screen.blit(t_sub3, (card_x + 16, card_y + 86))
@@ -983,7 +1010,10 @@ class TutorialScreen:
         if self.phase == 1:
             step_tag = "STEP 1/3: NAVIGATION"
             tag_col = (251, 191, 36)
-            txt = "Move your open hand away from center to approach the Guide Sage!"
+            if self.hand_detected:
+                txt = "Move your open hand away from player to approach the Guide Sage!"
+            else:
+                txt = "Move cursor, Click-to-Move, or use Arrow keys to approach the Guide Sage!"
             border_col = (245, 158, 11)
         elif self.phase == 3:
             step_tag = "STEP 2/3: WISDOM TRIAL"

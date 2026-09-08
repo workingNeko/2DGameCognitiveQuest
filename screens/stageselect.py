@@ -263,15 +263,34 @@ class StageSelect:
         self.npc_oldman_anim_frame = 0
         self.npc_oldman_anim_timer = 0
         self.player_block_timer = 0
-        self.dialogue_lines = [
-            ("Old Man", "Stop right there!"),
-            ("Student", "Huh? Why?"),
-            ("Old Man", "I see in you such greatness! Someday you will do these lands great good. But only when trained. For now, it is only potential."),
-            ("Student", "What shall I do?"),
-            ("Old Man", "Come! Come! Join me in my realm. Enter this portal and let's train your mind. You shall learn the ways of math! You see, it is like magic, but it runs on logic instead of spells!"),
-            ("Student", "That's amazing! I want to learn!"),
-            ("Old Man", "I like your enthusiasm! Follow me into the portal!")
-        ]
+        all_completed = (self.is_quarter_completed('quarter1') and self.is_quarter_completed('quarter2') and 
+                         self.is_quarter_completed('quarter3') and self.is_quarter_completed('quarter4'))
+        self.all_quarters_completed = all_completed
+        student_name = "Student"
+        if hasattr(self, 'main_menu') and self.main_menu and getattr(self.main_menu, 'selected_student', None):
+            student_name = self.main_menu.selected_student.get('first_name', 'Student')
+
+        if all_completed:
+            self.dialogue_lines = [
+                ("Old Man", f"Hail, Master Mathematician {student_name}! Look how far you have journeyed:"),
+                ("Old Man", "You built bridges and solved geometric riddles in the Geometry Forest!"),
+                ("Old Man", "You united communities through fair trade and Bayanihan in Barangay Kalye!"),
+                ("Old Man", "You unlocked ancient treasures in the Monetary Desert!"),
+                ("Old Man", "And you brought harmony to the depths of the Water Temple!"),
+                ("Old Man", "You have discovered the greatest truth of all:"),
+                ("Old Man", "Math is the ultimate magic, and with logic, courage, and perseverance, there is no problem in this world you cannot solve!"),
+                ("Old Man", "Congratulations on completing Cognitive Quest!")
+            ]
+        else:
+            self.dialogue_lines = [
+                ("Old Man", "Stop right there!"),
+                ("Student", "Huh? Why?"),
+                ("Old Man", "I see in you such greatness! Someday you will do these lands great good. But only when trained. For now, it is only potential."),
+                ("Student", "What shall I do?"),
+                ("Old Man", "Come! Come! Join me in my realm. Enter this portal and let's train your mind. You shall learn the ways of math! You see, it is like magic, but it runs on logic instead of spells!"),
+                ("Student", "That's amazing! I want to learn!"),
+                ("Old Man", "I like your enthusiasm! Follow me into the portal!")
+            ]
 
         # Skeleton NPC (static & interactive)
         self.npc_skeleton_sprite = None
@@ -1644,12 +1663,17 @@ class StageSelect:
         if self.oldman_dialogue_state == 1:
             self.oldman_dialogue_index += 1
             if self.oldman_dialogue_index >= len(self.dialogue_lines):
-                self.oldman_dialogue_state = 2
-                self.player_following_target = 'oldman'
-                self.player_block_timer = 0
-                if 'O' in self.npc_positions_data:
-                    self.npc_positions_data['O'] = []
-                print("[Old Man] Dialog complete! Old Man starts moving left and player follows.")
+                if getattr(self, 'all_quarters_completed', False):
+                    self.oldman_dialogue_state = 4
+                    self.oldman_dialogue_index = 0
+                    print("[Old Man] Grand Victory Speech complete! Old Man remains at hub.")
+                else:
+                    self.oldman_dialogue_state = 2
+                    self.player_following_target = 'oldman'
+                    self.player_block_timer = 0
+                    if 'O' in self.npc_positions_data:
+                        self.npc_positions_data['O'] = []
+                    print("[Old Man] Dialog complete! Old Man starts moving left and player follows.")
             return True
 
         if self.skeleton_dialogue_state == 1:
@@ -1939,12 +1963,16 @@ class StageSelect:
 
         # Proximity interaction check for Old Man NPC
         if self.npc_oldman_found:
+            player_center_x = self.player_x + TILE_SIZE // 2
+            player_center_y = self.player_y + TILE_SIZE // 2
+            oldman_center_x = self.npc_oldman_x + TILE_SIZE // 2
+            oldman_center_y = self.npc_oldman_y + TILE_SIZE // 2
+            dist = math.hypot(player_center_x - oldman_center_x, player_center_y - oldman_center_y)
+            if getattr(self, 'all_quarters_completed', False) and self.oldman_dialogue_state == 4:
+                if dist >= TILE_SIZE * 3.5:
+                    self.oldman_dialogue_state = 0
+
             if self.oldman_dialogue_state == 0:
-                player_center_x = self.player_x + TILE_SIZE // 2
-                player_center_y = self.player_y + TILE_SIZE // 2
-                oldman_center_x = self.npc_oldman_x + TILE_SIZE // 2
-                oldman_center_y = self.npc_oldman_y + TILE_SIZE // 2
-                dist = math.hypot(player_center_x - oldman_center_x, player_center_y - oldman_center_y)
                 if dist < TILE_SIZE * 2.5:
                     self.oldman_dialogue_state = 1
                     self.oldman_dialogue_index = 0
