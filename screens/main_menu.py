@@ -215,14 +215,14 @@ class MainMenu:
         self.dialogue_rect = pygame.Rect(self.dialogue_box_x, self.dialogue_box_y,
                                          self.dialogue_box_width, self.dialogue_box_height)
 
+        self.title_y = 20
+        self.error_y = self.h - 90
+        self.student_card_rect = None
+
         # ==========================================
         # BUTTONS
         # ==========================================
         self.setup_buttons()
-
-        self.title_y = 40
-        self.student_info_y = self.h - 90
-        self.error_y = self.h - 150
 
         # ==========================================
         # SCREEN STATES
@@ -477,9 +477,10 @@ class MainMenu:
 
     # ==========================================
     # CLICK HANDLER
-    def trigger_click(self):
+    def trigger_click(self, pos=None):
         """Handle click at cursor position"""
-        pos = self.cursor_pos
+        if pos is None:
+            pos = self.cursor_pos
         print(f"[MOUSE] Click at: {pos}")
 
         # If pop-up is active, intercept clicks!
@@ -893,7 +894,17 @@ class MainMenu:
         exit_btn_path = os.path.join("assets", "images", "exitbutton.png")
         
         has_save = False
-        if self.selected_student:
+        if self.selected_student and self.student_id:
+            try:
+                from db.save_system import load_student_progress
+                save_data = load_student_progress(self.student_id)
+                if save_data:
+                    q_data = save_data.get("completed_quarters", {})
+                    completed_count = sum(1 for q, d in q_data.items() if isinstance(d, dict) and d.get("completed"))
+                    self.selected_student["progress"] = int((completed_count / 4.0) * 100)
+                    self.selected_student["score"] = sum(d.get("score", 0) for q, d in q_data.items() if isinstance(d, dict))
+            except Exception:
+                pass
             has_save = check_save_exists(self.student_id)
             
         # Exit button is always present
@@ -907,21 +918,24 @@ class MainMenu:
             image_path=exit_btn_path
         )
         
-        # Sound Settings button on top right
-        sound_btn_w = 170
-        sound_btn_h = 50
-        sound_btn_x = self.w - sound_btn_w - 30
-        sound_btn_y = 30
+        # Sound Settings button on top right (aligned flush with gesture HUD)
+        sound_btn_w = 184
+        sound_btn_h = 34
+        sound_btn_x = self.w - sound_btn_w - 12
+        sound_btn_y = 50
         is_muted = self.audio_manager.music_muted and self.audio_manager.sfx_muted
-        sound_text = "MUTED" if is_muted else f"SOUND {int(self.audio_manager.music_volume * 100)}%"
+        sound_text = "MUTED" if is_muted else f"{int(self.audio_manager.music_volume * 100)}%"
+        sound_btn_font = pygame.font.SysFont("Segoe UI", 12, bold=True)
         self.sound_btn = Button(
             (sound_btn_x, sound_btn_y, sound_btn_w, sound_btn_h),
             text=f"SOUND: {sound_text}",
-            font=self.small_font,
+            font=sound_btn_font,
             bg_color=(30, 41, 59),
             text_color=(255, 215, 0) if not is_muted else (239, 68, 68),
             action=self.open_audio_settings
         )
+
+        select_btn_text = "CHANGE STUDENT" if self.selected_student else "SELECT STUDENT"
 
         if has_save:
             # Case: Selected student has existing save progress -> 4 vertical buttons
@@ -930,7 +944,7 @@ class MainMenu:
             
             self.select_student_btn = Button(
                 (self.w // 2 - bw // 2, start_y, bw, bh),
-                text="SELECT STUDENT",
+                text=select_btn_text,
                 font=self.button_font,
                 bg_color=(255, 215, 0),
                 text_color=(0, 0, 0),
@@ -976,7 +990,7 @@ class MainMenu:
             
             self.select_student_btn = Button(
                 (self.w // 2 - bw // 2, start_y, bw, bh),
-                text="SELECT STUDENT",
+                text=select_btn_text,
                 font=self.button_font,
                 bg_color=(255, 215, 0),
                 text_color=(0, 0, 0),
@@ -1358,6 +1372,117 @@ class MainMenu:
     # DRAW
     # ==========================================
 
+    def draw_selected_student_card(self):
+        """Renders a sleek, modern glassmorphic profile card displaying only the active selected student.
+        If no student is selected, nothing is rendered.
+        Dynamically positioned in the exact vertical middle between the Cognitive Play title and the buttons."""
+        if not self.selected_student:
+            self.student_card_rect = None
+            return
+
+        card_w = 640
+        card_h = 64
+        card_x = self.w // 2 - card_w // 2
+
+        # Dynamically calculate the middle position between the Cognitive Play title and the top action button
+        title_h = self.title_font.size("COGNITIVE PLAY")[1] if hasattr(self, "title_font") else 112
+        title_bottom = self.title_y + title_h + 4  # Includes title shadow/glow offset
+        buttons_top = self.select_student_btn.rect.top if getattr(self, "select_student_btn", None) else (self.h // 2 - 100)
+
+        available_space = max(card_h, buttons_top - title_bottom)
+        card_y = title_bottom + (available_space - card_h) // 2
+        self.student_card_rect = pygame.Rect(card_x, card_y, card_w, card_h)
+
+        # Card background surface with subtle slate alpha
+        card_surf = pygame.Surface((card_w, card_h), pygame.SRCALPHA)
+        pygame.draw.rect(card_surf, (15, 23, 42, 225), (0, 0, card_w, card_h), border_radius=16)
+        border_col = (217, 119, 6) # Warm Amber / Gold border
+        pygame.draw.rect(card_surf, border_col, (0, 0, card_w, card_h), 2, border_radius=16)
+        self.screen.blit(card_surf, (card_x, card_y))
+
+        # Circular Avatar Icon
+        av_cx = card_x + 36
+        av_cy = card_y + card_h // 2
+        pygame.draw.circle(self.screen, (30, 41, 59), (av_cx, av_cy), 22)
+        pygame.draw.circle(self.screen, border_col, (av_cx, av_cy), 22, 2)
+
+        gender = str(self.selected_student.get("gender", "male")).lower()
+        if gender == "female" and getattr(self, "girl_avatar", None):
+            self.screen.blit(self.girl_avatar, self.girl_avatar.get_rect(center=(av_cx, av_cy)))
+        elif getattr(self, "boy_avatar", None):
+            self.screen.blit(self.boy_avatar, self.boy_avatar.get_rect(center=(av_cx, av_cy)))
+        else:
+            av_font = pygame.font.SysFont("Comic Sans MS", 16, bold=True)
+            av_txt = av_font.render(gender[0].upper() if gender else "S", True, (255, 255, 255))
+            self.screen.blit(av_txt, av_txt.get_rect(center=(av_cx, av_cy)))
+
+        # Student Name
+        first = str(self.selected_student.get("first_name") or "").strip()
+        last = str(self.selected_student.get("last_name") or "").strip()
+        full_name = f"{first} {last}".strip() or "Active Student"
+        if len(full_name) > 26:
+            full_name = full_name[:24] + "..."
+
+        name_font = pygame.font.SysFont("Comic Sans MS", 17, bold=True)
+        pill_font = pygame.font.SysFont("Segoe UI", 11, bold=True)
+        metric_font = pygame.font.SysFont("Segoe UI", 13, bold=True)
+
+        name_shadow = name_font.render(full_name, True, (0, 0, 0))
+        name_surf = name_font.render(full_name, True, (255, 255, 255))
+        self.screen.blit(name_shadow, (card_x + 72 + 1, card_y + 8 + 1))
+        self.screen.blit(name_surf, (card_x + 72, card_y + 8))
+
+        # Grade Level Pill
+        level = self.selected_student.get("level") or self.selected_student.get("grade_level") or "Grade 2"
+        pill_text = pill_font.render(str(level), True, (56, 189, 248))
+        pw = pill_text.get_width() + 16
+        px = card_x + 72 + name_surf.get_width() + 12
+        pygame.draw.rect(self.screen, (8, 47, 73), (px, card_y + 9, pw, 20), border_radius=10)
+        pygame.draw.rect(self.screen, (14, 116, 144), (px, card_y + 9, pw, 20), 1, border_radius=10)
+        self.screen.blit(pill_text, (px + 8, card_y + 10))
+
+        # Student ID Pill
+        sid = self.selected_student.get("student_id") or self.selected_student.get("studentId")
+        if sid:
+            id_text = pill_font.render(f"ID: {sid}", True, (203, 213, 225))
+            iw = id_text.get_width() + 16
+            ix = px + pw + 8
+            pygame.draw.rect(self.screen, (30, 41, 59), (ix, card_y + 9, iw, 20), border_radius=10)
+            pygame.draw.rect(self.screen, (71, 85, 105), (ix, card_y + 9, iw, 20), 1, border_radius=10)
+            self.screen.blit(id_text, (ix + 8, card_y + 10))
+
+        # Row 2: Score & Progress
+        score = self.selected_student.get("score", 0)
+        prog = self.selected_student.get("progress", 0)
+
+        # Gold star icon polygon
+        star_cx = card_x + 80
+        star_cy = card_y + 42
+        star_pts = []
+        for i in range(10):
+            r = 7 if i % 2 == 0 else 3.2
+            ang = i * math.pi / 5 - math.pi / 2
+            star_pts.append((star_cx + r * math.cos(ang), star_cy + r * math.sin(ang)))
+        pygame.draw.polygon(self.screen, (250, 204, 21), star_pts)
+        pygame.draw.polygon(self.screen, (217, 119, 6), star_pts, 1)
+
+        score_surf = metric_font.render(f"Score: {score} pts", True, (251, 191, 36))
+        self.screen.blit(score_surf, (card_x + 92, card_y + 34))
+
+        prog_label = metric_font.render(f"Progress: {prog}%", True, (74, 222, 128))
+        self.screen.blit(prog_label, (card_x + 238, card_y + 34))
+
+        # Progress Bar
+        bx = card_x + 356
+        by = card_y + 38
+        bw = 240
+        bh = 10
+        fill_w = max(0, min(bw, int(bw * (prog / 100.0))))
+        pygame.draw.rect(self.screen, (30, 41, 59), (bx, by, bw, bh), border_radius=5)
+        if fill_w > 0:
+            pygame.draw.rect(self.screen, (34, 197, 94), (bx, by, fill_w, bh), border_radius=5)
+        pygame.draw.rect(self.screen, (51, 65, 85), (bx, by, bw, bh), 1, border_radius=5)
+
     def draw_camera_feed(self):
         # Always draw the real-time Gesture Status HUD badge!
         self.draw_gesture_hud()
@@ -1542,28 +1667,19 @@ class MainMenu:
                 self.screen.blit(continue_text, (self.dialogue_box_x + self.dialogue_box_width - 200,
                                                  self.dialogue_box_y + self.dialogue_box_height - 30))
 
-            # SELECTED STUDENT INFO
-            if self.selected_student:
-                student_name = f"{self.selected_student.get('first_name', '')} {self.selected_student.get('last_name', '')}".strip()
-                score = self.selected_student.get("score", 0)
-                prog = self.selected_student.get("progress", 0)
-                info_w = 480
-                info_h = 42
-                info_bg = pygame.Surface((info_w, info_h))
-                info_bg.fill((0, 0, 0))
-                info_bg.set_alpha(180)
-                self.screen.blit(info_bg, (self.w // 2 - info_w // 2, self.student_info_y))
-                student_text = self.small_font.render(f"Student: {student_name}  |  Score: {score} pts  |  Progress: {prog}%", True, (255, 215, 0))
-                self.screen.blit(student_text, (self.w // 2 - student_text.get_width() // 2, self.student_info_y + 7))
+            # SELECTED STUDENT PROFILE CARD
+            self.draw_selected_student_card()
 
-            # ERROR MESSAGE (commented out for testing)
+            # ERROR MESSAGE (e.g. Please select a student first!)
             if self.show_no_student_message and pygame.time.get_ticks() < self.no_student_timer:
-                error_bg = pygame.Surface((380, 45))
-                error_bg.fill((231, 76, 60))
-                error_bg.set_alpha(220)
-                self.screen.blit(error_bg, (self.w // 2 - 190, self.error_y))
+                error_w = 420
+                error_h = 44
+                error_bg = pygame.Surface((error_w, error_h), pygame.SRCALPHA)
+                error_bg.fill((220, 38, 38, 235))
+                pygame.draw.rect(error_bg, (254, 202, 202), (0, 0, error_w, error_h), 2, border_radius=12)
+                self.screen.blit(error_bg, (self.w // 2 - error_w // 2, self.error_y))
                 msg = self.small_font.render("Please select a student first!", True, (255, 255, 255))
-                self.screen.blit(msg, (self.w // 2 - msg.get_width() // 2, self.error_y + 12))
+                self.screen.blit(msg, (self.w // 2 - msg.get_width() // 2, self.error_y + 8))
             else:
                 self.show_no_student_message = False
 

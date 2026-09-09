@@ -42,18 +42,18 @@ class RPGQuizDialog:
         self.height = height
         self.audio_manager = audio_manager
 
-        # Dialog Box Dimensions
-        self.box_w = 640
-        self.box_h = 440
+        # Dialog Box Dimensions - Scaled up for optimal classroom & student legibility
+        self.box_w = min(self.width - 60, 840)
+        self.box_h = min(self.height - 40, 520)
         self.box_x = (self.width - self.box_w) // 2
         self.box_y = (self.height - self.box_h) // 2
 
         # Button Layout Geometry
-        self.btn_w = 560
-        self.btn_h = 44
+        self.btn_w = min(self.box_w - 60, 740)
+        self.btn_h = 50
         self.btn_x = self.box_x + (self.box_w - self.btn_w) // 2
-        self.button_y_start = self.box_y + 195
-        self.spacing = 52
+        self.button_y_start = self.box_y + 225
+        self.spacing = 60
 
         # Pre-allocated transparent dim surface
         self.dim_overlay = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
@@ -151,7 +151,7 @@ class RPGQuizDialog:
         pygame.draw.rect(self.screen, (253, 224, 71), main_rect.inflate(-6, -6), 1, border_radius=15)
 
         # 4. Top Header Banner Ribbon
-        header_h = 74
+        header_h = 80
         header_surf = pygame.Surface((box_w - 12, header_h), pygame.SRCALPHA)
         header_surf.fill((30, 41, 59, 230))
         self.screen.blit(header_surf, (box_x + 6, box_y + 6))
@@ -160,9 +160,9 @@ class RPGQuizDialog:
         # 5. Live Character Portrait Frame (Top Left)
         text_x = box_x + 30
         if sprite_frame is not None:
-            avatar_center_x = box_x + 48
-            avatar_center_y = box_y + 42
-            avatar_radius = 26
+            avatar_center_x = box_x + 50
+            avatar_center_y = box_y + 44
+            avatar_radius = 28
 
             # Deep velvet circle backdrop
             pygame.draw.circle(self.screen, (10, 15, 29), (avatar_center_x, avatar_center_y), avatar_radius + 2)
@@ -174,7 +174,7 @@ class RPGQuizDialog:
             try:
                 # Scale smoothly to fit circle while keeping aspect
                 orig_w, orig_h = sprite_frame.get_size()
-                scale_factor = min(46.0 / max(1, orig_w), 46.0 / max(1, orig_h))
+                scale_factor = min(52.0 / max(1, orig_w), 52.0 / max(1, orig_h))
                 target_w = max(1, int(orig_w * scale_factor))
                 target_h = max(1, int(orig_h * scale_factor))
                 scaled_avatar = pygame.transform.scale(sprite_frame, (target_w, target_h))
@@ -183,22 +183,22 @@ class RPGQuizDialog:
                 self.screen.blit(scaled_avatar, (dest_x, dest_y))
             except Exception:
                 pass
-            text_x = box_x + 88
+            text_x = box_x + 94
 
-        # 6. Speaker Typography
-        title_font = get_font(["Comic Sans MS", "Segoe UI"], 18, bold=True)
-        sub_font = get_font(["Segoe UI", "Tahoma", "Comic Sans MS"], 13)
+        # 6. Speaker Typography - Larger, Clearer
+        title_font = get_font(["Comic Sans MS", "Segoe UI"], 22, bold=True)
+        sub_font = get_font(["Segoe UI", "Tahoma", "Comic Sans MS"], 15)
 
         name_surf = title_font.render(speaker_name, True, (251, 191, 36))
-        self.screen.blit(name_surf, (text_x, box_y + 20))
+        self.screen.blit(name_surf, (text_x, box_y + 18))
 
         sub_surf = sub_font.render(speaker_subtitle, True, (148, 163, 184))
         self.screen.blit(sub_surf, (text_x, box_y + 46))
 
         # 7. Station Gem Progress Bar (Top Right)
         total_st = max(1, total_stations)
-        gem_start_x = box_x + box_w - 24 - (total_st - 1) * 26
-        gem_y = box_y + 42
+        gem_start_x = box_x + box_w - 28 - (total_st - 1) * 30
+        gem_y = box_y + 44
 
         # Connecting quest track line
         if total_st > 1:
@@ -206,51 +206,51 @@ class RPGQuizDialog:
                 self.screen,
                 (71, 85, 105),
                 (gem_start_x, gem_y),
-                (gem_start_x + (total_st - 1) * 26, gem_y),
-                3
+                (gem_start_x + (total_st - 1) * 30, gem_y),
+                4
             )
 
         pulse = 0.5 + 0.5 * math.sin(time.time() * 5.0)
 
         for s in range(1, total_st + 1):
-            gx = gem_start_x + (s - 1) * 26
+            gx = gem_start_x + (s - 1) * 30
             if s < station_idx:
                 # Completed: Bright glowing emerald gem with crisp vector star
-                pygame.draw.circle(self.screen, (16, 185, 129), (gx, gem_y), 9)
-                pygame.draw.circle(self.screen, (255, 255, 255), (gx, gem_y), 9, 1)
-                draw_vector_star(self.screen, gx, gem_y, radius=5, color=(255, 255, 255))
+                pygame.draw.circle(self.screen, (16, 185, 129), (gx, gem_y), 10)
+                pygame.draw.circle(self.screen, (255, 255, 255), (gx, gem_y), 10, 1)
+                draw_vector_star(self.screen, gx, gem_y, radius=6, color=(255, 255, 255))
             elif s == station_idx:
                 # Active Station: Radiant pulsing amber gem with vector sparkle diamond
-                glow_r = int(10 + pulse * 2)
+                glow_r = int(11 + pulse * 2.5)
                 pygame.draw.circle(self.screen, (245, 158, 11), (gx, gem_y), glow_r, 2)
-                pygame.draw.circle(self.screen, (251, 191, 36), (gx, gem_y), 9)
-                draw_vector_gem(self.screen, gx, gem_y, radius=5, color=(15, 23, 42), highlight_color=(254, 240, 138))
+                pygame.draw.circle(self.screen, (251, 191, 36), (gx, gem_y), 10)
+                draw_vector_gem(self.screen, gx, gem_y, radius=6, color=(15, 23, 42), highlight_color=(254, 240, 138))
             else:
                 # Locked upcoming station: Dark slate socket
-                pygame.draw.circle(self.screen, (30, 41, 59), (gx, gem_y), 7)
-                pygame.draw.circle(self.screen, (71, 85, 105), (gx, gem_y), 7, 1)
+                pygame.draw.circle(self.screen, (30, 41, 59), (gx, gem_y), 8)
+                pygame.draw.circle(self.screen, (71, 85, 105), (gx, gem_y), 8, 1)
 
-        # 8. Question Prompt
-        q_font = get_font(["Segoe UI", "Comic Sans MS"], 16, bold=True)
+        # 8. Question Prompt - Large & Prominent for Students
+        q_font = get_font(["Segoe UI", "Comic Sans MS"], 20, bold=True)
         wrapped_q = self.wrap_text(q_data.get("question", ""), q_font, box_w - 60)
         
-        y_text = box_y + 92
+        y_text = box_y + 98
         for line in wrapped_q:
             txt_surf = q_font.render(line, True, (248, 250, 252))
             self.screen.blit(txt_surf, (box_x + 30, y_text))
-            y_text += 23
+            y_text += 27
 
         # 9. Pedagogical / 50:50 Hint Banner
         if hint_msg:
-            hint_font = get_font(["Segoe UI", "Comic Sans MS"], 13)
-            draw_vector_lightbulb(self.screen, box_x + 38, y_text + 13, size=6)
+            hint_font = get_font(["Segoe UI", "Comic Sans MS"], 15)
+            draw_vector_lightbulb(self.screen, box_x + 40, y_text + 14, size=7)
             hint_surf = hint_font.render(f"Hint: {hint_msg}", True, (252, 211, 77))
-            self.screen.blit(hint_surf, (box_x + 50, y_text + 4))
+            self.screen.blit(hint_surf, (box_x + 56, y_text + 4))
 
         # 10. Game-Show Style Choice Buttons ([A], [B], [C], [D])
         choices = q_data.get("choices", [])[:4]
-        badge_font = get_font(["Segoe UI", "Arial"], 16, bold=True)
-        choice_font = get_font(["Segoe UI", "Comic Sans MS"], 16)
+        badge_font = get_font(["Segoe UI", "Arial"], 18, bold=True)
+        choice_font = get_font(["Segoe UI", "Comic Sans MS"], 18, bold=True)
 
         current_hovered_index = -1
 
@@ -291,7 +291,7 @@ class RPGQuizDialog:
 
             # Left Jewel-Toned Letter Badge
             badge_cfg = self.BADGE_COLORS.get(i, {"bg": (100, 100, 100), "border": (150, 150, 150), "label": chr(65 + i)})
-            badge_rect = pygame.Rect(btn_rect.x + 8, btn_rect.y + 6, 32, 32)
+            badge_rect = pygame.Rect(btn_rect.x + 8, btn_rect.y + 7, 36, 36)
 
             if is_elim:
                 pygame.draw.rect(self.screen, (30, 41, 59), badge_rect, border_radius=8)
@@ -313,7 +313,7 @@ class RPGQuizDialog:
             # Choice text next to badge (stripped of redundant leading letter)
             display_text = clean_choice_text(choice_text)
             txt_surf = choice_font.render(display_text, True, text_color)
-            txt_rect = txt_surf.get_rect(midleft=(btn_rect.x + 50, btn_rect.centery))
+            txt_rect = txt_surf.get_rect(midleft=(btn_rect.x + 56, btn_rect.centery))
             self.screen.blit(txt_surf, txt_rect)
 
         # Audio tick feedback when entering new hovered choice

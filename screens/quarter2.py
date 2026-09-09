@@ -10,6 +10,8 @@ import math
 import random
 from .map_loader import MapLoader
 from core.camera_system import LoLCamera
+from core.npc_scripts import get_map_instructions, get_station_script, get_mentor_script
+from core.npc_dialog_system import InstructionModal, NPCGreetingDialog
 
 try:
     from db import db
@@ -82,6 +84,21 @@ class Quarter2:
         # Universal RPG Quest Question Dialog
         from core.quiz_dialog import RPGQuizDialog
         self.quiz_dialog = RPGQuizDialog(self.screen, self.width, self.height, getattr(self.main_menu, 'audio_manager', None))
+
+        # Resolve Student Player Name
+        self.player_name = "Student"
+        if hasattr(self.main_menu, 'selected_student') and self.main_menu.selected_student:
+            self.player_name = self.main_menu.selected_student.get('first_name') or self.main_menu.selected_student.get('username') or "Student"
+
+        # NPC Instruction Modal & Proximity Greeting Dialog System
+        self.instruction_modal = InstructionModal(self.screen, self.width, self.height)
+        self.greeting_dialog = NPCGreetingDialog(self.screen, self.width, self.height)
+        self.guide_btn_rect = pygame.Rect(self.width - 130, 20, 110, 36)
+        self.fist_progress = 0.0
+
+        # Show Initial Map Instructions Popup
+        map_instr = get_map_instructions(self.map_name, self.player_name)
+        self.instruction_modal.show(map_instr)
 
         # Performance Caches
         self._scaled_tile_cache = {}
@@ -773,6 +790,12 @@ class Quarter2:
                 print(f"[OK] Successfully loaded {len(mapped_questions)} dynamic question(s) from Database for Quarter 2!")
         except Exception as e:
             print(f"[WARN] Exception loading database questions for Quarter 2: {e}")
+
+    def show_instructions(self):
+        """Displays the map instructions modal with student context."""
+        map_instr = get_map_instructions(self.map_name, self.player_name)
+        if hasattr(self, 'instruction_modal'):
+            self.instruction_modal.show(map_instr)
 
     def save_results_to_database(self):
         import threading
@@ -2501,6 +2524,32 @@ class Quarter2:
                 return
             return
 
+        # Check Instruction Modal interaction
+        if getattr(self, 'instruction_modal', None) and self.instruction_modal.is_visible:
+            if self.instruction_modal.handle_click(pos):
+                return
+            return
+
+        # Check HUD Guide Button click to re-open instructions
+        if getattr(self, 'guide_btn_rect', None) and self.guide_btn_rect.collidepoint(pos):
+            map_instr = get_map_instructions(self.map_name, self.player_name)
+            self.instruction_modal.show(map_instr)
+            return
+
+        # Check NPC Greeting Dialog interaction
+        if getattr(self, 'greeting_dialog', None) and self.greeting_dialog.is_visible:
+            if self.greeting_dialog.handle_click(pos):
+                self.greeting_dialog.hide()
+                self.quiz_state = 1
+                self.selected_choice_index = -1
+                self.eliminated_choices.clear()
+                self.wrong_feedback_msg = ""
+                self.current_question_index = self.quiz_station_index - 1
+                if getattr(self, 'coin_clink', None):
+                    self.coin_clink.play()
+                return
+            return
+
         import random
         from db.save_system import save_student_progress
         
@@ -2738,6 +2787,45 @@ class Quarter2:
                     info["anim_timer"] = 0
                     info["anim_frame"] = (info["anim_frame"] + 1) % len(info["frames"])
 
+        # Update Instruction Modal & handle Fist Hold dismiss
+        if getattr(self, 'instruction_modal', None) and self.instruction_modal.is_visible:
+            fist_pct = 0.0
+            if self.fist_closed and self.fist_start_time > 0:
+                elapsed = time.time() - self.fist_start_time
+                fist_pct = min(1.0, elapsed / self.CLICK_HOLD_TIME)
+                if elapsed >= self.CLICK_HOLD_TIME:
+                    self.instruction_modal.hide()
+                    self.fist_start_time = 0
+            self.instruction_modal.update(dt, self.cursor_pos, fist_pct)
+            return
+
+        # Update NPC Greeting Dialog & handle Fist Hold to start question
+        if getattr(self, 'greeting_dialog', None) and self.greeting_dialog.is_visible:
+            if self.quiz_station_index in self.quiz_stations:
+                st_x, st_y = self.quiz_stations[self.quiz_station_index]
+                npc_cx = st_x * TILE_SIZE + TILE_SIZE // 2
+                npc_cy = st_y * TILE_SIZE + TILE_SIZE // 2
+                dist_away = math.hypot((self.player_x + TILE_SIZE // 2) - npc_cx, (self.player_y + TILE_SIZE // 2) - npc_cy)
+                if dist_away > TILE_SIZE * 2.5:
+                    self.greeting_dialog.hide()
+
+            fist_pct = 0.0
+            if self.fist_closed and self.fist_start_time > 0:
+                elapsed = time.time() - self.fist_start_time
+                fist_pct = min(1.0, elapsed / self.CLICK_HOLD_TIME)
+                if elapsed >= self.CLICK_HOLD_TIME:
+                    self.greeting_dialog.hide()
+                    self.quiz_state = 1
+                    self.selected_choice_index = -1
+                    self.eliminated_choices.clear()
+                    self.wrong_feedback_msg = ""
+                    self.current_question_index = self.quiz_station_index - 1
+                    if getattr(self, 'coin_clink', None):
+                        self.coin_clink.play()
+                    self.fist_start_time = 0
+            self.greeting_dialog.update(dt, self.cursor_pos, fist_pct)
+            return
+
         # Proximity interaction check for current active station Guardian NPC (with Line-of-Sight wall check)
         if self.quiz_state == 0 and self.quiz_station_index in self.quiz_stations:
             st_x, st_y = self.quiz_stations[self.quiz_station_index]
@@ -2749,15 +2837,22 @@ class Quarter2:
             npc_center_y = st_y * TILE_SIZE + TILE_SIZE // 2
             dist = math.hypot(player_center_x - npc_center_x, player_center_y - npc_center_y)
             
-            # Require close proximity (within 1.25 tiles) AND unobstructed line of sight (no wall in between)
-            if dist < TILE_SIZE * 1.25 and self.has_line_of_sight(p_tile_x, p_tile_y, st_x, st_y):
-                self.quiz_state = 1
-                self.selected_choice_index = -1
-                self.eliminated_choices.clear()
-                self.wrong_feedback_msg = ""
-                self.current_question_index = self.quiz_station_index - 1
-                if self.coin_clink:
-                    self.coin_clink.play()
+            # Require close proximity (within 1.8 tiles) AND unobstructed line of sight
+            if dist < TILE_SIZE * 1.8 and self.has_line_of_sight(p_tile_x, p_tile_y, st_x, st_y):
+                if not self.greeting_dialog.is_visible:
+                    script = get_station_script(self.map_name, self.quiz_station_index)
+                    info = self.station_npc_info.get(self.quiz_station_index, {})
+                    speaker_name = script.get("npc_name", info.get("name", "Guardian"))
+                    speaker_title = script.get("npc_title", info.get("title", f"Station {self.quiz_station_index}"))
+                    greeting_text = script.get("greeting", "Halika, magsimula tayo!").replace("[Player Name]", self.player_name)
+                    
+                    sprite_frame = None
+                    if info.get("frames"):
+                        frames = info["frames"]
+                        anim_idx = info.get("anim_frame", 0) % len(frames)
+                        sprite_frame = frames[anim_idx]
+                        
+                    self.greeting_dialog.show(speaker_name, speaker_title, greeting_text, sprite_frame=sprite_frame)
 
         self.update_player_movement()
         self.check_portal_teleport_on_hold()
@@ -2804,7 +2899,7 @@ class Quarter2:
         overlay.fill((10, 15, 29, 170))
         self.screen.blit(overlay, (0, 0))
 
-        box_w, box_h = 560, 290
+        box_w, box_h = 580, 300
         box_x = (self.width - box_w) // 2
         box_y = (self.height - box_h) // 2
 
@@ -2815,15 +2910,20 @@ class Quarter2:
         pygame.draw.rect(self.screen, (220, 38, 38), dialog_rect, 3, border_radius=14)
         pygame.draw.rect(self.screen, (248, 113, 113), dialog_rect.inflate(-6, -6), 1, border_radius=10)
 
+        script = get_station_script(self.map_name, self.quiz_station_index)
         info = self.station_npc_info.get(self.quiz_station_index, {})
-        w_title = info.get("wrong_encouragement", "Barrio Stall - Try Again")
-        speaker_surf = self.dialog_header_font.render(w_title, True, (248, 113, 113))
-        self.screen.blit(speaker_surf, (box_x + 32, box_y + 16))
+        speaker = script.get("npc_name", info.get("name", "Guardian"))
+        speaker_title = script.get("npc_title", info.get("title", f"Station {self.quiz_station_index}"))
+        retry_msg = script.get("retry_line", "That choice is not quite correct. You have 1 try remaining!").replace("[Player Name]", self.player_name)
 
-        msg_surf1 = self.dialog_q_font.render("That choice is not quite correct.", True, (255, 255, 255))
-        msg_surf2 = self.dialog_hint_font.render("You have 1 try remaining! Think carefully and try again.", True, (254, 240, 138))
-        self.screen.blit(msg_surf1, (box_x + 30, box_y + 46))
-        self.screen.blit(msg_surf2, (box_x + 30, box_y + 70))
+        speaker_surf = self.dialog_header_font.render(f"{speaker} ({speaker_title}) - Try Again", True, (248, 113, 113))
+        self.screen.blit(speaker_surf, (box_x + 24, box_y + 16))
+
+        lines = self.wrap_text(retry_msg, self.dialog_q_font, box_w - 48)
+        y_off = box_y + 46
+        for l in lines[:2]:
+            self.screen.blit(self.dialog_q_font.render(l, True, (255, 255, 255)), (box_x + 24, y_off))
+            y_off += 22
 
         # Pedagogical Educational Hint Box
         from core.hints import get_educational_hint
@@ -2832,7 +2932,7 @@ class Quarter2:
         q_text = current_q.get("question", "")
         hint_text = get_educational_hint("quarter2", q_text)
 
-        hint_box = pygame.Rect(box_x + 20, box_y + 100, box_w - 40, 105)
+        hint_box = pygame.Rect(box_x + 20, box_y + 98, box_w - 40, 115)
         pygame.draw.rect(self.screen, (30, 41, 59), hint_box, border_radius=8)
         pygame.draw.rect(self.screen, (245, 158, 11), hint_box, 1, border_radius=8)
 
@@ -2842,28 +2942,16 @@ class Quarter2:
         h_title = hint_title_font.render("Pedagogical Hint:", True, (255, 215, 0))
         self.screen.blit(h_title, (hint_box.x + 32, hint_box.y + 6))
 
-        # Text wrap
-        words = hint_text.split(" ")
-        lines = []
-        cur = []
-        for w in words:
-            cur.append(w)
-            if hint_body_font.size(" ".join(cur))[0] > (hint_box.width - 24):
-                cur.pop()
-                lines.append(" ".join(cur))
-                cur = [w]
-        if cur:
-            lines.append(" ".join(cur))
-
+        h_lines = self.wrap_text(hint_text, hint_body_font, hint_box.width - 24)
         hy = hint_box.y + 30
-        for hl in lines[:3]:
+        for hl in h_lines[:3]:
             h_surf = hint_body_font.render(hl, True, (241, 245, 249))
             self.screen.blit(h_surf, (hint_box.x + 12, hy))
             hy += 22
 
         button_w, button_h = 220, 44
         button_x = box_x + (box_w - button_w) // 2
-        button_y = box_y + 225
+        button_y = box_y + 235
         btn_rect = pygame.Rect(button_x, button_y, button_w, button_h)
 
         is_hovered = btn_rect.collidepoint(self.cursor_pos)
@@ -2881,7 +2969,7 @@ class Quarter2:
         overlay.fill((10, 15, 29, 175))
         self.screen.blit(overlay, (0, 0))
 
-        box_w, box_h = 580, 270
+        box_w, box_h = 580, 280
         box_x = (self.width - box_w) // 2
         box_y = (self.height - box_h) // 2
 
@@ -2892,23 +2980,27 @@ class Quarter2:
         pygame.draw.rect(self.screen, (245, 158, 11), dialog_rect, 3, border_radius=14)
         pygame.draw.rect(self.screen, (251, 191, 36), dialog_rect.inflate(-6, -6), 1, border_radius=10)
 
+        script = get_station_script(self.map_name, self.quiz_station_index)
         info = self.station_npc_info.get(self.quiz_station_index, {})
-        speaker_name = info.get("name", f"Station {self.quiz_station_index}")
-        speaker_surf = self.dialog_header_font.render(f"{speaker_name} - Out of Tries", True, (245, 158, 11))
-        self.screen.blit(speaker_surf, (box_x + 30, box_y + 18))
+        speaker_name = script.get("npc_name", info.get("name", f"Station {self.quiz_station_index}"))
+        reveal_msg = script.get("out_of_tries_line", "Here is the answer. Keep moving forward!").replace("[Player Name]", self.player_name)
+        item_name = script.get("item_awarded", "Progression Item")
 
-        q_data = self.quiz_questions[self.current_question_index]
-        correct_choice_text = q_data["choices"][q_data["correct"]]
+        speaker_surf = self.dialog_header_font.render(f"{speaker_name} - Solution Revealed", True, (245, 158, 11))
+        self.screen.blit(speaker_surf, (box_x + 24, box_y + 18))
 
-        msg1 = self.dialog_q_font.render(f"Out of tries! The correct answer was: {correct_choice_text}", True, (255, 255, 255))
-        reward_text = "You still received the Bahay Kubo piece so your quest can continue!" if self.map_name == "map5.txt" else "You completed this stall challenge so your quest can continue!"
-        msg2 = self.dialog_hint_font.render(reward_text, True, (254, 240, 138))
-        self.screen.blit(msg1, (box_x + 30, box_y + 68))
-        self.screen.blit(msg2, (box_x + 30, box_y + 110))
+        lines = self.wrap_text(reveal_msg, self.dialog_q_font, box_w - 48)
+        y_off = box_y + 55
+        for l in lines[:2]:
+            self.screen.blit(self.dialog_q_font.render(l, True, (255, 255, 255)), (box_x + 24, y_off))
+            y_off += 24
+
+        reward_surf = self.dialog_hint_font.render(f"Acquired: {item_name}! Your quest continues!", True, (254, 240, 138))
+        self.screen.blit(reward_surf, (box_x + 24, y_off + 8))
 
         button_w, button_h = 240, 44
         button_x = box_x + (box_w - button_w) // 2
-        button_y = box_y + 190
+        button_y = box_y + 205
         btn_rect = pygame.Rect(button_x, button_y, button_w, button_h)
 
         is_hovered = btn_rect.collidepoint(self.cursor_pos)
@@ -2918,7 +3010,7 @@ class Quarter2:
         pygame.draw.rect(self.screen, bg_color, btn_rect, border_radius=10)
         pygame.draw.rect(self.screen, border_color, btn_rect, 2, border_radius=10)
 
-        c_surf = self.dialog_header_font.render("Continue Fiesta >>", True, (255, 255, 255))
+        c_surf = self.dialog_header_font.render("Continue Quest >>", True, (255, 255, 255))
         self.screen.blit(c_surf, c_surf.get_rect(center=btn_rect.center))
 
     def draw_correct_dialog(self):
@@ -2926,7 +3018,7 @@ class Quarter2:
         overlay.fill((10, 15, 29, 170))
         self.screen.blit(overlay, (0, 0))
 
-        box_w, box_h = 540, 260
+        box_w, box_h = 560, 270
         box_x = (self.width - box_w) // 2
         box_y = (self.height - box_h) // 2
 
@@ -2937,22 +3029,27 @@ class Quarter2:
         pygame.draw.rect(self.screen, (22, 163, 74), dialog_rect, 3, border_radius=14)
         pygame.draw.rect(self.screen, (74, 222, 128), dialog_rect.inflate(-6, -6), 1, border_radius=10)
 
+        script = get_station_script(self.map_name, self.quiz_station_index)
         info = self.station_npc_info.get(self.quiz_station_index, {})
-        c_title = info.get("correct_praise", "Well Done! (Correct Answer)")
-        speaker_surf = self.dialog_header_font.render(c_title, True, (74, 222, 128))
-        self.screen.blit(speaker_surf, (box_x + 32, box_y + 18))
+        speaker_name = script.get("npc_name", info.get("name", "Guardian"))
+        praise_msg = script.get("praise_line", self.current_correct_phrase).replace("[Player Name]", self.player_name)
+        item_name = script.get("item_awarded", "Progression Item")
 
-        msg_surf = self.dialog_q_font.render(self.current_correct_phrase, True, (255, 255, 255))
-        self.screen.blit(msg_surf, (box_x + 30, box_y + 75))
+        speaker_surf = self.dialog_header_font.render(f"{speaker_name} - Well Done! (Correct)", True, (74, 222, 128))
+        self.screen.blit(speaker_surf, (box_x + 24, box_y + 18))
 
-        t_math = info.get("target_math", "")
-        if t_math:
-            m_surf = self.dialog_hint_font.render(f"{t_math}", True, (253, 230, 138))
-            self.screen.blit(m_surf, (box_x + 30, box_y + 110))
+        lines = self.wrap_text(praise_msg, self.dialog_q_font, box_w - 48)
+        y_off = box_y + 60
+        for l in lines[:2]:
+            self.screen.blit(self.dialog_q_font.render(l, True, (255, 255, 255)), (box_x + 24, y_off))
+            y_off += 24
+
+        reward_surf = self.dialog_hint_font.render(f"Awarded: {item_name}!", True, (253, 230, 138))
+        self.screen.blit(reward_surf, (box_x + 24, y_off + 8))
 
         button_w, button_h = 240, 44
         button_x = box_x + (box_w - button_w) // 2
-        button_y = box_y + 175
+        button_y = box_y + 195
         btn_rect = pygame.Rect(button_x, button_y, button_w, button_h)
 
         is_hovered = btn_rect.collidepoint(self.cursor_pos)
@@ -2971,7 +3068,7 @@ class Quarter2:
         overlay.fill((10, 15, 29, 175))
         self.screen.blit(overlay, (0, 0))
 
-        box_w, box_h = 620, 340
+        box_w, box_h = 640, 360
         box_x = (self.width - box_w) // 2
         box_y = (self.height - box_h) // 2
 
@@ -2982,25 +3079,24 @@ class Quarter2:
         pygame.draw.rect(self.screen, (218, 165, 32), dialog_rect, 3, border_radius=14)
         pygame.draw.rect(self.screen, (255, 215, 0), dialog_rect.inflate(-6, -6), 1, border_radius=10)
 
-        speaker_surf = self.dialog_header_font.render("BARANGAY FIESTA - ALL TRIALS SOLVED!", True, (255, 215, 0))
-        self.screen.blit(speaker_surf, (box_x + 30, box_y + 18))
+        mentor = get_mentor_script(self.map_name)
+        m_name = mentor.get("mentor_name", "Barrio Leader Mang Jose")
+        m_title = mentor.get("mentor_title", "Barrio Community Elder")
+        complete_speech = mentor.get("complete_dialogue", "Mabuhay! You have solved all five challenges!").replace("[Player Name]", self.player_name)
 
-        speech_lines = [
-            "Congratulations, young adventurer! You have mastered Philippine Money,",
-            "Sari-sari change, Jeepney fare multiplication, and Market scale weights!",
-            "The Grand Fiesta Exit Portal is now fully open.",
-            "Step into the portal at the end of the street to return to town!"
-        ]
+        speaker_surf = self.dialog_header_font.render(f"{m_name} ({m_title})", True, (255, 215, 0))
+        self.screen.blit(speaker_surf, (box_x + 24, box_y + 18))
 
-        y_text = box_y + 70
-        for line in speech_lines:
+        lines = self.wrap_text(complete_speech, self.dialog_q_font, box_w - 48)
+        y_text = box_y + 65
+        for line in lines[:5]:
             txt_surf = self.dialog_q_font.render(line, True, (248, 250, 252))
-            self.screen.blit(txt_surf, (box_x + 30, y_text))
+            self.screen.blit(txt_surf, (box_x + 24, y_text))
             y_text += 26
 
         button_w, button_h = 240, 44
         button_x = box_x + (box_w - button_w) // 2
-        button_y = box_y + 245
+        button_y = box_y + 285
         btn_rect = pygame.Rect(button_x, button_y, button_w, button_h)
 
         is_hovered = btn_rect.collidepoint(self.cursor_pos)
@@ -3269,7 +3365,7 @@ class Quarter2:
     # UPDATE PLAYER MOVEMENT (Sprint Boost & Particle Trails)
     # ============================================================
     def update_player_movement(self):
-        if (hasattr(self, 'camera_pan_active') and self.camera_pan_active) or self.quiz_state in [1, 2, 3, 4, 5] or (hasattr(self, 'player_block_timer') and self.player_block_timer > 0):
+        if (hasattr(self, 'camera_pan_active') and self.camera_pan_active) or self.quiz_state in [1, 2, 3, 4, 5] or (hasattr(self, 'player_block_timer') and self.player_block_timer > 0) or (getattr(self, 'instruction_modal', None) and self.instruction_modal.is_visible) or (getattr(self, 'greeting_dialog', None) and self.greeting_dialog.is_visible):
             self.anim_frame = 0
             return
 
@@ -3821,10 +3917,28 @@ class Quarter2:
         if hasattr(self, 'victory_card') and self.victory_card.active:
             self.victory_card.draw(self.cursor_pos)
 
+        # Draw Greeting Dialog overlay
+        if getattr(self, 'greeting_dialog', None):
+            self.greeting_dialog.draw(self.cursor_pos)
+
+        # Draw Instruction Modal overlay
+        if getattr(self, 'instruction_modal', None):
+            self.instruction_modal.draw(self.cursor_pos)
+
     # ============================================================
     # DRAW UI
     # ============================================================
     def draw_ui(self):
+        # Draw HUD Guide Button
+        if getattr(self, 'guide_btn_rect', None):
+            hov = self.guide_btn_rect.collidepoint(self.cursor_pos)
+            bg = (30, 41, 59) if not hov else (51, 65, 85)
+            pygame.draw.rect(self.screen, bg, self.guide_btn_rect, border_radius=8)
+            pygame.draw.rect(self.screen, (251, 191, 36) if hov else (203, 213, 225), self.guide_btn_rect, 2, border_radius=8)
+            g_font = self.get_ui_font(12, bold=True)
+            g_text = g_font.render("[?] Guide", True, (251, 191, 36) if hov else (255, 255, 255))
+            self.screen.blit(g_text, g_text.get_rect(center=self.guide_btn_rect.center))
+
         # HUD Objectives Box (Top/Bottom Center)
         if self.quiz_state in [0, 6]:
             box_w = 460
@@ -3922,6 +4036,19 @@ class Quarter2:
 
         if event.type == pygame.KEYDOWN:
             if event.key in [pygame.K_SPACE, pygame.K_RETURN]:
+                if getattr(self, 'instruction_modal', None) and self.instruction_modal.is_visible:
+                    self.instruction_modal.hide()
+                    return "handled"
+                elif getattr(self, 'greeting_dialog', None) and self.greeting_dialog.is_visible:
+                    self.greeting_dialog.hide()
+                    self.quiz_state = 1
+                    self.selected_choice_index = -1
+                    self.eliminated_choices.clear()
+                    self.wrong_feedback_msg = ""
+                    self.current_question_index = self.quiz_station_index - 1
+                    if getattr(self, 'coin_clink', None):
+                        self.coin_clink.play()
+                    return "handled"
                 if self.quiz_state == 0:
                     self.lol_camera.recenter()
             elif event.key == pygame.K_ESCAPE:

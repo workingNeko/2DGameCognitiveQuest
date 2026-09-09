@@ -82,6 +82,12 @@ class Quarter1:
         from core.quiz_dialog import RPGQuizDialog
         self.quiz_dialog = RPGQuizDialog(self.screen, self.width, self.height, getattr(self.main_menu, 'audio_manager', None))
 
+        # Master NPC Dialogue & Instruction Modal System
+        from core.npc_dialog_system import InstructionModal, NPCGreetingDialog
+        from core.npc_scripts import get_map_instructions, get_station_script, get_mentor_script
+        self.instruction_modal = InstructionModal(self.screen, self.width, self.height, getattr(self.main_menu, 'audio_manager', None))
+        self.greeting_dialog = NPCGreetingDialog(self.screen, self.width, self.height, getattr(self.main_menu, 'audio_manager', None))
+
         # Performance Caches
         self._scaled_tile_cache = {}
         self._scaled_sprite_cache = {}
@@ -595,6 +601,23 @@ class Quarter1:
         print(f"[OK] Quarter1 initialized with map: {self.map_name}")
         print(f"   Goal portal: {self.goal_portal_direction}")
         print(f"   Portals loaded: {len(self.portals)}")
+
+        # Automatically pop up map instructions at start
+        student_name = "Student"
+        if hasattr(self.main_menu, 'selected_student') and self.main_menu.selected_student:
+            student_name = self.main_menu.selected_student.get('first_name', 'Student')
+        inst_data = get_map_instructions("quarter1", self.map_name, student_name)
+        self.instruction_modal.show(inst_data)
+
+    def show_instructions(self):
+        """Displays the map instructions modal with student context."""
+        from core.npc_scripts import get_map_instructions
+        student_name = "Student"
+        if hasattr(self.main_menu, 'selected_student') and self.main_menu.selected_student:
+            student_name = self.main_menu.selected_student.get('first_name', 'Student')
+        inst_data = get_map_instructions("quarter1", self.map_name, student_name)
+        if hasattr(self, 'instruction_modal'):
+            self.instruction_modal.show(inst_data)
 
     # ============================================================
     # CREATE DEFAULT MAP (fallback)
@@ -2376,7 +2399,34 @@ class Quarter1:
             
         import random
         from db.save_system import save_student_progress
-        
+        from core.npc_scripts import get_station_script, get_map_instructions
+
+        student_name = "Student"
+        if hasattr(self.main_menu, 'selected_student') and self.main_menu.selected_student:
+            student_name = self.main_menu.selected_student.get('first_name', 'Student')
+
+        # Check Instructions Modal click
+        if hasattr(self, 'instruction_modal') and self.instruction_modal.is_active():
+            if self.instruction_modal.handle_click(pos):
+                return
+            return
+
+        # Check HUD Guide Button click
+        guide_btn_rect = pygame.Rect(self.width - 130, 20, 110, 36)
+        if guide_btn_rect.collidepoint(pos):
+            inst_data = get_map_instructions("quarter1", self.map_name, student_name)
+            self.instruction_modal.show(inst_data)
+            return
+
+        # Check Proximity Greeting Dialog click -> pops up Dynamic Question
+        if hasattr(self, 'greeting_dialog') and self.greeting_dialog.is_active():
+            if self.greeting_dialog.handle_click(pos):
+                self.active_shape_id = self.quiz_station_index
+                self.current_question_index = self.quiz_station_index - 1
+                self.quiz_state = 1
+                self.selected_choice_index = -1
+                return
+
         # State 1: Dialog with choices
         if self.quiz_state == 1:
             q_data = self.quiz_questions[self.current_question_index]
@@ -2384,7 +2434,8 @@ class Quarter1:
 
             if clicked_idx is not None and clicked_idx < len(q_data["choices"]):
                 if clicked_idx == q_data["correct"]:
-                    self.current_correct_phrase = random.choice(self.correct_phrases)
+                    script_data = get_station_script("quarter1", self.map_name, self.quiz_station_index, student_name)
+                    self.current_correct_phrase = script_data["correct_praise"]
                     self.quiz_state = 3
                     if hasattr(self.main_menu, 'audio_manager'):
                         self.main_menu.audio_manager.play_sfx("correct")
@@ -2632,6 +2683,24 @@ class Quarter1:
             self.victory_card.update(dt)
             return
 
+        # Update instructions modal & greeting dialog
+        if hasattr(self, 'instruction_modal') and self.instruction_modal.is_active():
+            self.instruction_modal.update(dt)
+            hold_time = time.time() - self.fist_start_time if self.fist_start_time > 0 else 0.0
+            if self.instruction_modal.handle_fist_hold(self.current_gesture == "FIST", hold_time, self.CLICK_HOLD_TIME):
+                self.fist_start_time = 0
+            return
+
+        if hasattr(self, 'greeting_dialog') and self.greeting_dialog.is_active():
+            self.greeting_dialog.update(dt)
+            hold_time = time.time() - self.fist_start_time if self.fist_start_time > 0 else 0.0
+            if self.greeting_dialog.handle_fist_hold(self.current_gesture == "FIST", hold_time, self.CLICK_HOLD_TIME):
+                self.fist_start_time = 0
+                self.active_shape_id = self.quiz_station_index
+                self.current_question_index = self.quiz_station_index - 1
+                self.quiz_state = 1
+                self.selected_choice_index = -1
+
         # Handle smooth warp-out transition to stage select
         if self.warp_out_active:
             self.warp_out_timer -= dt
@@ -2708,10 +2777,22 @@ class Quarter1:
                     else:
                         self.player_dir = "down" if p_dy > 0 else "up"
                     
-                    self.active_shape_id = self.quiz_station_index
-                    self.current_question_index = self.quiz_station_index - 1
-                    self.quiz_state = 1
-                    self.selected_choice_index = -1
+                    # Show NPC Greeting Dialog smoothly
+                    if not self.greeting_dialog.is_active() and not self.instruction_modal.is_active():
+                        from core.npc_scripts import get_station_script
+                        student_name = "Student"
+                        if hasattr(self.main_menu, 'selected_student') and self.main_menu.selected_student:
+                            student_name = self.main_menu.selected_student.get('first_name', 'Student')
+                        script_data = get_station_script("quarter1", self.map_name, self.quiz_station_index, student_name)
+                        sprite_frame = None
+                        if hasattr(self, 'shape_sprites') and self.quiz_station_index in self.shape_sprites:
+                            frames = self.shape_sprites[self.quiz_station_index]
+                            if frames:
+                                sprite_frame = frames[self.shape_npc_anim_frame % len(frames)]
+                        self.greeting_dialog.show(script_data, sprite_frame=sprite_frame, station_idx=self.quiz_station_index, theme="forest")
+                else:
+                    if self.greeting_dialog.is_active() and self.greeting_dialog.target_station_idx == self.quiz_station_index:
+                        self.greeting_dialog.hide()
 
         # Proximity interaction check for Old Man NPC (map1.txt)
         if self.quiz_state == 0 and self.map_name.lower() == 'map1.txt' and self.npc_oldman_found and self.player_block_timer <= 0 and not self.oldman_riddle_answered and getattr(self, 'oldman_interaction_cooldown', 0.0) <= 0:
@@ -2778,7 +2859,7 @@ class Quarter1:
     # UPDATE PLAYER MOVEMENT
     # ============================================================
     def update_player_movement(self):
-        if self.quiz_state in [1, 2, 3, 4, 5, 10, 11, 12, 13, 14, 20, 21, 22] or self.player_block_timer > 0 or self.puzzle_active or self.camera_pan_active:
+        if self.quiz_state in [1, 2, 3, 4, 5, 10, 11, 12, 13, 14, 20, 21, 22] or self.player_block_timer > 0 or self.puzzle_active or self.camera_pan_active or (hasattr(self, 'instruction_modal') and self.instruction_modal.is_active()) or (hasattr(self, 'greeting_dialog') and self.greeting_dialog.is_active()):
             self.anim_frame = 0
             return
 
@@ -3254,20 +3335,29 @@ class Quarter1:
         if hasattr(self, 'victory_card') and self.victory_card.active:
             self.victory_card.draw(self.cursor_pos)
 
+        # Draw Proximity NPC Greeting Dialog
+        if hasattr(self, 'greeting_dialog') and self.greeting_dialog.is_active():
+            hold_pct = (time.time() - self.fist_start_time) / self.CLICK_HOLD_TIME if self.fist_start_time > 0 else 0.0
+            self.greeting_dialog.draw(self.cursor_pos, hold_pct)
+
+        # Draw Map Instructions Modal
+        if hasattr(self, 'instruction_modal') and self.instruction_modal.is_active():
+            hold_pct = (time.time() - self.fist_start_time) / self.CLICK_HOLD_TIME if self.fist_start_time > 0 else 0.0
+            self.instruction_modal.draw(self.cursor_pos, hold_pct)
+
     def draw_quiz_dialog(self):
+        from core.npc_scripts import get_station_script
+        student_name = "Student"
+        if hasattr(self.main_menu, 'selected_student') and self.main_menu.selected_student:
+            student_name = self.main_menu.selected_student.get('first_name', 'Student')
+
         q_data = self.quiz_questions[self.current_question_index]
-        speaker_name = "Old Man"
-        speaker_subtitle = "Storybook Meadow"
+        script_data = get_station_script("quarter1", self.map_name, self.quiz_station_index, student_name)
+        speaker_name = script_data["name"]
+        speaker_subtitle = f"{script_data['role']} - Station {self.quiz_station_index} of 5"
         sprite_frame = None
 
         if self.is_quiz_map and self.active_shape_id is not None:
-            npc_data = self.shape_npcs.get(self.active_shape_id)
-            if npc_data:
-                shape_name = npc_data.get('name', 'Shape').capitalize()
-                speaker_name = f"{shape_name} Guardian"
-                speaker_subtitle = f"Quest Station {self.quiz_station_index} of 5 - Storybook Meadow"
-            
-            # Retrieve active live animated sprite frame
             if hasattr(self, 'shape_sprites') and self.active_shape_id in self.shape_sprites:
                 frames = self.shape_sprites[self.active_shape_id]
                 if frames:
@@ -3285,6 +3375,14 @@ class Quarter1:
         )
 
     def draw_wrong_dialog(self):
+        from core.npc_scripts import get_station_script
+        student_name = "Student"
+        if hasattr(self.main_menu, 'selected_student') and self.main_menu.selected_student:
+            student_name = self.main_menu.selected_student.get('first_name', 'Student')
+
+        script_data = get_station_script("quarter1", self.map_name, self.quiz_station_index, student_name)
+        speaker_name = script_data["name"]
+
         overlay = pygame.Surface((self.width, self.height))
         overlay.fill((0, 0, 0))
         overlay.set_alpha(150)
@@ -3299,17 +3397,11 @@ class Quarter1:
         pygame.draw.rect(self.screen, (220, 38, 38), dialog_rect, 3, border_radius=12)
 
         speaker_font = pygame.font.SysFont("Comic Sans MS", 18, bold=True)
-        speaker_name = "Old Man"
-        if self.is_quiz_map and self.active_shape_id is not None:
-            npc_data = self.shape_npcs.get(self.active_shape_id)
-            if npc_data:
-                speaker_name = f"{npc_data['name'].capitalize()} NPC"
-        
         speaker_surf = speaker_font.render(speaker_name, True, (239, 68, 68))
         self.screen.blit(speaker_surf, (box_x + 25, box_y + 16))
 
         q_font = pygame.font.SysFont("Comic Sans MS", 15)
-        msg_surf1 = q_font.render("Hmm, that is not quite correct.", True, (255, 255, 255))
+        msg_surf1 = q_font.render(script_data["wrong_retry"], True, (255, 255, 255))
         msg_surf2 = q_font.render("You have 1 try remaining! Think carefully.", True, (255, 215, 0))
         self.screen.blit(msg_surf1, (box_x + 25, box_y + 48))
         self.screen.blit(msg_surf2, (box_x + 25, box_y + 72))
@@ -3366,6 +3458,14 @@ class Quarter1:
         self.screen.blit(c_surf, c_rect)
 
     def draw_out_of_tries_dialog(self):
+        from core.npc_scripts import get_station_script
+        student_name = "Student"
+        if hasattr(self.main_menu, 'selected_student') and self.main_menu.selected_student:
+            student_name = self.main_menu.selected_student.get('first_name', 'Student')
+
+        script_data = get_station_script("quarter1", self.map_name, self.quiz_station_index, student_name)
+        speaker_name = script_data["name"]
+
         overlay = pygame.Surface((self.width, self.height))
         overlay.fill((0, 0, 0))
         overlay.set_alpha(160)
@@ -3380,12 +3480,6 @@ class Quarter1:
         pygame.draw.rect(self.screen, (245, 158, 11), dialog_rect, 3, border_radius=8)
 
         speaker_font = pygame.font.SysFont("Comic Sans MS", 18, bold=True)
-        speaker_name = "Old Man"
-        if self.is_quiz_map and self.active_shape_id is not None:
-            npc_data = self.shape_npcs.get(self.active_shape_id)
-            if npc_data:
-                speaker_name = f"{npc_data['name'].capitalize()} NPC"
-
         speaker_surf = speaker_font.render(speaker_name, True, (245, 158, 11))
         self.screen.blit(speaker_surf, (box_x + 25, box_y + 15))
 
@@ -3394,13 +3488,16 @@ class Quarter1:
 
         q_font = pygame.font.SysFont("Comic Sans MS", 15)
         msg1 = q_font.render(f"Out of tries! The correct answer was: {correct_choice_text}", True, (255, 255, 255))
-        if self.map_name.lower() == 'map1.txt':
-            reward_text = "You still received the Bridge piece so your quest can continue!"
-        else:
-            reward_text = "You still received the Shape piece so your quest can continue!"
-        msg2 = q_font.render(reward_text, True, (255, 215, 0))
-        self.screen.blit(msg1, (box_x + 25, box_y + 60))
-        self.screen.blit(msg2, (box_x + 25, box_y + 105))
+        reward_text = script_data["out_of_tries"]
+        
+        # Split reward text if long
+        wrapped_reward = self.wrap_text(reward_text, q_font, box_w - 50)
+        self.screen.blit(msg1, (box_x + 25, box_y + 55))
+        ry = box_y + 85
+        for rw_line in wrapped_reward:
+            msg2 = q_font.render(rw_line, True, (255, 215, 0))
+            self.screen.blit(msg2, (box_x + 25, ry))
+            ry += 22
 
         button_w, button_h = 200, 42
         button_x = box_x + (box_w - button_w) // 2
@@ -3418,6 +3515,14 @@ class Quarter1:
         self.screen.blit(c_surf, c_rect)
 
     def draw_correct_dialog(self):
+        from core.npc_scripts import get_station_script
+        student_name = "Student"
+        if hasattr(self.main_menu, 'selected_student') and self.main_menu.selected_student:
+            student_name = self.main_menu.selected_student.get('first_name', 'Student')
+
+        script_data = get_station_script("quarter1", self.map_name, self.quiz_station_index, student_name)
+        speaker_name = script_data["name"]
+
         overlay = pygame.Surface((self.width, self.height))
         overlay.fill((0, 0, 0))
         overlay.set_alpha(150)
@@ -3432,22 +3537,20 @@ class Quarter1:
         pygame.draw.rect(self.screen, (22, 163, 74), dialog_rect, 3, border_radius=8)
 
         speaker_font = pygame.font.SysFont("Comic Sans MS", 18, bold=True)
-        speaker_name = "Old Man"
-        if self.is_quiz_map and self.active_shape_id is not None:
-            npc_data = self.shape_npcs.get(self.active_shape_id)
-            if npc_data:
-                speaker_name = f"{npc_data['name'].capitalize()} NPC"
-        
         speaker_surf = speaker_font.render(speaker_name, True, (22, 163, 74))
         self.screen.blit(speaker_surf, (box_x + 25, box_y + 20))
 
-        q_font = pygame.font.SysFont("Comic Sans MS", 16)
-        msg_surf = q_font.render(self.current_correct_phrase, True, (255, 255, 255))
-        self.screen.blit(msg_surf, (box_x + 25, box_y + 70))
+        q_font = pygame.font.SysFont("Comic Sans MS", 15)
+        wrapped_praise = self.wrap_text(self.current_correct_phrase or script_data["correct_praise"], q_font, box_w - 50)
+        py = box_y + 65
+        for p_line in wrapped_praise:
+            msg_surf = q_font.render(p_line, True, (255, 255, 255))
+            self.screen.blit(msg_surf, (box_x + 25, py))
+            py += 22
 
         button_w, button_h = 200, 42
         button_x = box_x + (box_w - button_w) // 2
-        button_y = box_y + 140
+        button_y = box_y + 155
         btn_rect = pygame.Rect(button_x, button_y, button_w, button_h)
 
         is_hovered = btn_rect.collidepoint(self.cursor_pos)
@@ -3532,13 +3635,14 @@ class Quarter1:
         self.screen.blit(speaker_surf, (box_x + 25, box_y + 20))
         pygame.draw.line(self.screen, (218, 165, 32), (box_x + 25, box_y + 48), (box_x + 120, box_y + 48), 2)
 
+        from core.npc_scripts import get_mentor_script
+        student_name = "Student"
+        if hasattr(self.main_menu, 'selected_student') and self.main_menu.selected_student:
+            student_name = self.main_menu.selected_student.get('first_name', 'Student')
+        mentor_data = get_mentor_script("quarter1", self.map_name, student_name)
+
         q_font = pygame.font.SysFont("Comic Sans MS", 15)
-        speech_lines = [
-            "Halt, young traveler! Beyond this point lies the portal.",
-            "But to pass, you must build the bridge first",
-            "and answer my riddle!",
-            "Go back and solve the shape puzzles in the forest."
-        ]
+        speech_lines = mentor_data["incomplete"].split("\n")
         
         y_text = box_y + 65
         for line in speech_lines:
@@ -3748,10 +3852,8 @@ class Quarter1:
 
         q_font = pygame.font.SysFont("Comic Sans MS", 15)
         speech_lines = [
-            "Outstanding, young adventurer! You have solved my riddle.",
-            "You may now enter the portal and proceed on your quest.",
-            "The path to the next quarter is open to you.",
-            "Safe travels, and may wisdom guide your way!"
+            "Outstanding, young adventurer! You have built the bridge and solved my riddle!",
+            "You may now enter the portal and proceed on your quest. Safe travels!"
         ]
         
         y_text = box_y + 65
@@ -3799,13 +3901,14 @@ class Quarter1:
         self.screen.blit(speaker_surf, (box_x + 25, box_y + 20))
         pygame.draw.line(self.screen, (218, 165, 32), (box_x + 25, box_y + 48), (box_x + 120, box_y + 48), 2)
 
+        from core.npc_scripts import get_mentor_script
+        student_name = "Student"
+        if hasattr(self.main_menu, 'selected_student') and self.main_menu.selected_student:
+            student_name = self.main_menu.selected_student.get('first_name', 'Student')
+        mentor_data = get_mentor_script("quarter1", self.map_name, student_name)
+
         q_font = pygame.font.SysFont("Comic Sans MS", 15)
-        speech_lines = [
-            "Halt, young traveler! Beyond this point lies the portal.",
-            "But you must gather all 5 jigsaw puzzle pieces first",
-            "and solve my puzzle!",
-            "Answer the shape puzzles in the forest to get the pieces."
-        ]
+        speech_lines = mentor_data["incomplete"].split("\n")
         
         y_text = box_y + 65
         for line in speech_lines:
@@ -3852,13 +3955,15 @@ class Quarter1:
         self.screen.blit(speaker_surf, (box_x + 25, box_y + 20))
         pygame.draw.line(self.screen, (218, 165, 32), (box_x + 25, box_y + 48), (box_x + 120, box_y + 48), 2)
 
+        from core.npc_scripts import get_mentor_script
+        student_name = "Student"
+        if hasattr(self.main_menu, 'selected_student') and self.main_menu.selected_student:
+            student_name = self.main_menu.selected_student.get('first_name', 'Student')
+        mentor_data = get_mentor_script("quarter1", self.map_name, student_name)
+
         q_font = pygame.font.SysFont("Comic Sans MS", 15)
-        speech_lines = [
-            "Excellent! You have successfully solved my jigsaw puzzle.",
-            "I have unlocked the portal for you.",
-            "Walk through it to continue your journey.",
-            "Safe travels, young adventurer!"
-        ]
+        solved_text = mentor_data.get("solved", "Well done! The portal is open—step forward!")
+        speech_lines = solved_text.split("\n")
         
         y_text = box_y + 65
         for line in speech_lines:
@@ -3905,12 +4010,14 @@ class Quarter1:
         self.screen.blit(speaker_surf, (box_x + 25, box_y + 20))
         pygame.draw.line(self.screen, (218, 165, 32), (box_x + 25, box_y + 48), (box_x + 120, box_y + 48), 2)
 
+        from core.npc_scripts import get_mentor_script
+        student_name = "Student"
+        if hasattr(self.main_menu, 'selected_student') and self.main_menu.selected_student:
+            student_name = self.main_menu.selected_student.get('first_name', 'Student')
+        mentor_data = get_mentor_script("quarter1", self.map_name, student_name)
+
         q_font = pygame.font.SysFont("Comic Sans MS", 15)
-        speech_lines = [
-            "Excellent work gathering the puzzle pieces!",
-            "Now you must solve the jigsaw puzzle using what you got.",
-            "Are you ready to begin?"
-        ]
+        speech_lines = mentor_data["complete"].split("\n")
         
         y_text = box_y + 65
         for line in speech_lines:
@@ -3957,7 +4064,14 @@ class Quarter1:
     # DRAW UI
     # ============================================================
     def draw_ui(self):
-
+        # Quest Guide HUD Button (Top-Right)
+        guide_btn_rect = pygame.Rect(self.width - 130, 20, 110, 36)
+        is_guide_hov = guide_btn_rect.collidepoint(self.cursor_pos)
+        pygame.draw.rect(self.screen, (34, 197, 94) if is_guide_hov else (15, 23, 42), guide_btn_rect, border_radius=8)
+        pygame.draw.rect(self.screen, (250, 204, 21), guide_btn_rect, 2, border_radius=8)
+        guide_font = pygame.font.SysFont("Comic Sans MS", 12, bold=True)
+        guide_surf = guide_font.render("[?] Guide", True, (255, 255, 255) if is_guide_hov else (250, 204, 21))
+        self.screen.blit(guide_surf, guide_surf.get_rect(center=guide_btn_rect.center))
 
         # Draw Objectives HUD Box at the bottom center of the screen
         if self.is_quiz_map:
@@ -4068,6 +4182,19 @@ class Quarter1:
 
         if self.pause_menu.handle_event(event):
             return "blocked"
+
+        if event.type == pygame.KEYDOWN:
+            if event.key in (pygame.K_SPACE, pygame.K_RETURN):
+                if hasattr(self, 'instruction_modal') and self.instruction_modal.is_active():
+                    self.instruction_modal.hide()
+                    return "blocked"
+                if hasattr(self, 'greeting_dialog') and self.greeting_dialog.is_active():
+                    self.greeting_dialog.hide()
+                    self.active_shape_id = self.quiz_station_index
+                    self.current_question_index = self.quiz_station_index - 1
+                    self.quiz_state = 1
+                    self.selected_choice_index = -1
+                    return "blocked"
 
 
         if self.puzzle_active:

@@ -10,10 +10,12 @@ import math
 import pygame
 
 
-def draw_vector_star(surface, cx, cy, radius=8, color=(255, 215, 0), outline_color=(255, 255, 255), num_points=5):
+def draw_vector_star(surface, cx, cy, radius=8, color=(255, 215, 0), outline_color=(255, 255, 255), num_points=5, **kwargs):
     """
     Renders a mathematically sharp, symmetrical star polygon with an optional highlight rim.
     """
+    if "size" in kwargs:
+        radius = kwargs["size"]
     points = []
     total_vertices = num_points * 2
     for i in range(total_vertices):
