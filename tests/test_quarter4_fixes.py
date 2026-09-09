@@ -316,6 +316,52 @@ class TestQuarter4Fixes(unittest.TestCase):
                     self.assertGreaterEqual(py, 0)
                     self.assertLess(py, q4.map_loader.rows)
 
+    def test_map12_walk_and_click_platform_boarding(self):
+        """Verify Map 12 Lotus Platform can be boarded via walking to dock or direct click after answering stations."""
+        q4 = Quarter4(self.screen, self.mm, "map12.txt")
+        q4.instruction_modal.hide()
+
+        # 1. Answer all 6 stations
+        for st in range(1, len(q4.quiz_stations) + 1):
+            q4.answered_stations.add(st)
+        q4.quiz_state = 0
+
+        # Updating automatically sets raft to ready_to_sail
+        q4.update()
+        self.assertEqual(q4.raft_state, "ready_to_sail")
+
+        # 2. Test walkability of dock bank (col 28, 29, 30) - can_move should allow walking onto embarkation tiles
+        self.assertTrue(q4.can_move(28 * 32, 9 * 32))
+        self.assertTrue(q4.can_move(29 * 32, 9 * 32))
+        self.assertTrue(q4.can_move(30 * 32, 9 * 32))
+
+        # 3. Test walking near west dock triggers sailing cruise
+        q4.player_x = 28 * 32
+        q4.player_y = 9 * 32
+        q4.update()
+        self.assertEqual(q4.raft_state, "sailing")
+        self.assertTrue(q4.raft_passenger)
+
+        # 4. Finish cruise across water canal
+        q4.raft_x = q4.raft_target_x
+        q4.update()
+        self.assertEqual(q4.raft_state, "docked_east")
+        self.assertFalse(q4.raft_passenger)
+        self.assertAlmostEqual(q4.player_x, 37 * 32, delta=8)
+        self.assertEqual(q4.quiz_state, 6)
+
+        # 5. Verify East Pier dock walkability and path to portal at (48, 8)
+        self.assertTrue(q4.can_move(37 * 32, 9 * 32))
+        self.assertTrue(q4.can_move(38 * 32, 9 * 32))
+        self.assertTrue(q4.can_move(38 * 32, 8 * 32))
+
+        # 6. Test direct click on raft to return or board
+        rx = (q4.raft_x - q4.camera_x) * 1.5
+        ry = (q4.raft_y - q4.camera_y) * 1.5
+        q4.trigger_click((int(rx + 10), int(ry + 10)))
+        self.assertEqual(q4.raft_state, "sailing_west")
+        self.assertTrue(q4.raft_passenger)
+
 if __name__ == "__main__":
     unittest.main()
 

@@ -1073,10 +1073,20 @@ class Quarter4:
             tile = self.game_map[row][col]
 
             if tile not in self.WALKABLE_TILES:
-                # Map 12: Allow stepping on the docked raft when docked at the East Pier
-                if getattr(self, 'is_map12', False) and getattr(self, 'raft_state', None) == 'docked_east':
-                    if row == 9 and col in [35, 36]:
-                        continue
+                # Map 12: Allow stepping on the embarkation dock & raft tiles
+                if getattr(self, 'is_map12', False):
+                    # West Dock & Raft Embarkation
+                    if row in (8, 9, 10) and col in (28, 29, 30):
+                        if tile == 'W' and row == 9 and col == 30 and getattr(self, 'raft_state', None) in ['docked_west', 'ready_to_sail']:
+                            continue
+                        elif tile != 'T' and row in (8, 9, 10) and col in (28, 29):
+                            continue
+                    # East Dock & Arrival Pier
+                    if row in (8, 9, 10) and col in (35, 36, 37, 38):
+                        if tile == 'W' and row == 9 and col == 35 and getattr(self, 'raft_state', None) == 'docked_east':
+                            continue
+                        elif tile != 'T' and row in (8, 9, 10) and col in (36, 37, 38):
+                            continue
                 return False
 
             # Block entire 2-block wide closed double doors span
@@ -1092,6 +1102,10 @@ class Quarter4:
                     player_row = int(self.player_y // TILE_SIZE)
                     if player_col == npc_col and player_row == npc_row:
                         continue
+                    # On Map 12, don't let Bromen block embarking onto the raft once stations are answered
+                    if getattr(self, 'is_map12', False) and (npc_col, npc_row) == (29, 9):
+                        if len(self.answered_stations) >= 6 or getattr(self, 'key_puzzle_solved', False) or getattr(self, 'raft_state', None) != 'docked_west':
+                            continue
                     return False
 
         return True
@@ -1601,6 +1615,35 @@ class Quarter4:
                 if hasattr(self, 'reset_btn_rect') and self.reset_btn_rect and self.reset_btn_rect.collidepoint(pos):
                     self.init_key_puzzle()
 
+        # Check Direct Click on Lotus Raft on Map 12 (Board or Ride)
+        if getattr(self, 'is_map12', False) and self.quiz_state in [0, 6] and not getattr(self, 'raft_passenger', False) and not (self.key_puzzle_active or self.emblem_puzzle_active) and self.bromen_dialogue_state == 0:
+            rx = (self.raft_x - self.camera_x) * ZOOM
+            ry = (self.raft_y - self.camera_y) * ZOOM
+            raft_w = int(TILE_SIZE * 2.2 * ZOOM)
+            raft_h = int(TILE_SIZE * 1.8 * ZOOM)
+            raft_click_rect = pygame.Rect(rx - 15, ry - 15, raft_w + 30, raft_h + 30)
+            if raft_click_rect.collidepoint(pos):
+                if len(self.answered_stations) >= 6 or getattr(self, 'key_puzzle_solved', False):
+                    if getattr(self, 'raft_state', None) in ["docked_west", "ready_to_sail"]:
+                        self.raft_state = "sailing"
+                        self.raft_passenger = True
+                        self.player_x = self.raft_x
+                        self.player_y = self.raft_y
+                        print("[BOAT] Clicked Lotus Raft! Sailing eastward across canal rapids!")
+                        if hasattr(self, 'sound_snap') and self.sound_snap:
+                            try:
+                                self.sound_snap.play()
+                            except Exception:
+                                pass
+                        return
+                    elif getattr(self, 'raft_state', None) == "docked_east":
+                        self.raft_state = "sailing_west"
+                        self.raft_passenger = True
+                        self.player_x = self.raft_x
+                        self.player_y = self.raft_y
+                        print("[BOAT] Clicked Lotus Raft! Cruising back to West Pier!")
+                        return
+
     # ============================================================
     # UPDATE
     # ============================================================
@@ -1757,21 +1800,26 @@ class Quarter4:
 
         # Map 12: Lotus Raft sailing logic
         if getattr(self, 'is_map12', False):
-            # Ready to sail once the helm lock puzzle with Guardian Bromen is solved
-            if self.key_puzzle_solved and self.raft_state == "docked_west":
+            # Ready to sail once all 6 stations are cleared or key puzzle solved
+            if (len(self.answered_stations) >= 6 or getattr(self, 'key_puzzle_solved', False)) and self.raft_state == "docked_west":
                 self.raft_state = "ready_to_sail"
-                print("[WAVE] Helm lock solved! Lotus Raft is untethered and ready to sail!")
+                print("[WAVE] All stations answered! Lotus Raft is untethered and ready to sail!")
 
-            # Check if player is near the Lotus Raft when ready to sail
+            # Check if player is near the Lotus Raft when ready to sail (West Pier)
             if self.raft_state == "ready_to_sail":
                 player_center_x = self.player_x + TILE_SIZE // 2
                 player_center_y = self.player_y + TILE_SIZE // 2
                 raft_center_x = self.raft_x + TILE_SIZE // 2
                 raft_center_y = self.raft_y + TILE_SIZE // 2
                 dist_to_raft = math.hypot(player_center_x - raft_center_x, player_center_y - raft_center_y)
-                if dist_to_raft < TILE_SIZE * 1.5:
+                player_col = int(self.player_x // TILE_SIZE)
+                player_row = int(self.player_y // TILE_SIZE)
+                # Generous boarding range: anywhere on the west dock bank (cols 28-30, rows 8-10) or within 3.5 tiles
+                if dist_to_raft < TILE_SIZE * 3.5 or (player_col in (28, 29, 30) and player_row in (8, 9, 10)):
                     self.raft_state = "sailing"
                     self.raft_passenger = True
+                    self.player_x = self.raft_x
+                    self.player_y = self.raft_y
                     print("[BOAT] Player hopped on the Lotus Raft! Sailing down the canal rapids!")
                     if hasattr(self, 'sound_snap') and self.sound_snap:
                         try:
@@ -1779,7 +1827,7 @@ class Quarter4:
                         except Exception:
                             pass
 
-            # Update sailing animation and movement
+            # Update sailing animation and movement (Eastward to Goal Portal)
             if self.raft_state == "sailing":
                 self.raft_x += self.raft_speed * dt
                 self.player_x = self.raft_x
@@ -1811,6 +1859,28 @@ class Quarter4:
                         except Exception:
                             pass
 
+            # Update sailing animation and movement (Westward return if desired)
+            elif self.raft_state == "sailing_west":
+                self.raft_x -= self.raft_speed * dt
+                self.player_x = self.raft_x
+                self.player_y = self.raft_y
+                if random.random() < 0.65:
+                    self.raft_wake_particles.append({
+                        'x': self.raft_x + 36 + random.uniform(-4, 4),
+                        'y': self.raft_y + 16 + random.uniform(-6, 6),
+                        'vx': random.uniform(0.3, 1.2),
+                        'vy': random.uniform(-0.6, 0.6),
+                        'radius': random.uniform(3, 6),
+                        'life': 1.0
+                    })
+                if self.raft_x <= 30.0 * TILE_SIZE:
+                    self.raft_x = 30.0 * TILE_SIZE
+                    self.raft_state = "docked_west"
+                    self.raft_passenger = False
+                    self.player_x = 29.0 * TILE_SIZE
+                    self.player_y = 9.0 * TILE_SIZE
+                    print("[BOAT] Lotus Raft returned to West Pier!")
+
         tot_stations = len(self.quiz_stations) if hasattr(self, 'quiz_stations') and self.quiz_stations else 6
         if len(self.answered_stations) >= tot_stations and not self.npc_bromen_found and self.quiz_state == 0:
             self.quiz_state = 6
@@ -1825,6 +1895,8 @@ class Quarter4:
             self.bromen_dialogue_state == 0 and 
             self.npc_bromen_found and 
             not self.key_puzzle_solved and
+            not getattr(self, 'raft_passenger', False) and
+            (not getattr(self, 'is_map12', False) or getattr(self, 'raft_state', None) == 'docked_west') and
             now >= getattr(self, 'bromen_proximity_cooldown_end', 0)):
             player_center_x = self.player_x + TILE_SIZE // 2
             player_center_y = self.player_y + TILE_SIZE // 2
@@ -2188,16 +2260,31 @@ class Quarter4:
         self.screen.blit(glow_surf, (lantern_x - glow_r, lantern_y - glow_r))
         pygame.draw.circle(self.screen, (255, 255, 255), (lantern_x, lantern_y), max(1, int(2 * ZOOM)))
 
-        # 6. Boarding Banner Pill when ready to sail
-        if self.raft_state == "ready_to_sail":
+        # 6. Boarding Banner Pill when ready to sail / stations cleared
+        is_ready = (self.raft_state == "ready_to_sail") or (len(self.answered_stations) >= 6 and self.raft_state == "docked_west")
+        if is_ready:
             prompt_font = pygame.font.SysFont("Comic Sans MS", int(11 * ZOOM), bold=True)
-            prompt_text = "HOP ON THE RAFT!"
+            prompt_text = "[CLICK / WALK HERE] RIDE PLATFORM >>"
             p_surf = prompt_font.render(prompt_text, True, (15, 23, 42))
+            pw = p_surf.get_width() + 16
+            ph = p_surf.get_height() + 8
+
+            b_surf = pygame.Surface((pw, ph), pygame.SRCALPHA)
+            b_surf.fill((250, 204, 21, 240))
+            pygame.draw.rect(b_surf, (255, 255, 255), (0, 0, pw, ph), 2, border_radius=8)
+            b_surf.blit(p_surf, (8, 4))
+
+            prompt_y = cy - hull_h // 2 - ph - int(8 * ZOOM) + int(math.sin(self.frame_counter * 0.15) * 3 * ZOOM)
+            self.screen.blit(b_surf, (cx - pw // 2, prompt_y))
+        elif self.raft_state == "docked_east":
+            prompt_font = pygame.font.SysFont("Comic Sans MS", int(10 * ZOOM), bold=True)
+            prompt_text = "PORTAL UNLOCKED! WALK EAST >>"
+            p_surf = prompt_font.render(prompt_text, True, (255, 255, 255))
             pw = p_surf.get_width() + 14
             ph = p_surf.get_height() + 8
 
             b_surf = pygame.Surface((pw, ph), pygame.SRCALPHA)
-            b_surf.fill((250, 204, 21, 230))
+            b_surf.fill((16, 185, 129, 230))
             pygame.draw.rect(b_surf, (255, 255, 255), (0, 0, pw, ph), 2, border_radius=8)
             b_surf.blit(p_surf, (7, 4))
 
@@ -4142,12 +4229,10 @@ class Quarter4:
                 npc_name = self.station_npcs.get(active_target_idx, {}).get("name", f"Guardian {active_target_idx}")
                 target_info = (st_x, st_y, npc_name)
             elif getattr(self, 'is_map12', False):
-                if not self.key_puzzle_solved and self.npc_bromen_found:
-                    target_info = (self.npc_bromen_tile_x, self.npc_bromen_tile_y, "Guardian Bromen")
-                elif getattr(self, 'raft_state', None) in ["docked_west", "ready_to_sail"]:
-                    target_info = (29, 9, "Lotus Raft")
+                if getattr(self, 'raft_state', None) in ["docked_west", "ready_to_sail"]:
+                    target_info = (30, 9, "Lotus Platform")
                 else:
-                    target_info = (48, 9, "Exit Portal")
+                    target_info = (48, 8, "Exit Portal")
             elif self.npc_bromen_found and not (self.key_puzzle_solved or self.emblem_puzzle_solved):
                 target_info = (self.npc_bromen_tile_x, self.npc_bromen_tile_y, "Bromen (Ancient Lock Block)")
 
