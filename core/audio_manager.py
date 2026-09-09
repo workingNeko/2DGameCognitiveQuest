@@ -486,6 +486,12 @@ class AudioManager:
             a_star = (np.clip(w_star, -1.0, 1.0) * 26000).astype(np.int16)
             self.sfx_cache["star_chime"] = pygame.sndarray.make_sound(np.column_stack((a_star, a_star)))
 
+            # 21. Modal / Menu Open (Pleasant ascending soft harmonic chime)
+            t_open = np.linspace(0, 0.22, int(sr * 0.22), False)
+            w_open = (0.5 * np.sin(2 * np.pi * 659.25 * t_open) + 0.5 * np.sin(2 * np.pi * 987.77 * t_open)) * np.exp(-t_open * 18)
+            a_open = (w_open * 22000).astype(np.int16)
+            self.sfx_cache["menu_open"] = pygame.sndarray.make_sound(np.column_stack((a_open, a_open)))
+
         except Exception as e:
             print(f"[WARN] AudioManager: Warning synthesizing core SFX: {e}")
 

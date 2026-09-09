@@ -1519,7 +1519,7 @@ class Quarter2:
 
         # Overwrite G and T with Q2 tiles for Quarter 2 Maps
         tiles["G"] = load_tile("grass.png", is_q2=True)
-        tiles["T"] = load_tile("tree_pine_very_tall_clean.png", is_q2=True)
+        tiles["T"] = load_tile("tree_pine_medium_clean.png", is_q2=True)
 
         # New Q2 tiles
         q2_tiles = {

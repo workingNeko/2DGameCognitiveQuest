@@ -537,6 +537,7 @@ class MainMenu:
             box_w, box_h = 580, 360
             box_x = (self.w - box_w) // 2
             box_y = (self.h - box_h) // 2
+            dialog_rect = pygame.Rect(box_x, box_y, box_w, box_h)
 
             m_minus_rect = pygame.Rect(box_x + 40, box_y + 105, 42, 34)
             m_bar_rect = pygame.Rect(box_x + 92, box_y + 110, 240, 24)
