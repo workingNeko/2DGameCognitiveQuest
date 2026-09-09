@@ -1483,6 +1483,21 @@ class MainMenu:
             pygame.draw.rect(self.screen, (34, 197, 94), (bx, by, fill_w, bh), border_radius=5)
         pygame.draw.rect(self.screen, (51, 65, 85), (bx, by, bw, bh), 1, border_radius=5)
 
+    def get_gesture_hud_geometry(self):
+        """Calculates non-overlapping coordinates for the gesture status badge."""
+        pill_w = 184
+        pill_h = 36
+        if self.current_screen in ["student_select", "leaderboard"]:
+            # On student selection and leaderboard, avoid the top-left back button
+            pill_x = 165
+            pill_y = 22
+        else:
+            # On all gameplay quarters, tutorial, stage_select, and main menu:
+            # Position at Top-Left to ensure zero collision with top-right Guide and Pause buttons
+            pill_x = 20
+            pill_y = 18
+        return pill_x, pill_y, pill_w, pill_h
+
     def draw_camera_feed(self):
         # Always draw the real-time Gesture Status HUD badge!
         self.draw_gesture_hud()
@@ -1493,8 +1508,9 @@ class MainMenu:
             camera_surface = pygame.surfarray.make_surface(np.swapaxes(camera_frame_rgb, 0, 1))
             camera_surface = pygame.transform.scale(camera_surface, (120, 90))
 
-            camera_x = self.w - 130
-            camera_y = 52
+            pill_x, pill_y, pill_w, pill_h = self.get_gesture_hud_geometry()
+            camera_x = pill_x
+            camera_y = pill_y + pill_h + 8
 
             pygame.draw.rect(self.screen, (255, 255, 255), (camera_x - 2, camera_y - 2, 124, 94), 2, border_radius=6)
             self.screen.blit(camera_surface, (camera_x, camera_y))
@@ -1536,10 +1552,7 @@ class MainMenu:
             text_col = (203, 213, 225)
             fill_pct = 0.0
 
-        pill_w = 184
-        pill_h = 32
-        pill_x = self.w - pill_w - 12
-        pill_y = 10
+        pill_x, pill_y, pill_w, pill_h = self.get_gesture_hud_geometry()
 
         # Semi-transparent background with progress indicator
         pill_surf = pygame.Surface((pill_w, pill_h), pygame.SRCALPHA)

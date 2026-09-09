@@ -596,6 +596,45 @@ def test_mouse_clicks_student_selection():
 
     print("PASS: Student selection mouse click, hover, and scroll verified successfully.")
 
+def test_gesture_hud_no_overlap():
+    """Verify that the gesture status HUD (SEEKING HAND) does not collide with Guide or Pause buttons."""
+    from screens.main_menu import MainMenu
+    from screens.quarter1 import Quarter1
+    from screens.quarter2 import Quarter2
+    from screens.quarter3 import Quarter3
+    from screens.quarter4 import Quarter4
+    from screens.tutorial import TutorialScreen
+
+    menu = MainMenu(screen)
+    screens_to_check = [
+        ("quarter1", Quarter1(screen, menu, "map1.txt")),
+        ("quarter2", Quarter2(screen, menu, "map4.txt")),
+        ("quarter3", Quarter3(screen, menu, "map7.txt")),
+        ("quarter4", Quarter4(screen, menu, "map10.txt")),
+        ("tutorial", TutorialScreen(screen, menu)),
+    ]
+
+    for s_name, s_obj in screens_to_check:
+        if hasattr(s_obj, 'instruction_modal'):
+            s_obj.instruction_modal.hide()
+        menu.current_screen = s_name
+        gx, gy, gw, gh = menu.get_gesture_hud_geometry()
+        gesture_rect = pygame.Rect(gx, gy, gw, gh)
+
+        # 1. Must not collide with Pause Button
+        pause_rect = s_obj.pause_menu.pause_btn_rect
+        assert not gesture_rect.colliderect(pause_rect), f"[{s_name}] Gesture HUD {gesture_rect} overlaps Pause button {pause_rect}!"
+
+        # 2. Must not collide with Guide Button (if present)
+        guide_rect = getattr(s_obj, 'guide_btn_rect', None)
+        if guide_rect is None and s_name == "quarter1":
+            guide_rect = pygame.Rect(screen.get_width() - 256, 18, 110, 36)
+        if guide_rect is not None:
+            assert not gesture_rect.colliderect(guide_rect), f"[{s_name}] Gesture HUD {gesture_rect} overlaps Guide button {guide_rect}!"
+            assert not guide_rect.colliderect(pause_rect), f"[{s_name}] Guide button {guide_rect} overlaps Pause button {pause_rect}!"
+
+    print("PASS: Gesture Status HUD has zero collision with Guide and Pause buttons across all gameplay screens.")
+
 if __name__ == "__main__":
     test_audio_manager_sounds()
     test_pedagogical_hints()
@@ -608,6 +647,7 @@ if __name__ == "__main__":
     test_quarters_integration()
     test_bromen_exclusive_to_quarter4()
     test_map5_portal_loading()
+    test_gesture_hud_no_overlap()
     print("\nALL GAME STANDARD ENHANCEMENT TESTS PASSED SUCCESSFULLY!")
 
 
