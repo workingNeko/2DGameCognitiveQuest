@@ -2412,7 +2412,7 @@ class Quarter1:
             return
 
         # Check HUD Guide Button click
-        guide_btn_rect = pygame.Rect(self.width - 130, 20, 110, 36)
+        guide_btn_rect = pygame.Rect(self.width - 256, 18, 110, 36)
         if guide_btn_rect.collidepoint(pos):
             inst_data = get_map_instructions("quarter1", self.map_name, student_name)
             self.instruction_modal.show(inst_data)
@@ -2429,7 +2429,8 @@ class Quarter1:
 
         # State 1: Dialog with choices
         if self.quiz_state == 1:
-            q_data = self.quiz_questions[self.current_question_index]
+            q_idx = max(0, min(self.current_question_index, len(self.quiz_questions) - 1)) if self.quiz_questions else 0
+            q_data = self.quiz_questions[q_idx] if self.quiz_questions else {"question": "", "choices": [], "correct": 0}
             clicked_idx = self.quiz_dialog.get_clicked_choice(pos)
 
             if clicked_idx is not None and clicked_idx < len(q_data["choices"]):
@@ -3351,7 +3352,8 @@ class Quarter1:
         if hasattr(self.main_menu, 'selected_student') and self.main_menu.selected_student:
             student_name = self.main_menu.selected_student.get('first_name', 'Student')
 
-        q_data = self.quiz_questions[self.current_question_index]
+        q_idx = max(0, min(self.current_question_index, len(self.quiz_questions) - 1)) if self.quiz_questions else 0
+        q_data = self.quiz_questions[q_idx] if self.quiz_questions else {"question": "", "choices": [], "correct": 0}
         script_data = get_station_script("quarter1", self.map_name, self.quiz_station_index, student_name)
         speaker_name = script_data["name"]
         speaker_subtitle = f"{script_data['role']} - Station {self.quiz_station_index} of 5"
@@ -4064,8 +4066,8 @@ class Quarter1:
     # DRAW UI
     # ============================================================
     def draw_ui(self):
-        # Quest Guide HUD Button (Top-Right)
-        guide_btn_rect = pygame.Rect(self.width - 130, 20, 110, 36)
+        # Quest Guide HUD Button (Top-Right, left of Pause)
+        guide_btn_rect = pygame.Rect(self.width - 256, 18, 110, 36)
         is_guide_hov = guide_btn_rect.collidepoint(self.cursor_pos)
         pygame.draw.rect(self.screen, (34, 197, 94) if is_guide_hov else (15, 23, 42), guide_btn_rect, border_radius=8)
         pygame.draw.rect(self.screen, (250, 204, 21), guide_btn_rect, 2, border_radius=8)

@@ -91,7 +91,7 @@ class Quarter3:
         # NPC Instruction Modal & Proximity Greeting Dialog System
         self.instruction_modal = InstructionModal(self.screen, self.width, self.height)
         self.greeting_dialog = NPCGreetingDialog(self.screen, self.width, self.height)
-        self.guide_btn_rect = pygame.Rect(self.width - 130, 20, 110, 36)
+        self.guide_btn_rect = pygame.Rect(self.width - 256, 18, 110, 36)
         self.fist_progress = 0.0
 
         # Show Initial Map Instructions Popup
@@ -1871,7 +1871,8 @@ class Quarter3:
         
         # State 1: Multiple Choice Answer Selection (No icons)
         if self.quiz_state == 1:
-            q_data = self.quiz_questions[self.current_question_index]
+            q_idx = max(0, min(self.current_question_index, len(self.quiz_questions) - 1)) if self.quiz_questions else 0
+            q_data = self.quiz_questions[q_idx] if self.quiz_questions else {"question": "", "choices": [], "correct": 0}
             clicked_idx = self.quiz_dialog.get_clicked_choice(pos, self.eliminated_choices)
 
             if clicked_idx is not None and clicked_idx < len(q_data["choices"]):
@@ -3692,7 +3693,8 @@ class Quarter3:
     # QUIZ DIALOGUE DRAWING METHODS (Clean & Icon-Free)
     # ============================================================
     def draw_quiz_dialog(self):
-        q_data = self.quiz_questions[self.current_question_index]
+        q_idx = max(0, min(self.current_question_index, len(self.quiz_questions) - 1)) if self.quiz_questions else 0
+        q_data = self.quiz_questions[q_idx] if self.quiz_questions else {"question": "", "choices": [], "correct": 0}
         st_title = q_data.get("title", f"Challenge {self.quiz_station_index}")
         npc_info = self.station_npcs.get(self.quiz_station_index, {})
         speaker_name = npc_info.get("name", "Guardian")

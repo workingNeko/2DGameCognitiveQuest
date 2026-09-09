@@ -24,10 +24,12 @@ stdout.log
 # Temporary test & scratch artifacts
 scratch/
 test_*.png
-test_*.py
+/test_*.py
+!tests/
 db/saves/test_*.json
 db/cache/
 db/reset_records.json
+db/pending_sync.json
 *.tmp
 
 # Operating system files

@@ -3,53 +3,32 @@
     "selected_student": {
         "id": 9,
         "student_id": "1",
-        "first_name": "Jessuny Dado",
-        "last_name": "",
-        "score": 140,
-        "progress": 100,
+        "first_name": "Jessuny",
+        "last_name": "Dado",
+        "score": 100,
+        "progress": 25,
         "level": "Grade 2",
         "gender": "male"
     },
     "current_screen": "menu",
-    "tutorial_completed": true,
+    "tutorial_completed": false,
     "completed_quarters": {
         "quarter1": {
             "completed": true,
-            "score": 20,
-            "percentage": 20.0,
+            "score": 100,
+            "percentage": 100.0,
             "total_questions": 5,
-            "timestamp": 1788889400.985542
-        },
-        "quarter2": {
-            "completed": true,
-            "score": 20,
-            "percentage": 20.0,
-            "total_questions": 5,
-            "timestamp": 1788889446.9419847
-        },
-        "quarter3": {
-            "completed": true,
-            "score": 60,
-            "percentage": 60.0,
-            "total_questions": 5,
-            "timestamp": 1788889497.2456775
-        },
-        "quarter4": {
-            "completed": true,
-            "score": 40,
-            "percentage": 33.3,
-            "total_questions": 6,
-            "timestamp": 1788891901.6790595
+            "timestamp": 1788926042.2392013
         }
     },
-    "timestamp": 1788892125.3584957,
+    "timestamp": 1788926042.4010913,
     "stage_select": {
-        "player_x": 859.9400000000026,
-        "player_y": 58.059999999999434,
+        "player_x": 832,
+        "player_y": 416,
         "oldman_dialogue_state": 0,
         "knight_dialogue_state": 0,
         "skeleton_dialogue_state": 0,
-        "bromen_dialogue_state": 3,
-        "player_following_target": false
+        "bromen_dialogue_state": 0,
+        "player_following_target": null
     }
 }

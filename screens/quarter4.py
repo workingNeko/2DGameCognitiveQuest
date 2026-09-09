@@ -94,7 +94,7 @@ class Quarter4:
         # NPC Instruction Modal & Proximity Greeting Dialog System
         self.instruction_modal = InstructionModal(self.screen, self.width, self.height)
         self.greeting_dialog = NPCGreetingDialog(self.screen, self.width, self.height)
-        self.guide_btn_rect = pygame.Rect(self.width - 130, 20, 110, 36)
+        self.guide_btn_rect = pygame.Rect(self.width - 256, 18, 110, 36)
         self.fist_progress = 0.0
 
         # Show Initial Map Instructions Popup
@@ -1416,8 +1416,8 @@ class Quarter4:
         
         # State 1: Quiz Question dialogue click
         if self.quiz_state == 1:
-            q_idx = min(self.current_question_index, len(self.quiz_questions) - 1)
-            q_data = self.quiz_questions[q_idx]
+            q_idx = max(0, min(self.current_question_index, len(self.quiz_questions) - 1)) if self.quiz_questions else 0
+            q_data = self.quiz_questions[q_idx] if self.quiz_questions else {"question": "", "choices": [], "correct": 0}
             clicked_idx = self.quiz_dialog.get_clicked_choice(pos, self.eliminated_choices)
 
             if clicked_idx is not None and clicked_idx < len(q_data["choices"]):
@@ -2694,8 +2694,8 @@ class Quarter4:
     # QUIZ DIALOGUE DRAWING METHODS
     # ============================================================
     def draw_quiz_dialog(self):
-        q_idx = min(self.current_question_index, len(self.quiz_questions) - 1)
-        q_data = self.quiz_questions[q_idx]
+        q_idx = max(0, min(self.current_question_index, len(self.quiz_questions) - 1)) if self.quiz_questions else 0
+        q_data = self.quiz_questions[q_idx] if self.quiz_questions else {"question": "", "choices": [], "correct": 0}
         npc_data = self.station_npcs.get(self.quiz_station_index, {})
         tot_stations = len(self.quiz_stations) if hasattr(self, 'quiz_stations') and self.quiz_stations else 6
         raw_speaker_name = npc_data.get("name", "Water Guardian")
@@ -2758,7 +2758,7 @@ class Quarter4:
         # Pedagogical Educational Hint Box
         from core.hints import get_educational_hint
         from core.vector_icons import draw_vector_lightbulb
-        q_idx = min(self.current_question_index, len(self.quiz_questions) - 1)
+        q_idx = max(0, min(self.current_question_index, len(self.quiz_questions) - 1)) if self.quiz_questions else 0
         current_q = self.quiz_questions[q_idx] if self.quiz_questions else {}
         q_text = current_q.get("question", "")
         hint_text = get_educational_hint("quarter4", q_text)

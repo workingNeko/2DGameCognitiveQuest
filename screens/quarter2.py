@@ -93,7 +93,7 @@ class Quarter2:
         # NPC Instruction Modal & Proximity Greeting Dialog System
         self.instruction_modal = InstructionModal(self.screen, self.width, self.height)
         self.greeting_dialog = NPCGreetingDialog(self.screen, self.width, self.height)
-        self.guide_btn_rect = pygame.Rect(self.width - 130, 20, 110, 36)
+        self.guide_btn_rect = pygame.Rect(self.width - 256, 18, 110, 36)
         self.fist_progress = 0.0
 
         # Show Initial Map Instructions Popup
@@ -2555,7 +2555,8 @@ class Quarter2:
         
         # State 1: Choice Button Selection (No icons)
         if self.quiz_state == 1:
-            q_data = self.quiz_questions[self.current_question_index]
+            q_idx = max(0, min(self.current_question_index, len(self.quiz_questions) - 1)) if self.quiz_questions else 0
+            q_data = self.quiz_questions[q_idx] if self.quiz_questions else {"question": "", "choices": [], "correct": 0}
             clicked_idx = self.quiz_dialog.get_clicked_choice(pos, self.eliminated_choices)
             
             if clicked_idx is not None and clicked_idx < len(q_data["choices"]):
@@ -2879,7 +2880,8 @@ class Quarter2:
             anim_idx = info.get("anim_frame", 0) % len(frames)
             sprite_frame = frames[anim_idx]
 
-        q_data = self.quiz_questions[self.current_question_index]
+        q_idx = max(0, min(self.current_question_index, len(self.quiz_questions) - 1)) if self.quiz_questions else 0
+        q_data = self.quiz_questions[q_idx] if self.quiz_questions else {"question": "", "choices": [], "correct": 0}
 
         self.quiz_dialog.update(0.016)
         self.quiz_dialog.draw(

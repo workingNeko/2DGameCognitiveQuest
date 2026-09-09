@@ -1,4 +1,7 @@
 # tests/test_npc_scripts.py
+import os
+import sys
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 import unittest
 from core.npc_scripts import (
     get_map_instructions,
