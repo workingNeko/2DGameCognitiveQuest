@@ -2631,13 +2631,13 @@ class Quarter2:
             box_y = (self.height - box_h) // 2
             btn_rect = pygame.Rect(box_x + (box_w - 240) // 2, box_y + 175, 240, 44)
             if btn_rect.collidepoint(pos):
-                # Award 2-second Festive Sprint Speed Boost (SPEED = 4)!
-                self.speed_boost_timer = 2.0
+                # Award 3-second Festive Sprint Speed Boost!
+                self.speed_boost_timer = 3.0
                 cleared_info = self.station_npc_info.get(self.quiz_station_index, {})
                 cleared_name = cleared_info.get("name", f"Station {self.quiz_station_index}")
                 self.banner_text = f"STALL CLEARED: {cleared_name.upper()}!"
                 self.banner_sub = "Festive Sprint active! Proceed to the next barrio stall!"
-                self.banner_timer = 2.0
+                self.banner_timer = 3.0
 
                 current_st = self.quiz_station_index
                 if self.map_name == "map5.txt":
@@ -2664,12 +2664,12 @@ class Quarter2:
             if btn_rect.collidepoint(pos):
                 self.eliminated_choices.clear()
                 self.wrong_feedback_msg = ""
-                self.speed_boost_timer = 2.0
+                self.speed_boost_timer = 3.0
                 cleared_info = self.station_npc_info.get(self.quiz_station_index, {})
                 cleared_name = cleared_info.get("name", f"Station {self.quiz_station_index}")
                 self.banner_text = f"STALL CLEARED: {cleared_name.upper()}!"
                 self.banner_sub = "Festive Sprint active! Proceed to the next barrio stall!"
-                self.banner_timer = 2.0
+                self.banner_timer = 3.0
 
                 current_st = self.quiz_station_index
                 if self.map_name == "map5.txt":
@@ -2758,10 +2758,10 @@ class Quarter2:
                 self.title_active = False
 
         # Update speed boost timer & banner timer
-        if self.speed_boost_timer > 0:
-            self.speed_boost_timer -= dt
+        if self.speed_boost_timer > 0 and self.quiz_state in [0, 5, 6] and not getattr(self, 'camera_pan_active', False):
+            self.speed_boost_timer = max(0.0, self.speed_boost_timer - dt)
         if self.banner_timer > 0:
-            self.banner_timer -= dt
+            self.banner_timer = max(0.0, self.banner_timer - dt)
 
         # Update tile animation frame
         self.tile_anim_timer += 1
@@ -3371,7 +3371,7 @@ class Quarter2:
             self.anim_frame = 0
             return
 
-        current_speed = (SPEED * 1.4) if self.speed_boost_timer > 0 else SPEED
+        current_speed = (SPEED * 1.5) if self.speed_boost_timer > 0 else SPEED
         vx, vy = 0, 0
 
         # Hand Gesture / Cursor Directional Controls (Pure Gesture Navigation)

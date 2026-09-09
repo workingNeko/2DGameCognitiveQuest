@@ -1718,6 +1718,7 @@ class Quarter3:
         self.eliminated_choices.clear()
         self.wrong_feedback_msg = ""
         self.ident_input_text = ""
+        self.speed_boost_timer = 3.0
 
         # Map 7 Reward: Load Cargo onto Explorer's Caravan
         if self.is_caravan_mode and self.quiz_station_index in self.station_cargo_rewards:
@@ -1725,8 +1726,8 @@ class Quarter3:
             self.caravan_cargo.append(reward)
             self.caravan_upgrade_banner_text = f"CARAVAN UPGRADE: {reward['name']} Loaded!"
             self.caravan_upgrade_banner_sub = f"Speed Rush Activated! {reward['desc']}"
-            self.caravan_upgrade_banner_timer = 4.0
-            self.speed_boost_timer = 5.0  # 5 seconds of lightning sprint!
+            self.caravan_upgrade_banner_timer = 3.0
+            self.speed_boost_timer = 3.0  # 3 seconds of speed sprint!
 
             # Spawn celebration sparkles and music notes
             for _ in range(20):
@@ -1748,8 +1749,8 @@ class Quarter3:
             self.citadel_collected_keystones.append(keystone)
             self.citadel_banner_text = f"SUN KEYSTONE {st_num}/5 UNLOCKED!"
             self.citadel_banner_sub = f"{keystone['name']} ({keystone['math']}) slotted into Citadel Altar!"
-            self.citadel_banner_timer = 4.0
-            self.speed_boost_timer = 5.0
+            self.citadel_banner_timer = 3.0
+            self.speed_boost_timer = 3.0
 
             for _ in range(25):
                 self.caravan_sparkles.append({
@@ -1764,7 +1765,7 @@ class Quarter3:
             print(f"Citadel Keystone {st_num} Acquired: {keystone['name']}")
 
         elif self.map_name == "map8.txt":
-            self.speed_boost_timer = 6.0
+            self.speed_boost_timer = 3.0
 
         # In-World Bridge Construction and Camera Pan for Map 8
         st_num = self.quiz_station_index
@@ -2238,8 +2239,8 @@ class Quarter3:
                 self.citadel_banner_text = ""
 
         # Update Speed Boost & Wind Sprites
-        if self.speed_boost_timer > 0:
-            self.speed_boost_timer -= dt
+        if self.speed_boost_timer > 0 and self.quiz_state in [0, 5, 6] and not getattr(self, 'camera_pan_active', False):
+            self.speed_boost_timer = max(0.0, self.speed_boost_timer - dt)
             if random.random() < 0.35:
                 self.caravan_sparkles.append({
                     "x": self.player_x + random.randint(4, 28),

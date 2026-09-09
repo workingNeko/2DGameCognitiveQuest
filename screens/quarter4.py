@@ -437,6 +437,8 @@ class Quarter4:
         ]
 
         self.player_block_timer = 0.0
+        self.speed_boost_timer = 0.0
+        self.speed_sparkles = []
 
         # Curated review questions (2 shapes Q1, 2 geometry Q2, 2 arithmetic/fractions Q3)
         self.quiz_questions = [
@@ -1482,6 +1484,7 @@ class Quarter4:
                 if btn_rect.collidepoint(pos):
                     hit = True
             if hit:
+                self.speed_boost_timer = 3.0
                 self.quiz_state = 0
                 self.trigger_award_animation(self.quiz_station_index)
                 if self.quiz_station_index < len(self.quiz_stations):
@@ -1505,6 +1508,7 @@ class Quarter4:
                 if btn_rect.collidepoint(pos):
                     hit = True
             if hit:
+                self.speed_boost_timer = 3.0
                 self.eliminated_choices.clear()
                 self.quiz_state = 0
                 self.trigger_award_animation(self.quiz_station_index)
@@ -1659,6 +1663,21 @@ class Quarter4:
             self.title_elapsed += dt
             if self.title_elapsed >= self.title_duration:
                 self.title_active = False
+
+        # Update speed boost sprint timer
+        if hasattr(self, 'speed_boost_timer') and self.speed_boost_timer > 0 and self.quiz_state in [0, 6] and not getattr(self, 'key_puzzle_active', False) and not getattr(self, 'emblem_puzzle_active', False) and getattr(self, 'player_block_timer', 0) <= 0:
+            self.speed_boost_timer = max(0.0, self.speed_boost_timer - dt)
+
+        # Update speed sparkles
+        if hasattr(self, 'speed_sparkles') and self.speed_sparkles:
+            surviving_sp = []
+            for sp in self.speed_sparkles:
+                sp["x"] += sp["vx"]
+                sp["y"] += sp["vy"]
+                sp["life"] -= dt
+                if sp["life"] > 0:
+                    surviving_sp.append(sp)
+            self.speed_sparkles = surviving_sp
 
         # Update animations for all 6 Shape/Number Station NPCs
         if hasattr(self, 'station_npcs') and self.station_npcs:
@@ -1851,7 +1870,7 @@ class Quarter4:
             return
 
         vx, vy = 0, 0
-        current_speed = SPEED
+        current_speed = (SPEED * 1.5) if getattr(self, 'speed_boost_timer', 0) > 0 else SPEED
 
         # Hand Gesture / Cursor Directional Controls (Pure Gesture Navigation)
         player_screen_x = (self.player_x - self.camera_x + TILE_SIZE / 2) * ZOOM
@@ -1888,11 +1907,24 @@ class Quarter4:
 
         if vx != 0 or vy != 0:
             self.anim_timer += 1
-            if self.anim_timer >= 16:
+            if self.anim_timer >= (10 if getattr(self, 'speed_boost_timer', 0) > 0 else 16):
                 self.anim_timer = 0
                 self.anim_frame = (self.anim_frame + 1) % 2
                 if hasattr(self.main_menu, 'audio_manager'):
                     self.main_menu.audio_manager.play_sfx("footstep_stone")
+
+            # Spawn celebration sparkles during speed boost sprint
+            if getattr(self, 'speed_boost_timer', 0) > 0 and random.random() < 0.4:
+                f_cols = [(255, 215, 0), (56, 189, 248), (34, 197, 94), (168, 85, 247), (245, 158, 11)]
+                self.speed_sparkles.append({
+                    "x": self.player_x + TILE_SIZE // 2 + random.randint(-8, 8),
+                    "y": self.player_y + TILE_SIZE - random.randint(0, 8),
+                    "vx": random.uniform(-0.5, 0.5),
+                    "vy": random.uniform(-1.0, -0.2),
+                    "color": random.choice(f_cols),
+                    "life": 0.5,
+                    "rad": random.randint(2, 4)
+                })
         else:
             self.anim_frame = 0
 
@@ -2300,6 +2332,16 @@ class Quarter4:
 
         self.draw_player()
         self.draw_water_particles()
+
+        # Draw speed boost sprint sparkles
+        if hasattr(self, 'speed_sparkles'):
+            for sp in self.speed_sparkles:
+                sx = (sp["x"] - self.camera_x) * ZOOM
+                sy = (sp["y"] - self.camera_y) * ZOOM
+                if 0 <= sx <= self.width and 0 <= sy <= self.height:
+                    life_pct = max(0.0, min(1.0, sp.get("life", 0.5) / 0.5))
+                    r = max(1, int(sp.get("rad", 3) * life_pct))
+                    pygame.draw.circle(self.screen, sp.get("color", (255, 215, 0)), (int(sx), int(sy)), r)
 
         # Draw visible tree tiles on top of everything (Second pass)
         for row in range(start_row, end_row):

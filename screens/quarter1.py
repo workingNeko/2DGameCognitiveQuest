@@ -408,6 +408,8 @@ class Quarter1:
         self.quiz_station_index = 1  # current station (1-5)
         self.current_question_index = 0
         self.selected_choice_index = -1  # choice highlighted
+        self.speed_boost_timer = 0.0
+        self.speed_sparkles = []
 
         # Seamless portal warp transition variables
         self.warp_out_active = False
@@ -2478,7 +2480,8 @@ class Quarter1:
             box_y = (self.height - box_h) // 2
             btn_rect = pygame.Rect(box_x + (box_w - 200) // 2, box_y + 140, 200, 42)
             if btn_rect.collidepoint(pos):
-                if self.is_quiz_map:
+                self.speed_boost_timer = 3.0
+                if self.is_quiz_map and self.active_shape_id in self.shape_npcs:
                     self.shape_npcs[self.active_shape_id]['answered'] = True
                     answered_count = sum(1 for s in self.shape_npcs.values() if s['answered'])
                     
@@ -2517,7 +2520,8 @@ class Quarter1:
             box_y = (self.height - box_h) // 2
             btn_rect = pygame.Rect(box_x + (box_w - 200) // 2, box_y + 195, 200, 42)
             if btn_rect.collidepoint(pos):
-                if self.is_quiz_map:
+                self.speed_boost_timer = 3.0
+                if self.is_quiz_map and self.active_shape_id in self.shape_npcs:
                     self.shape_npcs[self.active_shape_id]['answered'] = True
                     answered_count = sum(1 for s in self.shape_npcs.values() if s['answered'])
                     
@@ -2626,6 +2630,7 @@ class Quarter1:
             box_y = (self.height - box_h) // 2
             btn_rect = pygame.Rect(box_x + (box_w - 200) // 2, box_y + 210, 200, 42)
             if btn_rect.collidepoint(pos):
+                self.speed_boost_timer = 3.0
                 self.quiz_state = 0
                 self.oldman_interaction_cooldown = 5.0  # 5 seconds to walk away
                 self.player_block_timer = 0.0
@@ -2753,6 +2758,20 @@ class Quarter1:
             if self.title_elapsed >= self.title_duration:
                 self.title_active = False
 
+        # Update Speed Boost & Sparkles
+        if hasattr(self, 'speed_boost_timer') and self.speed_boost_timer > 0 and self.quiz_state in [0, 6] and not getattr(self, 'camera_pan_active', False) and not getattr(self, 'puzzle_active', False) and getattr(self, 'player_block_timer', 0) <= 0:
+            self.speed_boost_timer = max(0.0, self.speed_boost_timer - dt)
+
+        if hasattr(self, 'speed_sparkles') and self.speed_sparkles:
+            surviving_sp = []
+            for sp in self.speed_sparkles:
+                sp["x"] += sp["vx"]
+                sp["y"] += sp["vy"]
+                sp["life"] -= dt
+                if sp["life"] > 0:
+                    surviving_sp.append(sp)
+            self.speed_sparkles = surviving_sp
+
 
         # Update Shape NPC animation frame
         if self.is_quiz_map:
@@ -2865,7 +2884,7 @@ class Quarter1:
             return
 
         vx, vy = 0, 0
-        current_speed = SPEED
+        current_speed = (SPEED * 1.5) if getattr(self, 'speed_boost_timer', 0) > 0 else SPEED
 
         # Hand Gesture / Cursor Directional Controls (Pure Gesture Navigation)
         player_screen_x = (self.player_x - self.camera_x + TILE_SIZE / 2) * ZOOM
@@ -2916,11 +2935,24 @@ class Quarter1:
 
         if vx != 0 or vy != 0:
             self.anim_timer += 1
-            if self.anim_timer >= 16:
+            if self.anim_timer >= (10 if getattr(self, 'speed_boost_timer', 0) > 0 else 16):
                 self.anim_timer = 0
                 self.anim_frame = (self.anim_frame + 1) % 2
                 if hasattr(self.main_menu, 'audio_manager'):
                     self.main_menu.audio_manager.play_sfx("footstep_grass")
+
+            # Spawn celebration sparkles during speed boost sprint
+            if getattr(self, 'speed_boost_timer', 0) > 0 and random.random() < 0.4:
+                f_cols = [(255, 215, 0), (239, 68, 68), (34, 197, 94), (59, 130, 246), (245, 158, 11)]
+                self.speed_sparkles.append({
+                    "x": self.player_x + TILE_SIZE // 2 + random.randint(-8, 8),
+                    "y": self.player_y + TILE_SIZE - random.randint(0, 8),
+                    "vx": random.uniform(-0.5, 0.5),
+                    "vy": random.uniform(-1.0, -0.2),
+                    "color": random.choice(f_cols),
+                    "life": 0.5,
+                    "rad": random.randint(2, 4)
+                })
         else:
             self.anim_frame = 0
 
@@ -3122,6 +3154,16 @@ class Quarter1:
                     if tile_char in ['X', 'Y', 'Z']:
                         self.draw_tile(tile_char, col * TILE_SIZE, row * TILE_SIZE)
         self.draw_ui()
+
+        # Draw speed boost sprint sparkles
+        if hasattr(self, 'speed_sparkles'):
+            for sp in self.speed_sparkles:
+                sx = (sp["x"] - self.camera_x) * ZOOM
+                sy = (sp["y"] - self.camera_y) * ZOOM
+                if 0 <= sx <= self.width and 0 <= sy <= self.height:
+                    life_pct = max(0.0, min(1.0, sp.get("life", 0.5) / 0.5))
+                    r = max(1, int(sp.get("rad", 3) * life_pct))
+                    pygame.draw.circle(self.screen, sp.get("color", (255, 215, 0)), (int(sx), int(sy)), r)
 
         # Draw jigsaw piece or bridge tile award animation (flies down to bottom-center objectives HUD)
         if self.award_anim_active:
