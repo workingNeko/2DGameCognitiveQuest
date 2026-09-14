@@ -3134,7 +3134,7 @@ class StageSelect:
                 self.screen.blit(s_surf, (sx - s["width"], sy - s["width"]))
 
         # 3. Animated "LOADING..." Title (Traveling Sine Wave identical to Quarter Titles)
-        base_y = self.height // 2 - 50
+        base_y = self.height // 2 - 60
         x = self.width // 2 - self.loading_total_width // 2
 
         for i, data in enumerate(self.loading_letters):
@@ -3160,18 +3160,55 @@ class StageSelect:
 
             x += data["width"] + self.loading_spacing
 
-        # 4. Premium Futuristic Energy Loading Bar (Centrally Focused, No Bottom Subtitle)
-        bar_w = min(540, self.width - 100)
-        bar_h = 24
-        bar_x = (self.width - bar_w) // 2
-        bar_y = base_y + 80
+        # Destination Realm Subtitle Banner
+        dest_name = theme.get("name", "STAGE")
+        dest_title = theme.get("title", "")
+        dest_str = f"WARPING TO {dest_name}: {dest_title}"
+        sub_font = pygame.font.SysFont("Comic Sans MS", 14, bold=True)
+        sub_surf = sub_font.render(dest_str, True, theme.get("accent", (250, 204, 21)))
+        sub_rect = sub_surf.get_rect(center=(self.width // 2, base_y + 70))
+        self.screen.blit(sub_surf, sub_rect)
+
+        # 4. Objectives HUD Box at the bottom center of the screen (Matching Quarter Objectives location)
+        box_w = min(460, self.width - 40)
+        box_h = 80
+        box_x = (self.width - box_w) // 2
+        box_y = self.height - box_h - 20
         primary_col = theme.get("primary", (56, 189, 248))
         accent_col = theme.get("accent", (250, 204, 21))
 
-        # Soft ambient neon glow under the bar
-        glow_surf = pygame.Surface((bar_w + 32, bar_h + 32), pygame.SRCALPHA)
-        pygame.draw.rect(glow_surf, (*primary_col, 45), (0, 0, bar_w + 32, bar_h + 32), border_radius=18)
-        self.screen.blit(glow_surf, (bar_x - 16, bar_y - 16))
+        # Ambient neon glow behind the Objectives HUD box
+        box_glow = pygame.Surface((box_w + 24, box_h + 24), pygame.SRCALPHA)
+        pygame.draw.rect(box_glow, (*primary_col, 35), (0, 0, box_w + 24, box_h + 24), border_radius=16)
+        self.screen.blit(box_glow, (box_x - 12, box_y - 12))
+
+        # Translucent dark slate background
+        hud_bg = pygame.Surface((box_w, box_h), pygame.SRCALPHA)
+        hud_bg.fill((15, 23, 42, 220))
+        self.screen.blit(hud_bg, (box_x, box_y))
+
+        # Objectives HUD borders (Gold / Primary)
+        pygame.draw.rect(self.screen, (218, 165, 32), (box_x, box_y, box_w, box_h), 2, border_radius=10)
+        pygame.draw.rect(self.screen, (0, 0, 0, 120), (box_x + 2, box_y + 2, box_w - 4, box_h - 4), 1, border_radius=8)
+
+        # Header title in Gold
+        obj_title_font = pygame.font.SysFont("Comic Sans MS", 12, bold=True)
+        obj_title_surf = obj_title_font.render("CURRENT OBJECTIVES: WARPING TO REALM", True, (255, 215, 0))
+        self.screen.blit(obj_title_surf, (box_x + 16, box_y + 8))
+
+        # Realm descriptor tag on top-right of Objectives box
+        realm_text = theme.get("realm", "")
+        if realm_text:
+            realm_font = pygame.font.SysFont("Comic Sans MS", 10, bold=True)
+            realm_surf = realm_font.render(realm_text, True, (148, 163, 184))
+            realm_rect = realm_surf.get_rect(topright=(box_x + box_w - 16, box_y + 10))
+            self.screen.blit(realm_surf, realm_rect)
+
+        # 5. Premium Futuristic Energy Loading Bar (Placed inside the Objectives HUD location)
+        bar_x = box_x + 16
+        bar_y = box_y + 36
+        bar_w = box_w - 32
+        bar_h = 24
 
         # Track background (Deep metallic glass)
         pygame.draw.rect(self.screen, (15, 23, 42), (bar_x, bar_y, bar_w, bar_h), border_radius=12)
@@ -3226,7 +3263,7 @@ class StageSelect:
             # Bright white center core
             pygame.draw.circle(self.screen, (255, 255, 255), (spark_x, spark_y), max(2, pulse_rad - 1))
 
-        # 5. Crisp Centered Percentage Label inside the loading bar
+        # 6. Crisp Centered Percentage Label inside the loading bar
         percent_str = f"{int(progress * 100)}%"
         pct_font = pygame.font.SysFont("Comic Sans MS", 12, bold=True)
         # Drop shadow for readability
