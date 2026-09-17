@@ -1,0 +1,15 @@
+{
+    "student_id": "S-2024-006",
+    "selected_student": {
+        "id": 6,
+        "student_id": "S-2024-006",
+        "first_name": "Elena Ramos",
+        "last_name": "",
+        "score": 0,
+        "progress": 0,
+        "level": "Grade 1",
+        "gender": "female"
+    },
+    "current_screen": "menu",
+    "timestamp": 1788093406.1273205
+}

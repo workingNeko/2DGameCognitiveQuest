@@ -1,0 +1,24 @@
+{
+    "student_id": "S-2024-003",
+    "selected_student": {
+        "id": 3,
+        "student_id": "S-2024-003",
+        "first_name": "Pedro Garcia",
+        "last_name": "",
+        "score": 0,
+        "progress": 0,
+        "level": "Grade 2",
+        "gender": "male"
+    },
+    "current_screen": "stage_select",
+    "timestamp": 1788097229.6052861,
+    "stage_select": {
+        "player_x": 1400,
+        "player_y": 416,
+        "oldman_dialogue_state": 0,
+        "knight_dialogue_state": 0,
+        "skeleton_dialogue_state": 1,
+        "bromen_dialogue_state": 0,
+        "player_following_target": null
+    }
+}

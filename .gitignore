@@ -40,6 +40,5 @@ Desktop.ini
 
 # PyInstaller build & distribution artifacts
 build/
-dist/
 *.spec.bak
 

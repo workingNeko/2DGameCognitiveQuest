@@ -1,0 +1,27 @@
+{
+    "student_id": "test_student",
+    "selected_student": {
+        "id": "test_student",
+        "level": "Grade 2"
+    },
+    "current_screen": "quarter2",
+    "timestamp": 1787806076.5213165,
+    "quarter_data": {
+        "quarter_name": "quarter2",
+        "map_name": "map5.txt",
+        "player_x": 64,
+        "player_y": 64,
+        "player_dir": "down",
+        "quiz_state": 6,
+        "quiz_station_index": 5,
+        "current_question_index": 5,
+        "completed": false,
+        "first_attempt_correct": {
+            "1": true,
+            "2": true,
+            "3": true,
+            "4": true,
+            "5": true
+        }
+    }
+}

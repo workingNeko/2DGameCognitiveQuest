@@ -1,0 +1,14 @@
+[
+    {
+        "id": 9,
+        "userId": 1,
+        "studentId": "1",
+        "fullName": "Jessuny Dado",
+        "gradeLevel": "Grade 2",
+        "section": "A",
+        "gender": "Male",
+        "avatarColor": "#6366f1",
+        "createdAt": "2026-08-31T03:31:44.624Z",
+        "updatedAt": "2026-08-31T03:31:44.624Z"
+    }
+]

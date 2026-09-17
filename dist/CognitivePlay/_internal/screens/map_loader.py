@@ -1,0 +1,161 @@
+# map_loader.py - Handles loading and managing multiple maps
+import sys
+if sys.stdout is not None:
+    try:
+        sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+    except Exception:
+        pass
+if sys.stderr is not None:
+    try:
+        sys.stderr.reconfigure(encoding='utf-8', errors='replace')
+    except Exception:
+        pass
+
+import os
+import random
+
+
+class MapLoader:
+    def __init__(self, base_dir):
+        self.base_dir = base_dir
+        self.maps_dir = os.path.join(base_dir, "assets", "map")
+        self.quarter_maps_dir = os.path.join(self.maps_dir, "Quarter1Maps")
+
+        # Map data
+        self.current_map = None
+        self.current_map_name = None
+        self.game_map = []
+        self.rows = 0
+        self.cols = 0
+
+        # NPC positions
+        self.npc_positions = {}  # {'B': [(x,y)], 'O': [(x,y)], etc.}
+        self.player_start = None
+
+    def load_map(self, map_filename):
+        """Load a map file and parse it"""
+        # Try multiple paths
+        possible_paths = [
+            os.path.join(self.maps_dir, map_filename),
+            os.path.join(self.maps_dir, "Quarter1Maps", map_filename),
+            os.path.join(self.maps_dir, "Quarter2Maps", map_filename),
+            os.path.join(self.maps_dir, "Quarter3Maps", map_filename),
+            os.path.join(self.maps_dir, "Quarter4Maps", map_filename),
+        ]
+
+        map_path = None
+        for path in possible_paths:
+            if os.path.exists(path):
+                map_path = path
+                break
+
+        if map_path is None:
+            print(f"[FAIL] Map not found: {map_filename}")
+            return False
+
+        try:
+            with open(map_path, "r", encoding="utf-8") as f:
+                lines = [line.rstrip("\n\r") for line in f if line.rstrip("\n\r")]
+
+            if not lines:
+                print(f"[FAIL] Map file is empty: {map_path}")
+                return False
+
+            self.game_map = lines
+            self.rows = len(lines)
+            self.cols = max(len(row) for row in lines)
+            self.current_map_path = map_path
+            self.current_map_name = os.path.basename(map_path)
+
+            # Parse NPC positions and player start
+            self._parse_map_data()
+
+            print(f"[OK] Loaded map: {self.current_map_name} ({self.rows}x{self.cols})")
+            print(f"   Player start: {self.player_start}")
+            print(f"   NPCs found: {len(self.npc_positions)}")
+            return True
+
+        except Exception as e:
+            print(f"[FAIL] Error loading map {map_filename}: {e}")
+            return False
+
+    def _parse_map_data(self):
+        """Parse the map for NPC positions and player start"""
+        self.npc_positions = {}
+        self.player_start = None
+
+        # NPC markers to look for - 'O' for Oldman/Omen, 'S' for Skeleton, 'K' for Knight.
+        # 'B' for Bromen is strictly restricted to Quarter 4 maps and the Stage Select hub ('map.txt').
+        # In Quarter 1 and Quarter 3, 'B' represents river bridge / causeway tiles and must not be treated as Bromen.
+        is_q4_or_hub = False
+        norm_path = (getattr(self, 'current_map_path', None) or "").lower().replace("\\", "/")
+        norm_name = (self.current_map_name or "").lower()
+        if norm_name == "map.txt" or "quarter4maps" in norm_path or any(norm_name.startswith(p) for p in ["map10", "map11", "map12"]):
+            is_q4_or_hub = True
+
+        npc_markers = ['O', 'S', 'K']
+        if is_q4_or_hub:
+            npc_markers.append('B')
+
+        for y, row in enumerate(self.game_map):
+            for x, char in enumerate(row):
+                if char == 'P':
+                    self.player_start = (x, y)
+                elif char == 'N':
+                    # Treat N as O (Oldman NPC)
+                    if 'O' not in self.npc_positions:
+                        self.npc_positions['O'] = []
+                    self.npc_positions['O'].append((x, y))
+                elif char in npc_markers:
+                    if char not in self.npc_positions:
+                        self.npc_positions[char] = []
+                    self.npc_positions[char].append((x, y))
+
+    def get_random_map(self):
+        """Get a random map from Quarter1Maps folder"""
+        if not os.path.exists(self.quarter_maps_dir):
+            print(f"[FAIL] Quarter1Maps directory not found: {self.quarter_maps_dir}")
+            return None
+
+        try:
+            map_files = [f for f in os.listdir(self.quarter_maps_dir)
+                         if f.endswith('.txt')]
+            if not map_files:
+                print(f"[FAIL] No map files found in {self.quarter_maps_dir}")
+                return None
+
+            selected = random.choice(map_files)
+            print(f"[DICE] Randomly selected map: {selected}")
+            return selected
+
+        except Exception as e:
+            print(f"[FAIL] Error getting random map: {e}")
+            return None
+
+    def get_map_tile(self, row, col):
+        """Get tile character at position"""
+        if 0 <= row < self.rows and 0 <= col < self.cols:
+            if row < len(self.game_map) and col < len(self.game_map[row]):
+                return self.game_map[row][col]
+        return None
+
+    def replace_npc_markers_with_walkable_tiles(self):
+        """Replace NPC markers, portal letters, and player start 'P' with walkable tiles for rendering"""
+        modified_map = []
+        for y, row in enumerate(self.game_map):
+            row_list = list(row)
+            for x, char in enumerate(row_list):
+                if char in ['P', 'N', 'l', 'r', 'u', 'd'] or char in self.npc_positions:
+                    # Replace with proper walkable corridor or grass tile
+                    if char == 'P':
+                        row_list[x] = '#' if self.current_map_name == "map.txt" else 'G'
+                    elif char in ['B', 'K']:
+                        row_list[x] = '7' if self.current_map_name == "map.txt" else 'G'
+                    elif char in ['O', 'S', 'l', 'r']:
+                        row_list[x] = '6' if self.current_map_name == "map.txt" else 'G'
+                    elif char in ['u', 'd']:
+                        row_list[x] = '#' if self.current_map_name == "map.txt" else 'G'
+                    else:
+                        row_list[x] = 'G'
+            modified_map.append(''.join(row_list))
+        return modified_map

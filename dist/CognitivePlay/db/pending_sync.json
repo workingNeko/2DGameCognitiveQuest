@@ -1,0 +1,62 @@
+[
+    {
+        "studentId": 1,
+        "student_id": 1,
+        "assessmentId": 6,
+        "assessment_id": 6,
+        "gradeLevel": "Grade 2",
+        "grade_level": "Grade 2",
+        "score": 120,
+        "totalQuestions": 6,
+        "total_questions": 6,
+        "correctAnswers": 6,
+        "correct_answers": 6,
+        "percentage": 100.0,
+        "feedback": "Completed Quarter 4 (Water Temple). Answered 6 of 6 questions correctly on first attempt."
+    },
+    {
+        "studentId": 1,
+        "student_id": 1,
+        "assessmentId": 6,
+        "assessment_id": 6,
+        "gradeLevel": "Grade 2",
+        "grade_level": "Grade 2",
+        "score": 120,
+        "totalQuestions": 6,
+        "total_questions": 6,
+        "correctAnswers": 6,
+        "correct_answers": 6,
+        "percentage": 100.0,
+        "feedback": "Completed Quarter 4 (Water Temple). Answered 6 of 6 questions correctly on first attempt."
+    },
+    {
+        "studentId": 1,
+        "student_id": 1,
+        "assessmentId": 6,
+        "assessment_id": 6,
+        "gradeLevel": "Grade 2",
+        "grade_level": "Grade 2",
+        "score": 120,
+        "totalQuestions": 6,
+        "total_questions": 6,
+        "correctAnswers": 6,
+        "correct_answers": 6,
+        "percentage": 100.0,
+        "feedback": "Completed Quarter 4 (Water Temple). Answered 6 of 6 questions correctly on first attempt."
+    },
+    {
+        "studentId": 1,
+        "student_id": 1,
+        "assessmentId": 6,
+        "assessment_id": 6,
+        "gradeLevel": "Grade 2",
+        "grade_level": "Grade 2",
+        "score": 120,
+        "totalQuestions": 6,
+        "total_questions": 6,
+        "correctAnswers": 6,
+        "correct_answers": 6,
+        "percentage": 100.0,
+        "feedback": "Completed Quarter 4 (Water Temple). Answered 6 of 6 questions correctly on first attempt."
+    }
+]
