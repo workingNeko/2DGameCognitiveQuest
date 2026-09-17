@@ -3170,7 +3170,7 @@ class StageSelect:
         self.screen.blit(sub_surf, sub_rect)
 
         # 4. Objectives HUD Box at the bottom center of the screen (Matching Quarter Objectives location)
-        box_w = min(460, self.width - 40)
+        box_w = min(480, self.width - 40)
         box_h = 80
         box_x = (self.width - box_w) // 2
         box_y = self.height - box_h - 20
@@ -3193,7 +3193,7 @@ class StageSelect:
 
         # Header title in Gold
         obj_title_font = pygame.font.SysFont("Comic Sans MS", 12, bold=True)
-        obj_title_surf = obj_title_font.render("CURRENT OBJECTIVES: WARPING TO REALM", True, (255, 215, 0))
+        obj_title_surf = obj_title_font.render("CURRENT OBJECTIVES", True, (255, 215, 0))
         self.screen.blit(obj_title_surf, (box_x + 16, box_y + 8))
 
         # Realm descriptor tag on top-right of Objectives box

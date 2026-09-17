@@ -4119,7 +4119,7 @@ class Quarter1:
 
         # Draw Objectives HUD Box at the bottom center of the screen
         if self.is_quiz_map:
-            box_w, box_h = 360, 80
+            box_w, box_h = 480, 80
             box_x = (self.width - box_w) // 2
             box_y = self.height - box_h - 20
             

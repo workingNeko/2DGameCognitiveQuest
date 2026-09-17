@@ -723,7 +723,7 @@ class Quarter3:
         self.banner_bg = pygame.Surface((640, 68), pygame.SRCALPHA)
         self.banner_bg.fill((15, 23, 42, 230))
 
-        self.obj_hud_bg = pygame.Surface((340, 80), pygame.SRCALPHA)
+        self.obj_hud_bg = pygame.Surface((480, 80), pygame.SRCALPHA)
         self.obj_hud_bg.fill((15, 23, 42, 190))
 
         # 10. Pre-render Item & Caravan contact shadows
@@ -2672,7 +2672,7 @@ class Quarter3:
 
         # Draw Objectives HUD Box at the bottom center of the screen
         if self.is_quiz_map:
-            box_w, box_h = 340, 80
+            box_w, box_h = 480, 80
             box_x = (self.width - box_w) // 2
             box_y = self.height - box_h - 20
             

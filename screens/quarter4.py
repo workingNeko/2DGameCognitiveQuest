@@ -2583,7 +2583,7 @@ class Quarter4:
 
         # Draw Objectives HUD Box at the bottom center of the screen
         if self.is_quiz_map:
-            box_w, box_h = 390, 85
+            box_w, box_h = 480, 85
             box_x = (self.width - box_w) // 2
             box_y = self.height - box_h - 15
             
@@ -3167,7 +3167,7 @@ class Quarter4:
             banner_text = f"NEW GOLDEN KEY #{key_num} COLLECTED! ({total_keys}/6)"
 
         # Target bottom center Objectives HUD position
-        box_w, box_h = 370, 85
+        box_w, box_h = 480, 85
         target_x = self.width // 2
         target_y = self.height - box_h // 2 - 15
 

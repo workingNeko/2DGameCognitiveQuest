@@ -37,3 +37,9 @@ Thumbs.db
 ehthumbs.db
 Desktop.ini
 .DS_Store
+
+# PyInstaller build & distribution artifacts
+build/
+dist/
+*.spec.bak
+

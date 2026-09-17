@@ -1,6 +1,21 @@
 # main.py
-import pygame
+import os
 import sys
+
+# Ensure current working directory is always the application's root directory.
+# On Windows startup/boot, Windows launches applications with cwd = C:\Windows\System32.
+if getattr(sys, "frozen", False):
+    app_dir = os.path.dirname(os.path.abspath(sys.executable))
+else:
+    app_dir = os.path.dirname(os.path.abspath(__file__))
+
+try:
+    os.chdir(app_dir)
+except Exception as e:
+    print(f"[WARN] Failed to set working directory to {app_dir}: {e}")
+
+if app_dir not in sys.path:
+    sys.path.insert(0, app_dir)
 
 # Reconfigure stdout and stderr to UTF-8 to support emojis and prevent crashes on Windows consoles
 if sys.stdout is not None:
@@ -14,7 +29,35 @@ if sys.stderr is not None:
     except Exception:
         pass
 
+# Handle CLI flags before Pygame display initialization
+if len(sys.argv) > 1:
+    arg = sys.argv[1].lower()
+    if arg in ("--autostart-enable", "--enable-autostart", "-ae"):
+        from core.autostart_manager import enable_autostart
+        ok, msg = enable_autostart()
+        print(f"[AUTOSTART] {msg}")
+        sys.exit(0 if ok else 1)
+    elif arg in ("--autostart-disable", "--disable-autostart", "-ad"):
+        from core.autostart_manager import disable_autostart
+        ok, msg = disable_autostart()
+        print(f"[AUTOSTART] {msg}")
+        sys.exit(0 if ok else 1)
+    elif arg in ("--autostart-status", "--status-autostart", "-as"):
+        from core.autostart_manager import get_status_text, is_autostart_enabled
+        enabled = is_autostart_enabled()
+        print(f"[AUTOSTART] Status: {get_status_text()}")
+        sys.exit(0 if enabled else 1)
+    elif arg in ("--help", "-h"):
+        print("Cognitive Play - Educational Games Launcher")
+        print("Options:")
+        print("  --enable-autostart, --autostart-enable   Register game to launch on Windows boot")
+        print("  --disable-autostart, --autostart-disable Remove game from Windows boot")
+        print("  --status-autostart, --autostart-status  Check current Windows boot registration")
+        print("  --help, -h                              Show this help message")
+        sys.exit(0)
+
 # Initialize Pygame and font system before importing any game screens
+import pygame
 pygame.init()
 pygame.font.init()
 

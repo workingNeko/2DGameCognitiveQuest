@@ -70,17 +70,18 @@ class TestMainMenuStudentDisplay(unittest.TestCase):
 
     def test_buttons_are_centered(self):
         """Verify that buttons are placed in the center of the screen"""
-        # Test without save (3 buttons)
+        # Test without save (4 buttons: Select Student, Start Activity, Leaderboard, Settings)
         self.menu.selected_student = None
         self.menu.student_id = None
         self.menu.setup_buttons()
         
         bh = 58
         gap = 14
-        total_h_3 = (bh * 3) + (gap * 2)
-        expected_start_y_3 = (self.menu.h // 2) - (total_h_3 // 2)
-        self.assertEqual(self.menu.select_student_btn.rect.y, expected_start_y_3)
+        total_h_4 = (bh * 4) + (gap * 3)
+        expected_start_y_4 = (self.menu.h // 2) - (total_h_4 // 2)
+        self.assertEqual(self.menu.select_student_btn.rect.y, expected_start_y_4)
         self.assertEqual(self.menu.select_student_btn.rect.x, self.menu.w // 2 - 440 // 2)
+        self.assertEqual(self.menu.settings_btn.text, "SETTINGS")
 
     def test_student_card_position_centered_between_title_and_buttons(self):
         """Verify the selected student details box is positioned in the exact middle of the Cognitive Play title and the Buttons"""
