@@ -534,23 +534,25 @@ class MainMenu:
     def handle_popup_click(self, pos):
         """Handle clicking inside confirmation and settings pop-ups"""
         if self.popup_state == "audio_settings":
-            box_w, box_h = 580, 360
+            box_w, box_h = 600, 440
             box_x = (self.w - box_w) // 2
             box_y = (self.h - box_h) // 2
             dialog_rect = pygame.Rect(box_x, box_y, box_w, box_h)
 
-            m_minus_rect = pygame.Rect(box_x + 40, box_y + 105, 42, 34)
-            m_bar_rect = pygame.Rect(box_x + 92, box_y + 110, 240, 24)
-            m_plus_rect = pygame.Rect(box_x + 342, box_y + 105, 42, 34)
-            m_mute_rect = pygame.Rect(box_x + 398, box_y + 105, 140, 34)
+            m_minus_rect = pygame.Rect(box_x + 40, box_y + 100, 42, 34)
+            m_bar_rect = pygame.Rect(box_x + 92, box_y + 105, 240, 24)
+            m_plus_rect = pygame.Rect(box_x + 342, box_y + 100, 42, 34)
+            m_mute_rect = pygame.Rect(box_x + 398, box_y + 100, 160, 34)
 
-            s_minus_rect = pygame.Rect(box_x + 40, box_y + 190, 42, 34)
-            s_bar_rect = pygame.Rect(box_x + 92, box_y + 195, 240, 24)
-            s_plus_rect = pygame.Rect(box_x + 342, box_y + 190, 42, 34)
-            s_mute_rect = pygame.Rect(box_x + 398, box_y + 190, 140, 34)
+            s_minus_rect = pygame.Rect(box_x + 40, box_y + 180, 42, 34)
+            s_bar_rect = pygame.Rect(box_x + 92, box_y + 185, 240, 24)
+            s_plus_rect = pygame.Rect(box_x + 342, box_y + 180, 42, 34)
+            s_mute_rect = pygame.Rect(box_x + 398, box_y + 180, 160, 34)
 
-            test_rect = pygame.Rect(box_x + 50, box_y + 280, 220, 46)
-            done_rect = pygame.Rect(box_x + box_w - 270, box_y + 280, 220, 46)
+            autostart_toggle_rect = pygame.Rect(box_x + box_w - 180, box_y + 248, 140, 36)
+
+            test_rect = pygame.Rect(box_x + 50, box_y + 355, 220, 46)
+            done_rect = pygame.Rect(box_x + box_w - 270, box_y + 355, 220, 46)
 
             if m_minus_rect.collidepoint(pos):
                 self.audio_manager.set_music_volume(self.audio_manager.music_volume - 0.1)
@@ -579,6 +581,14 @@ class MainMenu:
             elif s_mute_rect.collidepoint(pos):
                 self.audio_manager.toggle_sfx_mute()
                 self.audio_manager.play_sfx("click")
+
+            elif autostart_toggle_rect.collidepoint(pos):
+                from core.autostart_manager import toggle_autostart
+                new_state, msg = toggle_autostart()
+                if hasattr(self, 'audio_manager'):
+                    self.audio_manager.play_sfx("click")
+                self.autostart_status_msg = msg
+                self.autostart_msg_timer = pygame.time.get_ticks() + 3500
 
             elif test_rect.collidepoint(pos):
                 self.audio_manager.play_sfx("success")
@@ -651,7 +661,7 @@ class MainMenu:
             self.popup_state = None
 
     def draw_audio_popup(self):
-        """Draw the interactive Audio & Sound Settings modal"""
+        """Draw the interactive Game & System Settings modal"""
         # 1. Overlay
         overlay = pygame.Surface((self.w, self.h))
         overlay.fill((0, 0, 0))
@@ -659,7 +669,7 @@ class MainMenu:
         self.screen.blit(overlay, (0, 0))
 
         # 2. Centered dialog box
-        box_w, box_h = 580, 360
+        box_w, box_h = 600, 440
         box_x = (self.w - box_w) // 2
         box_y = (self.h - box_h) // 2
         dialog_rect = pygame.Rect(box_x, box_y, box_w, box_h)
@@ -670,14 +680,14 @@ class MainMenu:
         title_font = pygame.font.SysFont("Comic Sans MS", 22, bold=True)
         label_font = pygame.font.SysFont("Comic Sans MS", 16, bold=True)
         btn_font = pygame.font.SysFont("Comic Sans MS", 15, bold=True)
-        small_font = pygame.font.SysFont("Comic Sans MS", 13)
+        small_font = pygame.font.SysFont("Comic Sans MS", 12)
 
         # Title
-        title_surf = title_font.render("Audio & Sound Settings", True, (56, 189, 248))
-        self.screen.blit(title_surf, (box_x + (box_w - title_surf.get_width()) // 2, box_y + 22))
+        title_surf = title_font.render("Game & System Settings", True, (56, 189, 248))
+        self.screen.blit(title_surf, (box_x + (box_w - title_surf.get_width()) // 2, box_y + 18))
 
         # Divider
-        pygame.draw.line(self.screen, (56, 189, 248), (box_x + 35, box_y + 60), (box_x + box_w - 35, box_y + 60), 2)
+        pygame.draw.line(self.screen, (56, 189, 248), (box_x + 35, box_y + 54), (box_x + box_w - 35, box_y + 54), 2)
 
         # ---------------- Music Volume Row ----------------
         m_vol = self.audio_manager.music_volume
@@ -685,13 +695,13 @@ class MainMenu:
         m_pct = int(m_vol * 100)
         m_label_color = (239, 68, 68) if m_muted else (241, 245, 249)
         m_label_text = f"Music Volume: {m_pct}% {'(MUTED)' if m_muted else ''}"
-        self.screen.blit(label_font.render(m_label_text, True, m_label_color), (box_x + 40, box_y + 75))
+        self.screen.blit(label_font.render(m_label_text, True, m_label_color), (box_x + 40, box_y + 68))
 
         # Buttons and Slider
-        m_minus_rect = pygame.Rect(box_x + 40, box_y + 105, 42, 34)
-        m_bar_rect = pygame.Rect(box_x + 92, box_y + 110, 240, 24)
-        m_plus_rect = pygame.Rect(box_x + 342, box_y + 105, 42, 34)
-        m_mute_rect = pygame.Rect(box_x + 398, box_y + 105, 140, 34)
+        m_minus_rect = pygame.Rect(box_x + 40, box_y + 98, 42, 34)
+        m_bar_rect = pygame.Rect(box_x + 92, box_y + 103, 240, 24)
+        m_plus_rect = pygame.Rect(box_x + 342, box_y + 98, 42, 34)
+        m_mute_rect = pygame.Rect(box_x + 398, box_y + 98, 160, 34)
 
         # Draw Music Minus [-]
         hover_m_minus = m_minus_rect.collidepoint(self.cursor_pos)
@@ -729,12 +739,12 @@ class MainMenu:
         s_pct = int(s_vol * 100)
         s_label_color = (239, 68, 68) if s_muted else (241, 245, 249)
         s_label_text = f"Sound Effects: {s_pct}% {'(MUTED)' if s_muted else ''}"
-        self.screen.blit(label_font.render(s_label_text, True, s_label_color), (box_x + 40, box_y + 160))
+        self.screen.blit(label_font.render(s_label_text, True, s_label_color), (box_x + 40, box_y + 148))
 
-        s_minus_rect = pygame.Rect(box_x + 40, box_y + 190, 42, 34)
-        s_bar_rect = pygame.Rect(box_x + 92, box_y + 195, 240, 24)
-        s_plus_rect = pygame.Rect(box_x + 342, box_y + 190, 42, 34)
-        s_mute_rect = pygame.Rect(box_x + 398, box_y + 190, 140, 34)
+        s_minus_rect = pygame.Rect(box_x + 40, box_y + 178, 42, 34)
+        s_bar_rect = pygame.Rect(box_x + 92, box_y + 183, 240, 24)
+        s_plus_rect = pygame.Rect(box_x + 342, box_y + 178, 42, 34)
+        s_mute_rect = pygame.Rect(box_x + 398, box_y + 178, 160, 34)
 
         # Draw SFX Minus [-]
         hover_s_minus = s_minus_rect.collidepoint(self.cursor_pos)
@@ -766,13 +776,52 @@ class MainMenu:
         txt = btn_font.render("UNMUTE" if s_muted else "MUTE SFX", True, (255, 255, 255))
         self.screen.blit(txt, (s_mute_rect.centerx - txt.get_width() // 2, s_mute_rect.centery - txt.get_height() // 2))
 
-        # Hotkey hint
-        hint_surf = small_font.render("Hotkey: [M] Toggle Mute  |  [ [ ] / [ ] ] Adjust Volume", True, (148, 163, 184))
-        self.screen.blit(hint_surf, (box_x + (box_w - hint_surf.get_width()) // 2, box_y + 242))
+        # Subtle divider before system settings
+        pygame.draw.line(self.screen, (51, 65, 85), (box_x + 35, box_y + 228), (box_x + box_w - 35, box_y + 228), 1)
+
+        # ---------------- Windows Startup Row ----------------
+        from core.autostart_manager import is_autostart_enabled, is_autostart_supported
+        is_supported = is_autostart_supported()
+        is_enabled = is_autostart_enabled() if is_supported else False
+
+        self.screen.blit(label_font.render("Run on Windows Startup", True, (241, 245, 249)), (box_x + 40, box_y + 242))
+        sub_text = "Automatically launch Cognitive Play when Windows boots" if is_supported else "Windows startup is only supported on Windows"
+        self.screen.blit(small_font.render(sub_text, True, (148, 163, 184)), (box_x + 40, box_y + 268))
+
+        # Autostart Toggle Button
+        autostart_toggle_rect = pygame.Rect(box_x + box_w - 180, box_y + 246, 140, 36)
+        hover_toggle = autostart_toggle_rect.collidepoint(self.cursor_pos)
+
+        if not is_supported:
+            btn_bg = (51, 65, 85)
+            border_col = (100, 116, 139)
+            btn_label = "N/A"
+        elif is_enabled:
+            btn_bg = (16, 185, 129) if not hover_toggle else (5, 150, 105)
+            border_col = (110, 231, 183)
+            btn_label = "[ON] ENABLED"
+        else:
+            btn_bg = (51, 65, 85) if not hover_toggle else (71, 85, 105)
+            border_col = (148, 163, 184)
+            btn_label = "[OFF] DISABLED"
+
+        pygame.draw.rect(self.screen, btn_bg, autostart_toggle_rect, border_radius=8)
+        pygame.draw.rect(self.screen, border_col, autostart_toggle_rect, 2, border_radius=8)
+        t_surf = btn_font.render(btn_label, True, (255, 255, 255))
+        self.screen.blit(t_surf, (autostart_toggle_rect.centerx - t_surf.get_width() // 2, autostart_toggle_rect.centery - t_surf.get_height() // 2))
+
+        # Status or feedback message (if recently toggled)
+        now = pygame.time.get_ticks()
+        if hasattr(self, 'autostart_status_msg') and getattr(self, 'autostart_msg_timer', 0) > now:
+            fb_surf = small_font.render(self.autostart_status_msg, True, (250, 204, 21))
+            self.screen.blit(fb_surf, (box_x + (box_w - fb_surf.get_width()) // 2, box_y + 298))
+        else:
+            hint_surf = small_font.render("Hotkey: [M] Toggle Mute  |  [ [ ] / [ ] ] Adjust Volume  |  [F] Fullscreen", True, (148, 163, 184))
+            self.screen.blit(hint_surf, (box_x + (box_w - hint_surf.get_width()) // 2, box_y + 312))
 
         # ---------------- Bottom Action Buttons ----------------
-        test_rect = pygame.Rect(box_x + 50, box_y + 280, 220, 46)
-        done_rect = pygame.Rect(box_x + box_w - 270, box_y + 280, 220, 46)
+        test_rect = pygame.Rect(box_x + 50, box_y + 355, 220, 46)
+        done_rect = pygame.Rect(box_x + box_w - 270, box_y + 355, 220, 46)
 
         hover_test = test_rect.collidepoint(self.cursor_pos)
         pygame.draw.rect(self.screen, (59, 130, 246) if hover_test else (37, 99, 235), test_rect, border_radius=8)
@@ -919,17 +968,17 @@ class MainMenu:
             image_path=exit_btn_path
         )
         
-        # Sound Settings button on top right (aligned flush with gesture HUD)
-        sound_btn_w = 184
+        # Settings / Sound button on top right
+        sound_btn_w = 196
         sound_btn_h = 34
-        sound_btn_x = self.w - sound_btn_w - 12
-        sound_btn_y = 50
+        sound_btn_x = self.w - sound_btn_w - 20
+        sound_btn_y = 22
         is_muted = self.audio_manager.music_muted and self.audio_manager.sfx_muted
         sound_text = "MUTED" if is_muted else f"{int(self.audio_manager.music_volume * 100)}%"
         sound_btn_font = pygame.font.SysFont("Segoe UI", 12, bold=True)
         self.sound_btn = Button(
             (sound_btn_x, sound_btn_y, sound_btn_w, sound_btn_h),
-            text=f"SOUND: {sound_text}",
+            text=f"SETTINGS ({sound_text})",
             font=sound_btn_font,
             bg_color=(30, 41, 59),
             text_color=(255, 215, 0) if not is_muted else (239, 68, 68),
@@ -939,8 +988,8 @@ class MainMenu:
         select_btn_text = "CHANGE STUDENT" if self.selected_student else "SELECT STUDENT"
 
         if has_save:
-            # Case: Selected student has existing save progress -> 4 vertical buttons
-            total_height = (bh * 4) + (gap * 3)
+            # Case: Selected student has existing save progress -> 5 vertical buttons
+            total_height = (bh * 5) + (gap * 4)
             start_y = (self.h // 2) - (total_height // 2)
             
             self.select_student_btn = Button(
@@ -982,11 +1031,21 @@ class MainMenu:
                 action=self.show_leaderboard,
                 image_path=None
             )
+
+            self.settings_btn = Button(
+                (self.w // 2 - bw // 2, start_y + (bh + gap) * 4, bw, bh),
+                text="SETTINGS",
+                font=self.button_font,
+                bg_color=(59, 130, 246),
+                text_color=(255, 255, 255),
+                action=self.open_audio_settings,
+                image_path=None
+            )
             
-            self.buttons = [self.select_student_btn, self.continue_activity_btn, self.start_new_activity_btn, self.leaderboard_btn, self.exit_btn, self.sound_btn]
+            self.buttons = [self.select_student_btn, self.continue_activity_btn, self.start_new_activity_btn, self.leaderboard_btn, self.settings_btn, self.exit_btn, self.sound_btn]
         else:
-            # Case: No saved progress or no student selected -> 3 vertical buttons
-            total_height = (bh * 3) + (gap * 2)
+            # Case: No saved progress or no student selected -> 4 vertical buttons
+            total_height = (bh * 4) + (gap * 3)
             start_y = (self.h // 2) - (total_height // 2)
             
             self.select_student_btn = Button(
@@ -1018,12 +1077,24 @@ class MainMenu:
                 action=self.show_leaderboard,
                 image_path=None
             )
+
+            self.settings_btn = Button(
+                (self.w // 2 - bw // 2, start_y + (bh + gap) * 3, bw, bh),
+                text="SETTINGS",
+                font=self.button_font,
+                bg_color=(59, 130, 246),
+                text_color=(255, 255, 255),
+                action=self.open_audio_settings,
+                image_path=None
+            )
             
-            self.buttons = [self.select_student_btn, self.start_activity_btn, self.leaderboard_btn, self.exit_btn, self.sound_btn]
+            self.buttons = [self.select_student_btn, self.start_activity_btn, self.leaderboard_btn, self.settings_btn, self.exit_btn, self.sound_btn]
 
     def open_audio_settings(self):
         self.audio_manager.play_sfx("click")
         self.popup_state = "audio_settings"
+
+    open_settings = open_audio_settings
 
     def show_leaderboard(self):
         print("[TROPHY] LEADERBOARD clicked! Loading Hall of Fame rankings...")
@@ -1149,8 +1220,8 @@ class MainMenu:
                 # Update sound button dynamic text
                 if getattr(self, 'sound_btn', None):
                     is_muted = self.audio_manager.music_muted and self.audio_manager.sfx_muted
-                    sound_text = "MUTED" if is_muted else f"SOUND {int(self.audio_manager.music_volume * 100)}%"
-                    self.sound_btn.text = f"SOUND: {sound_text}"
+                    sound_text = "MUTED" if is_muted else f"{int(self.audio_manager.music_volume * 100)}%"
+                    self.sound_btn.text = f"SETTINGS ({sound_text})"
                     self.sound_btn.text_color = (255, 215, 0) if not is_muted else (239, 68, 68)
 
                 # Update button hover states
@@ -1492,8 +1563,12 @@ class MainMenu:
             # On student selection and leaderboard, avoid the top-left back button
             pill_x = 165
             pill_y = 22
+        elif self.current_screen == "menu":
+            # On main menu, place cleanly below the Exit button (30, 30, 200, 70) to prevent overlap
+            pill_x = 30
+            pill_y = 112
         else:
-            # On all gameplay quarters, tutorial, stage_select, and main menu:
+            # On all gameplay quarters, tutorial, and stage_select:
             # Position at Top-Left to ensure zero collision with top-right Guide and Pause buttons
             pill_x = 20
             pill_y = 18

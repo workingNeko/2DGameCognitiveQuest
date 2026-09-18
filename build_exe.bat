@@ -1,45 +1,60 @@
 @echo off
-REM ============================================================
-REM Build Script for Cognitive Maze Standalone Executable
-REM ============================================================
-
+REM ==============================================================================
+REM Build Executable for Cognitive Play using PyInstaller
+REM ==============================================================================
 cd /d "%~dp0"
-echo ============================================================
-echo   Building Cognitive Maze Windows Executable
-echo ============================================================
-echo.
 
-REM 1. Check if PyInstaller is available
-where pyinstaller >nul 2>nul
-if %ERRORLEVEL% NEQ 0 (
-    echo [ERROR] PyInstaller is not installed or not in PATH!
-    echo Please install it by running: pip install pyinstaller
-    pause
-    exit /b 1
+echo [1/3] Detecting Python environment...
+set "PYTHON_EXE="
+
+if exist ".venv\Scripts\python.exe" (
+    set "PYTHON_EXE=.venv\Scripts\python.exe"
+    echo Using virtual environment Python: .venv\Scripts\python.exe
+) else (
+    where py >nul 2>nul
+    if %ERRORLEVEL% equ 0 (
+        set "PYTHON_EXE=py -3.11"
+        echo Using Python launcher: py -3.11
+    ) else (
+        set "PYTHON_EXE=python"
+        echo Using system Python: python
+    )
 )
 
-REM 2. Clean previous build artifacts
-echo [1/3] Cleaning previous build folders...
-if exist "dist\CognitiveMaze" rmdir /s /q "dist\CognitiveMaze"
-if exist "build\CognitiveMaze" rmdir /s /q "build\CognitiveMaze"
+echo.
+echo [2/3] Checking PyInstaller...
+%PYTHON_EXE% -m pip show pyinstaller >nul 2>nul
+if %ERRORLEVEL% neq 0 (
+    echo PyInstaller not found. Installing PyInstaller...
+    %PYTHON_EXE% -m pip install pyinstaller
+    if %ERRORLEVEL% neq 0 (
+        echo [ERROR] Failed to install PyInstaller.
+        pause
+        exit /b 1
+    )
+)
 
-REM 3. Run PyInstaller build
-echo [2/3] Compiling Cognitive Maze using CognitiveMaze.spec...
-pyinstaller --clean -y CognitiveMaze.spec
+echo.
+echo [3/3] Compiling CognitivePlay.exe with PyInstaller...
+%PYTHON_EXE% -m PyInstaller --clean -y CognitivePlay.spec
 
-if %ERRORLEVEL% NEQ 0 (
+if %ERRORLEVEL% neq 0 (
     echo.
-    echo [ERROR] PyInstaller build failed! Check errors above.
+    echo [ERROR] Build failed with error code %ERRORLEVEL%.
     pause
-    exit /b 1
+    exit /b %ERRORLEVEL%
 )
 
-REM 4. Complete
 echo.
-echo [3/3] Build completed successfully!
+echo [4/4] Synchronizing runtime assets and database folders...
+xcopy /E /I /Y "assets" "dist\CognitivePlay\assets" >nul
+xcopy /E /I /Y "db" "dist\CognitivePlay\db" >nul
+xcopy /E /I /Y "datasets" "dist\CognitivePlay\datasets" >nul
+
 echo.
-echo Executable folder created at: dist\CognitiveMaze\
-echo You can run: dist\CognitiveMaze\CognitiveMaze.exe
+echo ==============================================================================
+echo [SUCCESS] CognitivePlay.exe built successfully!
+echo Executable located at: dist\CognitivePlay\CognitivePlay.exe
+echo ==============================================================================
 echo.
-echo ============================================================
 pause

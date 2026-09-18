@@ -186,16 +186,6 @@ class RPGQuizDialog:
                 pass
             text_x = box_x + 94
 
-        # 6. Speaker Typography - Larger, Clearer
-        title_font = get_font(["Comic Sans MS", "Segoe UI"], 22, bold=True)
-        sub_font = get_font(["Segoe UI", "Tahoma", "Comic Sans MS"], 15)
-
-        name_surf = title_font.render(speaker_name, True, (251, 191, 36))
-        self.screen.blit(name_surf, (text_x, box_y + 18))
-
-        sub_surf = sub_font.render(speaker_subtitle, True, (148, 163, 184))
-        self.screen.blit(sub_surf, (text_x, box_y + 46))
-
         # 7. Station Gem Progress Bar (Top Right)
         total_st = max(1, total_stations)
         gem_start_x = box_x + box_w - 28 - (total_st - 1) * 30
@@ -231,22 +221,54 @@ class RPGQuizDialog:
                 pygame.draw.circle(self.screen, (30, 41, 59), (gx, gem_y), 8)
                 pygame.draw.circle(self.screen, (71, 85, 105), (gx, gem_y), 8, 1)
 
+        # 6. Speaker Typography - Clamped to avoid gem track overlap
+        max_header_w = max(120, gem_start_x - text_x - 16)
+        title_font = get_font(["Comic Sans MS", "Segoe UI"], 22, bold=True)
+        sub_font = get_font(["Segoe UI", "Tahoma", "Comic Sans MS"], 15)
+
+        name_surf = title_font.render(speaker_name, True, (251, 191, 36))
+        if name_surf.get_width() > max_header_w:
+            name_font_small = get_font(["Comic Sans MS", "Segoe UI"], 18, bold=True)
+            name_surf = name_font_small.render(speaker_name, True, (251, 191, 36))
+        self.screen.blit(name_surf, (text_x, box_y + 18))
+
+        sub_surf = sub_font.render(speaker_subtitle, True, (148, 163, 184))
+        if sub_surf.get_width() > max_header_w:
+            sub_font_small = get_font(["Segoe UI", "Tahoma", "Comic Sans MS"], 13)
+            sub_surf = sub_font_small.render(speaker_subtitle, True, (148, 163, 184))
+            if sub_surf.get_width() > max_header_w:
+                trunc_sub = speaker_subtitle
+                while len(trunc_sub) > 4 and sub_font_small.size(trunc_sub + "...")[0] > max_header_w:
+                    trunc_sub = trunc_sub[:-1]
+                sub_surf = sub_font_small.render(trunc_sub + "...", True, (148, 163, 184))
+        self.screen.blit(sub_surf, (text_x, box_y + 46))
+
         # 8. Question Prompt - Large & Prominent for Students
-        q_font = get_font(["Segoe UI", "Comic Sans MS"], 20, bold=True)
-        wrapped_q = self.wrap_text(q_data.get("question", ""), q_font, box_w - 60)
+        q_text = q_data.get("question", "")
+        q_font_size = 20 if len(q_text) < 140 else 18
+        q_font = get_font(["Segoe UI", "Comic Sans MS"], q_font_size, bold=True)
+        wrapped_q = self.wrap_text(q_text, q_font, box_w - 60)
         
-        y_text = box_y + 98
+        y_text = box_y + 88
+        line_height = 26 if q_font_size == 20 else 23
         for line in wrapped_q:
             txt_surf = q_font.render(line, True, (248, 250, 252))
             self.screen.blit(txt_surf, (box_x + 30, y_text))
-            y_text += 27
+            y_text += line_height
 
         # 9. Pedagogical / 50:50 Hint Banner
+        content_bottom = y_text
         if hint_msg:
-            hint_font = get_font(["Segoe UI", "Comic Sans MS"], 15)
-            draw_vector_lightbulb(self.screen, box_x + 40, y_text + 14, size=7)
+            hint_font = get_font(["Segoe UI", "Comic Sans MS"], 14)
+            draw_vector_lightbulb(self.screen, box_x + 40, y_text + 12, size=7)
             hint_surf = hint_font.render(f"Hint: {hint_msg}", True, (252, 211, 77))
             self.screen.blit(hint_surf, (box_x + 56, y_text + 4))
+            content_bottom = y_text + 26
+
+        # Dynamically position choice buttons so they NEVER collide with question or hint
+        desired_button_y = max(box_y + 220, content_bottom + 12)
+        max_button_y = box_y + box_h - (3 * self.spacing + self.btn_h + 12)
+        self.button_y_start = min(desired_button_y, max_button_y)
 
         # 10. Game-Show Style Choice Buttons ([A], [B], [C], [D])
         choices = q_data.get("choices", [])[:4]
@@ -270,22 +292,27 @@ class RPGQuizDialog:
 
             btn_rect = self.get_button_rect(i, slide_offset=curr_slide)
 
-            # Button Card Background & Borders
+            # Button Card Background
             if is_elim:
-                card_bg = (20, 25, 35)
+                card_bg = (15, 23, 42)
                 card_border = (51, 65, 85)
-                border_width = 1
                 text_color = (100, 116, 139)
-            elif is_hov:
-                card_bg = (251, 191, 36)
-                card_border = (255, 255, 255)
-                border_width = 2
-                text_color = (15, 23, 42)
-            else:
-                card_bg = (30, 41, 59)
-                card_border = (71, 85, 105)
                 border_width = 1
-                text_color = (248, 250, 252)
+            elif is_hov:
+                card_bg = (30, 41, 59)
+                card_border = (255, 255, 255)
+                text_color = (255, 255, 255)
+                border_width = 2
+            else:
+                card_bg = (15, 23, 42)
+                card_border = (71, 85, 105)
+                text_color = (226, 232, 240)
+                border_width = 1
+
+            # Soft drop shadow for hovered card
+            if is_hov:
+                shadow_rect = btn_rect.move(3, 3)
+                pygame.draw.rect(self.screen, (0, 0, 0, 70), shadow_rect, border_radius=12)
 
             pygame.draw.rect(self.screen, card_bg, btn_rect, border_radius=12)
             pygame.draw.rect(self.screen, card_border, btn_rect, border_width, border_radius=12)
@@ -311,11 +338,18 @@ class RPGQuizDialog:
                 b_lbl = badge_font.render(badge_cfg["label"], True, (255, 255, 255))
                 self.screen.blit(b_lbl, b_lbl.get_rect(center=badge_rect.center))
 
-            # Choice text next to badge (stripped of redundant leading letter)
+            # Choice text next to badge (stripped of redundant leading letter, auto-scaled if wide)
             display_text = clean_choice_text(choice_text)
-            txt_surf = choice_font.render(display_text, True, text_color)
-            txt_rect = txt_surf.get_rect(midleft=(btn_rect.x + 56, btn_rect.centery))
-            self.screen.blit(txt_surf, txt_rect)
+            avail_w = btn_rect.width - 68
+            choice_surf = choice_font.render(display_text, True, text_color)
+            if choice_surf.get_width() > avail_w:
+                smaller_font = get_font(["Segoe UI", "Comic Sans MS"], 15, bold=True)
+                choice_surf = smaller_font.render(display_text, True, text_color)
+                if choice_surf.get_width() > avail_w:
+                    tiny_font = get_font(["Segoe UI", "Comic Sans MS"], 13, bold=True)
+                    choice_surf = tiny_font.render(display_text, True, text_color)
+            txt_rect = choice_surf.get_rect(midleft=(btn_rect.x + 56, btn_rect.centery))
+            self.screen.blit(choice_surf, txt_rect)
 
         # Audio tick feedback when entering new hovered choice
         if current_hovered_index != self.last_hovered_index:
