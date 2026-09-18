@@ -6,29 +6,70 @@ Corresponds directly to docs/GAME_NPC_SCRIPTS_ALL_QUARTERS.md.
 """
 
 MAP_INSTRUCTIONS_DATA = {
+    # ====================================================
+    # QUARTER 1: GEOMETRY FOREST & SHAPES (Maps 1, 2, 3)
+    # ====================================================
+    "quarter1": {
+        "title": "QUARTER 1: GEOMETRY FOREST",
+        "subtitle": "Welcome to the magical Forest of Shapes, {player_name}!",
+        "theme": "forest",
+        "objectives_title": "🎯 LEARNING OBJECTIVES:",
+        "objectives_subtitle": "After this activity, you should be able to:",
+        "objectives": [
+            "Identify and name 2D geometric shapes (Circle, Triangle, Square, Rectangle, Star, Diamond, and Heart).",
+            "Describe shape characteristics including the number of sides, straight lines, curved edges, and corners (vertices).",
+            "Solve geometry riddles and visual-spatial jigsaw puzzles using shape properties."
+        ],
+        "steps": [
+            {
+                "title": "1. Find the 5 Shape Guardians:",
+                "bullets": [
+                    "Explore the forest trails and approach each guardian station.",
+                    "Hold a CLOSED FIST (or Click) to answer geometry questions."
+                ]
+            },
+            {
+                "title": "2. Collect Shape Tokens & Solve Altar Puzzles:",
+                "bullets": [
+                    "Each correct answer earns building planks, tokens, or jigsaw pieces!"
+                ]
+            },
+            {
+                "title": "3. Enter the Goal Portal to advance to the next map!",
+                "bullets": []
+            }
+        ]
+    },
     "map1.txt": {
-        "title": "WELCOME TO GEOMETRY FOREST!",
+        "title": "QUARTER 1: GEOMETRY FOREST - RIVER CROSSING",
         "subtitle": "Hello, {player_name}! The magical river has no crossing!",
         "theme": "forest",
+        "objectives_title": "🎯 LEARNING OBJECTIVES:",
+        "objectives_subtitle": "After this activity, you should be able to:",
+        "objectives": [
+            "Name 2D shapes and count their sides, straight lines, and corners/vertices.",
+            "Differentiate shapes with straight sides (triangles, squares) from curved shapes (circles, hearts).",
+            "Solve the Forest Mentor's shape riddle using logical deduction."
+        ],
         "steps": [
             {
                 "title": "1. Answer 5 Geometry Questions & Build the Bridge:",
                 "bullets": [
                     "Find all 5 Shape Guardians hidden in the forest.",
-                    "Approach each guardian and HOLD FIST to view the question.",
+                    "Approach each guardian and HOLD A CLOSED FIST (or Click) to view the question.",
                     "Each correct answer constructs 1 wooden plank across the river!"
                 ]
             },
             {
                 "title": "2. Cross the Bridge to the Old Man:",
                 "bullets": [
-                    "Once all 5 planks are laid, cross the water safely."
+                    "Once all 5 planks are laid, cross the water safely to meet the Forest Mentor."
                 ]
             },
             {
-                "title": "3. Solve the Old Man's Riddle:",
+                "title": "3. Solve the Old Man's Shape Riddle:",
                 "bullets": [
-                    "Speak to the Old Man and answer his secret shape riddle!"
+                    "Speak to the Old Man and select the shape that solves his riddle!"
                 ]
             },
             {
@@ -40,19 +81,26 @@ MAP_INSTRUCTIONS_DATA = {
         ]
     },
     "map2.txt": {
-        "title": "THE SHAPE VAULT OF GEOMETRY",
+        "title": "QUARTER 1: THE SHAPE VAULT OF GEOMETRY",
         "subtitle": "Welcome back, {player_name}! You are deeper in the forest!",
         "theme": "forest",
+        "objectives_title": "🎯 LEARNING OBJECTIVES:",
+        "objectives_subtitle": "After this activity, you should be able to:",
+        "objectives": [
+            "Identify specific geometric properties of Triangles, Squares, Diamonds, Stars, and Circles.",
+            "Apply visual matching by placing geometric tokens into their matching altar silhouette slots.",
+            "Recognize 2D shape characteristics in different orientations and sizes."
+        ],
         "steps": [
             {
                 "title": "1. Find the 5 Shape Guardians:",
                 "bullets": [
                     "Explore the winding trails to locate all 5 stations.",
-                    "Hold a CLOSED FIST to answer their shape questions."
+                    "Hold a CLOSED FIST (or Click) to answer their shape questions."
                 ]
             },
             {
-                "title": "2. Collect the 5 Shape Tokens:",
+                "title": "2. Collect the 5 Sacred Shape Tokens:",
                 "bullets": [
                     "Gather Square, Diamond, Heart, Circle, and Star tokens!"
                 ]
@@ -70,21 +118,28 @@ MAP_INSTRUCTIONS_DATA = {
         ]
     },
     "map3.txt": {
-        "title": "THE ANCIENT MOSAIC OF THE FOREST",
-        "subtitle": "You have reached the inner Forest, {player_name}!",
+        "title": "QUARTER 1: THE ANCIENT MOSAIC OF THE FOREST",
+        "subtitle": "You have reached the inner Forest ruins, {player_name}!",
         "theme": "forest",
+        "objectives_title": "🎯 LEARNING OBJECTIVES:",
+        "objectives_subtitle": "After this activity, you should be able to:",
+        "objectives": [
+            "Demonstrate comprehensive mastery of 2D shape attributes and visual geometry.",
+            "Assemble interlocking jigsaw pieces using edge matching, pattern recognition, and spatial perception.",
+            "Synthesize Quarter 1 geometry skills to unlock the path to Quarter 2: Barangay Kalye."
+        ],
         "steps": [
             {
                 "title": "1. Gather all 5 Jigsaw Pieces:",
                 "bullets": [
                     "Find the 5 Shape Guardians across the forest ruins.",
-                    "Hold a CLOSED FIST to solve their geometric challenges."
+                    "Hold a CLOSED FIST (or Click) to solve their geometric challenges."
                 ]
             },
             {
                 "title": "2. Bring the Pieces to the Old Man:",
                 "bullets": [
-                    "Reach the Old Man near the Master Portal."
+                    "Reach the Old Man near the Master Portal with your collected pieces."
                 ]
             },
             {
@@ -99,22 +154,65 @@ MAP_INSTRUCTIONS_DATA = {
             }
         ]
     },
-    "map4.txt": {
-        "title": "WELCOME TO BARANGAY KALYE!",
-        "subtitle": "Mabuhay, {player_name}! Welcome to the lively Barangay Kalye!",
+
+    # ====================================================
+    # QUARTER 2: BARANGAY KALYE & FILIPINO MARKET (Maps 4, 5, 6)
+    # ====================================================
+    "quarter2": {
+        "title": "QUARTER 2: BARANGAY KALYE & FIESTA",
+        "subtitle": "Mabuhay, {player_name}! Welcome to lively Barangay Kalye!",
         "theme": "fiesta",
+        "objectives_title": "🎯 LEARNING OBJECTIVES:",
+        "objectives_subtitle": "After this activity, you should be able to:",
+        "objectives": [
+            "Recognize and count Philippine Peso currency coins (₱1, ₱5, ₱10, ₱20) and paper bills (₱20 to ₱1000).",
+            "Calculate total costs and correct change in everyday market transactions.",
+            "Apply units of measurement for length, weight/mass (g, kg), liquid capacity, and clock time.",
+            "Understand basic fractions (1/2, 1/4) and geometric perimeter through Bayanihan cooperative building."
+        ],
         "steps": [
             {
                 "title": "1. Visit 5 Friendly Barrio Vendors:",
                 "bullets": [
-                    "Locate the Sari-Sari Store, Sorbetes Cart, Jeepney Terminal, Market Fruit Scale, and Parol Workshop.",
-                    "Hold a CLOSED FIST to solve their daily math challenges."
+                    "Explore the street market and accept math challenges from neighborhood stations.",
+                    "Hold a CLOSED FIST (or Click) to solve daily market and measurement problems."
+                ]
+            },
+            {
+                "title": "2. Build & Celebrate with Bayanihan Spirit:",
+                "bullets": [
+                    "Help construct the Bahay Kubo, arrange fiesta schedules, or measure market items!"
+                ]
+            },
+            {
+                "title": "3. Enter the Goal Portal to advance!",
+                "bullets": []
+            }
+        ]
+    },
+    "map4.txt": {
+        "title": "QUARTER 2: BARANGAY KALYE - STREET MARKET",
+        "subtitle": "Mabuhay, {player_name}! Welcome to the lively Street Market!",
+        "theme": "fiesta",
+        "objectives_title": "🎯 LEARNING OBJECTIVES:",
+        "objectives_subtitle": "After this activity, you should be able to:",
+        "objectives": [
+            "Identify denominations of Philippine Peso coins and banknotes.",
+            "Solve addition and subtraction word problems involving buying, selling, and giving exact change.",
+            "Read measurement scales for grocery weights and calculate jeepney passenger fares."
+        ],
+        "steps": [
+            {
+                "title": "1. Visit 5 Friendly Barrio Vendors:",
+                "bullets": [
+                    "Locate the Sari-Sari Store, Sorbetes Cart, Jeepney Terminal, Fruit Scale, and Parol Workshop.",
+                    "Hold a CLOSED FIST (or Click) to calculate exact change, fares, and weights."
                 ]
             },
             {
                 "title": "2. Master Philippine Money, Change, & Measurements:",
                 "bullets": [
-                    "Calculate peso change, count coins, and check weights!"
+                    "Calculate peso change, count coin totals, and check food weights!"
                 ]
             },
             {
@@ -126,21 +224,28 @@ MAP_INSTRUCTIONS_DATA = {
         ]
     },
     "map5.txt": {
-        "title": "THE BAHAY KUBO BUILD CHALLENGE",
-        "subtitle": "Maligayang pagdating, {player_name}!",
+        "title": "QUARTER 2: THE BAHAY KUBO BUILD CHALLENGE",
+        "subtitle": "Maligayang pagdating, {player_name}! Let's build with Bayanihan!",
         "theme": "fiesta",
+        "objectives_title": "🎯 LEARNING OBJECTIVES:",
+        "objectives_subtitle": "After this activity, you should be able to:",
+        "objectives": [
+            "Recognize and represent unit fractions (1/2, 1/3, 1/4) in construction parts and materials.",
+            "Apply measurement concepts of perimeter, length (cm, m), and clock time to architectural planning.",
+            "Demonstrate community cooperation (Bayanihan) through structured mathematical problem solving."
+        ],
         "steps": [
             {
                 "title": "1. Help 5 Barrio Craftspeople:",
                 "bullets": [
                     "Solve math challenges on Fractions, Division, Shapes, Time, and Garden Perimeters.",
-                    "Hold a CLOSED FIST to accept each building challenge."
+                    "Hold a CLOSED FIST (or Click) to accept each building challenge."
                 ]
             },
             {
                 "title": "2. Progressively Construct the Bahay Kubo:",
                 "bullets": [
-                    "Each correct answer raises bamboo stilts, walls, nipa roof, and ladder!"
+                    "Each correct answer raises bamboo stilts, woven walls, nipa roof, and ladder!"
                 ]
             },
             {
@@ -150,9 +255,16 @@ MAP_INSTRUCTIONS_DATA = {
         ]
     },
     "map6.txt": {
-        "title": "THE GRAND FIESTA CELEBRATION",
-        "subtitle": "It's Fiesta Day, {player_name}!",
+        "title": "QUARTER 2: THE GRAND FIESTA CELEBRATION",
+        "subtitle": "It's Fiesta Day, {player_name}! The whole town is celebrating!",
         "theme": "fiesta",
+        "objectives_title": "🎯 LEARNING OBJECTIVES:",
+        "objectives_subtitle": "After this activity, you should be able to:",
+        "objectives": [
+            "Solve multi-step measurement, time scheduling, and money distribution problems.",
+            "Calculate equal sharing of fiesta food portions, band performance schedules, and game prizes.",
+            "Complete Quarter 2 mastery to unlock the golden sands of Quarter 3: Monetary Desert."
+        ],
         "steps": [
             {
                 "title": "1. Complete the 5 Plaza Celebration Stations:",
@@ -166,22 +278,34 @@ MAP_INSTRUCTIONS_DATA = {
             }
         ]
     },
+
+    # ====================================================
+    # QUARTER 3: MONETARY DESERT & OASIS MIRAGE (Maps 7, 8, 9)
+    # ====================================================
     "quarter3": {
-        "title": "THE MONETARY DESERT EXPEDITION",
+        "title": "QUARTER 3: THE MONETARY DESERT EXPEDITION",
         "subtitle": "Welcome to the golden sands, {player_name}!",
         "theme": "desert",
+        "objectives_title": "🎯 LEARNING OBJECTIVES:",
+        "objectives_subtitle": "After this activity, you should be able to:",
+        "objectives": [
+            "Add and subtract 2-digit and 3-digit numbers with and without regrouping/borrowing.",
+            "Read, analyze, and solve multi-step mathematical word problems involving quantities and currency.",
+            "Identify number patterns, arithmetic sequences, skip-counting, and place value (hundreds, tens, ones).",
+            "Estimate sums and differences to make accurate trade decisions and manage caravan supplies."
+        ],
         "steps": [
             {
                 "title": "1. Explore the Ancient Desert Ruins:",
                 "bullets": [
                     "Find the 5 Desert Sages guarding the golden currency stations.",
-                    "Hold a CLOSED FIST to decode ancient trade tablets."
+                    "Hold a CLOSED FIST (or Click) to decode ancient trade tablets."
                 ]
             },
             {
                 "title": "2. Solve Multi-Step Money & Currency Problems:",
                 "bullets": [
-                    "Add and subtract Philippine Peso bills and coins!"
+                    "Add and subtract Philippine Peso bills, count gold, and balance trade equations!"
                 ]
             },
             {
@@ -190,16 +314,121 @@ MAP_INSTRUCTIONS_DATA = {
             }
         ]
     },
+    "map7.txt": {
+        "title": "QUARTER 3: MONETARY DESERT - CARAVAN TRAIL",
+        "subtitle": "Mount your desert steed, {player_name}! The expedition begins!",
+        "theme": "desert",
+        "objectives_title": "🎯 LEARNING OBJECTIVES:",
+        "objectives_subtitle": "After this activity, you should be able to:",
+        "objectives": [
+            "Perform 2-digit addition and subtraction involving market trade items and solar supplies.",
+            "Interpret place value concepts (hundreds, tens, ones) on ancient number stone tablets.",
+            "Apply skip-counting and pattern recognition to calculate caravan distances and water rations."
+        ],
+        "steps": [
+            {
+                "title": "1. Locate 5 Desert Sages:",
+                "bullets": [
+                    "Ride along the sandstone trail to find all 5 trade stations.",
+                    "Hold a CLOSED FIST (or Click) to calculate cargo quantities and gold coins."
+                ]
+            },
+            {
+                "title": "2. Lead the Royal Caravan:",
+                "bullets": [
+                    "Gather all 5 Solar Cargo packs to energize the Sun Portal."
+                ]
+            },
+            {
+                "title": "3. Step Through the Sun Portal into Map 8!",
+                "bullets": []
+            }
+        ]
+    },
+    "map8.txt": {
+        "title": "QUARTER 3: MONETARY DESERT - PHARAOH'S VAULT",
+        "subtitle": "Enter the ancient subterranean treasury, {player_name}!",
+        "theme": "desert",
+        "objectives_title": "🎯 LEARNING OBJECTIVES:",
+        "objectives_subtitle": "After this activity, you should be able to:",
+        "objectives": [
+            "Solve 3-digit addition and subtraction problems requiring regrouping in tens and hundreds.",
+            "Determine missing numbers in balanced arithmetic equations and number sentences.",
+            "Apply logical deduction to unlock ancient numerical combination locks."
+        ],
+        "steps": [
+            {
+                "title": "1. Search the Pyramid Chambers:",
+                "bullets": [
+                    "Find the 5 Vault Guardians stationed among ancient treasure chests.",
+                    "Hold a CLOSED FIST (or Click) to solve multi-digit equations."
+                ]
+            },
+            {
+                "title": "2. Collect 5 Desert Vault Keystones:",
+                "bullets": [
+                    "Place keystones into the central pharaoh's dais to break the vault seal!"
+                ]
+            },
+            {
+                "title": "3. Enter the Vault Portal to advance to Map 9!",
+                "bullets": []
+            }
+        ]
+    },
+    "map9.txt": {
+        "title": "QUARTER 3: MONETARY DESERT - OASIS MIRAGE",
+        "subtitle": "The sacred waters shimmer beneath the desert sun, {player_name}!",
+        "theme": "desert",
+        "objectives_title": "🎯 LEARNING OBJECTIVES:",
+        "objectives_subtitle": "After this activity, you should be able to:",
+        "objectives": [
+            "Master multi-step arithmetic word problems combining addition, subtraction, and currency exchange.",
+            "Compare numerical expressions and evaluate trade balance inequalities.",
+            "Complete Quarter 3 mastery to unlock the underwater passage to Quarter 4: Water Temple."
+        ],
+        "steps": [
+            {
+                "title": "1. Reach the 5 Oasis Sages:",
+                "bullets": [
+                    "Explore palm groves and ancient monoliths to answer final desert questions.",
+                    "Hold a CLOSED FIST (or Click) to calculate exact trade values."
+                ]
+            },
+            {
+                "title": "2. Awaken the Pharaoh's Water Altar:",
+                "bullets": [
+                    "Watch the golden sands part to reveal the subterranean canal!"
+                ]
+            },
+            {
+                "title": "3. Step Through the Master Portal to dive into Quarter 4!",
+                "bullets": []
+            }
+        ]
+    },
+
+    # ====================================================
+    # QUARTER 4: WATER TEMPLE & CLOCKTOWER (Maps 10, 11, 12)
+    # ====================================================
     "quarter4": {
-        "title": "THE WATER TEMPLE SANCTUARY",
+        "title": "QUARTER 4: THE WATER TEMPLE SANCTUARY",
         "subtitle": "Dive deep into the sunken sanctum, {player_name}!",
         "theme": "water",
+        "objectives_title": "🎯 LEARNING OBJECTIVES:",
+        "objectives_subtitle": "After this activity, you should be able to:",
+        "objectives": [
+            "Read and write time in hours and minutes on analog and digital clocks, and compute elapsed time intervals.",
+            "Formulate balanced arithmetic equations and solve multiplication/division (equal sharing) readiness problems.",
+            "Apply spatial orientation, symmetry, and sequencing to operate canal floodgates and sluice valves.",
+            "Synthesize comprehensive Grade 2 mathematical knowledge to achieve Grand Champion Mastery!"
+        ],
         "steps": [
             {
                 "title": "1. Locate the Water Temple Guardians:",
                 "bullets": [
                     "Find each guardian stationed along the submerged aqueducts.",
-                    "Hold a CLOSED FIST to solve advanced grade-level challenges."
+                    "Hold a CLOSED FIST (or Click) to solve advanced grade-level challenges."
                 ]
             },
             {
@@ -211,21 +440,28 @@ MAP_INSTRUCTIONS_DATA = {
             {
                 "title": "3. Activate the Lotus Raft & Floodgate Controls:",
                 "bullets": [
-                    "Unlock the Master Temple Sanctum to complete Cognitive Quest!"
+                    "Unlock the Master Temple Sanctum to complete Cognitive Maze!"
                 ]
             }
         ]
     },
     "map10.txt": {
-        "title": "THE WATER TEMPLE SANCTUARY - THE TEMPLE AQUEDUCT",
+        "title": "QUARTER 4: WATER TEMPLE - THE TEMPLE AQUEDUCT",
         "subtitle": "Dive into the outer sanctuary, {player_name}!",
         "theme": "water",
+        "objectives_title": "🎯 LEARNING OBJECTIVES:",
+        "objectives_subtitle": "After this activity, you should be able to:",
+        "objectives": [
+            "Tell time to the nearest 5 minutes on clock faces and solve elapsed time word problems.",
+            "Solve equal sharing and repeated addition (introductory multiplication) problems.",
+            "Collect and sequence 6 Golden Keys to unlock the Ancient Lock Box."
+        ],
         "steps": [
             {
                 "title": "1. Locate the 6 Water Guardians:",
                 "bullets": [
                     "Explore the submerged channels to locate all 6 guardians.",
-                    "Hold a CLOSED FIST to accept each mathematical test."
+                    "Hold a CLOSED FIST (or Click) to accept each mathematical test."
                 ]
             },
             {
@@ -247,15 +483,22 @@ MAP_INSTRUCTIONS_DATA = {
         ]
     },
     "map11.txt": {
-        "title": "THE SUBMERGED KEY VAULT",
+        "title": "QUARTER 4: THE SUBMERGED KEY VAULT",
         "subtitle": "The currents run deep, {player_name}!",
         "theme": "water",
+        "objectives_title": "🎯 LEARNING OBJECTIVES:",
+        "objectives_subtitle": "After this activity, you should be able to:",
+        "objectives": [
+            "Solve multi-step time, measurement, and mixed-operation arithmetic challenges.",
+            "Understand division as equal grouping/partitioning in aquatic treasure distribution.",
+            "Apply logical key matching to unlock the heavy double doors of the inner temple."
+        ],
         "steps": [
             {
                 "title": "1. Search the Submerged Chambers:",
                 "bullets": [
                     "Find all 6 guardians stationed behind the temple barricades.",
-                    "Hold a CLOSED FIST to decode each water puzzle."
+                    "Hold a CLOSED FIST (or Click) to decode each water puzzle."
                 ]
             },
             {
@@ -277,9 +520,16 @@ MAP_INSTRUCTIONS_DATA = {
         ]
     },
     "map12.txt": {
-        "title": "THE LOTUS RAFT & FINAL SANCTUM",
+        "title": "QUARTER 4: THE LOTUS RAFT & FINAL SANCTUM",
         "subtitle": "Master the rapids of the Great Floodgate, {player_name}!",
         "theme": "water",
+        "objectives_title": "🎯 LEARNING OBJECTIVES:",
+        "objectives_subtitle": "After this activity, you should be able to:",
+        "objectives": [
+            "Demonstrate comprehensive mastery across all Grade 2 Math domains: Geometry, Measurement, Money, Arithmetic, and Time.",
+            "Construct balanced arithmetic addition and multiplication equations using rune numbers.",
+            "Navigate the interactive Lotus Raft across rushing water canals and celebrate Grand Champion Victory!"
+        ],
         "steps": [
             {
                 "title": "1. Open All 6 Aqueduct Sluices:",
@@ -301,7 +551,7 @@ MAP_INSTRUCTIONS_DATA = {
                 ]
             },
             {
-                "title": "4. Enter the Grand Master Portal to complete Cognitive Quest!",
+                "title": "4. Enter the Grand Master Portal to complete Cognitive Maze!",
                 "bullets": []
             }
         ]
@@ -756,22 +1006,43 @@ def _infer_quarter_and_map(arg1, arg2=None):
     return "quarter1", a1 or "*"
 
 
-def get_map_instructions(arg1, arg2=None, arg3="Student"):
+def get_map_instructions(arg1, arg2=None, arg3=None):
     """
     Returns the instructions dict for the specified map or quarter, with {player_name} formatted.
-    Supports get_map_instructions(map_name, player_name) or
-    get_map_instructions(quarter_key, map_name, player_name).
+    Supports:
+      get_map_instructions(map_or_quarter, player_name="Student")
+      get_map_instructions(quarter_key, map_name, player_name="Student")
     """
-    if arg2 is not None and not str(arg2).lower().endswith(".txt") and not str(arg2).lower().startswith("map"):
-        # Called as (map_name, player_name)
-        m_key = str(arg1).lower()
-        p_name = str(arg2) if arg2 else "Student"
-        quarter_key, _ = _infer_quarter_and_map(m_key)
-    else:
-        # Called as (quarter_key, map_name, player_name)
+    if arg3 is not None:
+        # Explicit 3 args: (quarter_key, map_name, player_name)
         quarter_key = str(arg1).lower() if arg1 else "quarter1"
         m_key = str(arg2).lower() if arg2 else ""
         p_name = str(arg3) if arg3 else "Student"
+    elif arg2 is not None:
+        a2_str = str(arg2).lower().strip()
+        if a2_str.endswith(".txt") or a2_str.startswith("map") or a2_str in ["*", ""]:
+            # Called as (quarter_key, map_name)
+            quarter_key = str(arg1).lower() if arg1 else "quarter1"
+            m_key = a2_str
+            p_name = "Student"
+        else:
+            # Called as (map_or_quarter, player_name)
+            first_key = str(arg1).lower().strip() if arg1 else "quarter1"
+            p_name = str(arg2) if arg2 else "Student"
+            if first_key.startswith("quarter"):
+                quarter_key = first_key
+                m_key = ""
+            else:
+                quarter_key, m_key = _infer_quarter_and_map(first_key)
+    else:
+        # 1 arg
+        first_key = str(arg1).lower().strip() if arg1 else "quarter1"
+        p_name = "Student"
+        if first_key.startswith("quarter"):
+            quarter_key = first_key
+            m_key = ""
+        else:
+            quarter_key, m_key = _infer_quarter_and_map(first_key)
 
     info = MAP_INSTRUCTIONS_DATA.get(m_key)
     if not info:
@@ -781,6 +1052,12 @@ def get_map_instructions(arg1, arg2=None, arg3="Student"):
             "title": "QUEST OBJECTIVES",
             "subtitle": f"Welcome, {p_name}!",
             "theme": "forest",
+            "objectives_title": "🎯 LEARNING OBJECTIVES:",
+            "objectives_subtitle": "After this activity, you should be able to:",
+            "objectives": [
+                "Understand and apply mathematical reasoning to solve grade-level challenges.",
+                "Complete station tasks and interact with guardians to advance your quest."
+            ],
             "steps": [
                 {
                     "title": "1. Solve Station Challenges:",
@@ -798,6 +1075,9 @@ def get_map_instructions(arg1, arg2=None, arg3="Student"):
         "title": info["title"],
         "subtitle": info["subtitle"].format(player_name=p_name),
         "theme": info.get("theme", "forest"),
+        "objectives_title": info.get("objectives_title", "🎯 LEARNING OBJECTIVES:"),
+        "objectives_subtitle": info.get("objectives_subtitle", "After this activity, you should be able to:"),
+        "objectives": list(info.get("objectives", [])),
         "steps": []
     }
     for step in info["steps"]:

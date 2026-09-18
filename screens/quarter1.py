@@ -88,6 +88,10 @@ class Quarter1:
         self.instruction_modal = InstructionModal(self.screen, self.width, self.height, getattr(self.main_menu, 'audio_manager', None))
         self.greeting_dialog = NPCGreetingDialog(self.screen, self.width, self.height, getattr(self.main_menu, 'audio_manager', None))
 
+        # Dynamic Hierarchy Pathfinder & Starlight Visual Trail Guide
+        from core.pathfinder_guide import QuestPathfinderGuide
+        self.path_guide = QuestPathfinderGuide(self, quarter_id="quarter1", theme="forest")
+
         # Performance Caches
         self._scaled_tile_cache = {}
         self._scaled_sprite_cache = {}
@@ -2740,6 +2744,10 @@ class Quarter1:
         if self.puzzle_active:
             self.update_puzzle()
             return
+
+        # Update Pathfinder Visual Guide Trail
+        if hasattr(self, 'path_guide'):
+            self.path_guide.update(dt)
             
         # Update cooldowns
         if self.teleport_cooldown > 0:
@@ -3085,6 +3093,9 @@ class Quarter1:
             for portal in self.portals:
                 portal.draw(self.screen, self.camera_x, self.camera_y, ZOOM, self.width, self.height)
 
+        # Draw Hierarchy Pathfinder Visual Guide Trail
+        if hasattr(self, 'path_guide'):
+            self.path_guide.draw()
 
         # Draw Shape NPCs (1 to 5 hierarchy with glowing active station ring)
         if self.is_quiz_map:

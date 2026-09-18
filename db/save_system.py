@@ -462,6 +462,7 @@ def apply_student_progress(main_menu, save_data):
         ss.skeleton_dialogue_state = ss_data.get("skeleton_dialogue_state", 0)
         ss.bromen_dialogue_state = ss_data.get("bromen_dialogue_state", 0)
         ss.player_following_target = ss_data.get("player_following_target", None)
+        ss.barriers_lifted = ss_data.get("barriers_lifted", False)
         
         # Re-center Camera to player position
         ss.camera_x = ss.player_x + 16 - (ss.width // 2) / 1.50
@@ -470,7 +471,28 @@ def apply_student_progress(main_menu, save_data):
         print("[MAP] Stage Select screen state resumed.")
         
     elif current_screen in ["quarter1", "quarter2", "quarter3", "quarter4"]:
+        comp_qs = save_data.get("completed_quarters", {})
         q_data = save_data.get("quarter_data", {})
+        if comp_qs.get(current_screen, {}).get("completed", False) or q_data.get("completed", False):
+            # Quarter was already completed - resume in Stage Select hub instead of completed quarter
+            from screens.stageselect import StageSelect
+            main_menu.current_screen = "stage_select"
+            ss = StageSelect(main_menu.screen, main_menu)
+            main_menu.stage_select = ss
+            ss_data = save_data.get("stage_select", {})
+            if ss_data:
+                ss.player_x = ss_data.get("player_x", ss.player_x)
+                ss.player_y = ss_data.get("player_y", ss.player_y)
+                ss.oldman_dialogue_state = ss_data.get("oldman_dialogue_state", 0)
+                ss.knight_dialogue_state = ss_data.get("knight_dialogue_state", 0)
+                ss.skeleton_dialogue_state = ss_data.get("skeleton_dialogue_state", 0)
+                ss.bromen_dialogue_state = ss_data.get("bromen_dialogue_state", 0)
+                ss.player_following_target = ss_data.get("player_following_target", None)
+                ss.barriers_lifted = ss_data.get("barriers_lifted", False)
+                ss.camera_x = ss.player_x + 16 - (ss.width // 2) / 1.50
+                ss.camera_y = ss.player_y + 16 - (ss.height // 2) / 1.50
+            print(f"[GAME] {current_screen} already completed. Resumed activity in Stage Select hub.")
+            return
         map_name = q_data.get("map_name", "map1.txt")
         
         q = None

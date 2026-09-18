@@ -32,7 +32,7 @@ def main():
 
     # Set up fullscreen display
     screen = pygame.display.set_mode((screen_width, screen_height), pygame.FULLSCREEN)
-    pygame.display.set_caption("Cognitive Play - Educational Games")
+    pygame.display.set_caption("Cognitive Maze - Educational Games")
 
     # Set up clock for FPS
     clock = pygame.time.Clock()

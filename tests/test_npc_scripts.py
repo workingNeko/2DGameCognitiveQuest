@@ -13,22 +13,26 @@ from core.npc_scripts import (
 )
 
 class TestNPCScripts(unittest.TestCase):
-    def test_map_instructions_all_maps(self):
+    def test_map_instructions_all_maps_and_quarters(self):
         # Maps 1 to 12
-        for m in ["map1.txt", "map2.txt", "map3.txt", "map4.txt", "map5.txt", "map6.txt"]:
-            inst = get_map_instructions("quarter1" if "map1" in m or "map2" in m or "map3" in m else "quarter2", m, "Hero")
+        for m in ["map1.txt", "map2.txt", "map3.txt", "map4.txt", "map5.txt", "map6.txt", "map7.txt", "map8.txt", "map9.txt", "map10.txt", "map11.txt", "map12.txt"]:
+            inst = get_map_instructions(m, "Hero")
             self.assertIn("title", inst)
             self.assertIn("subtitle", inst)
             self.assertIn("Hero", inst["subtitle"])
-            self.assertTrue(len(inst["steps"]) >= 2)
+            self.assertIn("objectives_title", inst)
+            self.assertIn("objectives_subtitle", inst)
+            self.assertIn("objectives", inst)
+            self.assertTrue(len(inst["objectives"]) >= 2, f"Expected >=2 objectives for {m}")
+            self.assertTrue(len(inst["steps"]) >= 2, f"Expected >=2 steps for {m}")
 
-        # Quarter 3 and Quarter 4
-        for q, maps in [("quarter3", ["map7.txt", "map8.txt", "map9.txt"]), ("quarter4", ["map10.txt", "map11.txt", "map12.txt"])]:
-            for m in maps:
-                inst = get_map_instructions(q, m, "Hero")
-                self.assertIn("title", inst)
-                self.assertIn("Hero", inst["subtitle"])
-                self.assertTrue(len(inst["steps"]) >= 2)
+        # Quarters 1 to 4
+        for q in ["quarter1", "quarter2", "quarter3", "quarter4"]:
+            inst = get_map_instructions(q, "*", "Hero")
+            self.assertIn("title", inst)
+            self.assertIn("Hero", inst["subtitle"])
+            self.assertIn("objectives", inst)
+            self.assertTrue(len(inst["objectives"]) >= 3, f"Expected >=3 objectives for {q}")
 
     def test_station_scripts_q1(self):
         # Map 1 has specific guardians: Circle, Heart, Square, Star, Diamond
@@ -92,8 +96,9 @@ class TestNPCScripts(unittest.TestCase):
     def test_polymorphic_calls_and_aliases(self):
         # Test 2-arg get_map_instructions
         inst = get_map_instructions("map10.txt", "Alice")
-        self.assertIn("THE WATER TEMPLE SANCTUARY", inst["title"])
+        self.assertIn("WATER TEMPLE", inst["title"])
         self.assertIn("Alice", inst["subtitle"])
+        self.assertTrue(len(inst["objectives"]) >= 2)
 
         # Test 2-arg get_station_script and key aliases
         st = get_station_script("map4.txt", 2, "Alice")
@@ -124,8 +129,17 @@ class TestNPCScripts(unittest.TestCase):
         inst_data = get_map_instructions("map1.txt", "Tester")
         modal.show(inst_data)
         self.assertTrue(modal.is_visible)
+        self.assertTrue(len(modal.objectives) >= 2)
+        self.assertIn("LEARNING OBJECTIVES", modal.objectives_title)
+
         modal.update(0.016, (400, 300), fist_hold_pct=0.5)
         modal.draw((400, 300))
+
+        # Test scroll event
+        event_wheel = pygame.event.Event(pygame.MOUSEWHEEL, {"y": -1, "x": 0})
+        handled = modal.handle_event(event_wheel)
+        self.assertTrue(handled)
+
         modal.hide()
         self.assertFalse(modal.is_visible)
 

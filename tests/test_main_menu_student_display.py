@@ -83,7 +83,7 @@ class TestMainMenuStudentDisplay(unittest.TestCase):
         self.assertEqual(self.menu.select_student_btn.rect.x, self.menu.w // 2 - 440 // 2)
 
     def test_student_card_position_centered_between_title_and_buttons(self):
-        """Verify the selected student details box is positioned in the exact middle of the Cognitive Play title and the Buttons"""
+        """Verify the selected student details box is positioned in the exact middle of the Cognitive Maze title and the Buttons"""
         self.menu.selected_student = {
             "id": 1,
             "student_id": "2024-001",
@@ -98,7 +98,7 @@ class TestMainMenuStudentDisplay(unittest.TestCase):
         self.menu.setup_buttons()
         self.menu.draw()
 
-        title_h = self.menu.title_font.size("COGNITIVE PLAY")[1]
+        title_h = self.menu.title_font.size("COGNITIVE MAZE")[1]
         title_bottom = self.menu.title_y + title_h + 4
         buttons_top = self.menu.select_student_btn.rect.top
 

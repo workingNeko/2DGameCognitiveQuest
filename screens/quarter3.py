@@ -94,6 +94,10 @@ class Quarter3:
         self.guide_btn_rect = pygame.Rect(self.width - 256, 18, 110, 36)
         self.fist_progress = 0.0
 
+        # Dynamic Hierarchy Pathfinder & Starlight Visual Trail Guide
+        from core.pathfinder_guide import QuestPathfinderGuide
+        self.path_guide = QuestPathfinderGuide(self, quarter_id="quarter3", theme="desert")
+
         # Show Initial Map Instructions Popup
         map_instr = get_map_instructions(self.map_name, self.player_name)
         self.instruction_modal.show(map_instr)
@@ -2040,6 +2044,10 @@ class Quarter3:
         if self.time_up_dialog_active:
             return
 
+        # Update Pathfinder Visual Guide Trail
+        if hasattr(self, 'path_guide'):
+            self.path_guide.update(dt)
+
         # Update animations for all 5 Shape Station NPCs
         if hasattr(self, 'station_npcs'):
             for num, data in self.station_npcs.items():
@@ -2456,8 +2464,9 @@ class Quarter3:
                     if tile_char != 'T' and tile_char != 'w':
                         self.draw_tile(tile_char, col * TILE_SIZE, row * TILE_SIZE)
 
-
-
+        # Draw Hierarchy Pathfinder Visual Guide Trail
+        if hasattr(self, 'path_guide'):
+            self.path_guide.draw()
 
         if self.npc_oldman_found:
             self.draw_npc_static(self.npc_oldman_x, self.npc_oldman_y,

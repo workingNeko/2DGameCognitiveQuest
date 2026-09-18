@@ -226,7 +226,7 @@ class LeaderboardScreen:
         self.screen.blit(dim, (0, 0))
 
         # 2. Header & Title
-        title_surf = self.title_font.render("COGNITIVE QUEST - HALL OF FAME", True, (255, 215, 0))
+        title_surf = self.title_font.render("COGNITIVE MAZE - HALL OF FAME", True, (255, 215, 0))
         self.screen.blit(title_surf, title_surf.get_rect(center=(self.width // 2, 28)))
 
         subtitle_surf = self.subtitle_font.render("DepEd MATATAG Grade 2 Mathematics Official Student Rankings", True, (203, 213, 225))

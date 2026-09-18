@@ -97,6 +97,10 @@ class Quarter4:
         self.guide_btn_rect = pygame.Rect(self.width - 256, 18, 110, 36)
         self.fist_progress = 0.0
 
+        # Dynamic Hierarchy Pathfinder & Starlight Visual Trail Guide
+        from core.pathfinder_guide import QuestPathfinderGuide
+        self.path_guide = QuestPathfinderGuide(self, quarter_id="quarter4", theme="water")
+
         # Show Initial Map Instructions Popup
         map_instr = get_map_instructions(self.map_name, self.player_name)
         self.instruction_modal.show(map_instr)
@@ -1707,6 +1711,10 @@ class Quarter4:
             if self.title_elapsed >= self.title_duration:
                 self.title_active = False
 
+        # Update Pathfinder Visual Guide Trail
+        if hasattr(self, 'path_guide'):
+            self.path_guide.update(dt)
+
         # Update speed boost sprint timer
         if hasattr(self, 'speed_boost_timer') and self.speed_boost_timer > 0 and self.quiz_state in [0, 6] and not getattr(self, 'key_puzzle_active', False) and not getattr(self, 'emblem_puzzle_active', False) and getattr(self, 'player_block_timer', 0) <= 0:
             self.speed_boost_timer = max(0.0, self.speed_boost_timer - dt)
@@ -2382,6 +2390,10 @@ class Quarter4:
         if self.quiz_state == 6:
             for portal in self.portals:
                 portal.draw(self.screen, self.camera_x, self.camera_y, ZOOM, self.width, self.height)
+
+        # Draw Hierarchy Pathfinder Visual Guide Trail
+        if hasattr(self, 'path_guide'):
+            self.path_guide.draw()
 
         # Draw Station NPCs at coordinates 1, 2, 3, 4, 5, 6
         if hasattr(self, 'quiz_stations') and hasattr(self, 'station_npcs'):

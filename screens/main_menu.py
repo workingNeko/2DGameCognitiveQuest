@@ -190,7 +190,7 @@ class MainMenu:
         # ==========================================
 
         self.dialogue_lines = [
-            "Welcome to Cognitive Play!",
+            "Welcome to Cognitive Maze!",
             "Let's learn and have fun together!",
             "Please select your student profile."
         ]
@@ -1376,7 +1376,7 @@ class MainMenu:
     def draw_selected_student_card(self):
         """Renders a sleek, modern glassmorphic profile card displaying only the active selected student.
         If no student is selected, nothing is rendered.
-        Dynamically positioned in the exact vertical middle between the Cognitive Play title and the buttons."""
+        Dynamically positioned in the exact vertical middle between the Cognitive Maze title and the buttons."""
         if not self.selected_student:
             self.student_card_rect = None
             return
@@ -1385,8 +1385,8 @@ class MainMenu:
         card_h = 64
         card_x = self.w // 2 - card_w // 2
 
-        # Dynamically calculate the middle position between the Cognitive Play title and the top action button
-        title_h = self.title_font.size("COGNITIVE PLAY")[1] if hasattr(self, "title_font") else 112
+        # Dynamically calculate the middle position between the Cognitive Maze title and the top action button
+        title_h = self.title_font.size("COGNITIVE MAZE")[1] if hasattr(self, "title_font") else 112
         title_bottom = self.title_y + title_h + 4  # Includes title shadow/glow offset
         buttons_top = self.select_student_btn.rect.top if getattr(self, "select_student_btn", None) else (self.h // 2 - 100)
 
@@ -1623,12 +1623,12 @@ class MainMenu:
 
             # TITLE
             for offset in range(3, 0, -1):
-                glow = self.title_font.render("COGNITIVE PLAY", True, (255, 255, 150))
+                glow = self.title_font.render("COGNITIVE MAZE", True, (255, 255, 150))
                 tx = self.w // 2 - glow.get_width() // 2
                 self.screen.blit(glow, (tx, self.title_y - offset))
 
-            title = self.title_font.render("COGNITIVE PLAY", True, (255, 255, 255))
-            title_shadow = self.title_font.render("COGNITIVE PLAY", True, (0, 0, 0))
+            title = self.title_font.render("COGNITIVE MAZE", True, (255, 255, 255))
+            title_shadow = self.title_font.render("COGNITIVE MAZE", True, (0, 0, 0))
             tx = self.w // 2 - title.get_width() // 2
             self.screen.blit(title_shadow, (tx + 4, self.title_y + 4))
             self.screen.blit(title, (tx, self.title_y))

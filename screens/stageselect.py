@@ -14,6 +14,7 @@ from screens.quarter2 import Quarter2
 from screens.quarter3 import Quarter3
 from screens.quarter4 import Quarter4
 from core.camera_system import LoLCamera
+from core.pathfinder_guide import QuestPathfinderGuide
 
 # ============================================================
 # SETTINGS
@@ -56,6 +57,9 @@ class StageSelect:
         self.click_cooldown = 0.5
         self.locked_portal_banner_msg = ""
         self.locked_portal_banner_timer = 0.0
+
+        # Developer Shortcut / Cheat State (Ctrl+Shift+B)
+        self.barriers_lifted = False
 
         # Grand Finale Celebration State
         self.grand_finale_active = False
@@ -239,12 +243,6 @@ class StageSelect:
         self.bromen_teleport_frame = 0
         self.bromen_teleport_timer = 0
         self.player_following_target = None  # 'oldman', 'skeleton', 'knight', 'bromen', or None
-        self.bromen_dialogue_lines = [
-            ("Bromen", "Greetings! I am Bromen, master of the final realm."),
-            ("Student", "Are you guarding the entrance to Quarter 4?"),
-            ("Bromen", "Indeed! Follow me to the north portal to enter Quarter 4."),
-            ("Bromen", "Let us go!")
-        ]
 
         # Oldman NPC (static & interactive)
         self.npc_oldman_sprite = None
@@ -253,7 +251,7 @@ class StageSelect:
         self.npc_oldman_tile_x = 0
         self.npc_oldman_tile_y = 0
         self.npc_oldman_found = False
-        self.oldman_dialogue_state = 0  # 0: idle, 1: dialogue active, 2: walking, 3: disappeared
+        self.oldman_dialogue_state = 0  # 0: idle, 1: dialogue active, 2: walking, 3: disappeared, 4: completed speech
         self.oldman_dialogue_index = 0
         self.npc_oldman_left_sprites = []
         self.npc_oldman_down_sprites = []
@@ -270,6 +268,19 @@ class StageSelect:
         if hasattr(self, 'main_menu') and self.main_menu and getattr(self.main_menu, 'selected_student', None):
             student_name = self.main_menu.selected_student.get('first_name', 'Student')
 
+        if self.is_quarter_completed('quarter4'):
+            self.bromen_dialogue_lines = [
+                ("Bromen", f"Magnificent achievement, {student_name}! You have mastered Quarter 4 (Celestial Clocktower)!"),
+                ("Bromen", "Speak with the Old Man at the central sanctuary to celebrate your Grand Champion victory!")
+            ]
+        else:
+            self.bromen_dialogue_lines = [
+                ("Bromen", "Greetings! I am Bromen, master of the final realm."),
+                ("Student", "Are you guarding the entrance to Quarter 4?"),
+                ("Bromen", "Indeed! Follow me to the north portal to enter Quarter 4."),
+                ("Bromen", "Let us go!")
+            ]
+
         if all_completed:
             self.dialogue_lines = [
                 ("Old Man", f"Hail, Master Mathematician {student_name}! Look how far you have journeyed:"),
@@ -279,7 +290,13 @@ class StageSelect:
                 ("Old Man", "And you brought harmony to the depths of the Water Temple!"),
                 ("Old Man", "You have discovered the greatest truth of all:"),
                 ("Old Man", "Math is the ultimate magic, and with logic, courage, and perseverance, there is no problem in this world you cannot solve!"),
-                ("Old Man", "Congratulations on completing Cognitive Quest!")
+                ("Old Man", "Congratulations on completing Cognitive Maze!")
+            ]
+        elif self.is_quarter_completed('quarter1'):
+            self.dialogue_lines = [
+                ("Old Man", f"Well done on mastering Quarter 1, {student_name}!"),
+                ("Old Man", "The path south to Quarter 2 (Barangay Geometry) is now open!"),
+                ("Old Man", "Remember, each completed quarter brings you closer to becoming a Master Mathematician!")
             ]
         else:
             self.dialogue_lines = [
@@ -299,7 +316,7 @@ class StageSelect:
         self.npc_skeleton_tile_x = 0
         self.npc_skeleton_tile_y = 0
         self.npc_skeleton_found = False
-        self.skeleton_dialogue_state = 0  # 0: idle, 1: dialogue active, 2: walking, 3: disappeared
+        self.skeleton_dialogue_state = 0  # 0: idle, 1: dialogue active, 2: walking, 3: disappeared, 4: completed speech
         self.skeleton_dialogue_index = 0
         self.npc_skeleton_left_sprites = []
         self.npc_skeleton_down_sprites = []
@@ -308,10 +325,16 @@ class StageSelect:
         self.npc_skeleton_dir = "down"
         self.npc_skeleton_anim_frame = 0
         self.npc_skeleton_anim_timer = 0
-        self.skeleton_dialogue_lines = [
-            ("Skeleton", "Hi"),
-            ("Student", "Hello")
-        ]
+        if self.is_quarter_completed('quarter3'):
+            self.skeleton_dialogue_lines = [
+                ("Skeleton", f"Incredible work clearing Quarter 3 (Oasis Mirage), {student_name}!"),
+                ("Skeleton", "Head north along the corridor to meet Bromen at the Celestial Clocktower in Quarter 4!")
+            ]
+        else:
+            self.skeleton_dialogue_lines = [
+                ("Skeleton", "Hi"),
+                ("Student", "Hello")
+            ]
 
         # Knight NPC (static & interactive)
         self.npc_knight_sprite = None
@@ -320,7 +343,7 @@ class StageSelect:
         self.npc_knight_tile_x = 0
         self.npc_knight_tile_y = 0
         self.npc_knight_found = False
-        self.knight_dialogue_state = 0  # 0: idle, 1: dialogue active, 2: walking, 3: disappeared
+        self.knight_dialogue_state = 0  # 0: idle, 1: dialogue active, 2: walking, 3: disappeared, 4: completed speech
         self.knight_dialogue_index = 0
         self.npc_knight_left_sprites = []
         self.npc_knight_down_sprites = []
@@ -329,11 +352,17 @@ class StageSelect:
         self.npc_knight_dir = "down"
         self.npc_knight_anim_frame = 0
         self.npc_knight_anim_timer = 0
-        self.knight_dialogue_lines = [
-            ("Knight", "Halt, student! Beyond this portal lies Quarter 2."),
-            ("Student", "I am ready for the challenge!"),
-            ("Knight", "Walk through the portal down below to proceed. Best of luck!")
-        ]
+        if self.is_quarter_completed('quarter2'):
+            self.knight_dialogue_lines = [
+                ("Knight", f"Outstanding valor, {student_name}! You have mastered Quarter 2 (Barangay Geometry)!"),
+                ("Knight", "Head east through the corridor to explore Quarter 3 (Oasis Mirage)!")
+            ]
+        else:
+            self.knight_dialogue_lines = [
+                ("Knight", "Halt, student! Beyond this portal lies Quarter 2."),
+                ("Student", "I am ready for the challenge!"),
+                ("Knight", "Walk through the portal down below to proceed. Best of luck!")
+            ]
 
         # ============================================================
         # LOAD STATIC NPC SPRITES
@@ -443,6 +472,9 @@ class StageSelect:
         # INTERACTIVE OBJECTS IN ENHANCED SPACES
         # ============================================================
         self._init_interactive_objects()
+
+        # Dynamic Hierarchy Pathfinder & Starlight Visual Trail Guide
+        self.path_guide = QuestPathfinderGuide(self, quarter_id="stageselect", theme="forest")
 
     def _init_interactive_objects(self):
         """Initializes rich interactive entities across the hub's quadrants."""
@@ -1063,7 +1095,7 @@ class StageSelect:
             if self.animation:
                 self.animation.update()
 
-        def draw(self, screen, camera_x, camera_y, zoom, screen_width, screen_height):
+        def draw(self, screen, camera_x, camera_y, zoom, screen_width, screen_height, is_completed=False):
             screen_x = (self.get_world_x() - camera_x) * zoom
             screen_y = (self.get_world_y() - camera_y) * zoom
             scaled_width = int(self.get_width_pixels() * zoom)
@@ -1071,11 +1103,14 @@ class StageSelect:
 
             # Soft radiant pulsating aura glow behind the portal
             glow_surf = pygame.Surface((scaled_width + 20, scaled_height + 20), pygame.SRCALPHA)
-            aura_rgb = (34, 197, 94) if self.direction == 'left' else (
-                (59, 130, 246) if self.direction == 'up' else (
-                    (245, 158, 11) if self.direction == 'right' else (168, 85, 247)
+            if is_completed:
+                aura_rgb = (255, 215, 0)  # Shimmering Gold for CLEARED
+            else:
+                aura_rgb = (34, 197, 94) if self.direction == 'left' else (
+                    (59, 130, 246) if self.direction == 'up' else (
+                        (245, 158, 11) if self.direction == 'right' else (168, 85, 247)
+                    )
                 )
-            )
             pulse = (math.sin(pygame.time.get_ticks() * 0.005) + 1.0) * 0.5
             alpha = int(70 + 45 * pulse)
             pygame.draw.ellipse(glow_surf, (*aura_rgb, alpha), (0, 0, scaled_width + 20, scaled_height + 20))
@@ -1179,14 +1214,16 @@ class StageSelect:
     # ============================================================
     def is_quarter_completed(self, qid):
         """Returns True if the specified quarter is recorded as completed."""
-        if not hasattr(self, 'completed_quarters') or not self.completed_quarters:
-            from db.save_system import get_completed_quarters
-            student_id = getattr(self.main_menu, 'student_id', None)
-            self.completed_quarters = get_completed_quarters(student_id)
-        return self.completed_quarters.get(qid, {}).get("completed", False)
+        from db.save_system import get_completed_quarters
+        student_id = getattr(self.main_menu, 'student_id', None)
+        self.completed_quarters = get_completed_quarters(student_id)
+        return bool(self.completed_quarters.get(qid, {}).get("completed", False))
 
     def is_quarter_unlocked(self, qid):
-        """Sequential gating: Q1 is open; Q2 requires Q1; Q3 requires Q2; Q4 requires Q3."""
+        """Sequential gating: Q1 is open; Q2 requires Q1; Q3 requires Q2; Q4 requires Q3.
+        If barriers_lifted override is active (Ctrl+Shift+B), all quarter corridors and portals are unlocked."""
+        if getattr(self, 'barriers_lifted', False):
+            return True
         if qid == "quarter1":
             return True
         elif qid == "quarter2":
@@ -1265,7 +1302,8 @@ class StageSelect:
                 "knight_dialogue_state": self.knight_dialogue_state,
                 "skeleton_dialogue_state": self.skeleton_dialogue_state,
                 "bromen_dialogue_state": self.bromen_dialogue_state,
-                "player_following_target": self.player_following_target
+                "player_following_target": self.player_following_target,
+                "barriers_lifted": getattr(self, 'barriers_lifted', False)
             }
 
     def _preload_quarter_worker(self, qid):
@@ -1303,6 +1341,21 @@ class StageSelect:
     def enter_quarter(self, qid):
         """Initiate centralized portal transition with 3-second black LOADING screen and background preload."""
         if getattr(self, 'portal_transition_active', False):
+            return
+
+        if self.is_quarter_completed(qid):
+            print(f"[BLOCKED] {qid} is already completed! Player cannot re-enter.")
+            q_names = {
+                "quarter1": "Quarter 1",
+                "quarter2": "Quarter 2",
+                "quarter3": "Quarter 3",
+                "quarter4": "Quarter 4"
+            }
+            q_title = q_names.get(qid, qid.capitalize())
+            self.locked_portal_banner_msg = f"{q_title} is already completed!"
+            self.locked_portal_banner_timer = 2.5
+            if hasattr(self.main_menu, 'audio_manager') and self.main_menu.audio_manager:
+                self.main_menu.audio_manager.play_sfx("deny")
             return
 
         self.portal_transition_active = True
@@ -1479,7 +1532,11 @@ class StageSelect:
         if current_portal and self.fist_closed and self.teleport_cooldown <= 0:
             # Check if it's a left portal (goes to Quarter1)
             if current_portal.direction == 'left':
-                if self.oldman_dialogue_state == 0 and not self.is_quarter_completed('quarter1'):
+                if self.is_quarter_completed('quarter1'):
+                    self.locked_portal_banner_msg = "Quarter 1 is already completed!"
+                    self.locked_portal_banner_timer = 2.5
+                    return False
+                if self.oldman_dialogue_state == 0:
                     print("[LOCKED] Quarter 1 Portal Locked! Talk to the Old Man first.")
                     self.locked_portal_banner_msg = "Talk to the Old Man first to unlock Quarter 1!"
                     self.locked_portal_banner_timer = 2.5
@@ -1488,12 +1545,16 @@ class StageSelect:
                 return True
             # Check if it's an up portal (goes to Quarter2)
             elif current_portal.direction == 'up':
+                if self.is_quarter_completed('quarter2'):
+                    self.locked_portal_banner_msg = "Quarter 2 is already completed!"
+                    self.locked_portal_banner_timer = 2.5
+                    return False
                 if not self.is_quarter_unlocked('quarter2'):
                     print("[LOCKED] Quarter 2 Locked! Complete Quarter 1 first.")
                     self.locked_portal_banner_msg = "Complete Quarter 1 to unlock Quarter 2!"
                     self.locked_portal_banner_timer = 2.5
                     return False
-                if self.knight_dialogue_state == 0 and not self.is_quarter_completed('quarter2'):
+                if self.knight_dialogue_state == 0:
                     print("[LOCKED] Quarter 2 Portal Locked! Talk to the Knight first.")
                     self.locked_portal_banner_msg = "Talk to the Knight first to unlock Quarter 2!"
                     self.locked_portal_banner_timer = 2.5
@@ -1502,12 +1563,16 @@ class StageSelect:
                 return True
             # Check if it's a right portal (goes to Quarter3)
             elif current_portal.direction == 'right':
+                if self.is_quarter_completed('quarter3'):
+                    self.locked_portal_banner_msg = "Quarter 3 is already completed!"
+                    self.locked_portal_banner_timer = 2.5
+                    return False
                 if not self.is_quarter_unlocked('quarter3'):
                     print("[LOCKED] Quarter 3 Locked! Complete Quarter 2 first.")
                     self.locked_portal_banner_msg = "Complete Quarter 2 to unlock Quarter 3!"
                     self.locked_portal_banner_timer = 2.5
                     return False
-                if self.skeleton_dialogue_state == 0 and not self.is_quarter_completed('quarter3'):
+                if self.skeleton_dialogue_state == 0:
                     print("[LOCKED] Quarter 3 Portal Locked! Talk to the Skeleton first.")
                     self.locked_portal_banner_msg = "Talk to the Skeleton first to unlock Quarter 3!"
                     self.locked_portal_banner_timer = 2.5
@@ -1516,12 +1581,16 @@ class StageSelect:
                 return True
             # Check if it's a down portal (goes to Quarter4)
             elif current_portal.direction == 'down':
+                if self.is_quarter_completed('quarter4'):
+                    self.locked_portal_banner_msg = "Quarter 4 is already completed!"
+                    self.locked_portal_banner_timer = 2.5
+                    return False
                 if not self.is_quarter_unlocked('quarter4'):
                     print("[LOCKED] Quarter 4 Locked! Complete Quarter 3 first.")
                     self.locked_portal_banner_msg = "Complete Quarter 3 to unlock Quarter 4!"
                     self.locked_portal_banner_timer = 2.5
                     return False
-                if self.bromen_dialogue_state == 0 and not self.is_quarter_completed('quarter4'):
+                if self.bromen_dialogue_state == 0:
                     print("[LOCKED] Quarter 4 Portal Locked! Talk to Bromen first.")
                     self.locked_portal_banner_msg = "Talk to Bromen first to unlock Quarter 4!"
                     self.locked_portal_banner_timer = 2.5
@@ -1625,15 +1694,19 @@ class StageSelect:
             return True
 
         if self.player_following_target:
-            # Skip follow cutscene and enter immediately
+            # Skip follow cutscene and enter immediately if not completed
             if self.player_following_target == 'oldman':
-                self.enter_quarter("quarter1")
+                if not self.is_quarter_completed("quarter1"):
+                    self.enter_quarter("quarter1")
             elif self.player_following_target == 'knight':
-                self.enter_quarter("quarter2")
+                if not self.is_quarter_completed("quarter2"):
+                    self.enter_quarter("quarter2")
             elif self.player_following_target == 'skeleton':
-                self.enter_quarter("quarter3")
+                if not self.is_quarter_completed("quarter3"):
+                    self.enter_quarter("quarter3")
             elif self.player_following_target == 'bromen':
-                self.enter_quarter("quarter4")
+                if not self.is_quarter_completed("quarter4"):
+                    self.enter_quarter("quarter4")
             return True
 
         # Check if active dialogue line is still typing: fast forward on first press
@@ -1663,10 +1736,10 @@ class StageSelect:
         if self.oldman_dialogue_state == 1:
             self.oldman_dialogue_index += 1
             if self.oldman_dialogue_index >= len(self.dialogue_lines):
-                if getattr(self, 'all_quarters_completed', False):
+                if getattr(self, 'all_quarters_completed', False) or self.is_quarter_completed('quarter1'):
                     self.oldman_dialogue_state = 4
                     self.oldman_dialogue_index = 0
-                    print("[Old Man] Grand Victory Speech complete! Old Man remains at hub.")
+                    print("[Old Man] Speech complete! Old Man remains at hub.")
                 else:
                     self.oldman_dialogue_state = 2
                     self.player_following_target = 'oldman'
@@ -1679,34 +1752,49 @@ class StageSelect:
         if self.skeleton_dialogue_state == 1:
             self.skeleton_dialogue_index += 1
             if self.skeleton_dialogue_index >= len(self.skeleton_dialogue_lines):
-                self.skeleton_dialogue_state = 2
-                self.player_following_target = 'skeleton'
-                self.player_block_timer = 0
-                if 'S' in self.npc_positions_data:
-                    self.npc_positions_data['S'] = []
-                print("[Skeleton] Dialog complete! Skeleton starts moving right to portal and player follows.")
+                if self.is_quarter_completed('quarter3'):
+                    self.skeleton_dialogue_state = 4
+                    self.skeleton_dialogue_index = 0
+                    print("[Skeleton] Dialogue complete! Quarter 3 is already completed.")
+                else:
+                    self.skeleton_dialogue_state = 2
+                    self.player_following_target = 'skeleton'
+                    self.player_block_timer = 0
+                    if 'S' in self.npc_positions_data:
+                        self.npc_positions_data['S'] = []
+                    print("[Skeleton] Dialog complete! Skeleton starts moving right to portal and player follows.")
             return True
 
         if self.knight_dialogue_state == 1:
             self.knight_dialogue_index += 1
             if self.knight_dialogue_index >= len(self.knight_dialogue_lines):
-                self.knight_dialogue_state = 2
-                self.player_following_target = 'knight'
-                self.player_block_timer = 0
-                if '1' in self.npc_positions_data:
-                    self.npc_positions_data['1'] = []
-                print("[Knight] Dialog complete! Knight starts moving down to portal and player follows.")
+                if self.is_quarter_completed('quarter2'):
+                    self.knight_dialogue_state = 4
+                    self.knight_dialogue_index = 0
+                    print("[Knight] Dialogue complete! Quarter 2 is already completed.")
+                else:
+                    self.knight_dialogue_state = 2
+                    self.player_following_target = 'knight'
+                    self.player_block_timer = 0
+                    if '1' in self.npc_positions_data:
+                        self.npc_positions_data['1'] = []
+                    print("[Knight] Dialog complete! Knight starts moving down to portal and player follows.")
             return True
 
         if self.bromen_dialogue_state == 1:
             self.bromen_dialogue_index += 1
             if self.bromen_dialogue_index >= len(self.bromen_dialogue_lines):
-                self.bromen_dialogue_state = 2
-                self.player_following_target = 'bromen'
-                self.player_block_timer = 0
-                if 'B' in self.npc_positions_data:
-                    self.npc_positions_data['B'] = []
-                print("* Dialogue complete! Bromen starts moving north to portal and player follows.")
+                if self.is_quarter_completed('quarter4'):
+                    self.bromen_dialogue_state = 4
+                    self.bromen_dialogue_index = 0
+                    print("[Bromen] Dialogue complete! Quarter 4 is already completed.")
+                else:
+                    self.bromen_dialogue_state = 2
+                    self.player_following_target = 'bromen'
+                    self.player_block_timer = 0
+                    if 'B' in self.npc_positions_data:
+                        self.npc_positions_data['B'] = []
+                    print("* Dialogue complete! Bromen starts moving north to portal and player follows.")
             return True
 
         if self.interactable_dialogue_state == 1 and self.active_interactable:
@@ -1770,34 +1858,46 @@ class StageSelect:
         
         if current_portal and self.teleport_cooldown <= 0:
             if current_portal.direction == 'left':
-                if self.oldman_dialogue_state == 0 and not self.is_quarter_completed('quarter1'):
+                if self.is_quarter_completed('quarter1'):
+                    self.locked_portal_banner_msg = "Quarter 1 is already completed!"
+                    self.locked_portal_banner_timer = 2.0
+                elif self.oldman_dialogue_state == 0:
                     self.locked_portal_banner_msg = "Talk to the Old Man first to unlock Quarter 1!"
                     self.locked_portal_banner_timer = 1.0
                 else:
                     self.enter_quarter("quarter1")
             elif current_portal.direction == 'up':
-                if not self.is_quarter_unlocked('quarter2'):
+                if self.is_quarter_completed('quarter2'):
+                    self.locked_portal_banner_msg = "Quarter 2 is already completed!"
+                    self.locked_portal_banner_timer = 2.0
+                elif not self.is_quarter_unlocked('quarter2'):
                     self.locked_portal_banner_msg = "Complete Quarter 1 to unlock Quarter 2!"
                     self.locked_portal_banner_timer = 2.0
-                elif self.knight_dialogue_state == 0 and not self.is_quarter_completed('quarter2'):
+                elif self.knight_dialogue_state == 0:
                     self.locked_portal_banner_msg = "Talk to the Knight first to unlock Quarter 2!"
                     self.locked_portal_banner_timer = 1.5
                 else:
                     self.enter_quarter("quarter2")
             elif current_portal.direction == 'right':
-                if not self.is_quarter_unlocked('quarter3'):
+                if self.is_quarter_completed('quarter3'):
+                    self.locked_portal_banner_msg = "Quarter 3 is already completed!"
+                    self.locked_portal_banner_timer = 2.0
+                elif not self.is_quarter_unlocked('quarter3'):
                     self.locked_portal_banner_msg = "Complete Quarter 2 to unlock Quarter 3!"
                     self.locked_portal_banner_timer = 2.0
-                elif self.skeleton_dialogue_state == 0 and not self.is_quarter_completed('quarter3'):
+                elif self.skeleton_dialogue_state == 0:
                     self.locked_portal_banner_msg = "Talk to the Skeleton first to unlock Quarter 3!"
                     self.locked_portal_banner_timer = 1.5
                 else:
                     self.enter_quarter("quarter3")
             elif current_portal.direction == 'down':
-                if not self.is_quarter_unlocked('quarter4'):
+                if self.is_quarter_completed('quarter4'):
+                    self.locked_portal_banner_msg = "Quarter 4 is already completed!"
+                    self.locked_portal_banner_timer = 2.0
+                elif not self.is_quarter_unlocked('quarter4'):
                     self.locked_portal_banner_msg = "Complete Quarter 3 to unlock Quarter 4!"
                     self.locked_portal_banner_timer = 2.0
-                elif self.bromen_dialogue_state == 0 and not self.is_quarter_completed('quarter4'):
+                elif self.bromen_dialogue_state == 0:
                     self.locked_portal_banner_msg = "Talk to Bromen first to unlock Quarter 4!"
                     self.locked_portal_banner_timer = 1.5
                 else:
@@ -1849,6 +1949,10 @@ class StageSelect:
             self.title_elapsed += dt
             if self.title_elapsed >= self.title_duration:
                 self.title_active = False
+
+        # Update Pathfinder Visual Guide Trail
+        if hasattr(self, 'path_guide'):
+            self.path_guide.update(dt)
 
         # Update cooldowns
         if self.teleport_cooldown > 0:
@@ -1911,12 +2015,16 @@ class StageSelect:
 
         # Proximity interaction check for Bromen NPC
         if self.npc_bromen_found:
+            player_center_x = self.player_x + TILE_SIZE // 2
+            player_center_y = self.player_y + TILE_SIZE // 2
+            bromen_center_x = self.npc_bromen_x + TILE_SIZE // 2
+            bromen_center_y = self.npc_bromen_y + TILE_SIZE // 2
+            dist = math.hypot(player_center_x - bromen_center_x, player_center_y - bromen_center_y)
+            if self.is_quarter_completed('quarter4') and self.bromen_dialogue_state == 4:
+                if dist >= TILE_SIZE * 3.5:
+                    self.bromen_dialogue_state = 0
+
             if self.bromen_dialogue_state == 0:
-                player_center_x = self.player_x + TILE_SIZE // 2
-                player_center_y = self.player_y + TILE_SIZE // 2
-                bromen_center_x = self.npc_bromen_x + TILE_SIZE // 2
-                bromen_center_y = self.npc_bromen_y + TILE_SIZE // 2
-                dist = math.hypot(player_center_x - bromen_center_x, player_center_y - bromen_center_y)
                 if dist < TILE_SIZE * 2.5:
                     if not self.is_quarter_unlocked('quarter4'):
                         if self.locked_portal_banner_timer <= 0:
@@ -1968,7 +2076,7 @@ class StageSelect:
             oldman_center_x = self.npc_oldman_x + TILE_SIZE // 2
             oldman_center_y = self.npc_oldman_y + TILE_SIZE // 2
             dist = math.hypot(player_center_x - oldman_center_x, player_center_y - oldman_center_y)
-            if getattr(self, 'all_quarters_completed', False) and self.oldman_dialogue_state == 4:
+            if (getattr(self, 'all_quarters_completed', False) or self.is_quarter_completed('quarter1')) and self.oldman_dialogue_state == 4:
                 if dist >= TILE_SIZE * 3.5:
                     self.oldman_dialogue_state = 0
 
@@ -2037,12 +2145,16 @@ class StageSelect:
 
         # Proximity interaction check for Skeleton NPC
         if self.npc_skeleton_found:
+            player_center_x = self.player_x + TILE_SIZE // 2
+            player_center_y = self.player_y + TILE_SIZE // 2
+            skeleton_center_x = self.npc_skeleton_x + TILE_SIZE // 2
+            skeleton_center_y = self.npc_skeleton_y + TILE_SIZE // 2
+            dist = math.hypot(player_center_x - skeleton_center_x, player_center_y - skeleton_center_y)
+            if self.is_quarter_completed('quarter3') and self.skeleton_dialogue_state == 4:
+                if dist >= TILE_SIZE * 3.5:
+                    self.skeleton_dialogue_state = 0
+
             if self.skeleton_dialogue_state == 0:
-                player_center_x = self.player_x + TILE_SIZE // 2
-                player_center_y = self.player_y + TILE_SIZE // 2
-                skeleton_center_x = self.npc_skeleton_x + TILE_SIZE // 2
-                skeleton_center_y = self.npc_skeleton_y + TILE_SIZE // 2
-                dist = math.hypot(player_center_x - skeleton_center_x, player_center_y - skeleton_center_y)
                 if dist < TILE_SIZE * 2.5:
                     if not self.is_quarter_unlocked('quarter3'):
                         if self.locked_portal_banner_timer <= 0:
@@ -2111,12 +2223,16 @@ class StageSelect:
 
         # Proximity interaction check for Knight NPC
         if self.npc_knight_found:
+            player_center_x = self.player_x + TILE_SIZE // 2
+            player_center_y = self.player_y + TILE_SIZE // 2
+            knight_center_x = self.npc_knight_x + TILE_SIZE // 2
+            knight_center_y = self.npc_knight_y + TILE_SIZE // 2
+            dist = math.hypot(player_center_x - knight_center_x, player_center_y - knight_center_y)
+            if self.is_quarter_completed('quarter2') and self.knight_dialogue_state == 4:
+                if dist >= TILE_SIZE * 3.5:
+                    self.knight_dialogue_state = 0
+
             if self.knight_dialogue_state == 0:
-                player_center_x = self.player_x + TILE_SIZE // 2
-                player_center_y = self.player_y + TILE_SIZE // 2
-                knight_center_x = self.npc_knight_x + TILE_SIZE // 2
-                knight_center_y = self.npc_knight_y + TILE_SIZE // 2
-                dist = math.hypot(player_center_x - knight_center_x, player_center_y - knight_center_y)
                 if dist < TILE_SIZE * 2.5:
                     if not self.is_quarter_unlocked('quarter2'):
                         if self.locked_portal_banner_timer <= 0:
@@ -2250,40 +2366,56 @@ class StageSelect:
                 port_rect = pygame.Rect(portal.get_world_x(), portal.get_world_y(), portal.get_width_pixels(), portal.get_height_pixels())
                 if port_rect.colliderect(p_rect) or portal.contains_position(self.player_x + TILE_SIZE // 2, self.player_y + TILE_SIZE // 2):
                     if portal.direction == 'left':
-                        if self.oldman_dialogue_state >= 2 or self.player_following_target == 'oldman' or self.is_quarter_completed('quarter1'):
+                        if self.is_quarter_completed('quarter1'):
+                            if self.locked_portal_banner_timer <= 0:
+                                self.locked_portal_banner_msg = "Quarter 1 is already completed!"
+                                self.locked_portal_banner_timer = 2.0
+                        elif self.oldman_dialogue_state >= 2 or self.player_following_target == 'oldman':
                             self.enter_quarter("quarter1")
                             return
                         elif self.oldman_dialogue_state == 0 and self.locked_portal_banner_timer <= 0:
                             self.locked_portal_banner_msg = "Talk to the Old Man first to unlock Quarter 1!"
                             self.locked_portal_banner_timer = 2.0
                     elif portal.direction == 'right':
-                        if not self.is_quarter_unlocked('quarter3'):
+                        if self.is_quarter_completed('quarter3'):
+                            if self.locked_portal_banner_timer <= 0:
+                                self.locked_portal_banner_msg = "Quarter 3 is already completed!"
+                                self.locked_portal_banner_timer = 2.0
+                        elif not self.is_quarter_unlocked('quarter3'):
                             if self.locked_portal_banner_timer <= 0:
                                 self.locked_portal_banner_msg = "Complete Quarter 2 to unlock Quarter 3!"
                                 self.locked_portal_banner_timer = 2.0
-                        elif self.skeleton_dialogue_state >= 2 or self.player_following_target == 'skeleton' or self.is_quarter_completed('quarter3'):
+                        elif self.skeleton_dialogue_state >= 2 or self.player_following_target == 'skeleton':
                             self.enter_quarter("quarter3")
                             return
                         elif self.skeleton_dialogue_state == 0 and self.locked_portal_banner_timer <= 0:
                             self.locked_portal_banner_msg = "Talk to the Skeleton first to unlock Quarter 3!"
                             self.locked_portal_banner_timer = 2.0
                     elif portal.direction == 'up':
-                        if not self.is_quarter_unlocked('quarter2'):
+                        if self.is_quarter_completed('quarter2'):
+                            if self.locked_portal_banner_timer <= 0:
+                                self.locked_portal_banner_msg = "Quarter 2 is already completed!"
+                                self.locked_portal_banner_timer = 2.0
+                        elif not self.is_quarter_unlocked('quarter2'):
                             if self.locked_portal_banner_timer <= 0:
                                 self.locked_portal_banner_msg = "Complete Quarter 1 to unlock Quarter 2!"
                                 self.locked_portal_banner_timer = 2.0
-                        elif self.knight_dialogue_state >= 2 or self.player_following_target == 'knight' or self.is_quarter_completed('quarter2'):
+                        elif self.knight_dialogue_state >= 2 or self.player_following_target == 'knight':
                             self.enter_quarter("quarter2")
                             return
                         elif self.knight_dialogue_state == 0 and self.locked_portal_banner_timer <= 0:
                             self.locked_portal_banner_msg = "Talk to the Knight first to unlock Quarter 2!"
                             self.locked_portal_banner_timer = 2.0
                     elif portal.direction == 'down':
-                        if not self.is_quarter_unlocked('quarter4'):
+                        if self.is_quarter_completed('quarter4'):
+                            if self.locked_portal_banner_timer <= 0:
+                                self.locked_portal_banner_msg = "Quarter 4 is already completed!"
+                                self.locked_portal_banner_timer = 2.0
+                        elif not self.is_quarter_unlocked('quarter4'):
                             if self.locked_portal_banner_timer <= 0:
                                 self.locked_portal_banner_msg = "Complete Quarter 3 to unlock Quarter 4!"
                                 self.locked_portal_banner_timer = 2.0
-                        elif self.bromen_dialogue_state >= 2 or self.player_following_target == 'bromen' or self.is_quarter_completed('quarter4'):
+                        elif self.bromen_dialogue_state >= 2 or self.player_following_target == 'bromen':
                             self.enter_quarter("quarter4")
                             return
                         elif self.bromen_dialogue_state == 0 and self.locked_portal_banner_timer <= 0:
@@ -2330,9 +2462,12 @@ class StageSelect:
                     self.player_dir = "left"
                     moved = True
                 else:
-                    if not self.npc_oldman_found or self.oldman_dialogue_state >= 3:
-                        self.enter_quarter("quarter1")
-                        return
+                    if not self.is_quarter_completed("quarter1"):
+                        if not self.npc_oldman_found or self.oldman_dialogue_state >= 3:
+                            self.enter_quarter("quarter1")
+                            return
+                    else:
+                        self.player_following_target = None
 
         elif self.player_following_target == 'skeleton':
             # Follow Skeleton rightwards towards Right Portal (x=52*TILE_SIZE, y=13*TILE_SIZE)
@@ -2358,9 +2493,12 @@ class StageSelect:
                     self.player_dir = "right"
                     moved = True
                 else:
-                    if not self.npc_skeleton_found or self.skeleton_dialogue_state >= 3:
-                        self.enter_quarter("quarter3")
-                        return
+                    if not self.is_quarter_completed("quarter3"):
+                        if not self.npc_skeleton_found or self.skeleton_dialogue_state >= 3:
+                            self.enter_quarter("quarter3")
+                            return
+                    else:
+                        self.player_following_target = None
 
         elif self.player_following_target == 'knight':
             # Follow Knight downwards towards Down Portal (x=25*TILE_SIZE, y=25*TILE_SIZE)
@@ -2386,9 +2524,12 @@ class StageSelect:
                     self.player_dir = "down"
                     moved = True
                 else:
-                    if not self.npc_knight_found or self.knight_dialogue_state >= 3:
-                        self.enter_quarter("quarter2")
-                        return
+                    if not self.is_quarter_completed("quarter2"):
+                        if not self.npc_knight_found or self.knight_dialogue_state >= 3:
+                            self.enter_quarter("quarter2")
+                            return
+                    else:
+                        self.player_following_target = None
 
         elif self.player_following_target == 'bromen':
             # Follow Bromen upwards towards North Portal (x=25*TILE_SIZE, y=0)
@@ -2414,9 +2555,12 @@ class StageSelect:
                     self.player_dir = "up"
                     moved = True
                 else:
-                    if not self.npc_bromen_found or self.bromen_dialogue_state >= 3:
-                        self.enter_quarter("quarter4")
-                        return
+                    if not self.is_quarter_completed("quarter4"):
+                        if not self.npc_bromen_found or self.bromen_dialogue_state >= 3:
+                            self.enter_quarter("quarter4")
+                            return
+                    else:
+                        self.player_following_target = None
 
         # Animate player while moving
         if moved:
@@ -2703,12 +2847,24 @@ class StageSelect:
                     else:
                         self.draw_tile(tile_char, col * TILE_SIZE, row * TILE_SIZE)
 
+        DIR_MAP = {
+            'left': 'quarter1',
+            'up': 'quarter2',
+            'right': 'quarter3',
+            'down': 'quarter4'
+        }
         # Draw portals
         for portal in self.portals:
-            portal.draw(self.screen, self.camera_x, self.camera_y, ZOOM, self.width, self.height)
+            qid = DIR_MAP.get(portal.direction)
+            is_comp = bool(qid and self.is_quarter_completed(qid))
+            portal.draw(self.screen, self.camera_x, self.camera_y, ZOOM, self.width, self.height, is_completed=is_comp)
 
         # Draw Corridor Energy Forcefields for Locked Quarters
         self.draw_corridor_barriers()
+
+        # Draw Hierarchy Pathfinder Visual Guide Trail
+        if hasattr(self, 'path_guide'):
+            self.path_guide.draw()
 
         # Draw Portal Status Badges above portals (CLEARED / OPEN / LOCKED)
         DIR_MAP = {
@@ -3319,7 +3475,13 @@ class StageSelect:
             
             b_surf = pygame.Surface((bw, bh), pygame.SRCALPHA)
             b_surf.fill((15, 23, 42, 238))
-            pygame.draw.rect(b_surf, (239, 68, 68), (0, 0, bw, bh), 2, border_radius=8)
+            if getattr(self, 'barriers_lifted', False) and "Lifted" in self.locked_portal_banner_msg:
+                border_color = (34, 197, 94)  # Emerald green for barriers lifted
+            elif "Restored" in self.locked_portal_banner_msg:
+                border_color = (245, 158, 11)  # Amber for barriers restored
+            else:
+                border_color = (239, 68, 68)  # Ruby red for locked alerts
+            pygame.draw.rect(b_surf, border_color, (0, 0, bw, bh), 2, border_radius=8)
             self.screen.blit(b_surf, (bx, by))
             
             # Drop shadow + main banner text
@@ -3499,6 +3661,35 @@ class StageSelect:
             self.cursor_pos = event.pos
 
         if event.type == pygame.KEYDOWN:
+            # Shortcut: Ctrl + Shift + B toggles lifting corridor barriers for Quarter 2, 3, and 4
+            mods = pygame.key.get_mods() if hasattr(pygame.key, 'get_mods') else 0
+            event_mod = getattr(event, 'mod', 0)
+            combined_mod = mods | event_mod
+            ctrl_pressed = bool(combined_mod & pygame.KMOD_CTRL)
+            shift_pressed = bool(combined_mod & pygame.KMOD_SHIFT)
+
+            pressed_keys = pygame.key.get_pressed() if hasattr(pygame.key, 'get_pressed') else None
+            if pressed_keys is not None:
+                if pressed_keys[pygame.K_LCTRL] or pressed_keys[pygame.K_RCTRL]:
+                    ctrl_pressed = True
+                if pressed_keys[pygame.K_LSHIFT] or pressed_keys[pygame.K_RSHIFT]:
+                    shift_pressed = True
+
+            if event.key == pygame.K_b and ctrl_pressed and shift_pressed:
+                self.barriers_lifted = not getattr(self, 'barriers_lifted', False)
+                if self.barriers_lifted:
+                    print("[STAGE SELECT CHEAT] Ctrl+Shift+B pressed: Barriers for Quarter 2, 3, and 4 lifted!")
+                    self.locked_portal_banner_msg = "Barrier Override: Quarter 2, 3 & 4 Barriers Lifted!"
+                    if hasattr(self.main_menu, 'audio_manager') and self.main_menu.audio_manager:
+                        self.main_menu.audio_manager.play_sfx("success")
+                else:
+                    print("[STAGE SELECT CHEAT] Ctrl+Shift+B pressed: Barriers restored!")
+                    self.locked_portal_banner_msg = "Barrier Override: Quarter Barriers Restored!"
+                    if hasattr(self.main_menu, 'audio_manager') and self.main_menu.audio_manager:
+                        self.main_menu.audio_manager.play_sfx("snap")
+                self.locked_portal_banner_timer = 3.0
+                return "barriers_toggled"
+
             if event.key in [pygame.K_SPACE, pygame.K_RETURN]:
                 if self.advance_dialogue():
                     return "dialogue_advance"
@@ -3516,19 +3707,31 @@ class StageSelect:
                         break
                 if current_portal and self.teleport_cooldown <= 0:
                     if current_portal.direction == 'left':
-                        if self.oldman_dialogue_state >= 2 or self.is_quarter_completed('quarter1'):
+                        if self.is_quarter_completed('quarter1'):
+                            self.locked_portal_banner_msg = "Quarter 1 is already completed!"
+                            self.locked_portal_banner_timer = 2.0
+                        elif self.oldman_dialogue_state >= 2:
                             self.enter_quarter("quarter1")
                             return "quarter_entered"
                     elif current_portal.direction == 'up':
-                        if self.is_quarter_unlocked('quarter2') and (self.knight_dialogue_state >= 2 or self.is_quarter_completed('quarter2')):
+                        if self.is_quarter_completed('quarter2'):
+                            self.locked_portal_banner_msg = "Quarter 2 is already completed!"
+                            self.locked_portal_banner_timer = 2.0
+                        elif self.is_quarter_unlocked('quarter2') and self.knight_dialogue_state >= 2:
                             self.enter_quarter("quarter2")
                             return "quarter_entered"
                     elif current_portal.direction == 'right':
-                        if self.is_quarter_unlocked('quarter3') and (self.skeleton_dialogue_state >= 2 or self.is_quarter_completed('quarter3')):
+                        if self.is_quarter_completed('quarter3'):
+                            self.locked_portal_banner_msg = "Quarter 3 is already completed!"
+                            self.locked_portal_banner_timer = 2.0
+                        elif self.is_quarter_unlocked('quarter3') and self.skeleton_dialogue_state >= 2:
                             self.enter_quarter("quarter3")
                             return "quarter_entered"
                     elif current_portal.direction == 'down':
-                        if self.is_quarter_unlocked('quarter4') and (self.bromen_dialogue_state >= 2 or self.is_quarter_completed('quarter4')):
+                        if self.is_quarter_completed('quarter4'):
+                            self.locked_portal_banner_msg = "Quarter 4 is already completed!"
+                            self.locked_portal_banner_timer = 2.0
+                        elif self.is_quarter_unlocked('quarter4') and self.bromen_dialogue_state >= 2:
                             self.enter_quarter("quarter4")
                             return "quarter_entered"
 
@@ -3578,7 +3781,7 @@ class StageSelect:
         title = t_font.render("QUEST COMPLETE: GRAND CHAMPION!", True, (255, 215, 0))
         self.screen.blit(title, title.get_rect(center=(card_x + card_w // 2, card_y + 35)))
 
-        sub = sub_font.render("Outstanding achievement! You have mastered all 4 Quarters of Cognitive Quest!", True, (226, 232, 240))
+        sub = sub_font.render("Outstanding achievement! You have mastered all 4 Quarters of Cognitive Maze!", True, (226, 232, 240))
         self.screen.blit(sub, sub.get_rect(center=(card_x + card_w // 2, card_y + 65)))
 
         # Summary rows for Q1-Q4

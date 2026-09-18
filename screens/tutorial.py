@@ -1221,7 +1221,7 @@ class TutorialScreen:
 
         m1 = self.dialog_q_font.render("Outstanding! 2 + 2 = 4 is correct!", True, (255, 255, 255))
         m2 = self.dialog_choice_font.render("The mystical Exit Portal has materialized on the path ahead.", True, (203, 213, 225))
-        m3 = self.ui_font.render("Step through the glowing portal to embark on your cognitive quest!", True, (254, 240, 138))
+        m3 = self.ui_font.render("Step through the glowing portal to embark on your Cognitive Maze!", True, (254, 240, 138))
         self.screen.blit(m1, (box_x + 24, box_y + 70))
         self.screen.blit(m2, (box_x + 24, box_y + 105))
         self.screen.blit(m3, (box_x + 24, box_y + 135))

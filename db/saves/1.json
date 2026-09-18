@@ -5,8 +5,8 @@
         "student_id": "1",
         "first_name": "Jessuny Dado",
         "last_name": "",
-        "score": 300,
-        "progress": 75,
+        "score": 200,
+        "progress": 50,
         "level": "Grade 2",
         "gender": "male"
     },
@@ -18,31 +18,25 @@
             "score": 100,
             "percentage": 100.0,
             "total_questions": 5,
-            "timestamp": 1789092549.83797
+            "timestamp": 1789724845.8240402
         },
         "quarter2": {
             "completed": true,
             "score": 100,
             "percentage": 100.0,
             "total_questions": 5,
-            "timestamp": 1789092597.9989774
-        },
-        "quarter3": {
-            "completed": true,
-            "score": 100,
-            "percentage": 100.0,
-            "total_questions": 5,
-            "timestamp": 1789092649.8753617
+            "timestamp": 1789724927.014613
         }
     },
-    "timestamp": 1789092733.3859859,
+    "timestamp": 1789724950.8799887,
     "stage_select": {
         "player_x": 800,
-        "player_y": 58.09999999999877,
+        "player_y": 773.5800000000011,
         "oldman_dialogue_state": 0,
-        "knight_dialogue_state": 0,
+        "knight_dialogue_state": 3,
         "skeleton_dialogue_state": 0,
-        "bromen_dialogue_state": 3,
-        "player_following_target": false
+        "bromen_dialogue_state": 0,
+        "player_following_target": false,
+        "barriers_lifted": false
     }
 }

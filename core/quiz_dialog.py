@@ -65,6 +65,7 @@ class RPGQuizDialog:
 
         # Pulse timer for active station jewel in progress bar
         self.pulse_timer = 0.0
+        self.is_visible = False
 
     def update(self, dt=0.016):
         """Updates internal pulse and animation timers."""

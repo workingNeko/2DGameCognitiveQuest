@@ -96,6 +96,10 @@ class Quarter2:
         self.guide_btn_rect = pygame.Rect(self.width - 256, 18, 110, 36)
         self.fist_progress = 0.0
 
+        # Dynamic Hierarchy Pathfinder & Starlight Visual Trail Guide
+        from core.pathfinder_guide import QuestPathfinderGuide
+        self.path_guide = QuestPathfinderGuide(self, quarter_id="quarter2", theme="fiesta")
+
         # Show Initial Map Instructions Popup
         map_instr = get_map_instructions(self.map_name, self.player_name)
         self.instruction_modal.show(map_instr)
@@ -2757,6 +2761,10 @@ class Quarter2:
             if self.title_elapsed >= self.title_duration:
                 self.title_active = False
 
+        # Update Pathfinder Visual Guide Trail
+        if hasattr(self, 'path_guide'):
+            self.path_guide.update(dt)
+
         # Update speed boost timer & banner timer
         if self.speed_boost_timer > 0 and self.quiz_state in [0, 5, 6] and not getattr(self, 'camera_pan_active', False):
             self.speed_boost_timer = max(0.0, self.speed_boost_timer - dt)
@@ -3604,6 +3612,10 @@ class Quarter2:
         # Always draw portals: locked gate when quiz_state < 6, radiant active vortex when quiz_state == 6
         for portal in self.portals:
             portal.draw(self.screen, self.camera_x, self.camera_y, ZOOM, self.width, self.height, is_unlocked=(self.quiz_state == 6), frame_counter=self.frame_counter)
+
+        # Draw Hierarchy Pathfinder Visual Guide Trail
+        if hasattr(self, 'path_guide'):
+            self.path_guide.draw()
 
         # Draw Active Filipino Street Character NPCs and their Landmark Props (Disappear when answered!)
         for num, (st_x, st_y) in self.quiz_stations.items():

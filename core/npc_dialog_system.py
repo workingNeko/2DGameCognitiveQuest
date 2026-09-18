@@ -75,8 +75,8 @@ def wrap_text(text, font, max_width):
 
 class InstructionModal:
     """
-    RPG Map Instructions Modal shown at the start of each map.
-    Explains the sequential quest steps and goals.
+    RPG Map Instructions & Learning Objectives Modal shown at the start of each map.
+    Explains the Grade 2 Math learning objectives and sequential quest steps.
     """
     def __init__(self, screen, width, height, audio_manager=None):
         self.screen = screen
@@ -88,22 +88,25 @@ class InstructionModal:
         self.data = None
         self.theme_key = "forest"
 
-        # Dimensions - Scaled up for optimal classroom & student legibility
-        self.box_w = min(self.width - 60, 860)
-        self.box_h = min(self.height - 60, 560)
+        # Dimensions - Sized for optimal classroom & student legibility
+        self.box_w = min(self.width - 40, 920)
+        self.box_h = min(self.height - 40, 620)
         self.box_x = (self.width - self.box_w) // 2
         self.box_y = (self.height - self.box_h) // 2
 
-        self.btn_w = min(self.box_w - 80, 420)
-        self.btn_h = 52
+        self.btn_w = min(self.box_w - 60, 440)
+        self.btn_h = 50
         self.btn_x = self.box_x + (self.box_w - self.btn_w) // 2
-        self.btn_y = self.box_y + self.box_h - 68
+        self.btn_y = self.box_y + self.box_h - 64
 
         self.dim_overlay = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
-        self.dim_overlay.fill((6, 10, 18, 190))
+        self.dim_overlay.fill((6, 10, 18, 200))
 
         self.pulse = 0.0
         self.shown_count = 0
+        self.scroll_y = 0
+        self.max_scroll = 0
+        self.fist_hold_pct = 0.0
 
     @property
     def title(self):
@@ -114,6 +117,18 @@ class InstructionModal:
         return self.data.get("subtitle", "") if self.data else ""
 
     @property
+    def objectives_title(self):
+        return self.data.get("objectives_title", "🎯 LEARNING OBJECTIVES:") if self.data else "🎯 LEARNING OBJECTIVES:"
+
+    @property
+    def objectives_subtitle(self):
+        return self.data.get("objectives_subtitle", "After this activity, you should be able to:") if self.data else "After this activity, you should be able to:"
+
+    @property
+    def objectives(self):
+        return self.data.get("objectives", []) if self.data else []
+
+    @property
     def steps(self):
         return self.data.get("steps", []) if self.data else []
 
@@ -121,6 +136,7 @@ class InstructionModal:
         self.data = instructions_data
         self.theme_key = instructions_data.get("theme", "forest")
         self.active = True
+        self.scroll_y = 0
         self.shown_count += 1
         if self.audio_manager:
             try:
@@ -163,7 +179,7 @@ class InstructionModal:
         if btn_rect.collidepoint(cursor_pos):
             self.hide()
             return True
-        # Clicking outside or anywhere on modal dismisses it as well
+        # Clicking anywhere on the modal or outside dismisses it as well
         modal_rect = pygame.Rect(self.box_x, self.box_y, self.box_w, self.box_h)
         if modal_rect.collidepoint(cursor_pos):
             self.hide()
@@ -173,12 +189,28 @@ class InstructionModal:
     def handle_event(self, event):
         if not self.active:
             return False
-        if event.type == pygame.KEYDOWN:
+        if event.type == pygame.MOUSEWHEEL:
+            self.scroll_y = max(0, min(self.max_scroll, self.scroll_y - event.y * 32))
+            return True
+        elif event.type == pygame.KEYDOWN:
             if event.key in (pygame.K_SPACE, pygame.K_RETURN, pygame.K_ESCAPE):
                 self.hide()
                 return True
-        elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
-            return self.handle_click(event.pos)
+            elif event.key == pygame.K_UP:
+                self.scroll_y = max(0, self.scroll_y - 32)
+                return True
+            elif event.key == pygame.K_DOWN:
+                self.scroll_y = min(self.max_scroll, self.scroll_y + 32)
+                return True
+        elif event.type == pygame.MOUSEBUTTONDOWN:
+            if event.button == 4:  # Scroll wheel up
+                self.scroll_y = max(0, self.scroll_y - 32)
+                return True
+            elif event.button == 5:  # Scroll wheel down
+                self.scroll_y = min(self.max_scroll, self.scroll_y + 32)
+                return True
+            elif event.button == 1:
+                return self.handle_click(event.pos)
         return False
 
     def handle_fist_hold(self, is_fist, hold_time, click_hold_time):
@@ -211,46 +243,191 @@ class InstructionModal:
         pygame.draw.rect(self.screen, theme["glow"], card_rect.inflate(-6, -6), 1, border_radius=12)
 
         # Header banner box
-        hdr_h = 80
+        hdr_h = 76
         hdr_rect = pygame.Rect(self.box_x + 14, self.box_y + 14, self.box_w - 28, hdr_h)
         pygame.draw.rect(self.screen, theme["header_bg"], hdr_rect, border_radius=12)
         pygame.draw.rect(self.screen, theme["border"], hdr_rect, 2, border_radius=12)
 
-        # Title & Subtitle Typography - Prominent & Highly Readable for Elementary Students
-        title_font = get_font("Comic Sans MS", 23, bold=True)
-        sub_font = get_font("Comic Sans MS", 16, italic=True)
-        body_font = get_font("Comic Sans MS", 17, bold=True)
-        bullet_font = get_font("Comic Sans MS", 15)
+        # Title & Subtitle Typography
+        title_font = get_font("Comic Sans MS", 21, bold=True)
+        sub_font = get_font("Comic Sans MS", 15, italic=True)
 
         title_surf = title_font.render(sanitize_text(self.data.get("title", "QUEST OBJECTIVES")), True, theme["title_color"])
-        t_rect = title_surf.get_rect(center=(hdr_rect.centerx, hdr_rect.top + 26))
+        t_rect = title_surf.get_rect(center=(hdr_rect.centerx, hdr_rect.top + 24))
         self.screen.blit(title_surf, t_rect)
 
         sub_surf = sub_font.render(sanitize_text(self.data.get("subtitle", "")), True, (241, 245, 249))
-        s_rect = sub_surf.get_rect(center=(hdr_rect.centerx, hdr_rect.top + 54))
+        s_rect = sub_surf.get_rect(center=(hdr_rect.centerx, hdr_rect.top + 52))
         self.screen.blit(sub_surf, s_rect)
 
-        # Steps list
-        cur_y = self.box_y + 106
-        max_content_w = self.box_w - 70
+        # Content Viewport Area
+        content_top = self.box_y + 98
+        content_bottom = self.btn_y - 10
+        viewport_h = content_bottom - content_top
+        viewport_w = self.box_w - 44
+        viewport_rect = pygame.Rect(self.box_x + 22, content_top, viewport_w, viewport_h)
 
-        for step in self.data.get("steps", []):
-            st_title = step.get("title", "")
-            if st_title:
-                st_surf = body_font.render(sanitize_text(st_title), True, theme["accent"])
-                self.screen.blit(st_surf, (self.box_x + 36, cur_y))
-                cur_y += 26
+        # Typography for content cards
+        sec_title_font = get_font("Comic Sans MS", 16, bold=True)
+        sec_sub_font = get_font("Comic Sans MS", 14, italic=True)
+        bullet_font = get_font("Comic Sans MS", 14)
+        step_title_font = get_font("Comic Sans MS", 15, bold=True)
+        tip_font = get_font("Comic Sans MS", 13, italic=True)
 
-            for bullet in step.get("bullets", []):
-                wrapped = wrap_text(bullet, bullet_font, max_content_w - 30)
-                for i, w_line in enumerate(wrapped):
-                    prefix = "  • " if i == 0 else "    "
-                    b_surf = bullet_font.render(sanitize_text(prefix + w_line), True, (226, 232, 240))
-                    self.screen.blit(b_surf, (self.box_x + 40, cur_y))
-                    cur_y += 22
-            cur_y += 8
+        # Measure content height to calculate max_scroll
+        content_card_w = viewport_w - (14 if self.max_scroll > 0 else 0)
+        inner_w = content_card_w - 28
 
+        calc_y = 0
+        objectives_list = self.data.get("objectives", [])
+        if objectives_list:
+            calc_y += 36  # Header in objectives card
+            for obj in objectives_list:
+                lines = wrap_text(f"• {obj}", bullet_font, inner_w)
+                calc_y += len(lines) * 20 + 4
+            calc_y += 18  # Spacing after card
+
+        steps_list = self.data.get("steps", [])
+        if steps_list:
+            calc_y += 32  # Header in steps card
+            for step in steps_list:
+                st_title = step.get("title", "")
+                if st_title:
+                    lines = wrap_text(st_title, step_title_font, inner_w)
+                    calc_y += len(lines) * 22 + 2
+                for bullet in step.get("bullets", []):
+                    lines = wrap_text(f"  • {bullet}", bullet_font, inner_w)
+                    calc_y += len(lines) * 20 + 2
+                calc_y += 6
+            calc_y += 18
+
+        # Tip box height
+        tip_text = "💡 Tip: Walk near any NPC station and hold a CLOSED FIST for 0.9s (or Click) to open your math trial!"
+        tip_lines = wrap_text(tip_text, tip_font, inner_w)
+        calc_y += len(tip_lines) * 18 + 16
+
+        self.max_scroll = max(0, calc_y - viewport_h)
+        self.scroll_y = max(0, min(self.max_scroll, self.scroll_y))
+
+        # Render content with viewport clipping
+        prev_clip = self.screen.get_clip()
+        self.screen.set_clip(viewport_rect)
+
+        cur_y = content_top - self.scroll_y
+
+        # ----------------------------------------------------
+        # 1. 🎯 LEARNING OBJECTIVES CARD
+        # ----------------------------------------------------
+        if objectives_list:
+            # Measure card height
+            card_inner_h = 36
+            for obj in objectives_list:
+                lines = wrap_text(f"• {obj}", bullet_font, inner_w)
+                card_inner_h += len(lines) * 20 + 4
+            card_inner_h += 8
+
+            obj_card_rect = pygame.Rect(self.box_x + 22, cur_y, content_card_w, card_inner_h)
+            pygame.draw.rect(self.screen, (20, 32, 54), obj_card_rect, border_radius=10)
+            pygame.draw.rect(self.screen, (250, 204, 21), obj_card_rect, 2, border_radius=10)
+
+            # Header
+            obj_title_surf = sec_title_font.render(sanitize_text(self.objectives_title), True, (250, 204, 21))
+            self.screen.blit(obj_title_surf, (obj_card_rect.left + 14, cur_y + 8))
+
+            obj_sub_surf = sec_sub_font.render(sanitize_text(self.objectives_subtitle), True, (224, 242, 254))
+            self.screen.blit(obj_sub_surf, (obj_card_rect.left + 14 + obj_title_surf.get_width() + 10, cur_y + 10))
+
+            card_cur_y = cur_y + 36
+            for obj in objectives_list:
+                lines = wrap_text(f"✓ {obj}", bullet_font, inner_w)
+                for i, line in enumerate(lines):
+                    color = (254, 240, 138) if i == 0 else (241, 245, 249)
+                    line_surf = bullet_font.render(sanitize_text(line), True, color)
+                    self.screen.blit(line_surf, (obj_card_rect.left + 16, card_cur_y))
+                    card_cur_y += 20
+                card_cur_y += 4
+
+            cur_y += card_inner_h + 12
+
+        # ----------------------------------------------------
+        # 2. 🗺️ QUEST INSTRUCTIONS CARD
+        # ----------------------------------------------------
+        if steps_list:
+            steps_inner_h = 32
+            for step in steps_list:
+                st_title = step.get("title", "")
+                if st_title:
+                    lines = wrap_text(st_title, step_title_font, inner_w)
+                    steps_inner_h += len(lines) * 22 + 2
+                for bullet in step.get("bullets", []):
+                    lines = wrap_text(f"  • {bullet}", bullet_font, inner_w)
+                    steps_inner_h += len(lines) * 20 + 2
+                steps_inner_h += 6
+            steps_inner_h += 8
+
+            step_card_rect = pygame.Rect(self.box_x + 22, cur_y, content_card_w, steps_inner_h)
+            pygame.draw.rect(self.screen, (15, 23, 42), step_card_rect, border_radius=10)
+            pygame.draw.rect(self.screen, theme["border"], step_card_rect, 2, border_radius=10)
+
+            step_hdr_surf = sec_title_font.render("🗺️ QUEST INSTRUCTIONS & HOW TO PLAY:", True, theme["title_color"])
+            self.screen.blit(step_hdr_surf, (step_card_rect.left + 14, cur_y + 8))
+
+            card_cur_y = cur_y + 34
+            for step in steps_list:
+                st_title = step.get("title", "")
+                if st_title:
+                    lines = wrap_text(st_title, step_title_font, inner_w)
+                    for line in lines:
+                        line_surf = step_title_font.render(sanitize_text(line), True, theme["accent"])
+                        self.screen.blit(line_surf, (step_card_rect.left + 16, card_cur_y))
+                        card_cur_y += 22
+                    card_cur_y += 2
+
+                for bullet in step.get("bullets", []):
+                    lines = wrap_text(f"  • {bullet}", bullet_font, inner_w)
+                    for line in lines:
+                        line_surf = bullet_font.render(sanitize_text(line), True, (226, 232, 240))
+                        self.screen.blit(line_surf, (step_card_rect.left + 16, card_cur_y))
+                        card_cur_y += 20
+                    card_cur_y += 2
+                card_cur_y += 6
+
+            cur_y += steps_inner_h + 12
+
+        # ----------------------------------------------------
+        # 3. 💡 CONTROLS TIP BOX
+        # ----------------------------------------------------
+        tip_card_rect = pygame.Rect(self.box_x + 22, cur_y, content_card_w, len(tip_lines) * 18 + 16)
+        pygame.draw.rect(self.screen, (30, 41, 59), tip_card_rect, border_radius=8)
+        pygame.draw.rect(self.screen, (71, 85, 105), tip_card_rect, 1, border_radius=8)
+
+        t_y = cur_y + 8
+        for line in tip_lines:
+            tip_surf = tip_font.render(sanitize_text(line), True, (203, 213, 225))
+            self.screen.blit(tip_surf, (tip_card_rect.left + 12, t_y))
+            t_y += 18
+
+        # Restore screen clip
+        self.screen.set_clip(prev_clip)
+
+        # ----------------------------------------------------
+        # Scrollbar (if content overflows viewport)
+        # ----------------------------------------------------
+        if self.max_scroll > 0:
+            track_x = self.box_x + self.box_w - 18
+            track_y = content_top
+            track_h = viewport_h
+            track_rect = pygame.Rect(track_x, track_y, 6, track_h)
+            pygame.draw.rect(self.screen, (30, 41, 59), track_rect, border_radius=3)
+
+            thumb_h = max(24, int(track_h * (viewport_h / (calc_y + 1))))
+            thumb_y = track_y + int((self.scroll_y / self.max_scroll) * (track_h - thumb_h))
+            thumb_rect = pygame.Rect(track_x, thumb_y, 6, thumb_h)
+            pygame.draw.rect(self.screen, theme["glow"], thumb_rect, border_radius=3)
+
+        # ----------------------------------------------------
         # CTA Button at bottom
+        # ----------------------------------------------------
         btn_rect = self.get_button_rect()
         is_hovered = btn_rect.collidepoint(cursor_pos)
         btn_bg = theme["button_hover"] if is_hovered else theme["button_bg"]
@@ -268,7 +445,7 @@ class InstructionModal:
             fill_surf.fill((255, 255, 255, 70))
             self.screen.blit(fill_surf, fill_rect)
 
-        btn_font = get_font("Comic Sans MS", 17, bold=True)
+        btn_font = get_font("Comic Sans MS", 16, bold=True)
         btn_text = "Let's Begin Quest! >>" if not is_hovered else "Click or Hold Fist to Begin!"
         if fist_hold_pct > 0.0:
             btn_text = f"Holding Fist: {int(fist_hold_pct * 100)}%"
