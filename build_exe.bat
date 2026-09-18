@@ -52,9 +52,14 @@ xcopy /E /I /Y "db" "dist\CognitivePlay\db" >nul
 xcopy /E /I /Y "datasets" "dist\CognitivePlay\datasets" >nul
 
 echo.
+echo [5/5] Creating Desktop Shortcut...
+powershell -Command "$desktop = [Environment]::GetFolderPath('Desktop'); $exe = (Resolve-Path 'dist\CognitivePlay\CognitivePlay.exe').Path; $dir = (Resolve-Path 'dist\CognitivePlay').Path; $lnk = Join-Path $desktop 'CognitivePlay.lnk'; $ws = New-Object -ComObject WScript.Shell; $s = $ws.CreateShortcut($lnk); $s.TargetPath = $exe; $s.WorkingDirectory = $dir; $s.Description = 'Cognitive Quest 2D - Educational Math Adventure'; $s.Save(); Write-Host '[OK] Shortcut created at:' $lnk"
+
+echo.
 echo ==============================================================================
 echo [SUCCESS] CognitivePlay.exe built successfully!
 echo Executable located at: dist\CognitivePlay\CognitivePlay.exe
+echo Desktop shortcut created: CognitivePlay.lnk
 echo ==============================================================================
 echo.
 pause
