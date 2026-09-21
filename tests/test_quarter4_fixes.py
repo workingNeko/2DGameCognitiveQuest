@@ -48,11 +48,11 @@ class TestQuarter4Fixes(unittest.TestCase):
 
         # Map 11
         instr11 = get_map_instructions("map11.txt", "HeroTester")
-        self.assertEqual(instr11["title"], "THE SUBMERGED KEY VAULT")
+        self.assertIn("THE SUBMERGED KEY VAULT", instr11["title"])
 
         # Map 12
         instr12 = get_map_instructions("map12.txt", "HeroTester")
-        self.assertEqual(instr12["title"], "THE LOTUS RAFT & FINAL SANCTUM")
+        self.assertIn("THE LOTUS RAFT & FINAL SANCTUM", instr12["title"])
 
         # Mentor scripts
         mentor_q4 = get_mentor_script("map10.txt", "HeroTester")

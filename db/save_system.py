@@ -329,7 +329,7 @@ def save_student_progress(main_menu):
     # Save Stage Select state if last_stage_select_data is present on main_menu
     # or if main_menu.stage_select is currently active
     ss_data = None
-    if main_menu.stage_select:
+    if getattr(main_menu, 'stage_select', None):
         ss = main_menu.stage_select
         ss_data = {
             "player_x": ss.player_x,
@@ -348,16 +348,16 @@ def save_student_progress(main_menu):
         
     # Gather active Quarter progress
     q_data = None
-    if main_menu.quarter1:
+    if getattr(main_menu, 'quarter1', None):
         q = main_menu.quarter1
         q_data = gather_quarter_data(q, "quarter1")
-    elif main_menu.quarter2:
+    elif getattr(main_menu, 'quarter2', None):
         q = main_menu.quarter2
         q_data = gather_quarter_data(q, "quarter2")
-    elif main_menu.quarter3:
+    elif getattr(main_menu, 'quarter3', None):
         q = main_menu.quarter3
         q_data = gather_quarter_data(q, "quarter3")
-    elif main_menu.quarter4:
+    elif getattr(main_menu, 'quarter4', None):
         q = main_menu.quarter4
         q_data = gather_quarter_data(q, "quarter4")
         

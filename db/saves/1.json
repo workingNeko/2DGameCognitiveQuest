@@ -1,14 +1,11 @@
 {
     "student_id": "1",
     "selected_student": {
-        "id": 9,
+        "id": 1,
         "student_id": "1",
-        "first_name": "Jessuny Dado",
-        "last_name": "",
-        "score": 200,
-        "progress": 50,
-        "level": "Grade 2",
-        "gender": "male"
+        "first_name": "SpeedTester",
+        "score": 100,
+        "progress": 25
     },
     "current_screen": "menu",
     "tutorial_completed": true,
@@ -18,25 +15,8 @@
             "score": 100,
             "percentage": 100.0,
             "total_questions": 5,
-            "timestamp": 1789724845.8240402
-        },
-        "quarter2": {
-            "completed": true,
-            "score": 100,
-            "percentage": 100.0,
-            "total_questions": 5,
-            "timestamp": 1789724927.014613
+            "timestamp": 1789979961.0430462
         }
     },
-    "timestamp": 1789724950.8799887,
-    "stage_select": {
-        "player_x": 800,
-        "player_y": 773.5800000000011,
-        "oldman_dialogue_state": 0,
-        "knight_dialogue_state": 3,
-        "skeleton_dialogue_state": 0,
-        "bromen_dialogue_state": 0,
-        "player_following_target": false,
-        "barriers_lifted": false
-    }
+    "timestamp": 1789980010.8337154
 }

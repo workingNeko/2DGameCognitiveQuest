@@ -942,22 +942,32 @@ MENTOR_SCRIPTS_DATA = {
 
     # Quarter 2
     ("quarter2", "map4.txt"): {
-        "name": "Barrio Leader",
-        "role": "Barangay Gatekeeper",
-        "incomplete": "Welcome to our barangay, young student!\nBefore we open the gate to the inner barrio, please help all 5 vendors in the street market!",
-        "complete": "Magaling! You have brought harmony and quick counting to our whole street market!\nThe road to the Barrio Garden and Bahay Kubo is open. Tuloy po kayo!"
+        "name": "Knight Guardian",
+        "role": "Grand Fiesta Portal Guardian",
+        "incomplete": "Halt, student! The Grand Fiesta Portal is sealed.\nFirst, resolve all 5 math challenges in the street market, then face my Philippine Currency Matching Trial!",
+        "challenge": "Halt, courageous student {player_name}! You have resolved all 5 barrio market challenges.\nNow, to unlock the Grand Fiesta Portal, you must prove your knowledge in the Philippine Currency Matching Trial!\nMatch each Philippine bill and coin to its correct denomination!",
+        "complete": "Outstanding valor and sharp intellect, {player_name}! You have successfully identified all Philippine currency!\nThe Grand Fiesta Portal is now permanently open. Step through to complete Quarter 2!"
     },
     ("quarter2", "map5.txt"): {
-        "name": "Master Carpenter",
-        "role": "Bahay Kubo Altar",
-        "incomplete": "Keep going, young builder! We need all 5 building sections completed before we can celebrate!",
-        "complete": "Magnificent! The Bahay Kubo stands proud and strong, built by your mathematical teamwork!\nThe road to the Grand Plaza is open!"
+        "name": "Knight Guardian",
+        "role": "Grand Fiesta Portal Guardian",
+        "incomplete": "Halt, builder! The Grand Fiesta Portal is sealed.\nFirst, construct all 5 sections of the Bahay Kubo, then face my Philippine Currency Matching Trial!",
+        "challenge": "Magnificent work constructing the Bahay Kubo, {player_name}!\nBefore you step through the Grand Fiesta Portal, you must pass my Philippine Currency Matching Trial!\nDemonstrate your mastery of Philippine Peso banknotes and coins!",
+        "complete": "Superb mastery, {player_name}! You have mastered both geometry building and Philippine currency!\nThe Grand Fiesta Portal is unlocked. Proceed, champion!"
     },
     ("quarter2", "map6.txt"): {
-        "name": "Hermano Mayor",
-        "role": "Fiesta Grand Stage",
-        "incomplete": "Welcome, guest of honor! Help all 5 plaza stations so the fiesta can reach its peak!",
-        "complete": "Mabuhay ang Fiesta! You have brought joy, fairness, and mathematical brilliance to our whole town!\nThe golden portal to Quarter 3: Monetary Desert is now open!"
+        "name": "Knight Guardian",
+        "role": "Grand Fiesta Portal Guardian",
+        "incomplete": "Halt, traveler! The Grand Fiesta Portal is sealed.\nClear all 5 festival plaza stations before taking the Currency Trial!",
+        "challenge": "Welcome to the Grand Portal, {player_name}! You have cleared all 5 festival stations.\nFace my final Philippine Currency Matching Trial to prove your fiscal wisdom!",
+        "complete": "Mabuhay! Truly exceptional work, {player_name}!\nYou have mastered all Philippine Peso bills and coins with flying colors!\nThe Grand Fiesta Portal to Quarter 3 is now open!"
+    },
+    ("quarter2", "*"): {
+        "name": "Knight Guardian",
+        "role": "Grand Fiesta Portal Guardian",
+        "incomplete": "Halt! Complete all 5 barrio stall challenges before taking the Currency Trial!",
+        "challenge": "Halt, brave student {player_name}!\nTo unlock this portal, match each Philippine Peso bill and coin to its correct denomination!",
+        "complete": "Magnificent! You have conquered the Philippine Currency Matching Trial!\nThe Grand Fiesta Portal is open!"
     },
 
     # Quarter 3

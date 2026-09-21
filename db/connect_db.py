@@ -220,7 +220,7 @@ class Database:
 
         remaining = []
         synced_count = 0
-        for item in pending:
+        for i, item in enumerate(pending):
             try:
                 url = f"{BASE_URL}/game-results"
                 data = json.dumps(item).encode('utf-8')
@@ -230,15 +230,17 @@ class Database:
                     headers={'Content-Type': 'application/json', 'User-Agent': 'Mozilla/5.0'},
                     method='POST'
                 )
-                with urllib.request.urlopen(req, timeout=5) as resp:
+                with urllib.request.urlopen(req, timeout=3) as resp:
                     if resp.status in [200, 201]:
                         synced_count += 1
                         print(f"[SYNC SUCCESS] Flushed offline evaluation for student #{item.get('studentId')}")
                     else:
                         remaining.append(item)
             except Exception:
-                # Network still offline / failed -> keep for next retry
+                # Network offline / unreachable -> keep this and all remaining items for next retry and break early
                 remaining.append(item)
+                remaining.extend(pending[i + 1:])
+                break
 
         if remaining:
             try:

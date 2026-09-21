@@ -81,9 +81,9 @@ class TestE2ENPCQuarters(unittest.TestCase):
             sc = get_station_script("quarter2", "map4.txt", i, "HeroTester")
             self.assertIn(expected_name, sc["name"])
 
-        # Check Map 5 mentor
+        # Check Map 5 mentor (Knight Guardian)
         m5 = get_mentor_script("quarter2", "map5.txt", "HeroTester")
-        self.assertEqual(m5["name"], "Master Carpenter")
+        self.assertEqual(m5["name"], "Knight Guardian")
 
         # Test drawing feedback dialogs
         q2.quiz_station_index = 1

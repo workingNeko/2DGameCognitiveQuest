@@ -1859,7 +1859,7 @@ class Quarter3:
             return
 
         # Check NPC Greeting Dialog interaction
-        if getattr(self, 'greeting_dialog', None) and self.greeting_dialog.is_visible:
+        if self.quiz_state == 0 and getattr(self, 'greeting_dialog', None) and self.greeting_dialog.is_visible:
             if self.greeting_dialog.handle_click(pos):
                 self.greeting_dialog.hide()
                 self.quiz_state = 1

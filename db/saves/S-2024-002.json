@@ -1,0 +1,35 @@
+{
+    "student_id": "S-2024-002",
+    "selected_student": {
+        "id": 19,
+        "student_id": "S-2024-002",
+        "first_name": "Maria Santos",
+        "last_name": "",
+        "score": 60,
+        "progress": 25,
+        "level": "Grade 2",
+        "gender": "female"
+    },
+    "current_screen": "menu",
+    "tutorial_completed": true,
+    "completed_quarters": {
+        "quarter2": {
+            "completed": true,
+            "score": 60,
+            "percentage": 60.0,
+            "total_questions": 5,
+            "timestamp": 1789978582.6591845
+        }
+    },
+    "timestamp": 1789978586.3005965,
+    "stage_select": {
+        "player_x": 800,
+        "player_y": 774.2400000000024,
+        "oldman_dialogue_state": 0,
+        "knight_dialogue_state": 3,
+        "skeleton_dialogue_state": 0,
+        "bromen_dialogue_state": 0,
+        "player_following_target": false,
+        "barriers_lifted": true
+    }
+}

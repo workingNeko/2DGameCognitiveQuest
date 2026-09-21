@@ -28,7 +28,7 @@ class StudentSelect:
         self.click_ready = False
 
         # For tracking clicks to prevent multiple triggers
-        self.last_click_time = 0
+        self.last_click_time = -10.0
         self.click_cooldown = 0.2  # seconds between clicks
 
         # =====================================================

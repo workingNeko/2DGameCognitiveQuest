@@ -78,14 +78,14 @@ class TestNPCScripts(unittest.TestCase):
         self.assertTrue("bridge first" in m1["incomplete"])
 
         m4 = get_mentor_script("quarter2", "map4.txt", "Hero")
-        self.assertEqual(m4["name"], "Barrio Leader")
-        self.assertTrue("all 5 vendors" in m4["incomplete"])
+        self.assertEqual(m4["name"], "Knight Guardian")
+        self.assertTrue("Philippine Currency" in m4["incomplete"] or "Trial" in m4["incomplete"] or "challenges" in m4["incomplete"])
 
         m5 = get_mentor_script("quarter2", "map5.txt", "Hero")
-        self.assertEqual(m5["name"], "Master Carpenter")
+        self.assertEqual(m5["name"], "Knight Guardian")
 
         m6 = get_mentor_script("quarter2", "map6.txt", "Hero")
-        self.assertEqual(m6["name"], "Hermano Mayor")
+        self.assertEqual(m6["name"], "Knight Guardian")
 
         m7 = get_mentor_script("quarter3", "map7.txt", "Hero")
         self.assertEqual(m7["name"], "Desert Vault Keeper")

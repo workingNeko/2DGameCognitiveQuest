@@ -12,6 +12,15 @@ from .map_loader import MapLoader
 from core.camera_system import LoLCamera
 from core.npc_scripts import get_map_instructions, get_station_script, get_mentor_script
 from core.npc_dialog_system import InstructionModal, NPCGreetingDialog
+from core.philippine_currency import (
+    get_randomized_quarter2_currency_pool,
+    render_currency_token,
+    render_banknote_surface,
+    render_coin_surface,
+    PHILIPPINE_CURRENCY
+)
+
+from db.save_system import save_student_progress
 
 try:
     from db import db
@@ -95,6 +104,34 @@ class Quarter2:
         self.greeting_dialog = NPCGreetingDialog(self.screen, self.width, self.height)
         self.guide_btn_rect = pygame.Rect(self.width - 256, 18, 110, 36)
         self.fist_progress = 0.0
+
+        # Dialog Button Interaction Rectangles
+        self.wrong_btn_rect = None
+        self.correct_btn_rect = None
+        self.out_of_tries_btn_rect = None
+        self.victory_btn_rect = None
+        self.currency_trial_start_btn_rect = None
+        self.currency_puzzle_continue_btn_rect = None
+        self.currency_puzzle_reset_btn_rect = None
+
+        # Philippine Currency Matching Puzzle & Knight Guardian States
+        self.currency_puzzle_active = False
+        self.currency_puzzle_solved = False
+        self.currency_puzzle_solved_time = 0
+        self.currency_puzzle_all_placed = False
+        self.currency_puzzle_slots = []
+        self.currency_puzzle_pieces = []
+        self.dragged_currency_piece = None
+        self.currency_drag_offset_x = 0
+        self.currency_drag_offset_y = 0
+        self.currency_hovered_piece = None
+        self.currency_hovered_slot = None
+        self.currency_sparkles = []
+        
+        # Guardian Knight State: 0 = waiting for stations, 1 = guarding portal, 2 = trial prompt modal, 3 = puzzle active, 4 = victory speech, 5 = portal unlocked
+        self.guardian_knight_state = 0
+        self.guardian_knight_proximity_cooldown = 0
+        self.guardian_knight_btn_rect = None
 
         # Dynamic Hierarchy Pathfinder & Starlight Visual Trail Guide
         from core.pathfinder_guide import QuestPathfinderGuide
@@ -551,13 +588,14 @@ class Quarter2:
         }
         self.npc_knight_path = []
         self.npc_knight_path_index = 0
-        # Initialize Knight at station 1 if available
-        if 1 in self.quiz_stations:
-            self.npc_knight_tile_x, self.npc_knight_tile_y = self.quiz_stations[1]
-            self.npc_knight_x = self.npc_knight_tile_x * TILE_SIZE
-            self.npc_knight_y = self.npc_knight_tile_y * TILE_SIZE
-            self.npc_knight_found = True
-            print(f"[STORE] Barangay Characters spawned at Quiz Stations 1-5")
+        # Knight Guardian is stationed at the exit portal via load_static_portals()
+        if not getattr(self, 'npc_knight_found', False):
+            if 1 in self.quiz_stations:
+                self.npc_knight_tile_x, self.npc_knight_tile_y = self.quiz_stations[1]
+                self.npc_knight_x = self.npc_knight_tile_x * TILE_SIZE
+                self.npc_knight_y = self.npc_knight_tile_y * TILE_SIZE
+                self.npc_knight_found = True
+        print(f"[STORE] Barangay Characters spawned at Quiz Stations 1-5; Knight Guardian guarding Exit Portal")
 
         # Quiz state variables
         self.quiz_state = 0  # 0: waiting proximity, 1: dialog Q, 2: wrong try again, 3: correct phrase transition, 4: out of tries reveal, 5: final speech, 6: quiz complete
@@ -2278,6 +2316,32 @@ class Quarter2:
                     self.render_map[y] = ''.join(row_list)
                 self.game_map[y] = ''.join(game_row_list)
 
+        # Station Knight Guardian directly in front of the Goal Portal
+        if self.portals:
+            exit_p = self.portals[0]
+            p_tx = int(exit_p.get_world_x() // TILE_SIZE)
+            p_ty = int(exit_p.get_world_y() // TILE_SIZE)
+            if exit_p.direction == 'right':
+                self.npc_knight_tile_x = max(0, p_tx - 1)
+                self.npc_knight_tile_y = p_ty
+                self.npc_knight_dir = 'left'
+            elif exit_p.direction == 'left':
+                self.npc_knight_tile_x = min(self.COLS - 1, p_tx + 1)
+                self.npc_knight_tile_y = p_ty
+                self.npc_knight_dir = 'right'
+            elif exit_p.direction == 'up':
+                self.npc_knight_tile_x = p_tx
+                self.npc_knight_tile_y = min(self.ROWS - 1, p_ty + 1)
+                self.npc_knight_dir = 'up'
+            elif exit_p.direction == 'down':
+                self.npc_knight_tile_x = p_tx
+                self.npc_knight_tile_y = max(0, p_ty - 1)
+                self.npc_knight_dir = 'down'
+            self.npc_knight_x = self.npc_knight_tile_x * TILE_SIZE
+            self.npc_knight_y = self.npc_knight_tile_y * TILE_SIZE
+            self.npc_knight_found = True
+            print(f"[KNIGHT GUARDIAN] Stationed at ({self.npc_knight_tile_x}, {self.npc_knight_tile_y}) guarding {exit_p.direction} Portal!")
+
     def find_path(self, start, end):
         """BFS pathfinder from start (col, row) to end (col, row) on the grid"""
         import collections
@@ -2541,7 +2605,7 @@ class Quarter2:
             return
 
         # Check NPC Greeting Dialog interaction
-        if getattr(self, 'greeting_dialog', None) and self.greeting_dialog.is_visible:
+        if self.quiz_state == 0 and getattr(self, 'greeting_dialog', None) and self.greeting_dialog.is_visible:
             if self.greeting_dialog.handle_click(pos):
                 self.greeting_dialog.hide()
                 self.quiz_state = 1
@@ -2557,6 +2621,53 @@ class Quarter2:
         import random
         from db.save_system import save_student_progress
         
+        # Check Philippine Currency Matching Puzzle interaction
+        if getattr(self, 'currency_puzzle_active', False):
+            if self.currency_puzzle_all_placed and getattr(self, 'currency_puzzle_continue_btn_rect', None):
+                if self.currency_puzzle_continue_btn_rect.collidepoint(pos):
+                    self.currency_puzzle_active = False
+                    self.currency_puzzle_solved = True
+                    self.guardian_knight_state = 4
+                    self.quiz_state = 5
+                    box_w, box_h = 640, 360
+                    box_x = (self.width - box_w) // 2
+                    box_y = (self.height - box_h) // 2
+                    self.victory_btn_rect = pygame.Rect(box_x + (box_w - 240) // 2, box_y + 285, 240, 44)
+                    self.banner_text = "CURRENCY TRIAL COMPLETED!"
+                    self.banner_sub = "Speak with the Knight Guardian to unlock the portal!"
+                    self.banner_timer = 4.0
+                    return
+
+            if getattr(self, 'currency_puzzle_reset_btn_rect', None) and self.currency_puzzle_reset_btn_rect.collidepoint(pos):
+                self.reset_currency_matching_puzzle()
+                return
+
+            # Piece picking for mouse click
+            if not self.currency_puzzle_all_placed:
+                for piece in reversed(self.currency_puzzle_pieces):
+                    if not piece["is_placed"]:
+                        p_rect = pygame.Rect(piece["x"], piece["y"], piece["w"], piece["h"])
+                        if p_rect.collidepoint(pos):
+                            self.dragged_currency_piece = piece
+                            piece["is_dragging"] = True
+                            self.currency_drag_offset_x = pos[0] - piece["x"]
+                            self.currency_drag_offset_y = pos[1] - piece["y"]
+                            if getattr(self, 'snap_sound', None):
+                                self.snap_sound.play()
+                            return
+            return
+
+        # Check Knight Guardian Trial Prompt interaction
+        if getattr(self, 'guardian_knight_state', 0) == 2:
+            if getattr(self, 'currency_trial_start_btn_rect', None) and self.currency_trial_start_btn_rect.collidepoint(pos):
+                self.guardian_knight_state = 3
+                self.init_currency_matching_puzzle()
+                self.currency_puzzle_active = True
+                if getattr(self, 'coin_clink', None):
+                    self.coin_clink.play()
+                return
+            return
+
         # State 1: Choice Button Selection (No icons)
         if self.quiz_state == 1:
             q_idx = max(0, min(self.current_question_index, len(self.quiz_questions) - 1)) if self.quiz_questions else 0
@@ -2620,21 +2731,22 @@ class Quarter2:
                     
         # State 2: Wrong answer retry screen click (1 try remaining)
         elif self.quiz_state == 2:
-            box_w, box_h = 560, 290
+            box_w, box_h = 580, 300
             box_x = (self.width - box_w) // 2
             box_y = (self.height - box_h) // 2
-            btn_rect = pygame.Rect(box_x + (box_w - 220) // 2, box_y + 225, 220, 44)
-            if btn_rect.collidepoint(pos):
+            btn_rect = pygame.Rect(box_x + (box_w - 220) // 2, box_y + 235, 220, 44)
+            if (hasattr(self, 'wrong_btn_rect') and self.wrong_btn_rect and self.wrong_btn_rect.collidepoint(pos)) or btn_rect.collidepoint(pos):
                 self.quiz_state = 1
                 save_student_progress(self.main_menu)
             
         # State 3: Correct answer transition screen click -> Award Speed Rush & In-World Banner!
         elif self.quiz_state == 3:
-            box_w, box_h = 540, 260
+            box_w, box_h = 560, 270
             box_x = (self.width - box_w) // 2
             box_y = (self.height - box_h) // 2
-            btn_rect = pygame.Rect(box_x + (box_w - 240) // 2, box_y + 175, 240, 44)
-            if btn_rect.collidepoint(pos):
+            box_rect = pygame.Rect(box_x, box_y, box_w, box_h)
+            btn_rect = pygame.Rect(box_x + (box_w - 240) // 2, box_y + 195, 240, 44)
+            if (hasattr(self, 'correct_btn_rect') and self.correct_btn_rect and self.correct_btn_rect.collidepoint(pos)) or btn_rect.collidepoint(pos) or box_rect.collidepoint(pos):
                 # Award 3-second Festive Sprint Speed Boost!
                 self.speed_boost_timer = 3.0
                 cleared_info = self.station_npc_info.get(self.quiz_station_index, {})
@@ -2654,18 +2766,24 @@ class Quarter2:
                     self.quiz_state = 0  # Immediate return to exploration!
                     print(f"[TARGET] Proceeding to Station {self.quiz_station_index}")
                 else:
+                    self.quiz_station_index = 6
                     self.current_question_index = 5
-                    self.quiz_state = 5
+                    self.quiz_state = 0
+                    self.guardian_knight_state = 1
+                    self.banner_text = "ALL 5 BARRIO STALLS CLEARED!"
+                    self.banner_sub = "Find the Knight Guardian at the portal to take the Currency Matching Trial!"
+                    self.banner_timer = 5.0
                 
                 save_student_progress(self.main_menu)
 
         # State 4: Out of tries reveal screen click -> Guaranteed progression!
         elif self.quiz_state == 4:
-            box_w, box_h = 580, 270
+            box_w, box_h = 580, 280
             box_x = (self.width - box_w) // 2
             box_y = (self.height - box_h) // 2
-            btn_rect = pygame.Rect(box_x + (box_w - 240) // 2, box_y + 190, 240, 44)
-            if btn_rect.collidepoint(pos):
+            box_rect = pygame.Rect(box_x, box_y, box_w, box_h)
+            btn_rect = pygame.Rect(box_x + (box_w - 240) // 2, box_y + 205, 240, 44)
+            if (hasattr(self, 'out_of_tries_btn_rect') and self.out_of_tries_btn_rect and self.out_of_tries_btn_rect.collidepoint(pos)) or btn_rect.collidepoint(pos) or box_rect.collidepoint(pos):
                 self.eliminated_choices.clear()
                 self.wrong_feedback_msg = ""
                 self.speed_boost_timer = 3.0
@@ -2686,19 +2804,26 @@ class Quarter2:
                     self.quiz_state = 0
                     print(f"[TARGET] Proceeding to Station {self.quiz_station_index}")
                 else:
+                    self.quiz_station_index = 6
                     self.current_question_index = 5
-                    self.quiz_state = 5
+                    self.quiz_state = 0
+                    self.guardian_knight_state = 1
+                    self.banner_text = "ALL 5 BARRIO STALLS CLEARED!"
+                    self.banner_sub = "Find the Knight Guardian at the portal to take the Currency Matching Trial!"
+                    self.banner_timer = 5.0
 
                 save_student_progress(self.main_menu)
                 
         # State 5: Final speech click -> Unlock Grand Fiesta Portal & Warp Transition!
         elif self.quiz_state == 5:
-            box_w, box_h = 620, 340
+            box_w, box_h = 640, 360
             box_x = (self.width - box_w) // 2
             box_y = (self.height - box_h) // 2
-            btn_rect = pygame.Rect(box_x + (box_w - 240) // 2, box_y + 245, 240, 44)
-            if btn_rect.collidepoint(pos):
+            box_rect = pygame.Rect(box_x, box_y, box_w, box_h)
+            btn_rect = pygame.Rect(box_x + (box_w - 240) // 2, box_y + 285, 240, 44)
+            if (hasattr(self, 'victory_btn_rect') and self.victory_btn_rect and self.victory_btn_rect.collidepoint(pos)) or btn_rect.collidepoint(pos) or box_rect.collidepoint(pos):
                 self.quiz_state = 6
+                self.guardian_knight_state = 5
                 self.save_results_to_database()
                 save_student_progress(self.main_menu)
                 self.banner_text = "GRAND FIESTA PORTAL UNLOCKED!"
@@ -2863,6 +2988,39 @@ class Quarter2:
                         
                     self.greeting_dialog.show(speaker_name, speaker_title, greeting_text, sprite_frame=sprite_frame)
 
+        # Proximity interaction check for Knight Portal Guardian (after Stations 1-5 cleared)
+        if self.quiz_station_index > 5 and not self.currency_puzzle_solved:
+            if self.guardian_knight_state == 0:
+                self.guardian_knight_state = 1
+            if getattr(self, 'npc_knight_found', False) and not self.currency_puzzle_active:
+                kx = self.npc_knight_tile_x * TILE_SIZE + TILE_SIZE // 2
+                ky = self.npc_knight_tile_y * TILE_SIZE + TILE_SIZE // 2
+                player_center_x = self.player_x + TILE_SIZE // 2
+                player_center_y = self.player_y + TILE_SIZE // 2
+                dist_k = math.hypot(player_center_x - kx, player_center_y - ky)
+                if dist_k < TILE_SIZE * 2.0:
+                    if self.guardian_knight_state == 1:
+                        self.guardian_knight_state = 2
+                        box_w, box_h = 660, 320
+                        box_x = (self.width - box_w) // 2
+                        box_y = (self.height - box_h) // 2
+                        self.currency_trial_start_btn_rect = pygame.Rect(box_x + (box_w - 240) // 2, box_y + 245, 240, 44)
+                        if getattr(self, 'coin_clink', None):
+                            self.coin_clink.play()
+                elif dist_k > TILE_SIZE * 3.0:
+                    if self.guardian_knight_state == 2:
+                        self.guardian_knight_state = 1
+
+        # Update Currency Matching Puzzle if active
+        if getattr(self, 'currency_puzzle_active', False):
+            self.update_currency_matching_puzzle(dt)
+
+        # Update Knight Guardian animation frame
+        self.npc_knight_anim_timer += 1
+        if self.npc_knight_anim_timer >= 14:
+            self.npc_knight_anim_timer = 0
+            self.npc_knight_anim_frame = (self.npc_knight_anim_frame + 1) % 3
+
         self.update_player_movement()
         self.check_portal_teleport_on_hold()
 
@@ -2963,6 +3121,7 @@ class Quarter2:
         button_x = box_x + (box_w - button_w) // 2
         button_y = box_y + 235
         btn_rect = pygame.Rect(button_x, button_y, button_w, button_h)
+        self.wrong_btn_rect = btn_rect
 
         is_hovered = btn_rect.collidepoint(self.cursor_pos)
         bg_color = (220, 38, 38) if is_hovered else (30, 41, 59)
@@ -3012,6 +3171,7 @@ class Quarter2:
         button_x = box_x + (box_w - button_w) // 2
         button_y = box_y + 205
         btn_rect = pygame.Rect(button_x, button_y, button_w, button_h)
+        self.out_of_tries_btn_rect = btn_rect
 
         is_hovered = btn_rect.collidepoint(self.cursor_pos)
         bg_color = (245, 158, 11) if is_hovered else (30, 41, 59)
@@ -3061,6 +3221,7 @@ class Quarter2:
         button_x = box_x + (box_w - button_w) // 2
         button_y = box_y + 195
         btn_rect = pygame.Rect(button_x, button_y, button_w, button_h)
+        self.correct_btn_rect = btn_rect
 
         is_hovered = btn_rect.collidepoint(self.cursor_pos)
         bg_color = (22, 163, 74) if is_hovered else (30, 41, 59)
@@ -3108,6 +3269,7 @@ class Quarter2:
         button_x = box_x + (box_w - button_w) // 2
         button_y = box_y + 285
         btn_rect = pygame.Rect(button_x, button_y, button_w, button_h)
+        self.victory_btn_rect = btn_rect
 
         is_hovered = btn_rect.collidepoint(self.cursor_pos)
         bg_color = (255, 215, 0) if is_hovered else (30, 41, 59)
@@ -3122,6 +3284,440 @@ class Quarter2:
 
     def draw_final_dialog(self):
         self.draw_victory_speech()
+
+    # ============================================================
+    # PHILIPPINE CURRENCY MATCHING PUZZLE ENGINE (Knight Guardian)
+    # ============================================================
+    def init_currency_matching_puzzle(self):
+        """Initializes the randomized Philippine Currency Matching Puzzle"""
+        self.currency_puzzle_slots = []
+        self.currency_puzzle_pieces = []
+        self.currency_puzzle_solved = False
+        self.currency_puzzle_all_placed = False
+        self.dragged_currency_piece = None
+        self.currency_drag_offset_x = 0
+        self.currency_drag_offset_y = 0
+        self.currency_sparkles = []
+
+        # Obtain randomized pool of 5 Philippine Currency items for this map & playthrough
+        pool = get_randomized_quarter2_currency_pool(self.map_name, num_items=5)
+
+        # Panel geometry
+        panel_w = min(1140, self.width - 60)
+        panel_h = min(620, self.height - 50)
+        panel_x = (self.width - panel_w) // 2
+        panel_y = (self.height - panel_h) // 2
+
+        num_items = len(pool)
+        gap = 16
+        slot_w = (panel_w - 60 - (num_items - 1) * gap) // num_items
+        slot_h = 160
+        slot_y = panel_y + 115
+
+        # 1. Target Slots (Top Row)
+        for i, item in enumerate(pool):
+            slot_x = panel_x + 30 + i * (slot_w + gap)
+            slot_rect = pygame.Rect(slot_x, slot_y, slot_w, slot_h)
+            self.currency_puzzle_slots.append({
+                "id": item["id"],
+                "rect": slot_rect,
+                "name": item["name"],
+                "value_text": item["value_text"],
+                "type": item["type"],
+                "color": item.get("color_accent", (218, 165, 32)),
+                "matched": False,
+                "matched_item": None
+            })
+
+        # 2. Draggable Currency Pieces (Bottom Row - Shuffled)
+        shuffled_pool = list(pool)
+        random.shuffle(shuffled_pool)
+
+        tray_y = slot_y + slot_h + 45
+        piece_w = slot_w - 10
+        piece_h = 95
+
+        for i, item in enumerate(shuffled_pool):
+            piece_x = panel_x + 30 + i * (slot_w + gap) + 5
+            piece_rect = pygame.Rect(piece_x, tray_y, piece_w, piece_h)
+            token_surf = render_currency_token(item, piece_w, piece_h)
+            self.currency_puzzle_pieces.append({
+                "id": item["id"],
+                "data": item,
+                "orig_x": piece_x,
+                "orig_y": tray_y,
+                "x": piece_x,
+                "y": tray_y,
+                "w": piece_w,
+                "h": piece_h,
+                "rect": piece_rect,
+                "token_surf": token_surf,
+                "is_dragging": False,
+                "is_placed": False
+            })
+
+        self.currency_puzzle_reset_btn_rect = pygame.Rect(panel_x + 30, panel_y + panel_h - 55, 180, 42)
+        self.currency_puzzle_continue_btn_rect = pygame.Rect(panel_x + panel_w - 240, panel_y + panel_h - 55, 210, 42)
+        print(f"[CURRENCY PUZZLE] Initialized with {len(pool)} items: {[it['name'] for it in pool]}")
+
+    def reset_currency_matching_puzzle(self):
+        """Resets all pieces back to the tray"""
+        for piece in self.currency_puzzle_pieces:
+            piece["x"] = piece["orig_x"]
+            piece["y"] = piece["orig_y"]
+            piece["is_dragging"] = False
+            piece["is_placed"] = False
+        for slot in self.currency_puzzle_slots:
+            slot["matched"] = False
+            slot["matched_item"] = None
+        self.currency_puzzle_all_placed = False
+        self.dragged_currency_piece = None
+        if getattr(self, 'snap_sound', None):
+            self.snap_sound.play()
+
+    def release_dragged_currency_piece(self):
+        """Handles dropping a dragged currency token onto slots"""
+        if not self.dragged_currency_piece:
+            return
+
+        piece = self.dragged_currency_piece
+        piece_center = (piece["x"] + piece["w"] // 2, piece["y"] + piece["h"] // 2)
+
+        matched_any = False
+        for slot in self.currency_puzzle_slots:
+            if slot["rect"].collidepoint(piece_center):
+                if slot["id"] == piece["id"] and not slot["matched"]:
+                    # Correct Match!
+                    slot["matched"] = True
+                    slot["matched_item"] = piece["data"]
+                    piece["is_placed"] = True
+                    piece["is_dragging"] = False
+                    piece["x"] = slot["rect"].x + (slot["rect"].w - piece["w"]) // 2
+                    piece["y"] = slot["rect"].y + slot["rect"].h - piece["h"] - 10
+                    matched_any = True
+
+                    if getattr(self, 'coin_clink', None):
+                        self.coin_clink.play()
+                    elif getattr(self, 'cash_register', None):
+                        self.cash_register.play()
+
+                    # Sparkles
+                    for _ in range(16):
+                        self.currency_sparkles.append({
+                            "x": slot["rect"].centerx + random.randint(-40, 40),
+                            "y": slot["rect"].centery + random.randint(-30, 30),
+                            "vx": random.uniform(-2.5, 2.5),
+                            "vy": random.uniform(-3.5, 0.5),
+                            "color": random.choice([(255, 215, 0), (74, 222, 128), (255, 255, 255), (251, 191, 36)]),
+                            "life": 0.6,
+                            "max_life": 0.6,
+                            "rad": random.randint(3, 5)
+                        })
+
+                    # Check if all slots matched
+                    if all(s["matched"] for s in self.currency_puzzle_slots):
+                        self.currency_puzzle_all_placed = True
+                        self.currency_puzzle_solved_time = pygame.time.get_ticks()
+                        if getattr(self, 'success_sound', None):
+                            self.success_sound.play()
+                        if hasattr(self, 'celebration_particles'):
+                            self.celebration_particles.spawn_burst(self.width // 2, self.height // 2, count=35)
+                    break
+                else:
+                    # Wrong slot
+                    break
+
+        if not matched_any:
+            piece["x"] = piece["orig_x"]
+            piece["y"] = piece["orig_y"]
+            piece["is_dragging"] = False
+            if getattr(self, 'snap_sound', None):
+                self.snap_sound.play()
+
+        self.dragged_currency_piece = None
+
+    def update_currency_matching_puzzle(self, dt):
+        """Updates gesture interaction and particle effects in currency puzzle"""
+        if not self.currency_puzzle_active:
+            return
+
+        for sp in self.currency_sparkles[:]:
+            sp["x"] += sp["vx"]
+            sp["y"] += sp["vy"]
+            sp["life"] -= dt
+            if sp["life"] <= 0:
+                self.currency_sparkles.remove(sp)
+
+        # Gesture Fist Hold Dragging Support
+        if self.fist_closed and not self.dragged_currency_piece and not self.currency_puzzle_all_placed:
+            for piece in reversed(self.currency_puzzle_pieces):
+                if not piece["is_placed"]:
+                    p_rect = pygame.Rect(piece["x"], piece["y"], piece["w"], piece["h"])
+                    if p_rect.collidepoint(self.cursor_pos):
+                        self.dragged_currency_piece = piece
+                        piece["is_dragging"] = True
+                        self.currency_drag_offset_x = self.cursor_pos[0] - piece["x"]
+                        self.currency_drag_offset_y = self.cursor_pos[1] - piece["y"]
+                        if getattr(self, 'snap_sound', None):
+                            self.snap_sound.play()
+                        break
+
+        if self.dragged_currency_piece:
+            if self.fist_closed or pygame.mouse.get_pressed()[0]:
+                self.dragged_currency_piece["x"] = self.cursor_pos[0] - self.currency_drag_offset_x
+                self.dragged_currency_piece["y"] = self.cursor_pos[1] - self.currency_drag_offset_y
+            else:
+                self.release_dragged_currency_piece()
+
+    def draw_currency_matching_puzzle(self):
+        """Renders the Philippine Currency Matching Puzzle modal dialog"""
+        overlay = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
+        overlay.fill((10, 15, 29, 230))
+        self.screen.blit(overlay, (0, 0))
+
+        panel_w = min(1140, self.width - 60)
+        panel_h = min(620, self.height - 50)
+        panel_x = (self.width - panel_w) // 2
+        panel_y = (self.height - panel_h) // 2
+
+        # Outer Shadow & Card
+        pygame.draw.rect(self.screen, (0, 0, 0, 150), (panel_x + 6, panel_y + 6, panel_w, panel_h), border_radius=16)
+        dialog_rect = pygame.Rect(panel_x, panel_y, panel_w, panel_h)
+        pygame.draw.rect(self.screen, (15, 23, 42), dialog_rect, border_radius=16)
+        pygame.draw.rect(self.screen, (218, 165, 32), dialog_rect, 3, border_radius=16)
+        pygame.draw.rect(self.screen, (255, 215, 0), dialog_rect.inflate(-6, -6), 1, border_radius=12)
+
+        # Header Title
+        h_font = self.get_ui_font(22, bold=True)
+        sub_font = self.get_ui_font(13)
+        h_surf = h_font.render("PHILIPPINE CURRENCY MATCHING TRIAL", True, (255, 215, 0))
+        self.screen.blit(h_surf, h_surf.get_rect(center=(panel_x + panel_w // 2, panel_y + 32)))
+
+        sub_text = "Drag each Philippine Banknote and Coin to its matching monetary denomination value slot!"
+        sub_surf = sub_font.render(sub_text, True, (203, 213, 225))
+        self.screen.blit(sub_surf, sub_surf.get_rect(center=(panel_x + panel_w // 2, panel_y + 62)))
+
+        # Section Divider
+        pygame.draw.line(self.screen, (71, 85, 105), (panel_x + 30, panel_y + 82), (panel_x + panel_w - 30, panel_y + 82), 1)
+
+        # Draw Target Slots (Top Row)
+        label_font = self.get_ui_font(13, bold=True)
+        sub_label_font = self.get_ui_font(11, bold=True)
+        stat_font = self.get_ui_font(10)
+
+        for slot in self.currency_puzzle_slots:
+            s_rect = slot["rect"]
+            is_matched = slot["matched"]
+            accent_col = slot["color"]
+
+            # Slot background card
+            bg_col = (20, 35, 30) if is_matched else (24, 32, 47)
+            border_col = (34, 197, 94) if is_matched else (100, 116, 139)
+            border_w = 3 if is_matched else 2
+
+            pygame.draw.rect(self.screen, bg_col, s_rect, border_radius=12)
+            pygame.draw.rect(self.screen, border_col, s_rect, border_w, border_radius=12)
+
+            # Slot Header Accent Bar
+            h_bar_rect = pygame.Rect(s_rect.x + 4, s_rect.y + 4, s_rect.w - 8, 30)
+            pygame.draw.rect(self.screen, (15, 23, 42), h_bar_rect, border_radius=8)
+            pygame.draw.rect(self.screen, accent_col, h_bar_rect, 1, border_radius=8)
+
+            val_surf = label_font.render(slot["value_text"], True, accent_col)
+            self.screen.blit(val_surf, (h_bar_rect.x + 8, h_bar_rect.y + 5))
+
+            type_surf = stat_font.render(slot["type"].upper(), True, (203, 213, 225))
+            self.screen.blit(type_surf, (h_bar_rect.right - type_surf.get_width() - 8, h_bar_rect.y + 7))
+
+            # Full Name Label
+            name_lines = self.wrap_text(slot["name"], sub_label_font, s_rect.w - 16)
+            ny = s_rect.y + 38
+            for nl in name_lines[:2]:
+                nl_surf = sub_label_font.render(nl, True, (255, 255, 255))
+                self.screen.blit(nl_surf, (s_rect.x + 8, ny))
+                ny += 16
+
+            if is_matched and slot["matched_item"]:
+                # Draw small matched badge
+                match_badge = self.get_ui_font(10, bold=True).render("MATCHED ✓", True, (74, 222, 128))
+                self.screen.blit(match_badge, (s_rect.centerx - match_badge.get_width() // 2, s_rect.bottom - 22))
+            else:
+                # Dashed Drop Target Box
+                drop_box = pygame.Rect(s_rect.x + 8, s_rect.y + 68, s_rect.w - 16, s_rect.h - 78)
+                pygame.draw.rect(self.screen, (30, 41, 59), drop_box, border_radius=8)
+                pygame.draw.rect(self.screen, (71, 85, 105), drop_box, 1, border_radius=8)
+                drop_lbl = stat_font.render("Drop Piece Here", True, (148, 163, 184))
+                self.screen.blit(drop_lbl, drop_lbl.get_rect(center=drop_box.center))
+
+        # Tray Header Label
+        tray_lbl_font = self.get_ui_font(12, bold=True)
+        tray_lbl = tray_lbl_font.render("CURRENCY TRAY (DRAG & DROP TO MATCHING DENOMINATION SLOT)", True, (251, 191, 36))
+        self.screen.blit(tray_lbl, (panel_x + 32, panel_y + 300))
+
+        # Draw Placed Pieces (inside their matched slots)
+        for piece in self.currency_puzzle_pieces:
+            if piece["is_placed"] and piece != self.dragged_currency_piece:
+                self.screen.blit(piece["token_surf"], (piece["x"], piece["y"]))
+
+        # Draw Unplaced Pieces in Tray
+        for piece in self.currency_puzzle_pieces:
+            if not piece["is_placed"] and piece != self.dragged_currency_piece:
+                p_rect = pygame.Rect(piece["x"], piece["y"], piece["w"], piece["h"])
+                is_hovered = p_rect.collidepoint(self.cursor_pos)
+
+                # Draw subtle pedestal shadow
+                pygame.draw.rect(self.screen, (0, 0, 0, 80), (piece["x"] + 3, piece["y"] + 3, piece["w"], piece["h"]), border_radius=8)
+                self.screen.blit(piece["token_surf"], (piece["x"], piece["y"]))
+
+                if is_hovered:
+                    pygame.draw.rect(self.screen, (255, 215, 0), (piece["x"] - 2, piece["y"] - 2, piece["w"] + 4, piece["h"] + 4), 2, border_radius=8)
+
+        # Draw Dragged Piece (on top of everything)
+        if self.dragged_currency_piece:
+            dp = self.dragged_currency_piece
+            # Glowing outline & shadow
+            pygame.draw.rect(self.screen, (0, 0, 0, 120), (dp["x"] + 6, dp["y"] + 6, dp["w"], dp["h"]), border_radius=8)
+            self.screen.blit(dp["token_surf"], (dp["x"], dp["y"]))
+            pygame.draw.rect(self.screen, (255, 215, 0), (dp["x"] - 2, dp["y"] - 2, dp["w"] + 4, dp["h"] + 4), 2, border_radius=8)
+
+        # Draw Sparkle Particles
+        for sp in self.currency_sparkles:
+            life_pct = max(0.0, min(1.0, sp["life"] / sp["max_life"]))
+            r = max(1, int(sp["rad"] * life_pct))
+            pygame.draw.circle(self.screen, sp["color"], (int(sp["x"]), int(sp["y"])), r)
+
+        # Bottom Controls
+        # 1. Reset Button
+        btn_font = self.get_ui_font(13, bold=True)
+        r_hov = self.currency_puzzle_reset_btn_rect.collidepoint(self.cursor_pos)
+        pygame.draw.rect(self.screen, (51, 65, 85) if r_hov else (30, 41, 59), self.currency_puzzle_reset_btn_rect, border_radius=8)
+        pygame.draw.rect(self.screen, (203, 213, 225) if r_hov else (100, 116, 139), self.currency_puzzle_reset_btn_rect, 1, border_radius=8)
+        r_txt = btn_font.render("↺ Reset Tray", True, (241, 245, 249))
+        self.screen.blit(r_txt, r_txt.get_rect(center=self.currency_puzzle_reset_btn_rect.center))
+
+        # 2. Continue / Unlock Button (Only if all placed)
+        if self.currency_puzzle_all_placed:
+            pulse = (math.sin(pygame.time.get_ticks() * 0.008) + 1) * 0.5
+            c_hov = self.currency_puzzle_continue_btn_rect.collidepoint(self.cursor_pos)
+            bg_col = (255, 215, 0) if c_hov else (22, 163, 74)
+            txt_col = (15, 23, 42) if c_hov else (255, 255, 255)
+
+            pygame.draw.rect(self.screen, bg_col, self.currency_puzzle_continue_btn_rect, border_radius=10)
+            pygame.draw.rect(self.screen, (255, 255, 255), self.currency_puzzle_continue_btn_rect, int(2 + pulse * 2), border_radius=10)
+            c_txt = self.get_ui_font(14, bold=True).render("Unlock Portal >>", True, txt_col)
+            self.screen.blit(c_txt, c_txt.get_rect(center=self.currency_puzzle_continue_btn_rect.center))
+
+    def draw_knight_guardian(self):
+        """Draws the Knight Portal Guardian with interactive indicator and direction"""
+        if not getattr(self, 'npc_knight_found', False):
+            return
+
+        screen_x = (self.npc_knight_x - self.camera_x) * ZOOM
+        screen_y = (self.npc_knight_y - self.camera_y) * ZOOM
+
+        # Draw Knight Sprite based on current direction
+        knight_sprite = self.npc_knight_sprite
+        if self.npc_knight_dir == "left" and self.npc_knight_left_sprites:
+            knight_sprite = self.npc_knight_left_sprites[self.npc_knight_anim_frame % len(self.npc_knight_left_sprites)]
+        elif self.npc_knight_dir == "right" and self.npc_knight_right_sprites:
+            knight_sprite = self.npc_knight_right_sprites[self.npc_knight_anim_frame % len(self.npc_knight_right_sprites)]
+        elif self.npc_knight_dir == "up" and self.npc_knight_up_sprites:
+            knight_sprite = self.npc_knight_up_sprites[self.npc_knight_anim_frame % len(self.npc_knight_up_sprites)]
+        elif self.npc_knight_dir == "down" and self.npc_knight_down_sprites:
+            knight_sprite = self.npc_knight_down_sprites[self.npc_knight_anim_frame % len(self.npc_knight_down_sprites)]
+
+        if knight_sprite:
+            scaled_size = int(TILE_SIZE * ZOOM)
+            scaled_sprite = pygame.transform.scale(knight_sprite, (scaled_size, scaled_size))
+            self.screen.blit(scaled_sprite, (screen_x, screen_y))
+
+        # Golden Floor Aura when awaiting challenge
+        if self.guardian_knight_state == 1:
+            pulse = (math.sin(self.frame_counter * 0.12) + 1) * 0.5
+            aura_surf = pygame.Surface((int(36 * ZOOM), int(16 * ZOOM)), pygame.SRCALPHA)
+            pygame.draw.ellipse(aura_surf, (255, 215, 0, int(90 + 70 * pulse)), (0, 0, int(36 * ZOOM), int(16 * ZOOM)))
+            self.screen.blit(aura_surf, (screen_x - int(2 * ZOOM), screen_y + int(22 * ZOOM)))
+
+            # Floating Quest Indicator above Knight
+            bob = math.sin(self.frame_counter * 0.15) * 3 * ZOOM
+            badge_x = screen_x + (TILE_SIZE * ZOOM) / 2 - 8 * ZOOM
+            badge_y = screen_y - 20 * ZOOM + bob
+
+            badge_rect = pygame.Rect(badge_x, badge_y, 16 * ZOOM, 16 * ZOOM)
+            pygame.draw.rect(self.screen, (255, 215, 0), badge_rect, border_radius=4)
+            pygame.draw.rect(self.screen, (0, 0, 0), badge_rect, 1, border_radius=4)
+
+            excl_surf = self.font.render("!", True, (0, 0, 0))
+            self.screen.blit(excl_surf, excl_surf.get_rect(center=badge_rect.center))
+
+            # Name Tag Pill
+            name_font = self.get_ui_font(int(10 * ZOOM), bold=True)
+            name_surf = name_font.render("Knight (Portal Guardian)", True, (255, 235, 120))
+            tag_w = name_surf.get_width() + 10
+            tag_h = name_surf.get_height() + 4
+            tag_x = screen_x + (TILE_SIZE * ZOOM) / 2 - tag_w / 2
+            tag_y = badge_y - tag_h - 2
+
+            tag_bg = pygame.Surface((tag_w, tag_h), pygame.SRCALPHA)
+            tag_bg.fill((15, 23, 42, 210))
+            self.screen.blit(tag_bg, (tag_x, tag_y))
+            pygame.draw.rect(self.screen, (255, 215, 0), (tag_x, tag_y, tag_w, tag_h), 1, border_radius=4)
+            self.screen.blit(name_surf, (tag_x + 5, tag_y + 2))
+
+    def draw_knight_guardian_prompt(self):
+        """Draws the modal dialog when approaching the Knight Guardian at the portal"""
+        overlay = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
+        overlay.fill((10, 15, 29, 180))
+        self.screen.blit(overlay, (0, 0))
+
+        box_w, box_h = 620, 320
+        box_x = (self.width - box_w) // 2
+        box_y = (self.height - box_h) // 2
+
+        pygame.draw.rect(self.screen, (0, 0, 0, 150), (box_x + 4, box_y + 4, box_w, box_h), border_radius=14)
+        dialog_rect = pygame.Rect(box_x, box_y, box_w, box_h)
+        pygame.draw.rect(self.screen, (15, 23, 42), dialog_rect, border_radius=14)
+        pygame.draw.rect(self.screen, (218, 165, 32), dialog_rect, 3, border_radius=14)
+        pygame.draw.rect(self.screen, (255, 215, 0), dialog_rect.inflate(-6, -6), 1, border_radius=10)
+
+        # Title
+        t_surf = self.dialog_header_font.render("Knight (Grand Fiesta Portal Guardian)", True, (255, 215, 0))
+        self.screen.blit(t_surf, (box_x + 24, box_y + 20))
+
+        speech = (
+            f"Mabuhay, {self.player_name}! You have solved all 5 barrio math challenges.\n\n"
+            "Before passing through the Grand Fiesta Exit Portal, you must prove your mastery of Philippine Currency!\n"
+            "Match each banknote and coin to its correct monetary denomination value to unlock the passage."
+        )
+
+        lines = speech.split('\n')
+        y_text = box_y + 65
+        for line in lines:
+            if line:
+                sub_lines = self.wrap_text(line, self.dialog_q_font, box_w - 48)
+                for sl in sub_lines:
+                    txt_surf = self.dialog_q_font.render(sl, True, (248, 250, 252))
+                    self.screen.blit(txt_surf, (box_x + 24, y_text))
+                    y_text += 24
+            else:
+                y_text += 8
+
+        # Button
+        button_w, button_h = 240, 44
+        button_x = box_x + (box_w - button_w) // 2
+        button_y = box_y + 245
+        btn_rect = pygame.Rect(button_x, button_y, button_w, button_h)
+        self.currency_trial_start_btn_rect = btn_rect
+
+        is_hovered = btn_rect.collidepoint(self.cursor_pos)
+        bg_col = (255, 215, 0) if is_hovered else (30, 41, 59)
+        txt_col = (15, 23, 42) if is_hovered else (255, 215, 0)
+
+        pygame.draw.rect(self.screen, bg_col, btn_rect, border_radius=10)
+        pygame.draw.rect(self.screen, (255, 255, 255) if is_hovered else (218, 165, 32), btn_rect, 2, border_radius=10)
+
+        c_surf = self.dialog_header_font.render("Begin Currency Trial >>", True, txt_col)
+        self.screen.blit(c_surf, c_surf.get_rect(center=btn_rect.center))
 
     # ============================================================
     # [HOUSE] PROGRESSIVE BAHAY KUBO CONSTRUCTION (Map 5 Specific)
@@ -3375,7 +3971,7 @@ class Quarter2:
     # UPDATE PLAYER MOVEMENT (Sprint Boost & Particle Trails)
     # ============================================================
     def update_player_movement(self):
-        if (hasattr(self, 'camera_pan_active') and self.camera_pan_active) or self.quiz_state in [1, 2, 3, 4, 5] or (hasattr(self, 'player_block_timer') and self.player_block_timer > 0) or (getattr(self, 'instruction_modal', None) and self.instruction_modal.is_visible) or (getattr(self, 'greeting_dialog', None) and self.greeting_dialog.is_visible):
+        if (hasattr(self, 'camera_pan_active') and self.camera_pan_active) or self.quiz_state in [1, 2, 3, 4, 5] or getattr(self, 'currency_puzzle_active', False) or getattr(self, 'guardian_knight_state', 0) == 2 or (hasattr(self, 'player_block_timer') and self.player_block_timer > 0) or (getattr(self, 'instruction_modal', None) and self.instruction_modal.is_visible) or (getattr(self, 'greeting_dialog', None) and self.greeting_dialog.is_visible):
             self.anim_frame = 0
             return
 
@@ -3658,6 +4254,9 @@ class Quarter2:
             if frames:
                 self.draw_npc_animated(world_x, world_y, frames, anim_frame)
 
+        # Draw Knight Portal Guardian
+        self.draw_knight_guardian()
+
         self.draw_player()
 
         # Draw visible tall tiles / painted cinder block walls (Second pass)
@@ -3764,6 +4363,33 @@ class Quarter2:
                 pygame.draw.rect(self.screen, (255, 255, 255), ptr_rect, 2, border_radius=8)
                 self.screen.blit(ptr_surf, (ptr_rect.x + 8, ptr_rect.y + 4))
 
+        # 2b. Off-Screen Directional Pointer for Knight Guardian (Portal Trial)
+        if self.quiz_station_index > 5 and not self.currency_puzzle_solved and getattr(self, 'npc_knight_found', False):
+            screen_k_x = (self.npc_knight_tile_x * TILE_SIZE - self.camera_x) * ZOOM
+            screen_k_y = (self.npc_knight_tile_y * TILE_SIZE - self.camera_y) * ZOOM
+            is_on_screen = (40 <= screen_k_x <= self.width - 60 and 40 <= screen_k_y <= self.height - 110)
+            if not is_on_screen:
+                player_screen_x = (self.player_x - self.camera_x) * ZOOM
+                player_screen_y = (self.player_y - self.camera_y) * ZOOM
+                dx = screen_k_x - player_screen_x
+                dy = screen_k_y - player_screen_y
+                dist_tiles = int(math.hypot(self.player_x - self.npc_knight_tile_x * TILE_SIZE, self.player_y - self.npc_knight_tile_y * TILE_SIZE) // TILE_SIZE)
+                angle = math.atan2(dy, dx)
+                margin = 55
+                clamp_x = max(margin, min(self.width - margin, player_screen_x + math.cos(angle) * 180))
+                clamp_y = max(margin, min(self.height - 100, player_screen_y + math.sin(angle) * 180))
+
+                ptr_font = self.get_ui_font(12, bold=True)
+                ptr_text = f">> Knight Guardian ({dist_tiles}m)"
+                ptr_surf = ptr_font.render(ptr_text, True, (15, 23, 42))
+                pw = ptr_surf.get_width() + 16
+                ph = 26
+
+                ptr_rect = pygame.Rect(clamp_x - pw // 2, clamp_y - ph // 2, pw, ph)
+                pygame.draw.rect(self.screen, (255, 215, 0), ptr_rect, border_radius=8)
+                pygame.draw.rect(self.screen, (255, 255, 255), ptr_rect, 2, border_radius=8)
+                self.screen.blit(ptr_surf, (ptr_rect.x + 8, ptr_rect.y + 4))
+
         # 3. Off-Screen Directional Pointer for Exit Portal (When all 5 challenges cleared)
         if self.quiz_state == 6 and self.portals:
             exit_p = self.portals[0]
@@ -3836,6 +4462,12 @@ class Quarter2:
             self.draw_out_of_tries_dialog()
         elif self.quiz_state == 5:
             self.draw_victory_speech()
+
+        # Draw Knight Guardian Trial Prompt & Currency Matching Trial UI
+        if getattr(self, 'guardian_knight_state', 0) == 2:
+            self.draw_knight_guardian_prompt()
+        elif getattr(self, 'currency_puzzle_active', False):
+            self.draw_currency_matching_puzzle()
 
         # Draw Area Title Animation
         if self.title_active:
@@ -3979,21 +4611,30 @@ class Quarter2:
             item_font = self.get_ui_font(12, bold=True)
 
             if self.quiz_state < 6:
-                cur_target_str = self.station_npc_info.get(self.quiz_station_index, {}).get("title", f"Station {self.quiz_station_index}")
-                obj1 = f"Target: {cur_target_str}"
-                obj1_surf = item_font.render(obj1, True, (255, 220, 80))
-                self.screen.blit(obj1_surf, (box_x + 16, box_y + 32))
+                if self.quiz_station_index <= 5:
+                    cur_target_str = self.station_npc_info.get(self.quiz_station_index, {}).get("title", f"Station {self.quiz_station_index}")
+                    obj1 = f"Target: {cur_target_str}"
+                    obj1_surf = item_font.render(obj1, True, (255, 220, 80))
+                    self.screen.blit(obj1_surf, (box_x + 16, box_y + 32))
 
-                if self.map_name == "map5.txt":
-                    obj2 = f"Bahay Kubo: {self.kubo_pieces_collected}/5 Pieces Built (Portal Locked)"
-                    obj2_surf = item_font.render(obj2, True, (254, 240, 138) if self.kubo_pieces_collected > 0 else (148, 163, 184))
+                    if self.map_name == "map5.txt":
+                        obj2 = f"Bahay Kubo: {self.kubo_pieces_collected}/5 Pieces Built (Portal Locked)"
+                        obj2_surf = item_font.render(obj2, True, (254, 240, 138) if self.kubo_pieces_collected > 0 else (148, 163, 184))
+                    else:
+                        cleared_count = max(0, self.quiz_station_index - 1)
+                        obj2 = f"Progress: {cleared_count}/5 Stalls Cleared (Portal Locked)"
+                        obj2_surf = item_font.render(obj2, True, (148, 163, 184) if cleared_count == 0 else (74, 222, 128))
+                    self.screen.blit(obj2_surf, (box_x + 16, box_y + 54))
                 else:
-                    cleared_count = max(0, self.quiz_station_index - 1)
-                    obj2 = f"Progress: {cleared_count}/5 Stalls Cleared (Portal Locked)"
-                    obj2_surf = item_font.render(obj2, True, (148, 163, 184) if cleared_count == 0 else (74, 222, 128))
-                self.screen.blit(obj2_surf, (box_x + 16, box_y + 54))
+                    obj1 = "PORTAL TRIAL: Knight Guardian (Philippine Currency)"
+                    obj1_surf = item_font.render(obj1, True, (255, 215, 0))
+                    self.screen.blit(obj1_surf, (box_x + 16, box_y + 32))
+
+                    obj2 = "Match Philippine Banknotes & Coins to Unlock Portal!"
+                    obj2_surf = item_font.render(obj2, True, (254, 240, 138))
+                    self.screen.blit(obj2_surf, (box_x + 16, box_y + 54))
             else:
-                obj1 = "BAHAY KUBO FULLY CONSTRUCTED!" if self.map_name == "map5.txt" else "ALL BARANGAY CHALLENGES CLEARED!"
+                obj1 = "BAHAY KUBO FULLY CONSTRUCTED!" if self.map_name == "map5.txt" else "ALL BARANGAY CHALLENGES & CURRENCY TRIAL CLEARED!"
                 obj1_surf = item_font.render(obj1, True, (74, 222, 128))
                 self.screen.blit(obj1_surf, (box_x + 16, box_y + 32))
 
@@ -4063,8 +4704,63 @@ class Quarter2:
                     if getattr(self, 'coin_clink', None):
                         self.coin_clink.play()
                     return "handled"
+                elif getattr(self, 'guardian_knight_state', 0) == 2:
+                    self.guardian_knight_state = 3
+                    self.init_currency_matching_puzzle()
+                    self.currency_puzzle_active = True
+                    if getattr(self, 'coin_clink', None):
+                        self.coin_clink.play()
+                    return "handled"
+                elif getattr(self, 'currency_puzzle_active', False) and getattr(self, 'currency_puzzle_all_placed', False):
+                    self.currency_puzzle_active = False
+                    self.currency_puzzle_solved = True
+                    self.guardian_knight_state = 4
+                    self.quiz_state = 5
+                    self.banner_text = "CURRENCY TRIAL COMPLETED!"
+                    self.banner_sub = "Speak with the Knight Guardian to unlock the portal!"
+                    self.banner_timer = 4.0
+                    return "handled"
+                elif self.quiz_state in [2, 3, 4, 5]:
+                    # Allow keyboard space/return to smoothly advance dialogs
+                    if self.quiz_state == 2:
+                        self.quiz_state = 1
+                        save_student_progress(self.main_menu)
+                    elif self.quiz_state in [3, 4]:
+                        current_st = self.quiz_station_index
+                        if self.map_name == "map5.txt":
+                            self.kubo_pieces_collected = current_st
+                            self.trigger_kubo_pan_sequence(current_st)
+
+                        if self.quiz_station_index < 5:
+                            self.quiz_station_index += 1
+                            self.current_question_index = self.quiz_station_index - 1
+                            self.quiz_state = 0
+                        else:
+                            self.quiz_station_index = 6
+                            self.current_question_index = 5
+                            self.quiz_state = 0
+                            self.guardian_knight_state = 1
+                            self.banner_text = "ALL 5 BARRIO STALLS CLEARED!"
+                            self.banner_sub = "Find the Knight Guardian at the portal to take the Currency Matching Trial!"
+                            self.banner_timer = 5.0
+                        save_student_progress(self.main_menu)
+                    elif self.quiz_state == 5:
+                        self.quiz_state = 6
+                        self.guardian_knight_state = 5
+                        self.save_results_to_database()
+                        save_student_progress(self.main_menu)
+                        self.banner_text = "GRAND FIESTA PORTAL UNLOCKED!"
+                        self.banner_sub = "Head to the Exit Portal at the end of the street to complete Quarter 2!"
+                        self.banner_timer = 999.0
+                        if self.success_sound:
+                            self.success_sound.play()
+                    return "handled"
                 if self.quiz_state == 0:
                     self.lol_camera.recenter()
+            elif event.key == pygame.K_r:
+                if getattr(self, 'currency_puzzle_active', False):
+                    self.reset_currency_matching_puzzle()
+                    return "handled"
             elif event.key == pygame.K_ESCAPE:
                 if self.main_menu:
                     from db.save_system import show_saving_and_exit
@@ -4075,8 +4771,14 @@ class Quarter2:
         elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
             self.cursor_pos = event.pos
             self.trigger_click(event.pos)
+        elif event.type == pygame.MOUSEBUTTONUP and event.button == 1:
+            if getattr(self, 'currency_puzzle_active', False):
+                self.release_dragged_currency_piece()
         elif event.type == pygame.MOUSEMOTION:
             self.cursor_pos = event.pos
+            if getattr(self, 'currency_puzzle_active', False) and getattr(self, 'dragged_currency_piece', None):
+                self.dragged_currency_piece["x"] = event.pos[0] - self.currency_drag_offset_x
+                self.dragged_currency_piece["y"] = event.pos[1] - self.currency_drag_offset_y
         return None
 
     def draw_stage_timer_hud(self):

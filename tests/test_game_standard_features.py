@@ -13,7 +13,7 @@ os.environ["SDL_AUDIODRIVER"] = "dummy"
 
 pygame.init()
 pygame.mixer.init()
-screen = pygame.display.set_mode((1024, 768))
+screen = pygame.display.set_mode((1280, 720))
 
 def test_audio_manager_sounds():
     from core.audio_manager import AudioManager

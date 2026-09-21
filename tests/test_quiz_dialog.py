@@ -19,13 +19,13 @@ install_font_cache()
 from core.quiz_dialog import RPGQuizDialog
 
 def test_quiz_dialog_initialization_and_hitbox():
-    screen = pygame.display.set_mode((1024, 768))
-    dialog = RPGQuizDialog(screen, 1024, 768)
+    screen = pygame.display.set_mode((1280, 720))
+    dialog = RPGQuizDialog(screen, 1280, 720)
 
     assert dialog.box_w == 840
     assert dialog.box_h == 520
-    assert dialog.box_x == (1024 - 840) // 2
-    assert dialog.box_y == (768 - 520) // 2
+    assert dialog.box_x == (1280 - 840) // 2
+    assert dialog.box_y == (720 - 520) // 2
 
     # Check button rects
     rect0 = dialog.get_button_rect(0)
@@ -48,8 +48,8 @@ def test_quiz_dialog_initialization_and_hitbox():
     print("PASS: RPGQuizDialog initialization and hit-testing verified.")
 
 def test_quiz_dialog_drawing():
-    screen = pygame.display.set_mode((1024, 768))
-    dialog = RPGQuizDialog(screen, 1024, 768)
+    screen = pygame.display.set_mode((1280, 720))
+    dialog = RPGQuizDialog(screen, 1280, 720)
 
     q_data = {
         "question": "Which shape has 4 equal sides and 4 right angles?",

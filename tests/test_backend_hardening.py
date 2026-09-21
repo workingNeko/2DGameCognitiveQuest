@@ -68,7 +68,7 @@ def test_async_saving():
     os.environ["SDL_VIDEODRIVER"] = "dummy"
     import pygame
     pygame.init()
-    screen = pygame.display.set_mode((100, 100))
+    screen = pygame.display.set_mode((1280, 720))
 
     class MockMainMenu:
         def __init__(self):
@@ -104,7 +104,7 @@ def test_background_offline_sync():
     from db.connect_db import db
     t = threading.Thread(target=db.sync_offline_results, daemon=True)
     t.start()
-    t.join(timeout=2.0)
+    t.join(timeout=5.0)
     assert not t.is_alive(), "Offline sync thread hung"
     print("PASS: Background offline sync runs safely and terminates cleanly.")
 

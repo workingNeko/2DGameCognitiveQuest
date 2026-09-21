@@ -22,7 +22,7 @@ from screens.main_menu import MainMenu
 class TestTextOverlapFixes(unittest.TestCase):
 
     def setUp(self):
-        self.screen = pygame.display.set_mode((1024, 768))
+        self.screen = pygame.display.set_mode((1280, 720))
 
     def test_main_menu_gesture_hud_does_not_overlap_exit_or_settings(self):
         """Verify gesture status badge does not overlap Exit button or Settings button on main menu."""

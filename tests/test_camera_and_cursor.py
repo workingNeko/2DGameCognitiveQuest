@@ -19,7 +19,7 @@ import pygame
 
 pygame.init()
 pygame.mixer.init()
-screen = pygame.display.set_mode((1024, 768))
+screen = pygame.display.set_mode((1280, 720))
 
 from core.camera_system import LoLCamera
 from core.cursor_system import GameCursor, CursorState

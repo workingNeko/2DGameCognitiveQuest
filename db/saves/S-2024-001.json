@@ -1,0 +1,17 @@
+{
+    "student_id": "S-2024-001",
+    "selected_student": {
+        "id": 18,
+        "student_id": "S-2024-001",
+        "first_name": "Juan Dela Cruz",
+        "last_name": "",
+        "score": 0,
+        "progress": 0,
+        "level": "Grade 2",
+        "gender": "male"
+    },
+    "current_screen": "menu",
+    "tutorial_completed": true,
+    "completed_quarters": {},
+    "timestamp": 1789872679.3143272
+}

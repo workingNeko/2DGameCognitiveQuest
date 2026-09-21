@@ -273,18 +273,26 @@ class QuestPathfinderGuide:
                             return (self.q.portal_tile_x, self.q.portal_tile_y, "Quarter 1 Exit Portal", True)
                     return (20, 0, "Quarter 1 Exit Portal", True)
 
-        # Quarter 2: Barrio Leader / Master Carpenter / Hermano Mayor
+        # Quarter 2: Knight Portal Guardian (Philippine Currency Trial)
         elif self.quarter_id == "quarter2":
-            if getattr(self.q, 'npc_oldman_found', False) and quiz_state == 5:
-                tx = getattr(self.q, 'npc_oldman_tile_x', 0)
-                ty = getattr(self.q, 'npc_oldman_tile_y', 0)
-                if tx > 0 and ty > 0:
-                    mentor_name = "Barrio Leader"
-                    if "map5" in map_name:
-                        mentor_name = "Master Carpenter"
-                    elif "map6" in map_name:
-                        mentor_name = "Hermano Mayor"
-                    return (tx, ty, mentor_name, False)
+            puzzle_solved = getattr(self.q, 'currency_puzzle_solved', False) or getattr(self.q, 'quiz_state', 0) == 6
+            if not puzzle_solved:
+                kx = getattr(self.q, 'npc_knight_tile_x', 0)
+                ky = getattr(self.q, 'npc_knight_tile_y', 0)
+                if kx > 0 and ky > 0:
+                    return (kx, ky, "Knight (Portal Guardian)", False)
+                # Fallback to mentor/oldman if present
+                if getattr(self.q, 'npc_oldman_found', False):
+                    tx = getattr(self.q, 'npc_oldman_tile_x', 0)
+                    ty = getattr(self.q, 'npc_oldman_tile_y', 0)
+                    if tx > 0 and ty > 0:
+                        return (tx, ty, "Barrio Leader", False)
+            else:
+                all_portals = getattr(self.q, 'portals', []) + getattr(self.q, 'locked_portals', [])
+                if all_portals:
+                    coords = self._extract_portal_tile(all_portals[0])
+                    if coords:
+                        return (coords[0], coords[1], "Grand Fiesta Portal", True)
 
         # Quarter 3: Desert Vault Keeper / Pharaoh Altar
         elif self.quarter_id == "quarter3":
