@@ -24,9 +24,11 @@ if ([string]::IsNullOrWhiteSpace($desktop)) {
 $targetDir = Join-Path $desktop "Cognitive Maze"
 
 Write-Host "Target Desktop Directory: $targetDir"
-if (!(Test-Path $targetDir)) {
-    New-Item -ItemType Directory -Path $targetDir -Force | Out-Null
+if (Test-Path $targetDir) {
+    Write-Host "Cleaning existing desktop directory: $targetDir"
+    Remove-Item -Path $targetDir -Recurse -Force
 }
+New-Item -ItemType Directory -Path $targetDir -Force | Out-Null
 
 # 3. Copy dist\CognitiveMaze files to Desktop
 Write-Host "Copying standalone distribution files to Desktop\Cognitive Maze..."
@@ -37,9 +39,10 @@ $legacyDesktop = Join-Path $env:USERPROFILE "Desktop"
 if ((Test-Path $legacyDesktop) -and ($legacyDesktop -ne $desktop)) {
     $legacyTargetDir = Join-Path $legacyDesktop "Cognitive Maze"
     Write-Host "Mirroring to user Desktop: $legacyTargetDir"
-    if (!(Test-Path $legacyTargetDir)) {
-        New-Item -ItemType Directory -Path $legacyTargetDir -Force | Out-Null
+    if (Test-Path $legacyTargetDir) {
+        Remove-Item -Path $legacyTargetDir -Recurse -Force
     }
+    New-Item -ItemType Directory -Path $legacyTargetDir -Force | Out-Null
     Copy-Item -Path "$distDir\*" -Destination $legacyTargetDir -Recurse -Force
 }
 

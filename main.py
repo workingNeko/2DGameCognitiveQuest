@@ -2,6 +2,9 @@
 import os
 import sys
 
+# Ensure matplotlib uses headless Agg backend to prevent Tk/GUI backend dependencies
+os.environ["MPLBACKEND"] = "Agg"
+
 # Ensure current working directory is always the application's root directory.
 # On Windows startup/boot, Windows launches applications with cwd = C:\Windows\System32.
 if getattr(sys, "frozen", False):

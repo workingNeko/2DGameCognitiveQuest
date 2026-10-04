@@ -7,6 +7,7 @@ from PyInstaller.utils.hooks import collect_all, collect_data_files
 mp_datas, mp_binaries, mp_hiddenimports = collect_all('mediapipe')
 cv2_datas, cv2_binaries, cv2_hiddenimports = collect_all('cv2')
 pygame_datas, pygame_binaries, pygame_hiddenimports = collect_all('pygame')
+mpl_datas, mpl_binaries, mpl_hiddenimports = collect_all('matplotlib')
 
 datas = [
     ('assets', 'assets'),
@@ -16,9 +17,9 @@ datas = [
     ('db', 'db'),
     ('datasets', 'datasets'),
     ('layout_config.json', '.'),
-] + mp_datas + cv2_datas + pygame_datas
+] + mp_datas + cv2_datas + pygame_datas + mpl_datas
 
-binaries = mp_binaries + cv2_binaries + pygame_binaries
+binaries = mp_binaries + cv2_binaries + pygame_binaries + mpl_binaries
 
 hiddenimports = [
     'winreg',
@@ -63,6 +64,9 @@ hiddenimports = [
     'cv2',
     'numpy',
     'mediapipe',
+    'matplotlib',
+    'matplotlib.pyplot',
+    'matplotlib.backends.backend_agg',
     'sqlite3',
     'threading',
     'PIL',
@@ -75,7 +79,28 @@ hiddenimports = [
     'random',
     'ctypes',
     'csv',
-] + mp_hiddenimports + cv2_hiddenimports + pygame_hiddenimports
+    'unittest',
+] + mp_hiddenimports + cv2_hiddenimports + pygame_hiddenimports + mpl_hiddenimports
+
+excluded_modules = [
+    'torch',
+    'torchvision',
+    'torchaudio',
+    'jax',
+    'jaxlib',
+    'pyarrow',
+    'scipy',
+    'pandas',
+    'imageio',
+    'imageio_ffmpeg',
+    'tkinter',
+    '_tkinter',
+    'IPython',
+    'pytest',
+    'setuptools',
+    'pip',
+    'distutils',
+]
 
 a = Analysis(
     ['main.py'],
@@ -86,7 +111,7 @@ a = Analysis(
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=[],
+    excludes=excluded_modules,
     noarchive=False,
     optimize=0,
 )

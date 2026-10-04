@@ -58,6 +58,9 @@ def get_executable_command() -> str:
         return f'"{exe_path}"'
 
     # 2. Check if a compiled dist executable already exists in the project
+    maze_exe = os.path.join(app_dir, "dist", "CognitiveMaze", "CognitiveMaze.exe")
+    if os.path.exists(maze_exe):
+        return f'"{os.path.abspath(maze_exe)}"'
     dist_exe = os.path.join(app_dir, "dist", "CognitivePlay", "CognitivePlay.exe")
     if os.path.exists(dist_exe):
         return f'"{os.path.abspath(dist_exe)}"'
