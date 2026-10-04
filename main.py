@@ -17,13 +17,23 @@ except Exception as e:
 if app_dir not in sys.path:
     sys.path.insert(0, app_dir)
 
-# Reconfigure stdout and stderr to UTF-8 to support emojis and prevent crashes on Windows consoles
-if sys.stdout is not None:
+# Safe stdout/stderr redirection for GUI windowed executables
+class NullWriter:
+    def write(self, s): pass
+    def flush(self): pass
+    def reconfigure(self, **kwargs): pass
+
+if sys.stdout is None:
+    sys.stdout = NullWriter()
+else:
     try:
         sys.stdout.reconfigure(encoding='utf-8', errors='replace')
     except Exception:
         pass
-if sys.stderr is not None:
+
+if sys.stderr is None:
+    sys.stderr = NullWriter()
+else:
     try:
         sys.stderr.reconfigure(encoding='utf-8', errors='replace')
     except Exception:
