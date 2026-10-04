@@ -1,6 +1,9 @@
 import os
+import sys
 import unittest
 import pygame
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # Headless video driver
 os.environ['SDL_VIDEODRIVER'] = 'dummy'
@@ -11,10 +14,10 @@ class TestMainMenuStudentDisplay(unittest.TestCase):
     def setUpClass(cls):
         pygame.init()
         cls.screen = pygame.display.set_mode((1280, 720))
+        from screens.main_menu import MainMenu
+        cls.menu = MainMenu(cls.screen)
 
     def setUp(self):
-        from screens.main_menu import MainMenu
-        self.menu = MainMenu(self.screen)
         self.menu.dialogue_active = False
 
     def test_no_student_no_card(self):

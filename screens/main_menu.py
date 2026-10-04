@@ -20,7 +20,7 @@ import time
 import math
 import threading
 from core.audio_manager import audio_manager
-from core.cursor_system import OneEuroFilter
+from core.cursor_system import OneEuroFilter, game_cursor
 from ui.button import Button
 from screens.stageselect import StageSelect
 from screens.studentselect import StudentSelect
@@ -110,10 +110,21 @@ class MainMenu:
         self.click_ready = False
         self.popup_state = None
 
-        # Cursor smoothing & jitter suppression
+        # Cursor sensitivity, active camera bounds & jitter suppression
+        self.cursor_sensitivity = 1.6
+        self.cam_x_min = 0.20
+        self.cam_x_max = 0.80
+        self.cam_y_min = 0.18
+        self.cam_y_max = 0.82
+
         self.cursor_x = float(self.w // 2)
         self.cursor_y = float(self.h // 2)
         self.target_history = []
+        self.hand_was_detected = False
+
+        # OneEuroFilter for instant response without high-frequency jitter
+        self.cursor_filter_x = OneEuroFilter(t0=time.time(), x0=self.cursor_x, min_cutoff=0.85, beta=0.03, d_cutoff=1.0)
+        self.cursor_filter_y = OneEuroFilter(t0=time.time(), x0=self.cursor_y, min_cutoff=0.85, beta=0.03, d_cutoff=1.0)
 
         # Store last cursor position for when hand is lost
         self.last_cursor_x = self.w // 2
@@ -122,6 +133,12 @@ class MainMenu:
         # Hand grace period
         self.last_hand_time = time.time()
         self.HAND_GRACE = 1.0  # Keep cursor for 1 second after hand lost
+
+        # Mouse activity tracking (only show mouse cursor when mouse is moved)
+        self.mouse_active = False
+        self.last_mouse_pos = pygame.mouse.get_pos()
+        self.last_mouse_move_time = 0.0
+        self.MOUSE_IDLE_TIMEOUT = 3.0  # Hide mouse cursor after 3 seconds of inactivity when no hand is present
 
         # ==========================================
         # STUDENT
@@ -269,23 +286,70 @@ class MainMenu:
     # SIMPLE FIST DETECTION (USING FINGER TIPS)
     # ==========================================
 
+    def _get_lm(self, hand_data, idx):
+        """Extract (x, y) landmark coordinates from either list or MediaPipe structure"""
+        if isinstance(hand_data, list):
+            return hand_data[idx][0], hand_data[idx][1]
+        return hand_data.landmark[idx].x, hand_data.landmark[idx].y
+
     def is_fist(self, hand_data):
-        """Detect closed fist (all fingers folded into palm)"""
+        """Detect closed fist (at least 3 of 4 fingers tightly curled into palm)"""
         if hand_data is None:
             return False
         try:
-            if isinstance(hand_data, list):
-                wrist = hand_data[0]
-                knuckle_dists = [math.hypot(hand_data[k][0] - wrist[0], hand_data[k][1] - wrist[1]) for k in [6, 10, 14, 18]]
-                tip_dists = [math.hypot(hand_data[t][0] - wrist[0], hand_data[t][1] - wrist[1]) for t in [8, 12, 16, 20]]
-            else:
-                wrist = (hand_data.landmark[0].x, hand_data.landmark[0].y)
-                knuckle_dists = [math.hypot(hand_data.landmark[k].x - wrist[0], hand_data.landmark[k].y - wrist[1]) for k in [6, 10, 14, 18]]
-                tip_dists = [math.hypot(hand_data.landmark[t].x - wrist[0], hand_data.landmark[t].y - wrist[1]) for t in [8, 12, 16, 20]]
+            wx, wy = self._get_lm(hand_data, 0)
+            m9x, m9y = self._get_lm(hand_data, 9)
+            palm_size = max(0.01, math.hypot(m9x - wx, m9y - wy))
 
-            # A finger is truly folded/closed if its tip is closer to the wrist than its middle knuckle
-            closed_fingers = [tip_dists[i] < knuckle_dists[i] * 1.05 for i in range(4)]
-            return sum(closed_fingers) >= 3
+            closed_count = 0
+            for mcp_i, pip_i, dip_i, tip_i in [(5, 6, 7, 8), (9, 10, 11, 12), (13, 14, 15, 16), (17, 18, 19, 20)]:
+                mx, my = self._get_lm(hand_data, mcp_i)
+                px, py = self._get_lm(hand_data, pip_i)
+                dx, dy = self._get_lm(hand_data, dip_i)
+                tx, ty = self._get_lm(hand_data, tip_i)
+
+                d_wrist_tip = math.hypot(tx - wx, ty - wy)
+                d_wrist_dip = math.hypot(dx - wx, dy - wy)
+                d_wrist_pip = math.hypot(px - wx, py - wy)
+                d_mcp_tip = math.hypot(tx - mx, ty - my)
+
+                # In a real closed fist, the tip is curled tightly into the palm:
+                # 1. Tip is tucked close to MCP base (d_mcp_tip < 0.48 * palm_size), OR
+                # 2. Tip is curled past DIP joint toward the wrist AND close to palm
+                is_closed = (d_mcp_tip < palm_size * 0.48) or (
+                    d_wrist_tip < d_wrist_dip * 0.98 and d_wrist_tip < d_wrist_pip * 0.98 and d_mcp_tip < palm_size * 0.58
+                )
+                if is_closed:
+                    closed_count += 1
+
+            return closed_count >= 3
+        except Exception:
+            return False
+
+    def is_open_hand(self, hand_data):
+        """Detect open hand (at least 3 fingers extended away from palm)"""
+        if hand_data is None:
+            return False
+        try:
+            wx, wy = self._get_lm(hand_data, 0)
+            m9x, m9y = self._get_lm(hand_data, 9)
+            palm_size = max(0.01, math.hypot(m9x - wx, m9y - wy))
+
+            open_count = 0
+            for mcp_i, pip_i, dip_i, tip_i in [(5, 6, 7, 8), (9, 10, 11, 12), (13, 14, 15, 16), (17, 18, 19, 20)]:
+                mx, my = self._get_lm(hand_data, mcp_i)
+                px, py = self._get_lm(hand_data, pip_i)
+                dx, dy = self._get_lm(hand_data, dip_i)
+                tx, ty = self._get_lm(hand_data, tip_i)
+
+                d_wrist_tip = math.hypot(tx - wx, ty - wy)
+                d_wrist_pip = math.hypot(px - wx, py - wy)
+                d_mcp_tip = math.hypot(tx - mx, ty - my)
+
+                if d_wrist_tip > d_wrist_pip * 1.04 and d_mcp_tip > palm_size * 0.52:
+                    open_count += 1
+
+            return open_count >= 3
         except Exception:
             return False
 
@@ -294,18 +358,24 @@ class MainMenu:
         if hand_data is None:
             return False
         try:
-            if isinstance(hand_data, list):
-                wrist = hand_data[0]
-                knuckle_dists = [math.hypot(hand_data[k][0] - wrist[0], hand_data[k][1] - wrist[1]) for k in [6, 10, 14, 18]]
-                tip_dists = [math.hypot(hand_data[t][0] - wrist[0], hand_data[t][1] - wrist[1]) for t in [8, 12, 16, 20]]
-            else:
-                wrist = (hand_data.landmark[0].x, hand_data.landmark[0].y)
-                knuckle_dists = [math.hypot(hand_data.landmark[k].x - wrist[0], hand_data.landmark[k].y - wrist[1]) for k in [6, 10, 14, 18]]
-                tip_dists = [math.hypot(hand_data.landmark[t].x - wrist[0], hand_data.landmark[t].y - wrist[1]) for t in [8, 12, 16, 20]]
+            wx, wy = self._get_lm(hand_data, 0)
+            m9x, m9y = self._get_lm(hand_data, 9)
+            palm_size = max(0.01, math.hypot(m9x - wx, m9y - wy))
 
-            # Index and Middle open, Ring and Pinky closed
-            closed_fingers = [tip_dists[i] < knuckle_dists[i] * 1.05 for i in range(4)]
-            return (not closed_fingers[0]) and (not closed_fingers[1]) and closed_fingers[2] and closed_fingers[3]
+            extended = []
+            for mcp_i, pip_i, dip_i, tip_i in [(5, 6, 7, 8), (9, 10, 11, 12), (13, 14, 15, 16), (17, 18, 19, 20)]:
+                mx, my = self._get_lm(hand_data, mcp_i)
+                px, py = self._get_lm(hand_data, pip_i)
+                dx, dy = self._get_lm(hand_data, dip_i)
+                tx, ty = self._get_lm(hand_data, tip_i)
+
+                d_wrist_tip = math.hypot(tx - wx, ty - wy)
+                d_wrist_pip = math.hypot(px - wx, py - wy)
+                d_mcp_tip = math.hypot(tx - mx, ty - my)
+
+                extended.append(d_wrist_tip > d_wrist_pip * 1.04 and d_mcp_tip > palm_size * 0.52)
+
+            return extended[0] and extended[1] and (not extended[2]) and (not extended[3])
         except Exception:
             return False
 
@@ -352,8 +422,13 @@ class MainMenu:
     def update_gesture(self):
         """Update gesture detection - Instant read from threaded worker (0ms latency, 60 FPS)"""
         if self.cap is None or not self.cap.isOpened():
-            mouse_x, mouse_y = pygame.mouse.get_pos()
-            self.cursor_pos = (mouse_x, mouse_y)
+            if getattr(self, 'mouse_active', False):
+                if time.time() - getattr(self, 'last_mouse_move_time', 0.0) <= self.MOUSE_IDLE_TIMEOUT:
+                    curr_m = pygame.mouse.get_pos()
+                    self.cursor_pos = curr_m
+                    self.cursor_x, self.cursor_y = float(curr_m[0]), float(curr_m[1])
+                else:
+                    self.mouse_active = False
             game_cursor.update(self.cursor_pos, "NO HAND", 0, self.CLICK_HOLD_TIME, 0)
             return
 
@@ -368,6 +443,9 @@ class MainMenu:
 
             if hand_detected and hand_coords and len(hand_coords) == 21:
                 self.last_hand_time = time.time()
+                now_t = time.time()
+                self.mouse_active = False
+                self.last_mouse_pos = pygame.mouse.get_pos()
 
                 # 1. Use Stable Palm Center (blend between wrist 0 and middle MCP 9)
                 wrist = hand_coords[0]
@@ -375,52 +453,64 @@ class MainMenu:
                 palm_x = wrist[0] * 0.35 + knuckle[0] * 0.65
                 palm_y = wrist[1] * 0.35 + knuckle[1] * 0.65
 
-                # Map palm position to screen coordinates with slight edge padding
-                raw_target_x = float(np.interp(palm_x, [0.12, 0.88], [0, self.w]))
-                raw_target_y = float(np.interp(palm_y, [0.12, 0.88], [0, self.h]))
+                # Map palm position to screen coordinates with increased sensitivity bounds
+                target_x = float(np.interp(palm_x, [self.cam_x_min, self.cam_x_max], [0, self.w]))
+                target_y = float(np.interp(palm_y, [self.cam_y_min, self.cam_y_max], [0, self.h]))
 
-                # 2. Rolling 3-frame filter to reject high-frequency sensor noise outliers
-                if not hasattr(self, 'target_history'):
-                    self.target_history = []
-                self.target_history.append((raw_target_x, raw_target_y))
-                if len(self.target_history) > 3:
-                    self.target_history.pop(0)
+                # If hand was just detected after a break, snap filter immediately
+                if not getattr(self, 'hand_was_detected', False):
+                    self.cursor_filter_x.reset(now_t, target_x)
+                    self.cursor_filter_y.reset(now_t, target_y)
+                    self.cursor_x = target_x
+                    self.cursor_y = target_y
+                    self.hand_was_detected = True
 
-                target_x = sum(p[0] for p in self.target_history) / len(self.target_history)
-                target_y = sum(p[1] for p in self.target_history) / len(self.target_history)
+                # Apply OneEuroFilter for instant zero-lag responsiveness and high-frequency jitter removal
+                filtered_target_x = self.cursor_filter_x(now_t, target_x)
+                filtered_target_y = self.cursor_filter_y(now_t, target_y)
 
-                # 3. Distance from current smoothed cursor
-                dx = target_x - self.cursor_x
-                dy = target_y - self.cursor_y
+                # Distance from current smoothed cursor
+                dx = filtered_target_x - self.cursor_x
+                dy = filtered_target_y - self.cursor_y
                 dist = math.hypot(dx, dy)
 
-                # Detect gestures first so we can stabilize the cursor during clicks
+                # Detect gestures with relative palm scaling
                 fist_detected = self.is_fist(hand_coords)
-                peace_detected = self.is_peace_sign(hand_coords)
+                open_detected = self.is_open_hand(hand_coords)
+                peace_detected = self.is_peace_sign(hand_coords) if (not fist_detected and not open_detected) else False
 
-                # 4. Adaptive Jitter Deadzone & Silk-Smooth Interpolation
+                # Adaptive Jitter Deadzone & High-Sensitivity Dynamic Interpolation
                 if fist_detected:
-                    # Click Stabilization: when holding a fist, lock cursor still to prevent drifting off buttons!
-                    if dist < 12.0:
-                        smooth = 0.0  # Rock-solid lock on target
+                    if self.current_screen == "student_select":
+                        # In student select, enable smooth fluid movement for dragging and scrolling
+                        if dist < 4.0:
+                            smooth = 0.0
+                        elif dist < 16.0:
+                            smooth = 0.70
+                        else:
+                            smooth = 0.92
                     else:
-                        smooth = 0.06
-                elif dist < 4.5:
-                    # Deadzone: eliminate camera micro-tremors completely when hand is held steady
+                        # Click Stabilization: when holding a fist on buttons, lock cursor still to prevent drifting
+                        if dist < 14.0:
+                            smooth = 0.0  # Rock-solid lock on target button
+                        else:
+                            smooth = 0.60 # Snappy repositioning even while holding fist
+                elif dist < 2.0:
+                    # Micro-deadzone: eliminates sensor noise when hand is held steady
                     smooth = 0.0
-                elif dist < 15.0:
-                    # Precision aim zone (hovering over buttons): silk-smooth interpolation
-                    smooth = 0.12
-                elif dist < 50.0:
-                    # Normal movement: fluid and natural
-                    smooth = 0.28
+                elif dist < 12.0:
+                    # Precision aim zone (hovering over buttons): snappy yet smooth
+                    smooth = 0.55
+                elif dist < 40.0:
+                    # Normal movement: fluid, swift, and highly sensitive
+                    smooth = 0.85
                 else:
-                    # Fast swipe: immediate responsive tracking
-                    smooth = 0.52
+                    # Fast swipe / flick: immediate 1:1 snap
+                    smooth = 0.98
 
                 if smooth > 0.0:
-                    self.cursor_x = self.cursor_x * (1 - smooth) + target_x * smooth
-                    self.cursor_y = self.cursor_y * (1 - smooth) + target_y * smooth
+                    self.cursor_x = self.cursor_x * (1 - smooth) + filtered_target_x * smooth
+                    self.cursor_y = self.cursor_y * (1 - smooth) + filtered_target_y * smooth
 
                 # Clamp cursor within window
                 self.cursor_x = max(0.0, min(float(self.w), self.cursor_x))
@@ -431,22 +521,26 @@ class MainMenu:
                 self.last_cursor_x = self.cursor_x
                 self.last_cursor_y = self.cursor_y
 
-                if fist_detected:
-                    if self.fist_start_time == 0:
+                # Deadlock-free gesture & click state machine
+                if not fist_detected:
+                    # Whenever fist is opened or released, immediately unlock click readiness
+                    if self.fist_start_time != 0 or self.click_ready:
+                        print("[HAND] Fist released - gesture & click lock reset")
+                    self.fist_start_time = 0
+                    self.click_ready = False
+                    self.last_fist_time = 0
+                else:
+                    self.last_fist_time = time.time()
+                    if self.fist_start_time == 0 and not self.click_ready:
                         self.fist_start_time = time.time()
                         print("[FIST] Fist detected! Hold to click...")
 
-                    hold_time = time.time() - self.fist_start_time
-
-                    if hold_time >= self.CLICK_HOLD_TIME and not self.click_ready:
-                        self.click_ready = True
-                        print(f"[OK] CLICK! (Held for {hold_time:.1f}s)")
-                        self.trigger_click()
-                else:
-                    if self.fist_start_time != 0:
-                        print("[HAND] Fist released")
-                    self.fist_start_time = 0
-                    self.click_ready = False
+                    if self.fist_start_time > 0:
+                        hold_time = time.time() - self.fist_start_time
+                        if hold_time >= self.CLICK_HOLD_TIME and not self.click_ready:
+                            self.click_ready = True
+                            print(f"[OK] CLICK! (Held for {hold_time:.1f}s)")
+                            self.trigger_click()
 
                 if peace_detected:
                     if self.peace_start_time == 0:
@@ -454,7 +548,8 @@ class MainMenu:
                         print("[PEACE] Peace sign detected! Hold to pause/trigger...")
 
                     hold_time = time.time() - self.peace_start_time
-                    if hold_time >= self.CLICK_HOLD_TIME:
+                    if hold_time >= self.CLICK_HOLD_TIME and not getattr(self, 'peace_ready', False):
+                        self.peace_ready = True
                         self.peace_start_time = 0
                         # When in active gameplay stage, pop up the universal in-game pause menu!
                         if self.current_screen in ["quarter1", "quarter2", "quarter3", "quarter4", "tutorial"]:
@@ -462,20 +557,19 @@ class MainMenu:
                             if active_stage and hasattr(active_stage, 'pause_menu'):
                                 active_stage.pause_menu.toggle_pause()
                                 print(f"[PAUSE] Toggled in-game pause menu via Peace Sign on {self.current_screen} (is_paused={active_stage.pause_menu.is_paused})")
-                        else:
+                        elif self.current_screen == "menu":
                             if not self.popup_state:
-                                if self.current_screen == "menu":
-                                    self.popup_state = "confirm_exit"
-                                else:
-                                    self.popup_state = "confirm_menu"
+                                self.popup_state = "confirm_exit"
                                 print(f"[OK] PEACE SIGN TRIGGERED! Popup state: {self.popup_state}")
                 else:
                     self.peace_start_time = 0
+                    self.peace_ready = False
 
                 self.current_gesture = "FIST" if fist_detected else ("PEACE" if peace_detected else "OPEN")
 
             # HAND GRACE PERIOD - keep cursor position for a while after hand is lost
             else:
+                self.hand_was_detected = False
                 elapsed = time.time() - self.last_hand_time
                 if elapsed < self.HAND_GRACE:
                     # Keep last cursor position
@@ -486,10 +580,15 @@ class MainMenu:
                     self.fist_start_time = 0
                     self.peace_start_time = 0
                     self.click_ready = False
-                    if pygame.mouse.get_focused():
-                        m_pos = pygame.mouse.get_pos()
-                        self.cursor_pos = m_pos
-                        self.cursor_x, self.cursor_y = float(m_pos[0]), float(m_pos[1])
+
+                    # DO NOT automatically use mouse! Only activate if physical mouse moved!
+                    if getattr(self, 'mouse_active', False):
+                        if time.time() - getattr(self, 'last_mouse_move_time', 0.0) <= self.MOUSE_IDLE_TIMEOUT:
+                            curr_m = pygame.mouse.get_pos()
+                            self.cursor_pos = curr_m
+                            self.cursor_x, self.cursor_y = float(curr_m[0]), float(curr_m[1])
+                        else:
+                            self.mouse_active = False
 
             # Update GameCursor with newest state
             game_cursor.update(
@@ -1125,16 +1224,22 @@ class MainMenu:
 
     def show_leaderboard(self):
         print("[TROPHY] LEADERBOARD clicked! Loading Hall of Fame rankings...")
+        self.fist_start_time = 0
+        self.click_ready = True
         self.current_screen = "leaderboard"
         self.leaderboard = LeaderboardScreen(self.screen, self)
 
     def select_student(self):
         print(f"[DATA] SELECT STUDENT clicked!")
+        self.fist_start_time = 0
+        self.click_ready = True
         self.current_screen = "student_select"
         self.student_select = StudentSelect(self.screen, self)
 
     def start_activity(self):
         print(f"[GAME] START ACTIVITY clicked!")
+        self.fist_start_time = 0
+        self.click_ready = False
         if not self.selected_student:
             if hasattr(self, 'audio_manager') and self.audio_manager:
                 self.audio_manager.play_sfx("wrong")
@@ -1164,6 +1269,8 @@ class MainMenu:
 
     def continue_activity(self):
         print("[GAME] CONTINUE ACTIVITY clicked!")
+        self.fist_start_time = 0
+        self.click_ready = False
         if not self.selected_student:
             if hasattr(self, 'audio_manager') and self.audio_manager:
                 self.audio_manager.play_sfx("wrong")
@@ -1251,9 +1358,10 @@ class MainMenu:
                     self.sound_btn.text = f"SETTINGS ({sound_text})"
                     self.sound_btn.text_color = (255, 215, 0) if not is_muted else (239, 68, 68)
 
-                # Update button hover states
+                # Update button hover states (only when hand or active mouse is present)
+                is_cursor_active = (self.current_gesture in ["FIST", "OPEN", "PEACE", "NO HAND (GRACE)"]) or getattr(self, 'mouse_active', False)
                 for b in self.buttons:
-                    b.hovered = b.rect.collidepoint(self.cursor_pos)
+                    b.hovered = is_cursor_active and b.rect.collidepoint(self.cursor_pos)
 
         elif self.current_screen == "stage_select" and self.stage_select:
             self.update_gesture()
@@ -1264,7 +1372,7 @@ class MainMenu:
                     self.CLICK_HOLD_TIME,
                     self.current_gesture
                 )
-                if not self.popup_state:
+                if not self.popup_state and self.stage_select:
                     self.stage_select.update()
 
         elif self.current_screen == "student_select" and self.student_select:
@@ -1276,7 +1384,7 @@ class MainMenu:
                     self.CLICK_HOLD_TIME,
                     self.current_gesture
                 )
-                if not self.popup_state:
+                if not self.popup_state and self.student_select:
                     self.student_select.update()
 
         elif self.current_screen == "tutorial" and self.tutorial:
@@ -1288,7 +1396,7 @@ class MainMenu:
                     self.CLICK_HOLD_TIME,
                     self.current_gesture
                 )
-                if not self.popup_state:
+                if not self.popup_state and self.tutorial:
                     self.tutorial.update()
 
         elif self.current_screen == "quarter1" and self.quarter1:
@@ -1300,7 +1408,7 @@ class MainMenu:
                     self.CLICK_HOLD_TIME,
                     self.current_gesture
                 )
-                if not self.popup_state:
+                if not self.popup_state and self.quarter1:
                     self.quarter1.update()
 
         elif self.current_screen == "quarter2" and self.quarter2:
@@ -1312,7 +1420,7 @@ class MainMenu:
                     self.CLICK_HOLD_TIME,
                     self.current_gesture
                 )
-                if not self.popup_state:
+                if not self.popup_state and self.quarter2:
                     self.quarter2.update()
 
         elif self.current_screen == "quarter3" and self.quarter3:
@@ -1324,7 +1432,7 @@ class MainMenu:
                     self.CLICK_HOLD_TIME,
                     self.current_gesture
                 )
-                if not self.popup_state:
+                if not self.popup_state and self.quarter3:
                     self.quarter3.update()
 
         elif self.current_screen == "quarter4" and self.quarter4:
@@ -1336,7 +1444,7 @@ class MainMenu:
                     self.CLICK_HOLD_TIME,
                     self.current_gesture
                 )
-                if not self.popup_state:
+                if not self.popup_state and self.quarter4:
                     self.quarter4.update()
 
         elif self.current_screen == "leaderboard" and self.leaderboard:
@@ -1348,7 +1456,7 @@ class MainMenu:
                     self.CLICK_HOLD_TIME,
                     self.current_gesture
                 )
-                if not self.popup_state:
+                if not self.popup_state and self.leaderboard:
                     self.leaderboard.update()
 
     def handle_event(self, event):
@@ -1370,8 +1478,13 @@ class MainMenu:
 
         # Always synchronize mouse coordinates on hardware mouse motion and clicks
         if event.type in [pygame.MOUSEMOTION, pygame.MOUSEBUTTONDOWN]:
-            self.cursor_pos = event.pos
-            self.cursor_x, self.cursor_y = float(event.pos[0]), float(event.pos[1])
+            if event.type == pygame.MOUSEBUTTONDOWN or (hasattr(event, 'rel') and (event.rel[0] != 0 or event.rel[1] != 0)):
+                self.mouse_active = True
+                self.last_mouse_move_time = time.time()
+                self.last_mouse_pos = event.pos
+                if self.current_gesture == "NO HAND":
+                    self.cursor_pos = event.pos
+                    self.cursor_x, self.cursor_y = float(event.pos[0]), float(event.pos[1])
 
         # If popup is active, intercept clicks and key events!
         if self.popup_state:
@@ -1695,8 +1808,8 @@ class MainMenu:
                 color = (255, 255, 255)  # White normally
                 pygame.draw.circle(self.screen, color, self.cursor_pos, 15, 2)
                 pygame.draw.circle(self.screen, (255, 100, 100), self.cursor_pos, 4)
-        else:
-            # Clean, always-visible mouse / targeting cursor so cursor never disappears!
+        elif getattr(self, 'mouse_active', False):
+            # Only draw mouse / targeting crosshair when physical mouse has actually moved!
             pygame.draw.circle(self.screen, (255, 255, 255), self.cursor_pos, 13, 2)
             pygame.draw.circle(self.screen, (56, 189, 248), self.cursor_pos, 4)
             # Subtle crosshair pings
@@ -1705,6 +1818,9 @@ class MainMenu:
             pygame.draw.line(self.screen, (255, 255, 255), (cx + 13, cy), (cx + 17, cy), 2)
             pygame.draw.line(self.screen, (255, 255, 255), (cx, cy - 17), (cx, cy - 13), 2)
             pygame.draw.line(self.screen, (255, 255, 255), (cx, cy + 13), (cx, cy + 17), 2)
+        else:
+            # No hand detected and mouse is idle: do NOT draw any cursor
+            pass
 
     def draw(self):
         if self.current_screen == "menu":

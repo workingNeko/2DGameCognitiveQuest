@@ -1,7 +1,7 @@
 {
     "student_id": "S-2024-006",
     "selected_student": {
-        "id": 6,
+        "id": 23,
         "student_id": "S-2024-006",
         "first_name": "Elena Ramos",
         "last_name": "",
@@ -11,5 +11,7 @@
         "gender": "female"
     },
     "current_screen": "menu",
-    "timestamp": 1788093406.1273205
+    "tutorial_completed": false,
+    "completed_quarters": {},
+    "timestamp": 1791097889.4837718
 }

@@ -1,7 +1,7 @@
 {
     "student_id": "S-2024-003",
     "selected_student": {
-        "id": 3,
+        "id": 20,
         "student_id": "S-2024-003",
         "first_name": "Pedro Garcia",
         "last_name": "",
@@ -10,17 +10,8 @@
         "level": "Grade 2",
         "gender": "male"
     },
-    "current_screen": "stage_select",
+    "current_screen": "menu",
     "tutorial_completed": true,
     "completed_quarters": {},
-    "timestamp": 1790754055.8364246,
-    "stage_select": {
-        "player_x": 1420.0,
-        "player_y": 416,
-        "oldman_dialogue_state": 0,
-        "knight_dialogue_state": 0,
-        "skeleton_dialogue_state": 2,
-        "bromen_dialogue_state": 0,
-        "player_following_target": false
-    }
+    "timestamp": 1791101183.637155
 }

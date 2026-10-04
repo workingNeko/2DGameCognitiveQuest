@@ -186,9 +186,14 @@ def test_original_game_cursor_rendering():
     test_surf = pygame.Surface((1024, 768))
     menu = MainMenu(test_surf)
 
-    # 1. Mouse / NO HAND mode
+    # 1. Mouse / NO HAND mode (idle mouse -> cursor not drawn)
     menu.current_gesture = "NO HAND"
+    menu.mouse_active = False
     menu.cursor_pos = (512, 384)
+    menu.draw_cursor()
+
+    # 1b. Mouse active when physical mouse moved
+    menu.mouse_active = True
     menu.draw_cursor()
 
     # 2. OPEN hand mode
@@ -206,6 +211,31 @@ def test_original_game_cursor_rendering():
     menu.current_gesture = "PEACE"
     menu.peace_start_time = time.time() - 0.45
     menu.draw_cursor()
+
+
+def test_mouse_inactivity_when_no_hand():
+    from screens.main_menu import MainMenu
+    test_surf = pygame.Surface((1024, 768))
+    menu = MainMenu(test_surf)
+
+    # When no hand is detected and no mouse motion has happened:
+    menu.mouse_active = False
+    menu.current_gesture = "NO HAND"
+    assert menu.mouse_active is False
+
+    # Simulate mouse motion event
+    event = pygame.event.Event(pygame.MOUSEMOTION, pos=(600, 400), rel=(10, 10), buttons=(0, 0, 0))
+    menu.handle_event(event)
+    assert menu.mouse_active is True
+    assert menu.cursor_pos == (600, 400)
+
+    # Simulate idle timeout expiration
+    menu.last_hand_time = time.time() - 5.0
+    menu.last_mouse_move_time = time.time() - 5.0
+    menu.update_gesture()
+    assert menu.mouse_active is False
+    print("PASS: When no hand is detected, mouse cursor only activates upon physical mouse motion and stays hidden when idle.")
+
 
 def test_one_euro_filter_stability_and_responsiveness():
     from core.cursor_system import OneEuroFilter
@@ -258,6 +288,139 @@ def test_curl_invariant_palm_tracking():
     print("PASS: Curl-invariant palm centroid and 1-Euro filter tracking execute accurately.")
 
 
+def test_gesture_open_and_close_fist_cycle():
+    from screens.main_menu import MainMenu
+    test_surf = pygame.Surface((1024, 768))
+    menu = MainMenu(test_surf)
+
+    # 1. Open hand coordinates: fingers extended upwards far from wrist
+    open_coords = [(0.5, 0.7)] * 21  # Wrist at y=0.7
+    open_coords[0] = (0.5, 0.7)      # Wrist
+    open_coords[9] = (0.5, 0.5)      # Middle MCP (palm_size = 0.2)
+    # Fingers extended up to y=0.25
+    for mcp_i, pip_i, dip_i, tip_i in [(5, 6, 7, 8), (9, 10, 11, 12), (13, 14, 15, 16), (17, 18, 19, 20)]:
+        open_coords[mcp_i] = (0.5, 0.50)
+        open_coords[pip_i] = (0.5, 0.40)
+        open_coords[dip_i] = (0.5, 0.32)
+        open_coords[tip_i] = (0.5, 0.25)
+
+    assert menu.is_open_hand(open_coords) is True
+    assert menu.is_fist(open_coords) is False
+
+    # 2. Fist coordinates: fingertips curled tightly into palm (tips closer to wrist/MCP)
+    fist_coords = [(0.5, 0.7)] * 21
+    fist_coords[0] = (0.5, 0.7)
+    fist_coords[9] = (0.5, 0.5)
+    for mcp_i, pip_i, dip_i, tip_i in [(5, 6, 7, 8), (9, 10, 11, 12), (13, 14, 15, 16), (17, 18, 19, 20)]:
+        fist_coords[mcp_i] = (0.5, 0.50)
+        fist_coords[pip_i] = (0.5, 0.44)
+        fist_coords[dip_i] = (0.5, 0.47)
+        fist_coords[tip_i] = (0.5, 0.52) # Curled down near MCP base
+
+    assert menu.is_fist(fist_coords) is True
+    assert menu.is_open_hand(fist_coords) is False
+
+    class MockCap:
+        def isOpened(self):
+            return True
+
+    menu.cap = MockCap()
+    clicked_count = [0]
+    menu.trigger_click = lambda pos=None: clicked_count.__setitem__(0, clicked_count[0] + 1)
+
+    # Cycle 1: Make Fist
+    with menu.camera_lock:
+        menu.latest_hand_coords = fist_coords
+        menu.latest_hand_detected = True
+
+    menu.update_gesture()
+    assert menu.fist_start_time > 0
+    assert menu.click_ready is False
+
+    # Hold Fist to trigger click
+    menu.fist_start_time = time.time() - 1.0  # Simulated 1.0s hold
+    menu.update_gesture()
+    assert clicked_count[0] == 1
+    assert menu.click_ready is True
+
+    # Cycle 2: Open Hand -> MUST reset click state immediately
+    with menu.camera_lock:
+        menu.latest_hand_coords = open_coords
+        menu.latest_hand_detected = True
+
+    menu.update_gesture()
+    assert menu.fist_start_time == 0
+    assert menu.click_ready is False
+    assert menu.current_gesture == "OPEN"
+
+    # Cycle 3: Close Hand into Fist AGAIN -> MUST detect new fist and start charging without locking
+    with menu.camera_lock:
+        menu.latest_hand_coords = fist_coords
+        menu.latest_hand_detected = True
+
+    menu.update_gesture()
+    assert menu.fist_start_time > 0
+    assert menu.click_ready is False
+    assert menu.current_gesture == "FIST"
+
+    # Hold again -> triggers 2nd click!
+    menu.fist_start_time = time.time() - 1.0
+    menu.update_gesture()
+    assert clicked_count[0] == 2
+    assert menu.click_ready is True
+    print("PASS: Hand open-to-close gesture cycle successfully triggers repeated clicks without sticking.")
+
+
+def test_half_closed_hand_not_detected_as_fist():
+    from screens.main_menu import MainMenu
+    test_surf = pygame.Surface((1024, 768))
+    menu = MainMenu(test_surf)
+
+    # Half-closed / relaxed hand: fingers slightly curved, tips still extending past DIP
+    half_coords = [(0.5, 0.7)] * 21
+    half_coords[0] = (0.5, 0.7)
+    half_coords[9] = (0.5, 0.5) # palm_size = 0.20
+    for mcp_i, pip_i, dip_i, tip_i in [(5, 6, 7, 8), (9, 10, 11, 12), (13, 14, 15, 16), (17, 18, 19, 20)]:
+        half_coords[mcp_i] = (0.5, 0.50)
+        half_coords[pip_i] = (0.5, 0.42)
+        half_coords[dip_i] = (0.5, 0.38)
+        half_coords[tip_i] = (0.5, 0.36) # Relaxed / half-closed curve
+
+    # Must NOT be detected as a fist!
+    assert menu.is_fist(half_coords) is False
+    print("PASS: Half-closed / relaxed hand is properly rejected and not detected as a fist.")
+
+
+def test_scale_invariance_fist_and_open():
+    from screens.main_menu import MainMenu
+    test_surf = pygame.Surface((1024, 768))
+    menu = MainMenu(test_surf)
+
+    # Test small hand (distant camera, palm span = 0.08)
+    small_fist = [(0.5, 0.6)] * 21
+    small_fist[0] = (0.5, 0.6)
+    small_fist[9] = (0.5, 0.52)
+    for mcp_i, pip_i, dip_i, tip_i in [(5, 6, 7, 8), (9, 10, 11, 12), (13, 14, 15, 16), (17, 18, 19, 20)]:
+        small_fist[mcp_i] = (0.5, 0.52)
+        small_fist[pip_i] = (0.5, 0.49)
+        small_fist[dip_i] = (0.5, 0.51)
+        small_fist[tip_i] = (0.5, 0.53)
+
+    assert menu.is_fist(small_fist) is True
+
+    small_open = [(0.5, 0.6)] * 21
+    small_open[0] = (0.5, 0.6)
+    small_open[9] = (0.5, 0.52)
+    for mcp_i, pip_i, dip_i, tip_i in [(5, 6, 7, 8), (9, 10, 11, 12), (13, 14, 15, 16), (17, 18, 19, 20)]:
+        small_open[mcp_i] = (0.5, 0.52)
+        small_open[pip_i] = (0.5, 0.48)
+        small_open[dip_i] = (0.5, 0.45)
+        small_open[tip_i] = (0.5, 0.42)
+
+    assert menu.is_open_hand(small_open) is True
+    print("PASS: Fist and open-hand gesture detection are scale-invariant across distances.")
+
+
 if __name__ == "__main__":
     print("--- RUNNING LOL CAMERA & GAME CURSOR UNIT TESTS ---")
     test_lol_camera_init_and_snap()
@@ -268,6 +431,10 @@ if __name__ == "__main__":
     test_lol_camera_middle_mouse_drag()
     test_lol_camera_coordinate_transformations()
     test_original_game_cursor_rendering()
+    test_mouse_inactivity_when_no_hand()
     test_one_euro_filter_stability_and_responsiveness()
     test_curl_invariant_palm_tracking()
-    print("--- ALL CAMERA & ORIGINAL CURSOR UNIT TESTS PASSED (10/10) ---")
+    test_gesture_open_and_close_fist_cycle()
+    test_half_closed_hand_not_detected_as_fist()
+    test_scale_invariance_fist_and_open()
+    print("--- ALL CAMERA & ORIGINAL CURSOR UNIT TESTS PASSED (14/14) ---")

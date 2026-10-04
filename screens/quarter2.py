@@ -4279,8 +4279,8 @@ class Quarter2:
 
         # Draw Knight Portal Guardian
         self.draw_knight_guardian()
-        if self.quiz_state == 6 and getattr(self, 'knight_guardian_active', True):
-            draw_beacon_marker(self.screen, (self.knight_guardian_x + TILE_SIZE // 2 - self.camera_x) * ZOOM, (self.knight_guardian_y - self.camera_y) * ZOOM, color=(59, 130, 246), beacon_type="exclamation", offset_y=int(-35 * ZOOM))
+        if self.quiz_state == 6 and getattr(self, 'knight_guardian_active', True) and getattr(self, 'npc_knight_found', False):
+            draw_beacon_marker(self.screen, (self.npc_knight_x + TILE_SIZE // 2 - self.camera_x) * ZOOM, (self.npc_knight_y - self.camera_y) * ZOOM, color=(59, 130, 246), beacon_type="exclamation", offset_y=int(-35 * ZOOM))
 
         self.draw_player()
 
