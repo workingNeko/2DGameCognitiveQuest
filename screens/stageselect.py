@@ -15,6 +15,8 @@ from screens.quarter3 import Quarter3
 from screens.quarter4 import Quarter4
 from core.camera_system import LoLCamera
 from core.pathfinder_guide import QuestPathfinderGuide
+from core.font_manager import get_font
+from core.visual_effects import DustParticleSystem, draw_beacon_marker, draw_aura_glow
 
 # ============================================================
 # SETTINGS
@@ -91,11 +93,23 @@ class StageSelect:
         self.dialogue_typing_speed = 38.0  # characters per second
         self.dialogue_active_key = None
         self.dialogue_sound_timer = 0.0
+        self.dialogue_auto_advance_timer = 0.0
+        self.dialogue_auto_advance_delay = 2.8  # seconds before auto-advancing to next line
 
         # Performance Caches
         self._scaled_tile_cache = {}
         self._scaled_sprite_cache = {}
+        self._barrier_cache = {}
         self._dim_overlay = None
+        self._bg_map_surface = None
+        self._fg_trees_surface = None
+        self._cached_num_cleared = -1
+        self._cached_t_surf = None
+        self._completed_quarters = {}
+        self._last_cq_time = 0.0
+
+        # Visual Effects & Dust Particle System
+        self.dust_particles = DustParticleSystem(max_particles=30)
 
         # ============================================================
         # PATHS
@@ -270,14 +284,16 @@ class StageSelect:
 
         if self.is_quarter_completed('quarter4'):
             self.bromen_dialogue_lines = [
-                ("Bromen", f"Magnificent achievement, {student_name}! You have mastered Quarter 4 (Celestial Clocktower)!"),
+                ("Bromen", f"Magnificent achievement, {student_name}! You have mastered Quarter 4 (The Water Temple)!"),
                 ("Bromen", "Speak with the Old Man at the central sanctuary to celebrate your Grand Champion victory!")
             ]
         else:
             self.bromen_dialogue_lines = [
-                ("Bromen", "Greetings! I am Bromen, master of the final realm."),
+                ("Bromen", f"Greetings, voyager {student_name}! I am Bromen, guardian of the celestial Water Temple."),
                 ("Student", "Are you guarding the entrance to Quarter 4?"),
-                ("Bromen", "Indeed! Follow me to the north portal to enter Quarter 4."),
+                ("Bromen", "Indeed! In the sunken aqueducts, you must master fractions, solve rudder equations, and balance the elemental waterways."),
+                ("Student", "I will restore harmony to the temple!"),
+                ("Bromen", "Spoken like a true champion! Follow me to the north portal to enter Quarter 4."),
                 ("Bromen", "Let us go!")
             ]
 
@@ -290,7 +306,7 @@ class StageSelect:
                 ("Old Man", "And you brought harmony to the depths of the Water Temple!"),
                 ("Old Man", "You have discovered the greatest truth of all:"),
                 ("Old Man", "Math is the ultimate magic, and with logic, courage, and perseverance, there is no problem in this world you cannot solve!"),
-                ("Old Man", "Congratulations on completing Cognitive Maze!")
+                ("Old Man", "Congratulations on completing Cognitive Quest!")
             ]
         elif self.is_quarter_completed('quarter1'):
             self.dialogue_lines = [
@@ -302,7 +318,7 @@ class StageSelect:
             self.dialogue_lines = [
                 ("Old Man", "Stop right there!"),
                 ("Student", "Huh? Why?"),
-                ("Old Man", "I see in you such greatness! Someday you will do these lands great good. But only when trained. For now, it is only potential."),
+                ("Old Man", f"I see in you such greatness, {student_name}! Someday you will do these lands great good. But only when trained. For now, it is only potential."),
                 ("Student", "What shall I do?"),
                 ("Old Man", "Come! Come! Join me in my realm. Enter this portal and let's train your mind. You shall learn the ways of math! You see, it is like magic, but it runs on logic instead of spells!"),
                 ("Student", "That's amazing! I want to learn!"),
@@ -327,13 +343,18 @@ class StageSelect:
         self.npc_skeleton_anim_timer = 0
         if self.is_quarter_completed('quarter3'):
             self.skeleton_dialogue_lines = [
-                ("Skeleton", f"Incredible work clearing Quarter 3 (Oasis Mirage), {student_name}!"),
-                ("Skeleton", "Head north along the corridor to meet Bromen at the Celestial Clocktower in Quarter 4!")
+                ("Skeleton", f"Incredible wisdom across the sands, {student_name}! You have mastered Quarter 3 (Monetary Desert)!"),
+                ("Skeleton", "Head north along the corridor to meet Bromen at the Water Temple in Quarter 4!")
             ]
         else:
             self.skeleton_dialogue_lines = [
-                ("Skeleton", "Hi"),
-                ("Student", "Hello")
+                ("Skeleton", f"Greetings, brave traveler {student_name}! I am the Desert Guardian of the Ancient Sands."),
+                ("Student", "What lies beyond this eastern portal?"),
+                ("Skeleton", "The great Monetary Desert! Ancient ruins filled with trade tablets, golden currency calculations, and the Pharaoh's Vault."),
+                ("Student", "Are the sands dangerous?"),
+                ("Skeleton", "Only to those without mathematical courage! Decode the trade seals and solve the multiplication puzzles to uncover the lost treasures."),
+                ("Student", "I am ready to brave the desert!"),
+                ("Skeleton", "Walk through the eastern portal to begin your expedition. May the sun guide your journey!")
             ]
 
         # Knight NPC (static & interactive)
@@ -355,13 +376,15 @@ class StageSelect:
         if self.is_quarter_completed('quarter2'):
             self.knight_dialogue_lines = [
                 ("Knight", f"Outstanding valor, {student_name}! You have mastered Quarter 2 (Barangay Geometry)!"),
-                ("Knight", "Head east through the corridor to explore Quarter 3 (Oasis Mirage)!")
+                ("Knight", "Head east through the corridor to explore the Monetary Desert in Quarter 3!")
             ]
         else:
             self.knight_dialogue_lines = [
-                ("Knight", "Halt, student! Beyond this portal lies Quarter 2."),
-                ("Student", "I am ready for the challenge!"),
-                ("Knight", "Walk through the portal down below to proceed. Best of luck!")
+                ("Knight", f"Mabuhay, young adventurer {student_name}! Beyond this southern gate lies Barangay Kalye."),
+                ("Student", "What kind of challenges await me there?"),
+                ("Knight", "You shall discover the power of Bayanihan! Measure perimeters, calculate fair market prices, and help build a Bahay Kubo with the community."),
+                ("Student", "I am ready to help the barangay!"),
+                ("Knight", "Walk through the southern portal down below to proceed. Best of luck on your quest!")
             ]
 
         # ============================================================
@@ -476,6 +499,107 @@ class StageSelect:
         # Dynamic Hierarchy Pathfinder & Starlight Visual Trail Guide
         self.path_guide = QuestPathfinderGuide(self, quarter_id="stageselect", theme="forest")
 
+        # Build full-map pre-rendered surfaces for 60 FPS performance on low-end CPUs
+        self.build_prerendered_map()
+
+    def build_prerendered_map(self):
+        """Pre-renders the entire stage map ground and tree layers for 60 FPS performance on low-end CPUs."""
+        scaled_size = int(TILE_SIZE * ZOOM)
+        map_w = self.COLS * scaled_size
+        map_h = self.ROWS * scaled_size
+        self._bg_map_surface = pygame.Surface((map_w, map_h))
+        self._fg_trees_surface = pygame.Surface((map_w, map_h), pygame.SRCALPHA)
+        self._fg_trees_surface.fill((0, 0, 0, 0))
+
+        def get_scaled(c):
+            raw = self.tile_images.get(c, self.fallback_tile)
+            if raw not in self._scaled_tile_cache:
+                self._scaled_tile_cache[raw] = pygame.transform.scale(raw, (scaled_size, scaled_size))
+            return self._scaled_tile_cache[raw]
+
+        grass_img = get_scaled('G')
+        tree_img = get_scaled('T')
+
+        for row in range(self.ROWS):
+            for col in range(self.COLS):
+                px = col * scaled_size
+                py = row * scaled_size
+                if row < len(self.render_map) and col < len(self.render_map[row]):
+                    tile_char = self.render_map[row][col]
+                    if tile_char == 'T':
+                        if grass_img:
+                            self._bg_map_surface.blit(grass_img, (px, py))
+                        if tree_img:
+                            self._fg_trees_surface.blit(tree_img, (px, py))
+                    else:
+                        img = get_scaled(tile_char)
+                        if img:
+                            self._bg_map_surface.blit(img, (px, py))
+                else:
+                    if grass_img:
+                        self._bg_map_surface.blit(grass_img, (px, py))
+
+        # Pathway Directional Markings - Pure single-line text aligned along each pathway corridor
+        path_markings = [
+            {
+                "tile_x": 17.5, "tile_y": 13.5,
+                "text": "<- Quarter 1: 2D Shapes & Geometry",
+                "rotation": 0,
+                "color": (255, 245, 150)
+            },
+            {
+                "tile_x": 26.5, "tile_y": 20.0,
+                "text": "v Quarter 2: Addition & Subtraction v",
+                "rotation": -90,
+                "color": (255, 245, 150)
+            },
+            {
+                "tile_x": 35.5, "tile_y": 13.5,
+                "text": "Quarter 3: Multiplication & Fractions ->",
+                "rotation": 0,
+                "color": (255, 245, 150)
+            },
+            {
+                "tile_x": 26.5, "tile_y": 6.0,
+                "text": "^ Quarter 4: Measurement & Time ^",
+                "rotation": 90,
+                "color": (255, 245, 150)
+            }
+        ]
+
+        font_marking = get_font("Comic Sans MS", max(14, int(16 * ZOOM)), bold=True)
+
+        for m in path_markings:
+            cx = int(m["tile_x"] * scaled_size)
+            cy = int(m["tile_y"] * scaled_size)
+
+            raw_txt = font_marking.render(m["text"], True, m["color"])
+            raw_sh = font_marking.render(m["text"], True, (0, 0, 0))
+
+            rot = m.get("rotation", 0)
+            if rot != 0:
+                txt = pygame.transform.rotate(raw_txt, rot)
+                sh = pygame.transform.rotate(raw_sh, rot)
+            else:
+                txt = raw_txt
+                sh = raw_sh
+
+            tw, th = txt.get_size()
+            lx = cx - tw // 2
+            ly = cy - th // 2
+
+            # Deep 8-way drop shadow for maximum contrast and high visibility on ground
+            for ox, oy in [(-2, 0), (2, 0), (0, -2), (0, 2), (-2, -2), (2, -2), (-2, 2), (2, 2), (-1, -1), (1, 1), (-1, 1), (1, -1), (0, 3)]:
+                self._bg_map_surface.blit(sh, (lx + ox, ly + oy))
+
+            # Main text painted directly onto pathway ground tiles
+            self._bg_map_surface.blit(txt, (lx, ly))
+
+        try:
+            self._bg_map_surface = self._bg_map_surface.convert()
+        except Exception:
+            pass
+
     def _init_interactive_objects(self):
         """Initializes rich interactive entities across the hub's quadrants."""
         def safe_load_scale(rel_path, target_size):
@@ -499,6 +623,26 @@ class StageSelect:
             for i in range(4)
         ]
 
+        # Pre-scaled interactable sprites at hub ZOOM to avoid scaling during draw
+        ow_f = int(44 * ZOOM)
+        oh_f = int(44 * ZOOM)
+        self._scaled_fountain = pygame.transform.scale(self.interactable_fountain_sprite, (ow_f, oh_f))
+        self._fountain_glow = pygame.Surface((ow_f + 16, oh_f + 16), pygame.SRCALPHA)
+        pygame.draw.ellipse(self._fountain_glow, (56, 189, 248), (0, 0, ow_f + 16, oh_f + 16))
+
+        ow_s = int(42 * ZOOM)
+        oh_s = int(50 * ZOOM)
+        self._scaled_statue = pygame.transform.scale(self.interactable_statue_sprite, (ow_s, oh_s))
+        self._statue_glow = pygame.Surface((ow_s + 16, oh_s + 16), pygame.SRCALPHA)
+        pygame.draw.ellipse(self._statue_glow, (251, 191, 36), (0, 0, ow_s + 16, oh_s + 16))
+
+        ow_c = int(36 * ZOOM)
+        oh_c = int(32 * ZOOM)
+        self._scaled_chest_frames = [
+            pygame.transform.scale(f, (ow_c, oh_c)) for f in self.interactable_chest_frames
+        ]
+        self._ripple_surf = pygame.Surface((70, 70), pygame.SRCALPHA)
+
         self.interactables = [
             {
                 "id": "fountain",
@@ -512,7 +656,7 @@ class StageSelect:
                 "sfx": "chime",
                 "dialogue": [
                     ("Fountain of Clarity", "The crystalline water reflects the golden sky, radiating ancient mathematical clarity..."),
-                    ("Fountain of Clarity", "'Geometry Secret: A polygon with 5 sides is a Pentagon, 6 is a Hexagon, and 8 is an Octagon! All triangles have interior angles that sum to 180°.'"),
+                    ("Fountain of Clarity", "'Geometry Secret: A polygon with 5 sides is a Pentagon, 6 is a Hexagon, and 8 is an Octagon! All triangles have interior angles that sum to 180 degrees.'"),
                     ("Student", "My mind feels crystal clear!")
                 ]
             },
@@ -1025,6 +1169,11 @@ class StageSelect:
             self.height_tiles = height_tiles
             self.width = TILE_SIZE * width_tiles
             self.height = TILE_SIZE * height_tiles
+            scaled_w = int(self.width * ZOOM)
+            scaled_h = int(self.height * ZOOM)
+            self.scaled_frames = [
+                pygame.transform.scale(f, (scaled_w, scaled_h)) for f in frames
+            ] if frames else []
 
         def update(self):
             if self.frames:
@@ -1041,15 +1190,18 @@ class StageSelect:
         def draw(self, screen, camera_x, camera_y, zoom, screen_width, screen_height):
             screen_x = (self.x - camera_x) * zoom
             screen_y = (self.y - camera_y) * zoom
+            scaled_width = int(self.width * zoom)
+            scaled_height = int(self.height * zoom)
 
-            if (-self.width * zoom <= screen_x <= screen_width + self.width * zoom and
-                    -self.height * zoom <= screen_y <= screen_height + self.height * zoom):
-                portal_img = self.get_current_image()
-                if portal_img:
-                    scaled_width = int(self.width * zoom)
-                    scaled_height = int(self.height * zoom)
-                    scaled_img = pygame.transform.scale(portal_img, (scaled_width, scaled_height))
-                    screen.blit(scaled_img, (screen_x, screen_y))
+            if (-scaled_width <= screen_x <= screen_width + scaled_width and
+                    -scaled_height <= screen_y <= screen_height + scaled_height):
+                if self.scaled_frames and self.current_frame < len(self.scaled_frames):
+                    screen.blit(self.scaled_frames[self.current_frame], (screen_x, screen_y))
+                else:
+                    portal_img = self.get_current_image()
+                    if portal_img:
+                        scaled_img = pygame.transform.scale(portal_img, (scaled_width, scaled_height))
+                        screen.blit(scaled_img, (screen_x, screen_y))
 
     # ============================================================
     # PORTAL CLASS
@@ -1101,23 +1253,35 @@ class StageSelect:
             scaled_width = int(self.get_width_pixels() * zoom)
             scaled_height = int(self.get_height_pixels() * zoom)
 
-            # Soft radiant pulsating aura glow behind the portal
-            glow_surf = pygame.Surface((scaled_width + 20, scaled_height + 20), pygame.SRCALPHA)
-            if is_completed:
-                aura_rgb = (255, 215, 0)  # Shimmering Gold for CLEARED
-            else:
-                aura_rgb = (34, 197, 94) if self.direction == 'left' else (
-                    (59, 130, 246) if self.direction == 'up' else (
-                        (245, 158, 11) if self.direction == 'right' else (168, 85, 247)
-                    )
-                )
-            pulse = (math.sin(pygame.time.get_ticks() * 0.005) + 1.0) * 0.5
-            alpha = int(70 + 45 * pulse)
-            pygame.draw.ellipse(glow_surf, (*aura_rgb, alpha), (0, 0, scaled_width + 20, scaled_height + 20))
-            screen.blit(glow_surf, (screen_x - 10, screen_y - 10))
+            # Cull completely off-screen portals
+            if (-scaled_width - 30 <= screen_x <= screen_width + 30 and
+                    -scaled_height - 30 <= screen_y <= screen_height + 30):
+                # Cached radiant aura glow behind portal (avoids creating new Surface every frame)
+                target_glow_size = (scaled_width + 20, scaled_height + 20)
+                if (not hasattr(self, '_glow_surf') or
+                        getattr(self, '_glow_size', None) != target_glow_size or
+                        getattr(self, '_glow_completed', None) != is_completed):
+                    self._glow_surf = pygame.Surface(target_glow_size, pygame.SRCALPHA)
+                    self._glow_size = target_glow_size
+                    self._glow_completed = is_completed
+                    if is_completed:
+                        aura_rgb = (255, 215, 0)  # Shimmering Gold for CLEARED
+                    else:
+                        aura_rgb = (34, 197, 94) if self.direction == 'left' else (
+                            (59, 130, 246) if self.direction == 'up' else (
+                                (245, 158, 11) if self.direction == 'right' else (168, 85, 247)
+                            )
+                        )
+                    self._glow_surf.fill((0, 0, 0, 0))
+                    pygame.draw.ellipse(self._glow_surf, (*aura_rgb, 100), (0, 0, scaled_width + 20, scaled_height + 20))
 
-            if self.animation:
-                self.animation.draw(screen, camera_x, camera_y, zoom, screen_width, screen_height)
+                pulse = (math.sin(pygame.time.get_ticks() * 0.005) + 1.0) * 0.5
+                alpha = int(70 + 45 * pulse)
+                self._glow_surf.set_alpha(alpha)
+                screen.blit(self._glow_surf, (screen_x - 10, screen_y - 10))
+
+                if self.animation:
+                    self.animation.draw(screen, camera_x, camera_y, zoom, screen_width, screen_height)
 
         def contains_position(self, world_x, world_y):
             portal_left = self.get_world_x()
@@ -1214,10 +1378,21 @@ class StageSelect:
     # ============================================================
     def is_quarter_completed(self, qid):
         """Returns True if the specified quarter is recorded as completed."""
+        now = time.time()
+        if not hasattr(self, '_completed_quarters') or (now - getattr(self, '_last_cq_time', 0.0) > 0.25):
+            from db.save_system import get_completed_quarters
+            student_id = getattr(self.main_menu, 'student_id', None)
+            self._completed_quarters = get_completed_quarters(student_id)
+            self._last_cq_time = now
+            self.completed_quarters = self._completed_quarters
+        return bool(self._completed_quarters.get(qid, {}).get("completed", False))
+
+    def refresh_completed_quarters(self):
         from db.save_system import get_completed_quarters
         student_id = getattr(self.main_menu, 'student_id', None)
-        self.completed_quarters = get_completed_quarters(student_id)
-        return bool(self.completed_quarters.get(qid, {}).get("completed", False))
+        self._completed_quarters = get_completed_quarters(student_id)
+        self._last_cq_time = time.time()
+        self.completed_quarters = self._completed_quarters
 
     def is_quarter_unlocked(self, qid):
         """Sequential gating: Q1 is open; Q2 requires Q1; Q3 requires Q2; Q4 requires Q3.
@@ -1404,6 +1579,13 @@ class StageSelect:
                 print(f"[STAGE] Entering Quarter 1 - {map_name}")
                 from screens.quarter1 import Quarter1
                 self.main_menu.quarter1 = Quarter1(self.screen, self.main_menu, map_name)
+            if self.main_menu.quarter1:
+                self.main_menu.quarter1.update_gesture(
+                    self.main_menu.cursor_pos,
+                    self.main_menu.fist_start_time,
+                    self.main_menu.CLICK_HOLD_TIME,
+                    self.main_menu.current_gesture
+                )
             self.main_menu.current_screen = "quarter1"
         elif qid == "quarter2":
             if self.portal_loaded_screen:
@@ -1413,6 +1595,13 @@ class StageSelect:
                 print(f"[STAGE] Entering Quarter 2 - {map_name}")
                 from screens.quarter2 import Quarter2
                 self.main_menu.quarter2 = Quarter2(self.screen, self.main_menu, map_name)
+            if self.main_menu.quarter2:
+                self.main_menu.quarter2.update_gesture(
+                    self.main_menu.cursor_pos,
+                    self.main_menu.fist_start_time,
+                    self.main_menu.CLICK_HOLD_TIME,
+                    self.main_menu.current_gesture
+                )
             self.main_menu.current_screen = "quarter2"
         elif qid == "quarter3":
             if self.portal_loaded_screen:
@@ -1422,6 +1611,13 @@ class StageSelect:
                 print(f"[STAGE] Entering Quarter 3 - {map_name}")
                 from screens.quarter3 import Quarter3
                 self.main_menu.quarter3 = Quarter3(self.screen, self.main_menu, map_name)
+            if self.main_menu.quarter3:
+                self.main_menu.quarter3.update_gesture(
+                    self.main_menu.cursor_pos,
+                    self.main_menu.fist_start_time,
+                    self.main_menu.CLICK_HOLD_TIME,
+                    self.main_menu.current_gesture
+                )
             self.main_menu.current_screen = "quarter3"
         elif qid == "quarter4":
             if self.portal_loaded_screen:
@@ -1431,18 +1627,25 @@ class StageSelect:
                 print(f"[STAGE] Entering Quarter 4 - {map_name}")
                 from screens.quarter4 import Quarter4
                 self.main_menu.quarter4 = Quarter4(self.screen, self.main_menu, map_name)
+            if self.main_menu.quarter4:
+                self.main_menu.quarter4.update_gesture(
+                    self.main_menu.cursor_pos,
+                    self.main_menu.fist_start_time,
+                    self.main_menu.CLICK_HOLD_TIME,
+                    self.main_menu.current_gesture
+                )
             self.main_menu.current_screen = "quarter4"
 
         self.portal_loaded_screen = None
         self.main_menu.stage_select = None
 
     def _init_portal_transition_fx(self, qid):
-        """Initialize theme palettes, swirling energy vortex, hyperspace star particles, and LOADING text."""
+        """Initialize theme palettes, pre-composited LOADING text, pre-rendered HUD, and star particles."""
         palettes = {
             "quarter1": {
                 "name": "QUARTER 1",
-                "title": "GEOMETRY FOREST",
-                "realm": "Geometry & Polygon Realm",
+                "title": "2D SHAPES & GEOMETRY",
+                "realm": "2D Shapes & Composite Figures",
                 "primary": (34, 197, 94),
                 "secondary": (56, 189, 248),
                 "accent": (250, 204, 21),
@@ -1450,8 +1653,8 @@ class StageSelect:
             },
             "quarter2": {
                 "name": "QUARTER 2",
-                "title": "BARRIOS' FIESTA",
-                "realm": "Market & Arithmetic Realm",
+                "title": "ADDITION & SUBTRACTION",
+                "realm": "Money & Word Problems",
                 "primary": (245, 158, 11),
                 "secondary": (239, 68, 68),
                 "accent": (253, 224, 71),
@@ -1459,8 +1662,8 @@ class StageSelect:
             },
             "quarter3": {
                 "name": "QUARTER 3",
-                "title": "MONETARY DESERT",
-                "realm": "Solar Desert & Fractions Realm",
+                "title": "MULTIPLICATION & FRACTIONS",
+                "realm": "Equal Groups & Fractions",
                 "primary": (234, 179, 8),
                 "secondary": (249, 115, 22),
                 "accent": (254, 240, 138),
@@ -1468,8 +1671,8 @@ class StageSelect:
             },
             "quarter4": {
                 "name": "QUARTER 4",
-                "title": "UNDERWATER DUNGEON",
-                "realm": "Aquatic Sluices & Grand Finale",
+                "title": "MEASUREMENT & TIME",
+                "realm": "Length, Mass, Time & Equations",
                 "primary": (56, 189, 248),
                 "secondary": (168, 85, 247),
                 "accent": (216, 180, 254),
@@ -1478,28 +1681,125 @@ class StageSelect:
         }
         self.portal_transition_theme = palettes.get(qid, palettes["quarter1"])
 
-        # Pre-render LOADING... letters in pixel font with theme primary glow
+        # Pre-composite LOADING... letters into single baked surfaces (eliminates 80 blits and 30 surface copies per frame)
         theme_glow = self.portal_transition_theme.get("primary", (180, 180, 180))
         self.loading_text = "LOADING..."
         self.loading_spacing = 10
         self.loading_letters = []
+        pad = 6
         for ch in self.loading_text:
             glow = self.title_font.render(ch, False, theme_glow)
             outline = self.title_font.render(ch, False, (0, 0, 0))
             main = self.title_font.render(ch, False, (255, 255, 255))
+            gw, gh = glow.get_width(), glow.get_height()
+
+            comp_surf = pygame.Surface((gw + pad * 2, gh + pad * 2), pygame.SRCALPHA)
+            for gx, gy in ((-4, 0), (4, 0), (0, -4), (0, 4)):
+                comp_surf.blit(glow, (pad + gx, pad + gy))
+            for ox, oy in ((-2, 0), (2, 0), (0, -2), (0, 2)):
+                comp_surf.blit(outline, (pad + ox, pad + oy))
+            comp_surf.blit(main, (pad, pad))
+
             self.loading_letters.append({
-                "glow": glow,
-                "outline": outline,
-                "main": main,
+                "surf": comp_surf,
+                "pad": pad,
                 "width": main.get_width()
             })
         self.loading_total_width = sum(l["width"] for l in self.loading_letters) + self.loading_spacing * (len(self.loading_text) - 1)
 
-        # Ambient floating particle stars
+        # Destination Realm Subtitle Banner (Pre-rendered)
+        dest_name = self.portal_transition_theme.get("name", "STAGE")
+        dest_title = self.portal_transition_theme.get("title", "")
+        dest_str = f"WARPING TO {dest_name}: {dest_title}"
+        sub_font = get_font("Comic Sans MS", 14, bold=True)
+        self._cached_dest_surf = sub_font.render(dest_str, True, self.portal_transition_theme.get("accent", (250, 204, 21)))
+        base_y = self.height // 2 - 60
+        self._cached_dest_rect = self._cached_dest_surf.get_rect(center=(self.width // 2, base_y + 70))
+
+        # Objectives HUD Dimensions
+        box_w = min(480, self.width - 40)
+        box_h = 80
+        box_x = (self.width - box_w) // 2
+        box_y = self.height - box_h - 20
+        self._cached_hud_pos = (box_x - 12, box_y - 12)
+        primary_col = self.portal_transition_theme.get("primary", (56, 189, 248))
+        accent_col = self.portal_transition_theme.get("accent", (250, 204, 21))
+
+        # Pre-render Entire Static HUD Surface
+        hud_surf = pygame.Surface((box_w + 24, box_h + 24), pygame.SRCALPHA)
+        # Ambient neon glow behind HUD
+        pygame.draw.rect(hud_surf, (*primary_col, 35), (0, 0, box_w + 24, box_h + 24), border_radius=16)
+        # Translucent dark slate background
+        pygame.draw.rect(hud_surf, (15, 23, 42, 220), (12, 12, box_w, box_h), border_radius=10)
+        # Objectives HUD borders (Gold / Primary)
+        pygame.draw.rect(hud_surf, (218, 165, 32), (12, 12, box_w, box_h), 2, border_radius=10)
+        pygame.draw.rect(hud_surf, (0, 0, 0, 120), (14, 14, box_w - 4, box_h - 4), 1, border_radius=8)
+
+        # Header title in Gold
+        obj_title_font = get_font("Comic Sans MS", 12, bold=True)
+        obj_title_surf = obj_title_font.render("CURRENT OBJECTIVES", True, (255, 215, 0))
+        hud_surf.blit(obj_title_surf, (12 + 16, 12 + 8))
+
+        # Realm descriptor tag on top-right of Objectives box
+        realm_text = self.portal_transition_theme.get("realm", "")
+        if realm_text:
+            realm_font = get_font("Comic Sans MS", 10, bold=True)
+            realm_surf = realm_font.render(realm_text, True, (148, 163, 184))
+            realm_rect = realm_surf.get_rect(topright=(12 + box_w - 16, 12 + 10))
+            hud_surf.blit(realm_surf, realm_rect)
+
+        # Track background (Deep metallic glass)
+        bar_x = box_x + 16
+        bar_y = box_y + 36
+        bar_w = box_w - 32
+        bar_h = 24
+        self._cached_bar_rect = (bar_x, bar_y, bar_w, bar_h)
+
+        pygame.draw.rect(hud_surf, (15, 23, 42), (12 + 16, 12 + 36, bar_w, bar_h), border_radius=12)
+        pygame.draw.rect(hud_surf, (51, 65, 85), (12 + 16, 12 + 36, bar_w, bar_h), 2, border_radius=12)
+        pygame.draw.rect(hud_surf, primary_col, (12 + 16, 12 + 36, bar_w, bar_h), 1, border_radius=12)
+        self._cached_hud_surf = hud_surf
+
+        # Pre-render 100% Fill Bar Texture
+        inner_margin = 3
+        max_fill_w = bar_w - inner_margin * 2
+        fill_h = bar_h - inner_margin * 2
+        self._cached_inner_margin = inner_margin
+        self._cached_max_fill_w = max_fill_w
+        self._cached_fill_h = fill_h
+
+        fill_texture = pygame.Surface((max_fill_w, fill_h))
+        for col_i in range(max_fill_w):
+            ratio = col_i / float(max(1, max_fill_w))
+            blend_r = int(primary_col[0] + (accent_col[0] - primary_col[0]) * ratio)
+            blend_g = int(primary_col[1] + (accent_col[1] - primary_col[1]) * ratio)
+            blend_b = int(primary_col[2] + (accent_col[2] - primary_col[2]) * ratio)
+            pygame.draw.line(fill_texture, (blend_r, blend_g, blend_b), (col_i, 0), (col_i, fill_h))
+
+        # Specular top shine baked directly into texture
+        shine_overlay = pygame.Surface((max_fill_w, fill_h // 2), pygame.SRCALPHA)
+        shine_overlay.fill((255, 255, 255, 65))
+        fill_texture.blit(shine_overlay, (0, 0))
+        self._cached_fill_bar_surf = fill_texture
+
+        # Pre-render percentage labels (0% to 100%)
+        self._cached_pct_surfs = {}
+        pct_font = get_font("Comic Sans MS", 12, bold=True)
+        for p in range(101):
+            p_str = f"{p}%"
+            p_shd = pct_font.render(p_str, True, (0, 0, 0))
+            p_txt = pct_font.render(p_str, True, (255, 255, 255))
+            pw, ph = p_txt.get_width(), p_txt.get_height()
+            p_surf = pygame.Surface((pw + 2, ph + 2), pygame.SRCALPHA)
+            p_surf.blit(p_shd, (2, 2))
+            p_surf.blit(p_txt, (1, 1))
+            self._cached_pct_surfs[p] = p_surf
+
+        # Ambient floating particle stars (Lightweight, 20 stars drawn directly, zero alpha surfaces)
         self.portal_transition_stars = []
-        for _ in range(50):
+        for _ in range(20):
             star_ang = random.uniform(0, 2 * math.pi)
-            speed = random.uniform(60, 180)
+            speed = random.uniform(60, 160)
             color = random.choice([
                 (255, 255, 255),
                 self.portal_transition_theme["accent"],
@@ -1509,9 +1809,8 @@ class StageSelect:
                 "angle": star_ang,
                 "dist": random.uniform(20, self.width // 2),
                 "speed": speed,
-                "length": random.uniform(4, 12),
                 "color": color,
-                "width": random.randint(2, 4)
+                "radius": random.randint(1, 2)
             })
 
     def _update_portal_transition(self, dt):
@@ -1816,10 +2115,10 @@ class StageSelect:
 
         # Check Grand Finale modal interaction
         if self.grand_finale_active:
-            card_w, card_h = 620, 450
+            card_w, card_h = 760, 520
             card_x = (self.width - card_w) // 2
             card_y = (self.height - card_h) // 2
-            btn_rect = pygame.Rect(card_x + (card_w - 280) // 2, card_y + 375, 280, 44)
+            btn_rect = pygame.Rect(card_x + (card_w - 320) // 2, card_y + 445, 320, 50)
             if btn_rect.collidepoint(pos):
                 self.grand_finale_active = False
                 self.grand_finale_dismissed = True
@@ -1907,7 +2206,7 @@ class StageSelect:
     # UPDATE
     # ============================================================
     def update(self):
-        dt = self.clock.tick(FPS) / 1000.0
+        dt = min(0.05, max(0.001, self.clock.tick() / 1000.0))
         self.frame_counter += 1
 
         # Check Portal Warp Screen Transition (3-second black LOADING screen)
@@ -1954,6 +2253,10 @@ class StageSelect:
         if hasattr(self, 'path_guide'):
             self.path_guide.update(dt)
 
+        # Update Dust Particle System
+        if hasattr(self, 'dust_particles'):
+            self.dust_particles.update(dt)
+
         # Update cooldowns
         if self.teleport_cooldown > 0:
             self.teleport_cooldown -= dt
@@ -1991,6 +2294,7 @@ class StageSelect:
             self.dialogue_active_key = current_dialogue_key
             self.dialogue_char_index = 0.0
             self.dialogue_sound_timer = 0.0
+            self.dialogue_auto_advance_timer = 0.0
 
         if active_dialogue_text:
             text_len = len(active_dialogue_text)
@@ -2005,6 +2309,17 @@ class StageSelect:
                     if char_just_typed not in (' ', '\t', '\n'):
                         if hasattr(self.main_menu, 'audio_manager'):
                             self.main_menu.audio_manager.play_sfx("dialogue_blip")
+                self.dialogue_auto_advance_timer = 0.0
+            else:
+                # Text is fully displayed: count auto-advance timer for seamless continuous dialogue
+                self.dialogue_auto_advance_timer += dt
+                # Dynamic reading delay proportional to sentence length (min 2.4s, max 3.8s)
+                reading_delay = max(2.4, min(3.8, text_len * 0.042))
+                if self.dialogue_auto_advance_timer >= reading_delay:
+                    self.dialogue_auto_advance_timer = 0.0
+                    self.advance_dialogue()
+        else:
+            self.dialogue_auto_advance_timer = 0.0
 
         # Update Bromen NPC idle animation
         if self.npc_bromen_sprites and self.npc_bromen_found and self.bromen_dialogue_state == 0:
@@ -2595,14 +2910,14 @@ class StageSelect:
         dist_factor = 1.3 if (abs(dx) > 160 or abs(dy) > 160) else 1.0
         g_speed = current_speed * dist_factor
 
-        if abs(dx) > 45:
+        if abs(dx) > 32:
             vx = g_speed if dx > 0 else -g_speed
             if dx > 0:
                 self.player_dir = "right"
             elif dx < 0:
                 self.player_dir = "left"
 
-        if abs(dy) > 45:
+        if abs(dy) > 32:
             vy = g_speed if dy > 0 else -g_speed
             if dy > 0:
                 self.player_dir = "down"
@@ -2618,9 +2933,17 @@ class StageSelect:
         if self.can_move(self.player_x, new_y):
             self.player_y = new_y
 
-        # Animation
+        # Animation & Dust Footstep Emission
         if vx != 0 or vy != 0:
             self.anim_timer += 1
+            if hasattr(self, 'dust_particles') and self.anim_timer % 8 == 0:
+                self.dust_particles.emit_footstep(
+                    (self.player_x + TILE_SIZE // 2) * ZOOM,
+                    (self.player_y + TILE_SIZE - 2) * ZOOM,
+                    direction=self.player_dir,
+                    speed_boost=getattr(self, 'speed_boost_active', False),
+                    terrain_color=(190, 180, 150)
+                )
             if self.anim_timer >= 16:
                 self.anim_timer = 0
                 self.anim_frame = (self.anim_frame + 1) % 2
@@ -2636,7 +2959,7 @@ class StageSelect:
         """Renders animated glowing magical plasma forcefields, dual crystal pylons, and sleek badges across locked corridors."""
         t = pygame.time.get_ticks() * 0.001
         pulse = 0.5 + 0.5 * math.sin(t * 4.0)
-        font = pygame.font.SysFont(["Segoe UI", "Tahoma", "Comic Sans MS", "Arial"], max(11, int(11 * ZOOM)), bold=True)
+        font = get_font("Comic Sans MS", max(13, int(13 * ZOOM)), bold=True)
 
         barriers = []
         # Quarter 2 (South corridor): row 16, cols 25, 26, 27
@@ -2683,15 +3006,22 @@ class StageSelect:
 
             # Only draw if on screen
             if -bw <= bx <= self.width + bw and -bh <= by <= self.height + bh:
-                # 1. Outer Radiant Ambient Forcefield Glow
+                # 1. Outer Radiant Ambient Forcefield Glow (cached surfaces)
+                cache_key = (bw, bh)
                 glow_pad = int(8 * ZOOM)
-                glow_surf = pygame.Surface((bw + glow_pad * 2, bh + glow_pad * 2), pygame.SRCALPHA)
+                if cache_key not in self._barrier_cache:
+                    g_surf = pygame.Surface((bw + glow_pad * 2, bh + glow_pad * 2), pygame.SRCALPHA)
+                    p_surf = pygame.Surface((bw, bh), pygame.SRCALPHA)
+                    self._barrier_cache[cache_key] = (g_surf, p_surf)
+                glow_surf, plasma_surf = self._barrier_cache[cache_key]
+
+                glow_surf.fill((0, 0, 0, 0))
                 glow_alpha = int(45 + 30 * pulse)
                 pygame.draw.rect(glow_surf, (239, 68, 68, glow_alpha), (0, 0, bw + glow_pad * 2, bh + glow_pad * 2), border_radius=10)
                 self.screen.blit(glow_surf, (bx - glow_pad, by - glow_pad))
 
                 # 2. Main High-Energy Plasma Surface
-                plasma_surf = pygame.Surface((bw, bh), pygame.SRCALPHA)
+                plasma_surf.fill((0, 0, 0, 0))
                 plasma_alpha = int(140 + 70 * pulse)
                 pygame.draw.rect(plasma_surf, (220, 38, 38, plasma_alpha), (0, 0, bw, bh), border_radius=6)
 
@@ -2734,22 +3064,23 @@ class StageSelect:
                     pygame.draw.circle(self.screen, (239, 68, 68), (int(px), int(py)), crystal_r)
                     pygame.draw.circle(self.screen, (255, 255, 255), (int(px), int(py)), max(1, crystal_r // 2))
 
-                # 6. Sleek Holographic Security Shield Badge
-                badge_bob = math.sin(t * 4.0) * 3
-                badge_w, badge_h = int(172 * ZOOM), int(26 * ZOOM)
-                center_x = bx + bw / 2
-                center_y = by + bh / 2 + badge_bob
-                badge_rect = pygame.Rect(center_x - badge_w // 2, center_y - badge_h // 2, badge_w, badge_h)
+    def is_dialogue_active(self):
+        """Returns True if any NPC, lore object, or modal dialogue is currently active."""
+        return bool(
+            self.oldman_dialogue_state == 1 or
+            self.skeleton_dialogue_state == 1 or
+            self.knight_dialogue_state == 1 or
+            self.bromen_dialogue_state == 1 or
+            self.interactable_dialogue_state == 1 or
+            getattr(self, 'grand_finale_active', False)
+        )
 
-                shadow_rect = badge_rect.copy()
-                shadow_rect.y += 2
-                pygame.draw.rect(self.screen, (0, 0, 0, 180), shadow_rect, border_radius=8)
-                pygame.draw.rect(self.screen, (15, 23, 42), badge_rect, border_radius=8)
-                border_color = (248, 113, 113) if pulse > 0.5 else (239, 68, 68)
-                pygame.draw.rect(self.screen, border_color, badge_rect, 2, border_radius=8)
-
-                lbl_surf = font.render(b['label'], True, (254, 240, 138) if pulse > 0.5 else (255, 255, 255))
-                self.screen.blit(lbl_surf, lbl_surf.get_rect(center=badge_rect.center))
+    # ============================================================
+    # DRAW CROSSROAD DIRECTIONAL ROAD SIGNS (Minimalist Mode)
+    # ============================================================
+    def draw_crossroad_guide_signs(self):
+        """Minimalist Mode: Suppressed to keep the central plaza completely clean and uncluttered."""
+        pass
 
     # ============================================================
     # DRAW TILE
@@ -2814,6 +3145,10 @@ class StageSelect:
         screen_x = (self.player_x - self.camera_x) * ZOOM
         screen_y = (self.player_y - self.camera_y) * ZOOM
 
+        # Draw footstep dust beneath player feet
+        if hasattr(self, 'dust_particles'):
+            self.dust_particles.draw(self.screen, camera_offset=(self.camera_x * ZOOM, self.camera_y * ZOOM))
+
         if (-TILE_SIZE * ZOOM <= screen_x <= self.width + TILE_SIZE * ZOOM and
                 -TILE_SIZE * ZOOM <= screen_y <= self.height + TILE_SIZE * ZOOM):
             sprite = self.player_sprites[self.player_dir][self.anim_frame]
@@ -2825,27 +3160,35 @@ class StageSelect:
             self.screen.blit(scaled_sprite, (screen_x, screen_y))
 
     # ============================================================
-    # DRAW - MODIFIED to use self.render_map
+    # DRAW - Clean Layering Pipeline (No tree overlapping text/dialogues)
     # ============================================================
     def draw(self):
+        # 0. Early return during Portal Loading Screen (eliminates 100% of background map rendering overhead)
+        if self.portal_transition_active:
+            self.draw_portal_transition()
+            return
+
         self.screen.fill((0, 0, 0))
 
-        # Draw visible tiles using render_map
-        start_col = max(0, int(self.camera_x / TILE_SIZE) - 2)
-        end_col = min(self.COLS, int((self.camera_x + self.width / ZOOM) / TILE_SIZE) + 3)
-        start_row = max(0, int(self.camera_y / TILE_SIZE) - 2)
-        end_row = min(self.ROWS, int((self.camera_y + self.height / ZOOM) / TILE_SIZE) + 3)
+        cam_pixel_x = int(self.camera_x * ZOOM)
+        cam_pixel_y = int(self.camera_y * ZOOM)
 
-        # Draw visible tiles using render_map (First pass: Skip trees and draw grass under them)
-        for row in range(start_row, end_row):
-            for col in range(start_col, end_col):
-                if row < len(self.render_map) and col < len(self.render_map[row]):
-                    tile_char = self.render_map[row][col]
-                    if tile_char == 'T':
-                        # Draw grass under the tree so there is no black void under the player
-                        self.draw_tile('G', col * TILE_SIZE, row * TILE_SIZE)
-                    else:
-                        self.draw_tile(tile_char, col * TILE_SIZE, row * TILE_SIZE)
+        # 1. Draw visible pre-rendered background (60 FPS on low-end CPUs)
+        if getattr(self, '_bg_map_surface', None):
+            self.screen.blit(self._bg_map_surface, (-cam_pixel_x, -cam_pixel_y))
+        else:
+            start_col = max(0, int(self.camera_x / TILE_SIZE) - 2)
+            end_col = min(self.COLS, int((self.camera_x + self.width / ZOOM) / TILE_SIZE) + 3)
+            start_row = max(0, int(self.camera_y / TILE_SIZE) - 2)
+            end_row = min(self.ROWS, int((self.camera_y + self.height / ZOOM) / TILE_SIZE) + 3)
+            for row in range(start_row, end_row):
+                for col in range(start_col, end_col):
+                    if row < len(self.render_map) and col < len(self.render_map[row]):
+                        tile_char = self.render_map[row][col]
+                        if tile_char == 'T':
+                            self.draw_tile('G', col * TILE_SIZE, row * TILE_SIZE)
+                        else:
+                            self.draw_tile(tile_char, col * TILE_SIZE, row * TILE_SIZE)
 
         DIR_MAP = {
             'left': 'quarter1',
@@ -2853,63 +3196,13 @@ class StageSelect:
             'right': 'quarter3',
             'down': 'quarter4'
         }
-        # Draw portals
+        # 2. Draw portals
         for portal in self.portals:
             qid = DIR_MAP.get(portal.direction)
             is_comp = bool(qid and self.is_quarter_completed(qid))
             portal.draw(self.screen, self.camera_x, self.camera_y, ZOOM, self.width, self.height, is_completed=is_comp)
 
-        # Draw Corridor Energy Forcefields for Locked Quarters
-        self.draw_corridor_barriers()
-
-        # Draw Hierarchy Pathfinder Visual Guide Trail
-        if hasattr(self, 'path_guide'):
-            self.path_guide.draw()
-
-        # Draw Portal Status Badges above portals (CLEARED / OPEN / LOCKED)
-        DIR_MAP = {
-            'left': 'quarter1',
-            'up': 'quarter2',
-            'right': 'quarter3',
-            'down': 'quarter4'
-        }
-        for portal in self.portals:
-            qid = DIR_MAP.get(portal.direction)
-            if qid:
-                sx = (portal.get_center_x() - self.camera_x) * ZOOM
-                sy = (portal.get_world_y() - self.camera_y) * ZOOM
-                bob = math.sin(self.frame_counter * 0.08) * 3
-                
-                badge_w, badge_h = int(105 * ZOOM), int(24 * ZOOM)
-                bx = sx - badge_w // 2
-                if portal.direction == 'down':
-                    by = sy + portal.get_height_pixels() * ZOOM + 8 + bob
-                else:
-                    by = sy - badge_h - 8 + bob
-                badge_rect = pygame.Rect(bx, by, badge_w, badge_h)
-                
-                b_font = pygame.font.SysFont("Comic Sans MS", int(11 * ZOOM), bold=True)
-                
-                if self.is_quarter_completed(qid):
-                    # CLEARED (Gold)
-                    pygame.draw.rect(self.screen, (15, 23, 42), badge_rect, border_radius=6)
-                    pygame.draw.rect(self.screen, (255, 215, 0), badge_rect, 2, border_radius=6)
-                    b_txt = b_font.render("CLEARED", True, (255, 215, 0))
-                    self.screen.blit(b_txt, b_txt.get_rect(center=badge_rect.center))
-                elif self.is_quarter_unlocked(qid):
-                    # OPEN (Emerald green)
-                    pygame.draw.rect(self.screen, (15, 23, 42), badge_rect, border_radius=6)
-                    pygame.draw.rect(self.screen, (34, 197, 94), badge_rect, 2, border_radius=6)
-                    b_txt = b_font.render("OPEN", True, (34, 197, 94))
-                    self.screen.blit(b_txt, b_txt.get_rect(center=badge_rect.center))
-                else:
-                    # LOCKED (Ruby red)
-                    pygame.draw.rect(self.screen, (15, 23, 42), badge_rect, border_radius=6)
-                    pygame.draw.rect(self.screen, (239, 68, 68), badge_rect, 2, border_radius=6)
-                    b_txt = b_font.render("LOCKED", True, (248, 113, 113))
-                    self.screen.blit(b_txt, b_txt.get_rect(center=badge_rect.center))
-
-        # Draw Interactive Objects & Lore Artifacts
+        # 3. Draw Interactive Objects & Lore Artifacts
         t_ticks = pygame.time.get_ticks() * 0.001
         for obj in self.interactables:
             ox = (obj["world_x"] - self.camera_x) * ZOOM
@@ -2920,73 +3213,44 @@ class StageSelect:
             # Check screen visibility
             if -ow <= ox <= self.width + ow and -oh <= oy <= self.height + oh:
                 if obj["type"] == "fountain":
-                    fglow = pygame.Surface((ow + 16, oh + 16), pygame.SRCALPHA)
-                    pygame.draw.ellipse(fglow, (56, 189, 248, 40 + int(20 * math.sin(t_ticks * 3.0))), (0, 0, ow + 16, oh + 16))
-                    self.screen.blit(fglow, (ox - 8, oy - 8))
-                    scaled_fountain = pygame.transform.scale(self.interactable_fountain_sprite, (ow, oh))
-                    self.screen.blit(scaled_fountain, (ox, oy))
+                    if hasattr(self, '_fountain_glow'):
+                        self._fountain_glow.set_alpha(int(40 + 20 * math.sin(t_ticks * 3.0)))
+                        self.screen.blit(self._fountain_glow, (ox - 8, oy - 8))
+                    f_sprite = getattr(self, '_scaled_fountain', self.interactable_fountain_sprite)
+                    self.screen.blit(f_sprite, (ox, oy))
                 elif obj["type"] == "statue":
-                    sglow = pygame.Surface((ow + 16, oh + 16), pygame.SRCALPHA)
-                    pygame.draw.ellipse(sglow, (251, 191, 36, 45 + int(25 * math.sin(t_ticks * 2.5))), (0, 0, ow + 16, oh + 16))
-                    self.screen.blit(sglow, (ox - 8, oy - 8))
-                    scaled_statue = pygame.transform.scale(self.interactable_statue_sprite, (ow, oh))
-                    self.screen.blit(scaled_statue, (ox, oy))
+                    if hasattr(self, '_statue_glow'):
+                        self._statue_glow.set_alpha(int(45 + 25 * math.sin(t_ticks * 2.5)))
+                        self.screen.blit(self._statue_glow, (ox - 8, oy - 8))
+                    s_sprite = getattr(self, '_scaled_statue', self.interactable_statue_sprite)
+                    self.screen.blit(s_sprite, (ox, oy))
                 elif obj["type"] == "chest":
                     pygame.draw.ellipse(self.screen, (0, 0, 0, 80), (ox + 2, oy + oh - 6, ow - 4, 8))
-                    frame_idx = min(len(self.interactable_chest_frames) - 1, obj.get("frame", 0))
-                    scaled_chest = pygame.transform.scale(self.interactable_chest_frames[frame_idx], (ow, oh))
-                    self.screen.blit(scaled_chest, (ox, oy))
+                    chest_frames = getattr(self, '_scaled_chest_frames', self.interactable_chest_frames)
+                    frame_idx = min(len(chest_frames) - 1, obj.get("frame", 0))
+                    self.screen.blit(chest_frames[frame_idx], (ox, oy))
                 elif obj["type"] == "lake":
-                    # Expanding ripples
+                    # Expanding ripples (reused surface)
                     for r_i in range(3):
                         r_phase = (t_ticks * 0.8 + r_i * 0.4) % 1.2
                         r_rad = int(r_phase * 20 * ZOOM)
                         r_alpha = max(0, int((1.0 - r_phase / 1.2) * 160))
-                        r_surf = pygame.Surface((r_rad * 2 + 4, r_rad * 2 + 4), pygame.SRCALPHA)
-                        pygame.draw.ellipse(r_surf, (94, 234, 212, r_alpha), (2, 2, r_rad * 2, max(2, int(r_rad * 1.3))), 2)
-                        self.screen.blit(r_surf, (ox + ow // 2 - r_rad - 2, oy + oh // 2 - int(r_rad * 0.65) - 2))
+                        if hasattr(self, '_ripple_surf'):
+                            self._ripple_surf.fill((0, 0, 0, 0))
+                            pygame.draw.ellipse(self._ripple_surf, (94, 234, 212, r_alpha), (2, 2, r_rad * 2, max(2, int(r_rad * 1.3))), 2)
+                            self.screen.blit(self._ripple_surf, (ox + ow // 2 - r_rad - 2, oy + oh // 2 - int(r_rad * 0.65) - 2))
                     lotus_rad = max(4, int(5 * ZOOM))
                     pygame.draw.circle(self.screen, (251, 191, 36), (int(ox + ow // 2), int(oy + oh // 2)), lotus_rad)
                     pygame.draw.circle(self.screen, (254, 240, 138), (int(ox + ow // 2), int(oy + oh // 2)), max(2, lotus_rad - 2))
 
-        # Draw Ambient Hub Particles (water drops, solar glints)
+        # 4. Draw Ambient Hub Particles
         for p in self.hub_particles:
             px = (p["x"] - self.camera_x) * ZOOM
             py = (p["y"] - self.camera_y) * ZOOM
-            alpha = max(0, min(255, int(255 * (p["life"] / p["max_life"]))))
-            p_surf = pygame.Surface((p["radius"] * 2, p["radius"] * 2), pygame.SRCALPHA)
-            pygame.draw.circle(p_surf, (*p["color"], alpha), (p["radius"], p["radius"]), p["radius"])
-            self.screen.blit(p_surf, (px - p["radius"], py - p["radius"]))
+            if 0 <= px <= self.width and 0 <= py <= self.height:
+                pygame.draw.circle(self.screen, p["color"], (int(px), int(py)), p["radius"])
 
-        # Draw Proximity Inspection Prompt Badge above active nearby interactable
-        if self.nearby_interactable and self.interactable_dialogue_state == 0:
-            n_obj = self.nearby_interactable
-            nx = (n_obj["world_x"] - self.camera_x + n_obj["width"] / 2) * ZOOM
-            ny = (n_obj["world_y"] - self.camera_y) * ZOOM
-            prompt_bob = math.sin(self.frame_counter * 0.12) * 4
-            prompt_font = pygame.font.SysFont("Comic Sans MS", max(11, int(12 * ZOOM)), bold=True)
-            prompt_str = f"[Space / Click] {n_obj['prompt']}"
-            p_text = prompt_font.render(prompt_str, True, (255, 255, 255))
-
-            pw = p_text.get_width() + 24
-            ph = p_text.get_height() + 10
-            px = nx - pw // 2
-            py = ny - ph - 12 + prompt_bob
-            badge_r = pygame.Rect(px, py, pw, ph)
-
-            # Drop shadow
-            sh_rect = badge_r.copy()
-            sh_rect.y += 2
-            pygame.draw.rect(self.screen, (0, 0, 0, 180), sh_rect, border_radius=10)
-
-            # Pill Badge Body
-            pygame.draw.rect(self.screen, (15, 23, 42), badge_r, border_radius=10)
-            pygame.draw.rect(self.screen, (251, 191, 36), badge_r, 2, border_radius=10)
-
-            self.screen.blit(p_text, p_text.get_rect(center=badge_r.center))
-
-        # Draw NPCs (before player so player is on top)
-        # Bromen - Idle, Walking Up, or Quest Exclamation
+        # 5. Draw NPC Sprites (Bromen, Oldman, Skeleton, Knight)
         if self.npc_bromen_found:
             if self.bromen_dialogue_state == 2:
                 if self.npc_bromen_up_sprites:
@@ -2999,32 +3263,7 @@ class StageSelect:
                 if self.npc_bromen_sprites:
                     self.draw_npc_animated(self.npc_bromen_x, self.npc_bromen_y,
                                            self.npc_bromen_sprites, self.npc_bromen_anim_frame)
-                
-                # Draw quest exclamation mark above Bromen's head if dialogue hasn't started and quarter is unlocked
-                if self.bromen_dialogue_state == 0 and self.is_quarter_unlocked('quarter4'):
-                    player_center_x = self.player_x + TILE_SIZE // 2
-                    player_center_y = self.player_y + TILE_SIZE // 2
-                    bro_center_x = self.npc_bromen_x + TILE_SIZE // 2
-                    bro_center_y = self.npc_bromen_y + TILE_SIZE // 2
-                    dist = math.hypot(player_center_x - bro_center_x, player_center_y - bro_center_y)
-                    
-                    if dist < TILE_SIZE * 3.0:
-                        screen_x = (self.npc_bromen_x - self.camera_x) * ZOOM
-                        screen_y = (self.npc_bromen_y - self.camera_y) * ZOOM
-                        
-                        excl_font = pygame.font.SysFont("Comic Sans MS", int(18 * ZOOM), bold=True)
-                        excl_surf = excl_font.render("!", True, (255, 0, 0))
-                        
-                        bounce = math.sin(self.frame_counter * 0.1) * 4 * ZOOM
-                        
-                        excl_x = screen_x + (TILE_SIZE * ZOOM) // 2 - excl_surf.get_width() // 2
-                        excl_y = screen_y - excl_surf.get_height() - 4 * ZOOM + bounce
-                        
-                        shadow_surf = excl_font.render("!", True, (0, 0, 0))
-                        self.screen.blit(shadow_surf, (excl_x + 1, excl_y + 1))
-                        self.screen.blit(excl_surf, (excl_x, excl_y))
 
-        # Oldman - Static or Animated Walking
         if self.npc_oldman_found:
             if self.oldman_dialogue_state == 2:
                 target_y = (self.npc_oldman_tile_y + 1) * TILE_SIZE
@@ -3054,36 +3293,7 @@ class StageSelect:
                 else:
                     self.draw_npc_static(self.npc_oldman_x, self.npc_oldman_y,
                                          self.npc_oldman_sprite)
-                
-                # Draw quest exclamation mark above the Old Man's head if dialogue hasn't started and player is in proximity
-                if self.oldman_dialogue_state == 0:
-                    player_center_x = self.player_x + TILE_SIZE // 2
-                    player_center_y = self.player_y + TILE_SIZE // 2
-                    oldman_center_x = self.npc_oldman_x + TILE_SIZE // 2
-                    oldman_center_y = self.npc_oldman_y + TILE_SIZE // 2
-                    dist = math.hypot(player_center_x - oldman_center_x, player_center_y - oldman_center_y)
-                    
-                    if dist < TILE_SIZE * 3.0:
-                        screen_x = (self.npc_oldman_x - self.camera_x) * ZOOM
-                        screen_y = (self.npc_oldman_y - self.camera_y) * ZOOM
-                        
-                        # Create floating quest indicator font matching visual aesthetics
-                        excl_font = pygame.font.SysFont("Comic Sans MS", int(18 * ZOOM), bold=True)
-                        excl_surf = excl_font.render("!", True, (255, 0, 0))  # Red color
-                        
-                        # Bounce animation (floating micro-animation)
-                        bounce = math.sin(self.frame_counter * 0.1) * 4 * ZOOM
-                        
-                        excl_x = screen_x + (TILE_SIZE * ZOOM) // 2 - excl_surf.get_width() // 2
-                        excl_y = screen_y - excl_surf.get_height() - 4 * ZOOM + bounce
-                        
-                        # Blit drop shadow
-                        shadow_surf = excl_font.render("!", True, (0, 0, 0))
-                        self.screen.blit(shadow_surf, (excl_x + 1, excl_y + 1))
-                        # Blit main exclamation
-                        self.screen.blit(excl_surf, (excl_x, excl_y))
 
-        # Skeleton - Static or Animated Walking
         if self.npc_skeleton_found:
             if self.skeleton_dialogue_state == 2:
                 target_y = (self.npc_skeleton_tile_y + 1) * TILE_SIZE
@@ -3113,32 +3323,7 @@ class StageSelect:
                 else:
                     self.draw_npc_static(self.npc_skeleton_x, self.npc_skeleton_y,
                                          self.npc_skeleton_sprite)
-                
-                # Draw quest exclamation mark above Skeleton's head if dialogue hasn't started and quarter is unlocked
-                if self.skeleton_dialogue_state == 0 and self.is_quarter_unlocked('quarter3'):
-                    player_center_x = self.player_x + TILE_SIZE // 2
-                    player_center_y = self.player_y + TILE_SIZE // 2
-                    skel_center_x = self.npc_skeleton_x + TILE_SIZE // 2
-                    skel_center_y = self.npc_skeleton_y + TILE_SIZE // 2
-                    dist = math.hypot(player_center_x - skel_center_x, player_center_y - skel_center_y)
-                    
-                    if dist < TILE_SIZE * 3.0:
-                        screen_x = (self.npc_skeleton_x - self.camera_x) * ZOOM
-                        screen_y = (self.npc_skeleton_y - self.camera_y) * ZOOM
-                        
-                        excl_font = pygame.font.SysFont("Comic Sans MS", int(18 * ZOOM), bold=True)
-                        excl_surf = excl_font.render("!", True, (255, 0, 0))
-                        
-                        bounce = math.sin(self.frame_counter * 0.1) * 4 * ZOOM
-                        
-                        excl_x = screen_x + (TILE_SIZE * ZOOM) // 2 - excl_surf.get_width() // 2
-                        excl_y = screen_y - excl_surf.get_height() - 4 * ZOOM + bounce
-                        
-                        shadow_surf = excl_font.render("!", True, (0, 0, 0))
-                        self.screen.blit(shadow_surf, (excl_x + 1, excl_y + 1))
-                        self.screen.blit(excl_surf, (excl_x, excl_y))
 
-        # Knight - Static or Animated Walking
         if self.npc_knight_found:
             if self.knight_dialogue_state == 2:
                 if self.npc_knight_down_sprites:
@@ -3164,41 +3349,131 @@ class StageSelect:
                 else:
                     self.draw_npc_static(self.npc_knight_x, self.npc_knight_y,
                                          self.npc_knight_sprite)
-                
-                # Draw quest exclamation mark above Knight's head if dialogue hasn't started and quarter is unlocked
-                if self.knight_dialogue_state == 0 and self.is_quarter_unlocked('quarter2'):
-                    player_center_x = self.player_x + TILE_SIZE // 2
-                    player_center_y = self.player_y + TILE_SIZE // 2
-                    knt_center_x = self.npc_knight_x + TILE_SIZE // 2
-                    knt_center_y = self.npc_knight_y + TILE_SIZE // 2
-                    dist = math.hypot(player_center_x - knt_center_x, player_center_y - knt_center_y)
-                    
-                    if dist < TILE_SIZE * 3.0:
-                        screen_x = (self.npc_knight_x - self.camera_x) * ZOOM
-                        screen_y = (self.npc_knight_y - self.camera_y) * ZOOM
-                        
-                        excl_font = pygame.font.SysFont("Comic Sans MS", int(18 * ZOOM), bold=True)
-                        excl_surf = excl_font.render("!", True, (255, 0, 0))
-                        
-                        bounce = math.sin(self.frame_counter * 0.1) * 4 * ZOOM
-                        
-                        excl_x = screen_x + (TILE_SIZE * ZOOM) // 2 - excl_surf.get_width() // 2
-                        excl_y = screen_y - excl_surf.get_height() - 4 * ZOOM + bounce
-                        
-                        shadow_surf = excl_font.render("!", True, (0, 0, 0))
-                        self.screen.blit(shadow_surf, (excl_x + 1, excl_y + 1))
-                        self.screen.blit(excl_surf, (excl_x, excl_y))
 
-        # Draw player
+        # Draw Animated Quest Beacons above Sanctuary NPCs
+        if not self.is_dialogue_active():
+            if self.npc_oldman_found:
+                draw_beacon_marker(self.screen, (self.npc_oldman_x - self.camera_x + TILE_SIZE // 2) * ZOOM, (self.npc_oldman_y - self.camera_y) * ZOOM, color=(251, 191, 36), beacon_type="exclamation", offset_y=int(-30 * ZOOM))
+            if self.npc_skeleton_found:
+                draw_beacon_marker(self.screen, (self.npc_skeleton_x - self.camera_x + TILE_SIZE // 2) * ZOOM, (self.npc_skeleton_y - self.camera_y) * ZOOM, color=(168, 85, 247), beacon_type="exclamation", offset_y=int(-30 * ZOOM))
+            if self.npc_knight_found:
+                draw_beacon_marker(self.screen, (self.npc_knight_x - self.camera_x + TILE_SIZE // 2) * ZOOM, (self.npc_knight_y - self.camera_y) * ZOOM, color=(59, 130, 246), beacon_type="exclamation", offset_y=int(-30 * ZOOM))
+            if self.npc_bromen_found:
+                draw_beacon_marker(self.screen, (self.npc_bromen_x - self.camera_x + TILE_SIZE // 2) * ZOOM, (self.npc_bromen_y - self.camera_y) * ZOOM, color=(20, 184, 166), beacon_type="exclamation", offset_y=int(-30 * ZOOM))
+
+        # 6. Draw player
         self.draw_player()
 
-        # Draw visible tree tiles on top of everything (Second pass)
-        for row in range(start_row, end_row):
-            for col in range(start_col, end_col):
-                if row < len(self.render_map) and col < len(self.render_map[row]):
-                    tile_char = self.render_map[row][col]
-                    if tile_char == 'T':
-                        self.draw_tile(tile_char, col * TILE_SIZE, row * TILE_SIZE)
+        # 7. Draw visible tree tiles on top of characters only (Pre-rendered canopy)
+        if getattr(self, '_fg_trees_surface', None):
+            self.screen.blit(self._fg_trees_surface, (-cam_pixel_x, -cam_pixel_y))
+        else:
+            start_col = max(0, int(self.camera_x / TILE_SIZE) - 2)
+            end_col = min(self.COLS, int((self.camera_x + self.width / ZOOM) / TILE_SIZE) + 3)
+            start_row = max(0, int(self.camera_y / TILE_SIZE) - 2)
+            end_row = min(self.ROWS, int((self.camera_y + self.height / ZOOM) / TILE_SIZE) + 3)
+            for row in range(start_row, end_row):
+                for col in range(start_col, end_col):
+                    if row < len(self.render_map) and col < len(self.render_map[row]):
+                        tile_char = self.render_map[row][col]
+                        if tile_char == 'T':
+                            self.draw_tile(tile_char, col * TILE_SIZE, row * TILE_SIZE)
+
+        # ============================================================
+        # 8. WORLD UI & GUIDES (Rendered AFTER trees so tree leaves NEVER overlap text/boxes)
+        # ============================================================
+        # Draw Corridor Energy Forcefields for Locked Quarters
+        self.draw_corridor_barriers()
+
+        # Draw Hierarchy Pathfinder Visual Guide Trail
+        if hasattr(self, 'path_guide') and not self.is_dialogue_active():
+            self.path_guide.draw()
+
+        # Draw Minimal Proximity Inspection Prompt Badge above active nearby interactable
+        if self.nearby_interactable and self.interactable_dialogue_state == 0 and not self.is_dialogue_active():
+            n_obj = self.nearby_interactable
+            nx = (n_obj["world_x"] - self.camera_x + n_obj["width"] / 2) * ZOOM
+            ny = (n_obj["world_y"] - self.camera_y) * ZOOM
+            prompt_bob = math.sin(self.frame_counter * 0.12) * 2
+            prompt_font = get_font("Comic Sans MS", max(11, int(11 * ZOOM)), bold=True)
+            prompt_str = f"[Space] {n_obj['prompt']}"
+            p_text = prompt_font.render(prompt_str, True, (255, 255, 255))
+
+            pw = p_text.get_width() + 18
+            ph = p_text.get_height() + 8
+            px = nx - pw // 2
+            py = ny - ph - 8 + prompt_bob
+            badge_r = pygame.Rect(int(px), int(py), pw, ph)
+
+            # Drop shadow & minimal pill
+            pygame.draw.rect(self.screen, (0, 0, 0, 140), badge_r.move(1, 1), border_radius=6)
+            pygame.draw.rect(self.screen, (15, 23, 42, 220), badge_r, border_radius=6)
+            pygame.draw.rect(self.screen, (251, 191, 36), badge_r, 1, border_radius=6)
+
+            self.screen.blit(p_text, p_text.get_rect(center=badge_r.center))
+
+        # Draw NPC Quest Exclamation Marks (!) - Rendered above trees for crisp visibility
+        if not self.is_dialogue_active():
+            excl_font = get_font("Comic Sans MS", int(24 * ZOOM), bold=True)
+            bounce = math.sin(self.frame_counter * 0.1) * 4 * ZOOM
+            player_center_x = self.player_x + TILE_SIZE // 2
+            player_center_y = self.player_y + TILE_SIZE // 2
+
+            # Bromen exclamation
+            if self.npc_bromen_found and self.bromen_dialogue_state == 0 and self.is_quarter_unlocked('quarter4'):
+                bro_center_x = self.npc_bromen_x + TILE_SIZE // 2
+                bro_center_y = self.npc_bromen_y + TILE_SIZE // 2
+                if math.hypot(player_center_x - bro_center_x, player_center_y - bro_center_y) < TILE_SIZE * 3.0:
+                    screen_x = (self.npc_bromen_x - self.camera_x) * ZOOM
+                    screen_y = (self.npc_bromen_y - self.camera_y) * ZOOM
+                    excl_surf = excl_font.render("!", True, (255, 0, 0))
+                    excl_x = screen_x + (TILE_SIZE * ZOOM) // 2 - excl_surf.get_width() // 2
+                    excl_y = screen_y - excl_surf.get_height() - 4 * ZOOM + bounce
+                    shadow_surf = excl_font.render("!", True, (0, 0, 0))
+                    self.screen.blit(shadow_surf, (excl_x + 1, excl_y + 1))
+                    self.screen.blit(excl_surf, (excl_x, excl_y))
+
+            # Old Man exclamation
+            if self.npc_oldman_found and self.oldman_dialogue_state == 0:
+                oldman_center_x = self.npc_oldman_x + TILE_SIZE // 2
+                oldman_center_y = self.npc_oldman_y + TILE_SIZE // 2
+                if math.hypot(player_center_x - oldman_center_x, player_center_y - oldman_center_y) < TILE_SIZE * 3.0:
+                    screen_x = (self.npc_oldman_x - self.camera_x) * ZOOM
+                    screen_y = (self.npc_oldman_y - self.camera_y) * ZOOM
+                    excl_surf = excl_font.render("!", True, (255, 0, 0))
+                    excl_x = screen_x + (TILE_SIZE * ZOOM) // 2 - excl_surf.get_width() // 2
+                    excl_y = screen_y - excl_surf.get_height() - 4 * ZOOM + bounce
+                    shadow_surf = excl_font.render("!", True, (0, 0, 0))
+                    self.screen.blit(shadow_surf, (excl_x + 1, excl_y + 1))
+                    self.screen.blit(excl_surf, (excl_x, excl_y))
+
+            # Skeleton exclamation
+            if self.npc_skeleton_found and self.skeleton_dialogue_state == 0 and self.is_quarter_unlocked('quarter3'):
+                skel_center_x = self.npc_skeleton_x + TILE_SIZE // 2
+                skel_center_y = self.npc_skeleton_y + TILE_SIZE // 2
+                if math.hypot(player_center_x - skel_center_x, player_center_y - skel_center_y) < TILE_SIZE * 3.0:
+                    screen_x = (self.npc_skeleton_x - self.camera_x) * ZOOM
+                    screen_y = (self.npc_skeleton_y - self.camera_y) * ZOOM
+                    excl_surf = excl_font.render("!", True, (255, 0, 0))
+                    excl_x = screen_x + (TILE_SIZE * ZOOM) // 2 - excl_surf.get_width() // 2
+                    excl_y = screen_y - excl_surf.get_height() - 4 * ZOOM + bounce
+                    shadow_surf = excl_font.render("!", True, (0, 0, 0))
+                    self.screen.blit(shadow_surf, (excl_x + 1, excl_y + 1))
+                    self.screen.blit(excl_surf, (excl_x, excl_y))
+
+            # Knight exclamation
+            if self.npc_knight_found and self.knight_dialogue_state == 0 and self.is_quarter_unlocked('quarter2'):
+                knt_center_x = self.npc_knight_x + TILE_SIZE // 2
+                knt_center_y = self.npc_knight_y + TILE_SIZE // 2
+                if math.hypot(player_center_x - knt_center_x, player_center_y - knt_center_y) < TILE_SIZE * 3.0:
+                    screen_x = (self.npc_knight_x - self.camera_x) * ZOOM
+                    screen_y = (self.npc_knight_y - self.camera_y) * ZOOM
+                    excl_surf = excl_font.render("!", True, (255, 0, 0))
+                    excl_x = screen_x + (TILE_SIZE * ZOOM) // 2 - excl_surf.get_width() // 2
+                    excl_y = screen_y - excl_surf.get_height() - 4 * ZOOM + bounce
+                    shadow_surf = excl_font.render("!", True, (0, 0, 0))
+                    self.screen.blit(shadow_surf, (excl_x + 1, excl_y + 1))
+                    self.screen.blit(excl_surf, (excl_x, excl_y))
 
         # Draw Area Title Animation
         if self.title_active:
@@ -3242,15 +3517,13 @@ class StageSelect:
                 outline.set_alpha(alpha)
                 main.set_alpha(alpha)
                 
-                # Glow
-                for gx in (-5, 0, 5):
-                    for gy in (-5, 0, 5):
-                        self.screen.blit(glow, (x + gx, y + gy + offset))
+                # Fast 4-way glow
+                for gx, gy in ((-4, 0), (4, 0), (0, -4), (0, 4)):
+                    self.screen.blit(glow, (x + gx, y + gy + offset))
                         
-                # Outline
-                for ox in (-2, -1, 1, 2):
-                    for oy in (-2, -1, 1, 2):
-                        self.screen.blit(outline, (x + ox, y + oy + offset))
+                # Fast 4-way outline
+                for ox, oy in ((-2, 0), (2, 0), (0, -2), (0, 2)):
+                    self.screen.blit(outline, (x + ox, y + oy + offset))
                         
                 # Main text
                 self.screen.blit(main, (x, y + offset))
@@ -3268,235 +3541,143 @@ class StageSelect:
             self.draw_portal_transition()
 
     def draw_portal_transition(self):
-        """Renders 3-second black loading screen with animated wave LOADING text and glowing energy capsule bar."""
+        """Renders ultra-optimized 3-second black loading screen with 0 per-frame heap allocations."""
         if not self.portal_transition_active or not self.portal_transition_theme:
             return
 
-        # 1. Solid Pure Black Background to completely conceal loading delay
+        # 1. Solid Pure Black Background
         self.screen.fill((0, 0, 0))
 
-        theme = self.portal_transition_theme
         timer = self.portal_transition_timer
         progress = max(0.0, min(1.0, timer / self.portal_transition_duration))
 
-        # 2. Ambient drifting star sparkles in the dark void
+        # 2. Ambient drifting star sparkles (Direct circle drawing, 0 surface allocations)
+        cx, cy = self.width // 2, self.height // 2
         for s in self.portal_transition_stars:
-            sx = int(self.width // 2 + math.cos(s["angle"]) * (s["dist"] % (self.width // 2)))
-            sy = int(self.height // 2 + math.sin(s["angle"]) * (s["dist"] % (self.height // 2)))
+            sx = int(cx + math.cos(s["angle"]) * (s["dist"] % cx))
+            sy = int(cy + math.sin(s["angle"]) * (s["dist"] % cy))
             if 0 <= sx < self.width and 0 <= sy < self.height:
-                s_alpha = int(180 * (math.sin(timer * 4.0 + s["dist"]) * 0.4 + 0.6))
-                s_surf = pygame.Surface((s["width"] * 2, s["width"] * 2), pygame.SRCALPHA)
-                pygame.draw.circle(s_surf, (*s["color"], s_alpha), (s["width"], s["width"]), s["width"])
-                self.screen.blit(s_surf, (sx - s["width"], sy - s["width"]))
+                pygame.draw.circle(self.screen, s["color"], (sx, sy), s["radius"])
 
-        # 3. Animated "LOADING..." Title (Traveling Sine Wave identical to Quarter Titles)
-        base_y = self.height // 2 - 60
-        x = self.width // 2 - self.loading_total_width // 2
-
+        # 3. Pre-composited Animated "LOADING..." Title (Single blit per letter)
+        base_y = cy - 60
+        x = cx - self.loading_total_width // 2
         for i, data in enumerate(self.loading_letters):
             phase = timer * 7.0 - i * 0.45
             offset = math.sin(phase) * 12
-
-            glow = data["glow"].copy()
-            outline = data["outline"].copy()
-            main = data["main"].copy()
-
-            # Thematic Glow
-            for gx in (-5, 0, 5):
-                for gy in (-5, 0, 5):
-                    self.screen.blit(glow, (x + gx, base_y + gy + offset))
-
-            # Outline
-            for ox in (-2, -1, 1, 2):
-                for oy in (-2, -1, 1, 2):
-                    self.screen.blit(outline, (x + ox, base_y + oy + offset))
-
-            # Main text
-            self.screen.blit(main, (x, base_y + offset))
-
+            pad = data["pad"]
+            self.screen.blit(data["surf"], (x - pad, int(base_y + offset) - pad))
             x += data["width"] + self.loading_spacing
 
-        # Destination Realm Subtitle Banner
-        dest_name = theme.get("name", "STAGE")
-        dest_title = theme.get("title", "")
-        dest_str = f"WARPING TO {dest_name}: {dest_title}"
-        sub_font = pygame.font.SysFont("Comic Sans MS", 14, bold=True)
-        sub_surf = sub_font.render(dest_str, True, theme.get("accent", (250, 204, 21)))
-        sub_rect = sub_surf.get_rect(center=(self.width // 2, base_y + 70))
-        self.screen.blit(sub_surf, sub_rect)
+        # 4. Destination Realm Subtitle Banner (Cached Blit)
+        if hasattr(self, '_cached_dest_surf'):
+            self.screen.blit(self._cached_dest_surf, self._cached_dest_rect)
 
-        # 4. Objectives HUD Box at the bottom center of the screen (Matching Quarter Objectives location)
-        box_w = min(480, self.width - 40)
-        box_h = 80
-        box_x = (self.width - box_w) // 2
-        box_y = self.height - box_h - 20
-        primary_col = theme.get("primary", (56, 189, 248))
-        accent_col = theme.get("accent", (250, 204, 21))
+        # 5. Objectives HUD Box & Track (Single Pre-rendered Cached Blit)
+        if hasattr(self, '_cached_hud_surf'):
+            self.screen.blit(self._cached_hud_surf, self._cached_hud_pos)
 
-        # Ambient neon glow behind the Objectives HUD box
-        box_glow = pygame.Surface((box_w + 24, box_h + 24), pygame.SRCALPHA)
-        pygame.draw.rect(box_glow, (*primary_col, 35), (0, 0, box_w + 24, box_h + 24), border_radius=16)
-        self.screen.blit(box_glow, (box_x - 12, box_y - 12))
-
-        # Translucent dark slate background
-        hud_bg = pygame.Surface((box_w, box_h), pygame.SRCALPHA)
-        hud_bg.fill((15, 23, 42, 220))
-        self.screen.blit(hud_bg, (box_x, box_y))
-
-        # Objectives HUD borders (Gold / Primary)
-        pygame.draw.rect(self.screen, (218, 165, 32), (box_x, box_y, box_w, box_h), 2, border_radius=10)
-        pygame.draw.rect(self.screen, (0, 0, 0, 120), (box_x + 2, box_y + 2, box_w - 4, box_h - 4), 1, border_radius=8)
-
-        # Header title in Gold
-        obj_title_font = pygame.font.SysFont("Comic Sans MS", 12, bold=True)
-        obj_title_surf = obj_title_font.render("CURRENT OBJECTIVES", True, (255, 215, 0))
-        self.screen.blit(obj_title_surf, (box_x + 16, box_y + 8))
-
-        # Realm descriptor tag on top-right of Objectives box
-        realm_text = theme.get("realm", "")
-        if realm_text:
-            realm_font = pygame.font.SysFont("Comic Sans MS", 10, bold=True)
-            realm_surf = realm_font.render(realm_text, True, (148, 163, 184))
-            realm_rect = realm_surf.get_rect(topright=(box_x + box_w - 16, box_y + 10))
-            self.screen.blit(realm_surf, realm_rect)
-
-        # 5. Premium Futuristic Energy Loading Bar (Placed inside the Objectives HUD location)
-        bar_x = box_x + 16
-        bar_y = box_y + 36
-        bar_w = box_w - 32
-        bar_h = 24
-
-        # Track background (Deep metallic glass)
-        pygame.draw.rect(self.screen, (15, 23, 42), (bar_x, bar_y, bar_w, bar_h), border_radius=12)
-        pygame.draw.rect(self.screen, (51, 65, 85), (bar_x, bar_y, bar_w, bar_h), 2, border_radius=12)
-        pygame.draw.rect(self.screen, primary_col, (bar_x, bar_y, bar_w, bar_h), 1, border_radius=12)
-
-        # Fill progress with smooth capsule rounding
-        inner_margin = 3
-        max_fill_w = bar_w - inner_margin * 2
+        # 6. Fill Progress (Hardware-fast sub-surface slice blit)
+        bar_x, bar_y, bar_w, bar_h = self._cached_bar_rect
+        inner_margin = self._cached_inner_margin
+        max_fill_w = self._cached_max_fill_w
+        fill_h = self._cached_fill_h
         fill_w = int(max_fill_w * progress)
 
-        if fill_w > 0:
-            fill_rect = pygame.Rect(bar_x + inner_margin, bar_y + inner_margin, fill_w, bar_h - inner_margin * 2)
+        if fill_w > 0 and hasattr(self, '_cached_fill_bar_surf'):
+            fill_sub = pygame.Rect(0, 0, fill_w, fill_h)
+            self.screen.blit(self._cached_fill_bar_surf, (bar_x + inner_margin, bar_y + inner_margin), area=fill_sub)
 
-            # Draw primary gradient base fill
-            fill_surf = pygame.Surface((fill_w, fill_rect.height), pygame.SRCALPHA)
-            fill_surf.fill(primary_col)
-
-            # Horizontal gradient shading towards accent color
-            for col_i in range(fill_w):
-                ratio = col_i / float(max(1, max_fill_w))
-                blend_r = int(primary_col[0] + (accent_col[0] - primary_col[0]) * ratio)
-                blend_g = int(primary_col[1] + (accent_col[1] - primary_col[1]) * ratio)
-                blend_b = int(primary_col[2] + (accent_col[2] - primary_col[2]) * ratio)
-                pygame.draw.line(fill_surf, (blend_r, blend_g, blend_b), (col_i, 0), (col_i, fill_rect.height))
-
-            # Glassy top specular reflection
-            top_shine = pygame.Surface((fill_w, fill_rect.height // 2), pygame.SRCALPHA)
-            top_shine.fill((255, 255, 255, 65))
-            fill_surf.blit(top_shine, (0, 0))
-
-            # Animated sweeping shimmer streak across the fill
-            shimmer_cycle = (timer * 340) % (max_fill_w + 100) - 50
-            if 0 <= shimmer_cycle < fill_w + 30:
-                s_left = max(0, int(shimmer_cycle - 20))
-                s_right = min(fill_w, int(shimmer_cycle + 20))
-                if s_right > s_left:
-                    shimmer_strip = pygame.Surface((s_right - s_left, fill_rect.height), pygame.SRCALPHA)
-                    shimmer_strip.fill((255, 255, 255, 90))
-                    fill_surf.blit(shimmer_strip, (s_left, 0))
-
-            self.screen.blit(fill_surf, fill_rect.topleft)
-
-            # Glowing energy tip spark at head of the progress bar
+            # Glowing energy tip spark at head of the progress bar (Direct circle drawing)
+            accent_col = self.portal_transition_theme.get("accent", (250, 204, 21))
             spark_x = bar_x + inner_margin + fill_w
             spark_y = bar_y + bar_h // 2
             pulse_rad = int(math.sin(timer * 12.0) * 2 + 5)
-
-            # Outer aura
-            pygame.draw.circle(self.screen, (*accent_col, 180), (spark_x, spark_y), pulse_rad + 6, 2)
             pygame.draw.circle(self.screen, accent_col, (spark_x, spark_y), pulse_rad + 3)
-            # Bright white center core
             pygame.draw.circle(self.screen, (255, 255, 255), (spark_x, spark_y), max(2, pulse_rad - 1))
 
-        # 6. Crisp Centered Percentage Label inside the loading bar
-        percent_str = f"{int(progress * 100)}%"
-        pct_font = pygame.font.SysFont("Comic Sans MS", 12, bold=True)
-        # Drop shadow for readability
-        pct_shadow = pct_font.render(percent_str, True, (0, 0, 0))
-        pct_surf = pct_font.render(percent_str, True, (255, 255, 255))
-        pct_center = (bar_x + bar_w // 2, bar_y + bar_h // 2)
-        self.screen.blit(pct_shadow, pct_shadow.get_rect(center=(pct_center[0] + 1, pct_center[1] + 1)))
-        self.screen.blit(pct_surf, pct_surf.get_rect(center=pct_center))
+        # 7. Crisp Centered Percentage Label (Cached LUT Blit)
+        pct_val = int(progress * 100)
+        pct_surf = self._cached_pct_surfs.get(pct_val)
+        if pct_surf:
+            self.screen.blit(pct_surf, pct_surf.get_rect(center=(bar_x + bar_w // 2, bar_y + bar_h // 2)))
 
     # ============================================================
     # DRAW UI
     # ============================================================
     def draw_ui(self):
-        # Refresh completed quarters status
-        from db.save_system import get_completed_quarters, is_game_completed
-        student_id = getattr(self.main_menu, 'student_id', None)
-        self.completed_quarters = get_completed_quarters(student_id)
+        # Use cached completed quarters status
+        completed = getattr(self, '_completed_quarters', None)
+        if completed is None:
+            from db.save_system import get_completed_quarters
+            student_id = getattr(self.main_menu, 'student_id', None)
+            completed = get_completed_quarters(student_id)
+            self._completed_quarters = completed
+            self.completed_quarters = completed
 
-        # Draw Top HUD Stage Progress Tracker
-        num_cleared = sum(1 for q in ['quarter1', 'quarter2', 'quarter3', 'quarter4'] if self.completed_quarters.get(q, {}).get("completed", False))
-        hud_w, hud_h = 300, 36
+        # Draw Top HUD Stage Progress Tracker (Enlarged for Grade 2)
+        num_cleared = sum(1 for q in ['quarter1', 'quarter2', 'quarter3', 'quarter4'] if completed.get(q, {}).get("completed", False))
+        hud_w, hud_h = 350, 42
         hud_x = (self.width - hud_w) // 2
         hud_y = 12
         hud_rect = pygame.Rect(hud_x, hud_y, hud_w, hud_h)
-        pygame.draw.rect(self.screen, (15, 23, 42), hud_rect, border_radius=8)
-        pygame.draw.rect(self.screen, (255, 215, 0), hud_rect, 2, border_radius=8)
+        pygame.draw.rect(self.screen, (15, 23, 42), hud_rect, border_radius=10)
+        pygame.draw.rect(self.screen, (255, 215, 0), hud_rect, 2, border_radius=10)
 
-        hud_font = pygame.font.SysFont("Comic Sans MS", 14, bold=True)
-        t_surf = hud_font.render(f"Quarters Mastered: {num_cleared}/4", True, (241, 245, 249))
-        self.screen.blit(t_surf, (hud_x + 14, hud_y + 7))
+        if getattr(self, '_cached_num_cleared', None) != num_cleared:
+            self._cached_num_cleared = num_cleared
+            hud_font = get_font("Comic Sans MS", 16, bold=True)
+            self._cached_t_surf = hud_font.render(f"Quarters Mastered: {num_cleared}/4", True, (241, 245, 249))
+        self.screen.blit(self._cached_t_surf, (hud_x + 16, hud_y + 9))
 
-        # 4 Golden Stars / Gem Medals (Native Vector Iconography Engine)
+        # 4 Golden Stars / Gem Medals (Native Vector Iconography Engine - Enlarged for Grade 2)
         from core.vector_icons import draw_vector_star
-        star_x = hud_x + 212
+        star_x = hud_x + 242
         for i in range(4):
             is_on = i < num_cleared
-            cx = star_x + i * 20
+            cx = star_x + i * 24
             cy = hud_y + hud_h // 2
             if is_on:
-                draw_vector_star(self.screen, cx, cy, radius=7, color=(255, 215, 0), outline_color=(254, 240, 138))
+                draw_vector_star(self.screen, cx, cy, radius=8, color=(255, 215, 0), outline_color=(254, 240, 138))
             else:
-                draw_vector_star(self.screen, cx, cy, radius=6, color=(51, 65, 85), outline_color=(71, 85, 105))
+                draw_vector_star(self.screen, cx, cy, radius=7, color=(51, 65, 85), outline_color=(71, 85, 105))
 
-        # Draw Locked Notification Banner if active
+        # Draw Locked Notification Banner if active (Enlarged for Grade 2)
         if self.locked_portal_banner_timer > 0 and self.locked_portal_banner_msg:
-            banner_font = pygame.font.SysFont("Comic Sans MS", 14, bold=True)
-            msg_surf = banner_font.render(self.locked_portal_banner_msg, True, (254, 242, 242))
-            
-            bw = msg_surf.get_width() + 40
-            bh = 38
-            bx = (self.width - bw) // 2
-            by = 56
-            
-            b_surf = pygame.Surface((bw, bh), pygame.SRCALPHA)
-            b_surf.fill((15, 23, 42, 238))
-            if getattr(self, 'barriers_lifted', False) and "Lifted" in self.locked_portal_banner_msg:
-                border_color = (34, 197, 94)  # Emerald green for barriers lifted
-            elif "Restored" in self.locked_portal_banner_msg:
-                border_color = (245, 158, 11)  # Amber for barriers restored
-            else:
-                border_color = (239, 68, 68)  # Ruby red for locked alerts
-            pygame.draw.rect(b_surf, border_color, (0, 0, bw, bh), 2, border_radius=8)
-            self.screen.blit(b_surf, (bx, by))
-            
-            # Drop shadow + main banner text
-            sh_surf = banner_font.render(self.locked_portal_banner_msg, True, (0, 0, 0))
-            self.screen.blit(sh_surf, (bx + 21, by + 9))
-            self.screen.blit(msg_surf, (bx + 20, by + 8))
+            banner_font = get_font("Comic Sans MS", 16, bold=True)
+            if getattr(self, '_cached_banner_msg', None) != self.locked_portal_banner_msg:
+                self._cached_banner_msg = self.locked_portal_banner_msg
+                msg_surf = banner_font.render(self.locked_portal_banner_msg, True, (254, 242, 242))
+                sh_surf = banner_font.render(self.locked_portal_banner_msg, True, (0, 0, 0))
+                bw = msg_surf.get_width() + 48
+                bh = 44
+                b_surf = pygame.Surface((bw, bh), pygame.SRCALPHA)
+                b_surf.fill((15, 23, 42, 238))
+                if getattr(self, 'barriers_lifted', False) and "Lifted" in self.locked_portal_banner_msg:
+                    border_color = (34, 197, 94)  # Emerald green for barriers lifted
+                elif "Restored" in self.locked_portal_banner_msg:
+                    border_color = (245, 158, 11)  # Amber for barriers restored
+                else:
+                    border_color = (239, 68, 68)  # Ruby red for locked alerts
+                pygame.draw.rect(b_surf, border_color, (0, 0, bw, bh), 2, border_radius=10)
+                b_surf.blit(sh_surf, (25, 11))
+                b_surf.blit(msg_surf, (24, 10))
+                self._cached_banner_surf = b_surf
 
-        # Reopen Grand Finale Button if all 4 completed
-        if is_game_completed(student_id) and not self.grand_finale_active:
-            btn_r = pygame.Rect(self.width - 170, 12, 150, 36)
+            bw, bh = self._cached_banner_surf.get_size()
+            bx = (self.width - bw) // 2
+            by = 62
+            self.screen.blit(self._cached_banner_surf, (bx, by))
+
+        # Reopen Grand Finale Button if all 4 completed (Enlarged for Grade 2)
+        if (num_cleared == 4) and not self.grand_finale_active:
+            btn_r = pygame.Rect(self.width - 180, 12, 160, 42)
             hov = btn_r.collidepoint(self.cursor_pos)
             bg = (245, 158, 11) if hov else (217, 119, 6)
-            pygame.draw.rect(self.screen, bg, btn_r, border_radius=8)
-            pygame.draw.rect(self.screen, (255, 255, 255), btn_r, 2, border_radius=8)
-            btn_txt = hud_font.render("Victory Card", True, (255, 255, 255))
+            pygame.draw.rect(self.screen, bg, btn_r, border_radius=10)
+            pygame.draw.rect(self.screen, (255, 255, 255), btn_r, 2, border_radius=10)
+            btn_font = get_font("Comic Sans MS", 15, bold=True)
+            btn_txt = btn_font.render("Victory Card", True, (255, 255, 255))
             self.screen.blit(btn_txt, btn_txt.get_rect(center=btn_r.center))
 
         # Draw Grand Finale Modal if active
@@ -3540,7 +3721,7 @@ class StageSelect:
                 y_offset += 18
 
     # ============================================================
-    # DRAW DIALOGUE BOX
+    # DRAW DIALOGUE BOX (Authentic GBA Pokemon Emerald Style)
     # ============================================================
     def draw_dialogue_box(self):
         if self.oldman_dialogue_state == 1:
@@ -3560,79 +3741,19 @@ class StageSelect:
         else:
             return
 
-        # Dialogue box layout
-        box_width = self.width - 80
-        box_height = 130
-        box_x = 40
-        box_y = self.height - box_height - 40
-
-        # Background (semi-transparent black)
-        dialogue_surface = pygame.Surface((box_width, box_height), pygame.SRCALPHA)
-        pygame.draw.rect(dialogue_surface, (20, 20, 20, 220), (0, 0, box_width, box_height), border_radius=10)
-        pygame.draw.rect(dialogue_surface, (255, 215, 0, 255), (0, 0, box_width, box_height), width=3, border_radius=10) # Gold border
-        self.screen.blit(dialogue_surface, (box_x, box_y))
-
-        # Render speaker name
-        if speaker == "Old Man":
-            name_color = (255, 215, 0)
-        elif speaker == "Skeleton":
-            name_color = (200, 100, 255) # Cyan/Purple for Skeleton
-        elif speaker == "Knight":
-            name_color = (100, 200, 255) # Cyan/Blue for Knight
-        elif speaker == "Bromen":
-            name_color = (255, 180, 50) # Orange/Gold for Bromen
-        elif speaker == "Fountain of Clarity":
-            name_color = (56, 189, 248) # Celestial Cyan
-        elif speaker == "Supply Chest":
-            name_color = (245, 158, 11) # Amber / Merchant Gold
-        elif speaker == "Sun Monolith":
-            name_color = (251, 191, 36) # Solar Gold
-        elif speaker == "Wishing Lake":
-            name_color = (94, 234, 212) # Emerald / Aqua
-        else:
-            name_color = (100, 255, 100) # Green for Student / Player
-
-        name_text = self.font.render(speaker, True, name_color)
-        self.screen.blit(name_text, (box_x + 20, box_y + 15))
-
-        # Wrap text and render
-        max_width = box_width - 40
-        words = text.split(" ")
-        lines = []
-        current_line = []
-        for word in words:
-            current_line.append(word)
-            test_str = " ".join(current_line)
-            if self.font.size(test_str)[0] > max_width:
-                current_line.pop()
-                lines.append(" ".join(current_line))
-                current_line = [word]
-        if current_line:
-            lines.append(" ".join(current_line))
-
-        # Render dialogue lines with typewriter effect
-        chars_remaining = int(self.dialogue_char_index)
-        y_offset = box_y + 45
-        for line in lines:
-            if chars_remaining <= 0:
-                break
-            visible_line = line[:chars_remaining]
-            chars_remaining -= len(line) + 1
-            line_surface = self.font.render(visible_line, True, (255, 255, 255))
-            self.screen.blit(line_surface, (box_x + 20, y_offset))
-            y_offset += 24
-
-        # Continue indicator
-        is_finished = (self.dialogue_char_index >= len(text))
-        if is_finished:
-            if (self.frame_counter // 30) % 2 == 0:
-                prompt = "Hold Fist / Space / Click to continue >>"
-                prompt_surface = self.small_font.render(prompt, True, (255, 215, 0))
-                self.screen.blit(prompt_surface, (box_x + box_width - prompt_surface.get_width() - 20, box_y + box_height - 25))
-        else:
-            prompt = "Hold Fist / Space to advance..."
-            prompt_surface = self.small_font.render(prompt, True, (160, 160, 160))
-            self.screen.blit(prompt_surface, (box_x + box_width - prompt_surface.get_width() - 20, box_y + box_height - 25))
+        from core.gba_dialogue import draw_gba_dialogue
+        student_info = getattr(self.main_menu, 'selected_student', None) if hasattr(self, 'main_menu') and self.main_menu else None
+        draw_gba_dialogue(
+            screen=self.screen,
+            screen_width=self.width,
+            screen_height=self.height,
+            speaker_name=speaker,
+            text_content=text,
+            char_index=self.dialogue_char_index,
+            student_info=student_info,
+            frame_counter=self.frame_counter,
+            show_portrait=True
+        )
 
     # ============================================================
     # HANDLE EVENT
@@ -3765,34 +3886,34 @@ class StageSelect:
             pygame.draw.circle(self.screen, p["color"], (int(p["x"]), int(p["y"])), p["size"])
 
         # 3. Centered Victory Modal Card
-        card_w, card_h = 620, 450
+        card_w, card_h = 760, 520
         card_x = (self.width - card_w) // 2
         card_y = (self.height - card_h) // 2
         card_rect = pygame.Rect(card_x, card_y, card_w, card_h)
-        pygame.draw.rect(self.screen, (15, 23, 42), card_rect, border_radius=16)
-        pygame.draw.rect(self.screen, (255, 215, 0), card_rect, 4, border_radius=16)
+        pygame.draw.rect(self.screen, (15, 23, 42), card_rect, border_radius=18)
+        pygame.draw.rect(self.screen, (255, 215, 0), card_rect, 4, border_radius=18)
 
         # Fonts
-        t_font = pygame.font.SysFont("Comic Sans MS", 21, bold=True)
-        sub_font = pygame.font.SysFont("Comic Sans MS", 13)
-        row_font = pygame.font.SysFont("Comic Sans MS", 13, bold=True)
+        t_font = pygame.font.SysFont("Comic Sans MS", 25, bold=True)
+        sub_font = pygame.font.SysFont("Comic Sans MS", 15)
+        row_font = pygame.font.SysFont("Comic Sans MS", 16, bold=True)
 
         # Title Header
         title = t_font.render("QUEST COMPLETE: GRAND CHAMPION!", True, (255, 215, 0))
-        self.screen.blit(title, title.get_rect(center=(card_x + card_w // 2, card_y + 35)))
+        self.screen.blit(title, title.get_rect(center=(card_x + card_w // 2, card_y + 38)))
 
         sub = sub_font.render("Outstanding achievement! You have mastered all 4 Quarters of Cognitive Maze!", True, (226, 232, 240))
-        self.screen.blit(sub, sub.get_rect(center=(card_x + card_w // 2, card_y + 65)))
+        self.screen.blit(sub, sub.get_rect(center=(card_x + card_w // 2, card_y + 70)))
 
         # Summary rows for Q1-Q4
         quarters_info = [
-            ("quarter1", "Quarter 1: Storybook Meadow", "Shapes & Jigsaw Puzzles"),
-            ("quarter2", "Quarter 2: Barangay Geometry", "Patterns & Bahay Kubo"),
-            ("quarter3", "Quarter 3: Oasis Mirage", "Math Explorations & Caravan"),
-            ("quarter4", "Quarter 4: Celestial Clocktower", "Water Temple Chrono Gears"),
+            ("quarter1", "Quarter 1: 2D Shapes & Geometry", "Shapes & Composite Figures"),
+            ("quarter2", "Quarter 2: Numbers, Addition & Subtraction", "Money & Word Problems"),
+            ("quarter3", "Quarter 3: Multiplication & Fractions", "Equal Groups & Fractions"),
+            ("quarter4", "Quarter 4: Measurement & Time", "Length, Mass, Time & Equations"),
         ]
 
-        row_y = card_y + 95
+        row_y = card_y + 98
         total_pts = 0
         for qid, title_str, desc_str in quarters_info:
             qdata = self.completed_quarters.get(qid, {})
@@ -3800,29 +3921,29 @@ class StageSelect:
             pct = qdata.get("percentage", 100.0)
             total_pts += score
 
-            row_rect = pygame.Rect(card_x + 30, row_y, card_w - 60, 52)
-            pygame.draw.rect(self.screen, (30, 41, 59), row_rect, border_radius=8)
-            pygame.draw.rect(self.screen, (51, 65, 85), row_rect, 1, border_radius=8)
+            row_rect = pygame.Rect(card_x + 30, row_y, card_w - 60, 60)
+            pygame.draw.rect(self.screen, (30, 41, 59), row_rect, border_radius=10)
+            pygame.draw.rect(self.screen, (51, 65, 85), row_rect, 1, border_radius=10)
 
             lbl_surf = row_font.render(f"{title_str}  ({desc_str})", True, (248, 250, 252))
-            self.screen.blit(lbl_surf, (card_x + 45, row_y + 8))
+            self.screen.blit(lbl_surf, (card_x + 45, row_y + 10))
 
             val_str = f"[Cleared]  Score: {score} pts  ({pct:.0f}%)"
             val_surf = sub_font.render(val_str, True, (255, 215, 0))
-            self.screen.blit(val_surf, (card_x + 45, row_y + 28))
+            self.screen.blit(val_surf, (card_x + 45, row_y + 34))
 
-            row_y += 58
+            row_y += 66
 
         # Total Cumulative Mastery Summary
         total_txt = row_font.render(f"Cumulative Score: {total_pts} / 400 pts   -   Rank: Cognitive Master (Master Tier)", True, (52, 211, 153))
-        self.screen.blit(total_txt, total_txt.get_rect(center=(card_x + card_w // 2, card_y + 348)))
+        self.screen.blit(total_txt, total_txt.get_rect(center=(card_x + card_w // 2, card_y + 398)))
 
         # Close / Celebrate Button
-        btn_rect = pygame.Rect(card_x + (card_w - 280) // 2, card_y + 375, 280, 44)
+        btn_rect = pygame.Rect(card_x + (card_w - 320) // 2, card_y + 445, 320, 50)
         hov = btn_rect.collidepoint(self.cursor_pos)
         bg = (34, 197, 94) if hov else (22, 163, 74)
-        pygame.draw.rect(self.screen, bg, btn_rect, border_radius=10)
-        pygame.draw.rect(self.screen, (134, 239, 172), btn_rect, 2, border_radius=10)
+        pygame.draw.rect(self.screen, bg, btn_rect, border_radius=12)
+        pygame.draw.rect(self.screen, (134, 239, 172), btn_rect, 2, border_radius=12)
         btn_lbl = row_font.render("Celebrate & Explore!", True, (255, 255, 255))
         self.screen.blit(btn_lbl, btn_lbl.get_rect(center=btn_rect.center))
 

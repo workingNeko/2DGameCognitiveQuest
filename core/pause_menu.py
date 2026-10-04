@@ -48,6 +48,10 @@ class InGamePauseMenu:
         self.guide_y = (self.height - self.guide_h) // 2
         self.guide_back_rect = pygame.Rect(self.guide_x + (self.guide_w - 220) // 2, self.guide_y + self.guide_h - 58, 220, 42)
 
+    def update(self, dt=0.016):
+        """Updates animation/state if needed."""
+        pass
+
     def get_font(self, size, bold=False):
         from .font_manager import get_font as fm_get_font
         return fm_get_font("Comic Sans MS", size, bold=bold)
@@ -77,14 +81,29 @@ class InGamePauseMenu:
             self.showing_controls = False
         self._play_sfx("click")
 
+    def open(self):
+        """Opens the pause menu."""
+        self.is_paused = True
+        self.showing_controls = False
+
+    def close(self):
+        """Closes the pause menu."""
+        self.is_paused = False
+        self.showing_controls = False
+
     def is_hovering(self, pos):
         """Returns True if cursor is hovering over pause button or modal buttons."""
         if self.is_paused:
             return True
+        if pos is None or not isinstance(pos, (tuple, list)) or len(pos) < 2 or not isinstance(pos[0], (int, float)):
+            return False
         return self.pause_btn_rect.collidepoint(pos)
 
     def handle_click(self, pos):
         """Handles cursor or mouse clicks on pause button or modal."""
+        if pos is None or not isinstance(pos, (tuple, list)) or len(pos) < 2 or not isinstance(pos[0], (int, float)):
+            return self.is_paused
+
         # 1. Check Pause Button toggle (only when not paused)
         if not self.is_paused and self.pause_btn_rect.collidepoint(pos):
             self.toggle_pause()
@@ -135,8 +154,11 @@ class InGamePauseMenu:
 
         return False
 
-    def draw_button(self, cursor_pos):
+    def draw_button(self, cursor_pos=None):
         """Draws the on-screen pause button in the top corner."""
+        if cursor_pos is None or not isinstance(cursor_pos, (tuple, list)) or len(cursor_pos) < 2 or not isinstance(cursor_pos[0], (int, float)):
+            cursor_pos = (-1000, -1000)
+
         hov = self.pause_btn_rect.collidepoint(cursor_pos)
         bg = (51, 65, 85) if hov else (30, 41, 59)
         border = (255, 215, 0) if hov else (148, 163, 184)
@@ -149,10 +171,13 @@ class InGamePauseMenu:
         txt = font.render("PAUSE", True, fg)
         self.screen.blit(txt, txt.get_rect(center=self.pause_btn_rect.center))
 
-    def draw_modal(self, cursor_pos):
+    def draw_modal(self, cursor_pos=None):
         """Draws the pause modal overlay or controls guide overlay."""
         if not self.is_paused:
             return
+
+        if cursor_pos is None or not isinstance(cursor_pos, (tuple, list)) or len(cursor_pos) < 2 or not isinstance(cursor_pos[0], (int, float)):
+            cursor_pos = (-1000, -1000)
 
         # Semi-transparent overlay
         if not hasattr(self, '_dim_surf') or self._dim_surf is None or self._dim_surf.get_size() != (self.width, self.height):
@@ -217,8 +242,11 @@ class InGamePauseMenu:
         e_txt = btn_font.render("Return to Stage Select", True, (255, 255, 255))
         self.screen.blit(e_txt, e_txt.get_rect(center=self.exit_rect.center))
 
-    def draw_controls_guide(self, cursor_pos):
+    def draw_controls_guide(self, cursor_pos=None):
         """Renders the comprehensive controls guide overlay."""
+        if cursor_pos is None or not isinstance(cursor_pos, (tuple, list)) or len(cursor_pos) < 2 or not isinstance(cursor_pos[0], (int, float)):
+            cursor_pos = (-1000, -1000)
+
         card_rect = pygame.Rect(self.guide_x, self.guide_y, self.guide_w, self.guide_h)
         pygame.draw.rect(self.screen, (15, 23, 42), card_rect, border_radius=16)
         pygame.draw.rect(self.screen, (99, 102, 241), card_rect, 3, border_radius=16)
@@ -232,7 +260,7 @@ class InGamePauseMenu:
 
         controls_data = [
             ("Open Hand Steering", "Position open hand in front of camera to steer player & guide cursor.", (100, 255, 150)),
-            ("Closed Fist Action", "Close and hold fist (0.9s) over choices, NPCs, and portals to confirm.", (255, 215, 0)),
+            ("Closed Fist Action", "Close and hold fist (0.9s) over choices, NPCs, and portals to confirm / click.", (255, 215, 0)),
             ("Peace Sign Pause", "Show a peace sign (V-sign) to camera to pop up this Pause Menu anytime.", (34, 197, 94)),
             ("Speed Burst", "Move your hand further from center to accelerate into a sprint.", (147, 197, 253)),
         ]
@@ -253,3 +281,13 @@ class InGamePauseMenu:
         pygame.draw.rect(self.screen, (199, 210, 254), self.guide_back_rect, 2, border_radius=10)
         b_txt = h_font.render("Back to Pause", True, (255, 255, 255))
         self.screen.blit(b_txt, b_txt.get_rect(center=self.guide_back_rect.center))
+
+    def draw(self, cursor_pos=None):
+        """Convenience method to draw pause button and/or modal."""
+        self.draw_button(cursor_pos)
+        if self.is_paused:
+            self.draw_modal(cursor_pos)
+
+
+PauseMenu = InGamePauseMenu
+

@@ -57,10 +57,31 @@ THEME_PALETTES = {
 
 def wrap_text(text, font, max_width):
     """Utility to split text into wrapped lines for rendering."""
+    if text is None:
+        return []
+    text = str(text)
     words = text.split(" ")
     lines = []
     current_line = []
     for word in words:
+        if not word:
+            continue
+        if font.size(word)[0] > max_width:
+            if current_line:
+                lines.append(" ".join(current_line))
+                current_line = []
+            chunk = ""
+            for char in word:
+                if font.size(chunk + char)[0] <= max_width:
+                    chunk += char
+                else:
+                    if chunk:
+                        lines.append(chunk)
+                    chunk = char
+            if chunk:
+                current_line = [chunk]
+            continue
+
         test_line = " ".join(current_line + [word])
         if font.size(test_line)[0] <= max_width:
             current_line.append(word)
@@ -78,11 +99,22 @@ class InstructionModal:
     RPG Map Instructions & Learning Objectives Modal shown at the start of each map.
     Explains the Grade 2 Math learning objectives and sequential quest steps.
     """
-    def __init__(self, screen, width, height, audio_manager=None):
-        self.screen = screen
-        self.width = width
-        self.height = height
-        self.audio_manager = audio_manager
+    def __init__(self, *args, **kwargs):
+        if len(args) >= 3:
+            self.screen = args[0]
+            self.width = args[1]
+            self.height = args[2]
+            self.audio_manager = args[3] if len(args) > 3 else kwargs.get("audio_manager")
+        elif len(args) == 2:
+            self.screen = pygame.display.get_surface()
+            self.width = args[0]
+            self.height = args[1]
+            self.audio_manager = kwargs.get("audio_manager")
+        else:
+            self.screen = kwargs.get("screen") or pygame.display.get_surface()
+            self.width = kwargs.get("width", 1280)
+            self.height = kwargs.get("height", 720)
+            self.audio_manager = kwargs.get("audio_manager")
 
         self.active = False
         self.data = None
@@ -118,7 +150,7 @@ class InstructionModal:
 
     @property
     def objectives_title(self):
-        return self.data.get("objectives_title", "🎯 LEARNING OBJECTIVES:") if self.data else "🎯 LEARNING OBJECTIVES:"
+        return self.data.get("objectives_title", "LEARNING OBJECTIVES:") if self.data else "LEARNING OBJECTIVES:"
 
     @property
     def objectives_subtitle(self):
@@ -132,9 +164,14 @@ class InstructionModal:
     def steps(self):
         return self.data.get("steps", []) if self.data else []
 
-    def show(self, instructions_data):
-        self.data = instructions_data
-        self.theme_key = instructions_data.get("theme", "forest")
+    def show(self, instructions_data=None, *args, **kwargs):
+        if isinstance(instructions_data, dict):
+            self.data = instructions_data
+        elif instructions_data is None:
+            self.data = kwargs.get("instructions_data") or {}
+        else:
+            self.data = {"title": str(instructions_data), "instructions": []}
+        self.theme_key = self.data.get("theme", kwargs.get("theme", "forest"))
         self.active = True
         self.scroll_y = 0
         self.shown_count += 1
@@ -175,16 +212,8 @@ class InstructionModal:
     def handle_click(self, cursor_pos):
         if not self.active:
             return False
-        btn_rect = self.get_button_rect()
-        if btn_rect.collidepoint(cursor_pos):
-            self.hide()
-            return True
-        # Clicking anywhere on the modal or outside dismisses it as well
-        modal_rect = pygame.Rect(self.box_x, self.box_y, self.box_w, self.box_h)
-        if modal_rect.collidepoint(cursor_pos):
-            self.hide()
-            return True
-        return False
+        self.hide()
+        return True
 
     def handle_event(self, event):
         if not self.active:
@@ -221,9 +250,30 @@ class InstructionModal:
             return True
         return False
 
-    def draw(self, cursor_pos, fist_hold_pct=None):
+    def draw(self, *args, **kwargs):
         if not self.active or not self.data:
             return
+
+        target_screen = self.screen
+        cursor_pos = kwargs.get("cursor_pos")
+        fist_hold_pct = kwargs.get("fist_hold_pct")
+
+        for a in args:
+            if hasattr(a, 'blit'):
+                target_screen = a
+            elif isinstance(a, (tuple, list)) and len(a) >= 2 and isinstance(a[0], (int, float)):
+                cursor_pos = a
+            elif isinstance(a, (int, float)):
+                fist_hold_pct = float(a)
+
+        if target_screen is None:
+            target_screen = pygame.display.get_surface()
+        if target_screen is None:
+            return
+        self.screen = target_screen
+
+        if cursor_pos is None or not isinstance(cursor_pos, (tuple, list)) or len(cursor_pos) < 2 or not isinstance(cursor_pos[0], (int, float)):
+            cursor_pos = (-1000, -1000)
         if fist_hold_pct is None:
             fist_hold_pct = getattr(self, 'fist_hold_pct', 0.0)
 
@@ -248,31 +298,31 @@ class InstructionModal:
         pygame.draw.rect(self.screen, theme["header_bg"], hdr_rect, border_radius=12)
         pygame.draw.rect(self.screen, theme["border"], hdr_rect, 2, border_radius=12)
 
-        # Title & Subtitle Typography
-        title_font = get_font("Comic Sans MS", 21, bold=True)
-        sub_font = get_font("Comic Sans MS", 15, italic=True)
+        # Title & Subtitle Typography (Enlarged for readability)
+        title_font = get_font("Comic Sans MS", 25, bold=True)
+        sub_font = get_font("Comic Sans MS", 17, italic=True)
 
         title_surf = title_font.render(sanitize_text(self.data.get("title", "QUEST OBJECTIVES")), True, theme["title_color"])
         t_rect = title_surf.get_rect(center=(hdr_rect.centerx, hdr_rect.top + 24))
         self.screen.blit(title_surf, t_rect)
 
         sub_surf = sub_font.render(sanitize_text(self.data.get("subtitle", "")), True, (241, 245, 249))
-        s_rect = sub_surf.get_rect(center=(hdr_rect.centerx, hdr_rect.top + 52))
+        s_rect = sub_surf.get_rect(center=(hdr_rect.centerx, hdr_rect.top + 54))
         self.screen.blit(sub_surf, s_rect)
 
         # Content Viewport Area
-        content_top = self.box_y + 98
+        content_top = self.box_y + 104
         content_bottom = self.btn_y - 10
         viewport_h = content_bottom - content_top
         viewport_w = self.box_w - 44
         viewport_rect = pygame.Rect(self.box_x + 22, content_top, viewport_w, viewport_h)
 
-        # Typography for content cards
-        sec_title_font = get_font("Comic Sans MS", 16, bold=True)
-        sec_sub_font = get_font("Comic Sans MS", 14, italic=True)
-        bullet_font = get_font("Comic Sans MS", 14)
-        step_title_font = get_font("Comic Sans MS", 15, bold=True)
-        tip_font = get_font("Comic Sans MS", 13, italic=True)
+        # Typography for content cards (Enlarged for Grade 2 Accessibility)
+        sec_title_font = get_font("Comic Sans MS", 20, bold=True)
+        sec_sub_font = get_font("Comic Sans MS", 16, italic=True)
+        bullet_font = get_font("Comic Sans MS", 17, bold=True)
+        step_title_font = get_font("Comic Sans MS", 18, bold=True)
+        tip_font = get_font("Comic Sans MS", 15, italic=True)
 
         # Measure content height to calculate max_scroll
         content_card_w = viewport_w - (14 if self.max_scroll > 0 else 0)
@@ -281,30 +331,30 @@ class InstructionModal:
         calc_y = 0
         objectives_list = self.data.get("objectives", [])
         if objectives_list:
-            calc_y += 36  # Header in objectives card
+            calc_y += 42  # Header in objectives card
             for obj in objectives_list:
-                lines = wrap_text(f"• {obj}", bullet_font, inner_w)
-                calc_y += len(lines) * 20 + 4
-            calc_y += 18  # Spacing after card
+                lines = wrap_text(f"- {obj}", bullet_font, inner_w)
+                calc_y += len(lines) * 24 + 4
+            calc_y += 20  # Spacing after card
 
         steps_list = self.data.get("steps", [])
         if steps_list:
-            calc_y += 32  # Header in steps card
+            calc_y += 38  # Header in steps card
             for step in steps_list:
                 st_title = step.get("title", "")
                 if st_title:
                     lines = wrap_text(st_title, step_title_font, inner_w)
-                    calc_y += len(lines) * 22 + 2
+                    calc_y += len(lines) * 26 + 2
                 for bullet in step.get("bullets", []):
-                    lines = wrap_text(f"  • {bullet}", bullet_font, inner_w)
-                    calc_y += len(lines) * 20 + 2
+                    lines = wrap_text(f"  - {bullet}", bullet_font, inner_w)
+                    calc_y += len(lines) * 24 + 2
                 calc_y += 6
-            calc_y += 18
+            calc_y += 20
 
         # Tip box height
-        tip_text = "💡 Tip: Walk near any NPC station and hold a CLOSED FIST for 0.9s (or Click) to open your math trial!"
+        tip_text = "Tip: Walk near any NPC station and hold a CLOSED FIST for 0.9s (or Click) to open your math trial!"
         tip_lines = wrap_text(tip_text, tip_font, inner_w)
-        calc_y += len(tip_lines) * 18 + 16
+        calc_y += len(tip_lines) * 22 + 18
 
         self.max_scroll = max(0, calc_y - viewport_h)
         self.scroll_y = max(0, min(self.max_scroll, self.scroll_y))
@@ -316,13 +366,13 @@ class InstructionModal:
         cur_y = content_top - self.scroll_y
 
         # ----------------------------------------------------
-        # 1. 🎯 LEARNING OBJECTIVES CARD
+        # 1. LEARNING OBJECTIVES CARD
         # ----------------------------------------------------
         if objectives_list:
             # Measure card height
             card_inner_h = 36
             for obj in objectives_list:
-                lines = wrap_text(f"• {obj}", bullet_font, inner_w)
+                lines = wrap_text(f"- {obj}", bullet_font, inner_w)
                 card_inner_h += len(lines) * 20 + 4
             card_inner_h += 8
 
@@ -339,7 +389,7 @@ class InstructionModal:
 
             card_cur_y = cur_y + 36
             for obj in objectives_list:
-                lines = wrap_text(f"✓ {obj}", bullet_font, inner_w)
+                lines = wrap_text(f"- {obj}", bullet_font, inner_w)
                 for i, line in enumerate(lines):
                     color = (254, 240, 138) if i == 0 else (241, 245, 249)
                     line_surf = bullet_font.render(sanitize_text(line), True, color)
@@ -350,7 +400,7 @@ class InstructionModal:
             cur_y += card_inner_h + 12
 
         # ----------------------------------------------------
-        # 2. 🗺️ QUEST INSTRUCTIONS CARD
+        # 2. QUEST INSTRUCTIONS CARD
         # ----------------------------------------------------
         if steps_list:
             steps_inner_h = 32
@@ -360,7 +410,7 @@ class InstructionModal:
                     lines = wrap_text(st_title, step_title_font, inner_w)
                     steps_inner_h += len(lines) * 22 + 2
                 for bullet in step.get("bullets", []):
-                    lines = wrap_text(f"  • {bullet}", bullet_font, inner_w)
+                    lines = wrap_text(f"  - {bullet}", bullet_font, inner_w)
                     steps_inner_h += len(lines) * 20 + 2
                 steps_inner_h += 6
             steps_inner_h += 8
@@ -369,7 +419,7 @@ class InstructionModal:
             pygame.draw.rect(self.screen, (15, 23, 42), step_card_rect, border_radius=10)
             pygame.draw.rect(self.screen, theme["border"], step_card_rect, 2, border_radius=10)
 
-            step_hdr_surf = sec_title_font.render("🗺️ QUEST INSTRUCTIONS & HOW TO PLAY:", True, theme["title_color"])
+            step_hdr_surf = sec_title_font.render(sanitize_text("QUEST INSTRUCTIONS & HOW TO PLAY:"), True, theme["title_color"])
             self.screen.blit(step_hdr_surf, (step_card_rect.left + 14, cur_y + 8))
 
             card_cur_y = cur_y + 34
@@ -384,7 +434,7 @@ class InstructionModal:
                     card_cur_y += 2
 
                 for bullet in step.get("bullets", []):
-                    lines = wrap_text(f"  • {bullet}", bullet_font, inner_w)
+                    lines = wrap_text(f"  - {bullet}", bullet_font, inner_w)
                     for line in lines:
                         line_surf = bullet_font.render(sanitize_text(line), True, (226, 232, 240))
                         self.screen.blit(line_surf, (step_card_rect.left + 16, card_cur_y))
@@ -462,11 +512,22 @@ class NPCGreetingDialog:
     Displays persona name, role, greeting text, animated portrait,
     and prompts the player to hold a closed fist for 0.9s or click to begin.
     """
-    def __init__(self, screen, width, height, audio_manager=None):
-        self.screen = screen
-        self.width = width
-        self.height = height
-        self.audio_manager = audio_manager
+    def __init__(self, *args, **kwargs):
+        if len(args) >= 3:
+            self.screen = args[0]
+            self.width = args[1]
+            self.height = args[2]
+            self.audio_manager = args[3] if len(args) > 3 else kwargs.get("audio_manager")
+        elif len(args) == 2:
+            self.screen = pygame.display.get_surface()
+            self.width = args[0]
+            self.height = args[1]
+            self.audio_manager = kwargs.get("audio_manager")
+        else:
+            self.screen = kwargs.get("screen") or pygame.display.get_surface()
+            self.width = kwargs.get("width", 1280)
+            self.height = kwargs.get("height", 720)
+            self.audio_manager = kwargs.get("audio_manager")
 
         self.active = False
         self.script_data = None
@@ -474,16 +535,16 @@ class NPCGreetingDialog:
         self.target_station_idx = 1
         self.theme_key = "forest"
 
-        # Dimensions - Scaled up and placed dead-center of the screen
-        self.box_w = min(self.width - 60, 840)
-        self.box_h = min(int(self.height * 0.42), 260)
+        # Dimensions - Scaled up and placed dead-center of the screen for high readability
+        self.box_w = min(self.width - 40, 960)
+        self.box_h = min(int(self.height * 0.48), 300)
         self.box_x = (self.width - self.box_w) // 2
         self.box_y = (self.height - self.box_h) // 2
 
-        self.btn_w = min(self.box_w - 80, 440)
-        self.btn_h = 48
+        self.btn_w = min(self.box_w - 60, 520)
+        self.btn_h = 52
         self.btn_x = self.box_x + (self.box_w - self.btn_w) // 2
-        self.btn_y = self.box_y + self.box_h - 58
+        self.btn_y = self.box_y + self.box_h - 62
 
         self.dim_overlay = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
         self.dim_overlay.fill((6, 10, 18, 140))
@@ -502,6 +563,7 @@ class NPCGreetingDialog:
             self.sprite_frame = kwargs.get("sprite_frame") or (args[1] if len(args) > 1 else None)
             self.target_station_idx = kwargs.get("station_idx", 1)
             self.theme_key = kwargs.get("theme", "forest")
+            self.student_info = kwargs.get("student_info") or (args[2] if len(args) > 2 else None)
         elif args:
             speaker_name = args[0]
             speaker_title = args[1] if len(args) > 1 else ""
@@ -514,8 +576,10 @@ class NPCGreetingDialog:
             self.sprite_frame = kwargs.get("sprite_frame") or (args[3] if len(args) > 3 else None)
             self.target_station_idx = kwargs.get("station_idx", 1)
             self.theme_key = kwargs.get("theme", "forest")
+            self.student_info = kwargs.get("student_info") or (args[4] if len(args) > 4 else None)
         else:
             self.script_data = {}
+            self.student_info = kwargs.get("student_info")
 
         self.active = True
         self.open_time = time.time()
@@ -555,6 +619,8 @@ class NPCGreetingDialog:
     def handle_click(self, cursor_pos):
         if not self.active:
             return False
+        if cursor_pos is None or not isinstance(cursor_pos, (tuple, list)) or len(cursor_pos) < 2 or not isinstance(cursor_pos[0], (int, float)):
+            return False
         # Clicking the CTA button or anywhere on the speech box triggers question!
         box_rect = pygame.Rect(self.box_x, self.box_y, self.box_w, self.box_h)
         if box_rect.collidepoint(cursor_pos):
@@ -580,96 +646,149 @@ class NPCGreetingDialog:
             return True
         return False
 
-    def draw(self, cursor_pos, fist_hold_pct=None):
+    def draw(self, *args, **kwargs):
         if not self.active or not self.script_data:
             return
+
+        target_screen = self.screen
+        cursor_pos = kwargs.get("cursor_pos")
+        fist_hold_pct = kwargs.get("fist_hold_pct")
+
+        for a in args:
+            if hasattr(a, 'blit'):
+                target_screen = a
+            elif isinstance(a, (tuple, list)) and len(a) >= 2 and isinstance(a[0], (int, float)):
+                cursor_pos = a
+            elif isinstance(a, (int, float)):
+                fist_hold_pct = float(a)
+
+        if target_screen is None:
+            target_screen = pygame.display.get_surface()
+        if target_screen is None:
+            return
+        self.screen = target_screen
+
+        if cursor_pos is None or not isinstance(cursor_pos, (tuple, list)) or len(cursor_pos) < 2 or not isinstance(cursor_pos[0], (int, float)):
+            cursor_pos = (-1000, -1000)
         if fist_hold_pct is None:
             fist_hold_pct = getattr(self, 'fist_hold_pct', 0.0)
 
-        theme = THEME_PALETTES.get(self.theme_key, THEME_PALETTES["forest"])
-
-        # Soft backdrop dimming to focus attention on the centered objective NPC popup
-        if hasattr(self, 'dim_overlay') and self.dim_overlay:
-            self.screen.blit(self.dim_overlay, (0, 0))
-
-        # Soft backdrop shadow
-        shadow = pygame.Surface((self.box_w, self.box_h), pygame.SRCALPHA)
-        shadow.fill((0, 0, 0, 140))
-        self.screen.blit(shadow, (self.box_x + 4, self.box_y + 6))
-
-        # Main box
-        box_rect = pygame.Rect(self.box_x, self.box_y, self.box_w, self.box_h)
-        pygame.draw.rect(self.screen, (15, 23, 42), box_rect, border_radius=16)
-        pygame.draw.rect(self.screen, theme["border"], box_rect, 3, border_radius=16)
-        pygame.draw.rect(self.screen, theme["glow"], box_rect.inflate(-6, -6), 1, border_radius=12)
-
-        # Portrait frame on left
-        p_size = 84
-        p_x = self.box_x + 20
-        p_y = self.box_y + 18
-        p_rect = pygame.Rect(p_x, p_y, p_size, p_size)
-
-        pygame.draw.rect(self.screen, (30, 41, 59), p_rect, border_radius=12)
-        pygame.draw.rect(self.screen, theme["accent"], p_rect, 2, border_radius=12)
-
-        if self.sprite_frame:
-            try:
-                scaled_sprite = pygame.transform.smoothscale(self.sprite_frame, (p_size - 8, p_size - 8))
-                self.screen.blit(scaled_sprite, (p_x + 4, p_y + 4))
-            except Exception:
-                pass
-        else:
-            # Fallback vector icon
-            draw_vector_star(self.screen, p_rect.centerx, p_rect.centery, radius=18, color=theme["accent"])
-
-        # Speaker Badge - Larger, Clearer Fonts
-        name_font = get_font("Comic Sans MS", 21, bold=True)
-        role_font = get_font("Comic Sans MS", 15, italic=True)
-        speech_font = get_font("Comic Sans MS", 17)
-
+        # ----------------------------------------------------
+        # 1. DRAW USER'S PLAYER CHARACTER PORTRAIT (Layered Behind Box on Right)
+        # ----------------------------------------------------
         speaker_name = self.script_data.get("name", "Guardian")
         speaker_role = self.script_data.get("role", f"Station {self.target_station_idx}")
+        
+        from .gba_dialogue import get_player_portrait
+        student_info = getattr(self, 'student_info', None)
+        p_surf = get_player_portrait(student_info, target_size=(230, 230))
 
-        n_surf = name_font.render(sanitize_text(speaker_name), True, theme["title_color"])
-        self.screen.blit(n_surf, (p_x + p_size + 18, p_y + 2))
+        if p_surf:
+            pw, ph = p_surf.get_size()
+            px = self.box_x + self.box_w - pw - 24
+            py = self.box_y - int(ph * 0.68)
+            self.screen.blit(p_surf, (px, py))
 
-        r_surf = role_font.render(sanitize_text(speaker_role), True, (148, 163, 184))
-        self.screen.blit(r_surf, (p_x + p_size + 18, p_y + 28))
+        # ----------------------------------------------------
+        # 2. DRAW GBA POKEMON STYLE DIALOGUE BOX FRAME
+        # ----------------------------------------------------
+        # Outer dark charcoal border (4px)
+        pygame.draw.rect(self.screen, (34, 34, 38), (self.box_x, self.box_y, self.box_w, self.box_h), border_radius=8)
 
-        # Proximity Greeting Speech lines
+        # Inner crisp white canvas
+        inner_x = self.box_x + 4
+        inner_y = self.box_y + 4
+        inner_w = self.box_w - 8
+        inner_h = self.box_h - 8
+        pygame.draw.rect(self.screen, (255, 255, 255), (inner_x, inner_y, inner_w, inner_h), border_radius=6)
+
+        # Subtle inner bevel outline
+        pygame.draw.rect(self.screen, (220, 224, 232), (inner_x + 1, inner_y + 1, inner_w - 2, inner_h - 2), width=1, border_radius=5)
+
+        # Signature Left Vertical Crimson Accent Bar
+        bar_w = 16
+        left_bar_x = inner_x + 1
+        pygame.draw.rect(self.screen, (218, 59, 59), (left_bar_x, inner_y + 1, bar_w, inner_h - 2))
+        pygame.draw.line(self.screen, (34, 34, 38), (left_bar_x + bar_w, inner_y), (left_bar_x + bar_w, inner_y + inner_h), 2)
+        pygame.draw.line(self.screen, (244, 114, 114), (left_bar_x + 1, inner_y + 2), (left_bar_x + 1, inner_y + inner_h - 2), 1)
+
+        # Signature Right Vertical Crimson Accent Bar
+        right_bar_x = inner_x + inner_w - bar_w - 1
+        pygame.draw.rect(self.screen, (218, 59, 59), (right_bar_x, inner_y + 1, bar_w, inner_h - 2))
+        pygame.draw.line(self.screen, (34, 34, 38), (right_bar_x, inner_y), (right_bar_x, inner_y + inner_h), 2)
+        pygame.draw.line(self.screen, (168, 38, 38), (right_bar_x + bar_w - 1, inner_y + 2), (right_bar_x + bar_w - 1, inner_y + inner_h - 2), 1)
+
+        # ----------------------------------------------------
+        # 3. SPEAKER NAME BADGE (GBA Header Pill)
+        # ----------------------------------------------------
+        badge_font = get_font("Comic Sans MS", 15, bold=True)
+        name_clean = sanitize_text(f"{speaker_name} ({speaker_role})" if speaker_role else speaker_name)
+        text_sz = badge_font.size(name_clean)
+        tag_w = text_sz[0] + 28
+        tag_h = 26
+        tag_x = self.box_x + 28
+        tag_y = self.box_y - 13
+
+        # Dark border pill
+        pygame.draw.rect(self.screen, (34, 34, 38), (tag_x, tag_y, tag_w, tag_h), border_radius=6)
+        pygame.draw.rect(self.screen, (255, 255, 255), (tag_x + 2, tag_y + 2, tag_w - 4, tag_h - 4), border_radius=4)
+
+        name_surf = badge_font.render(name_clean, True, (56, 80, 136))
+        self.screen.blit(name_surf, (tag_x + 14, tag_y + 4))
+
+        # ----------------------------------------------------
+        # 4. TYPOGRAPHY (GBA Indigo Blue with Periwinkle Drop Shadow)
+        # ----------------------------------------------------
+        body_font = get_font("Comic Sans MS", 21, bold=True)
+        text_color = (52, 76, 136)         # Pokemon GBA Indigo Blue
+        shadow_color = (164, 180, 214)     # Soft Periwinkle Lavender Drop Shadow
+
+        text_start_x = self.box_x + 36
+        text_max_w = self.box_w - 72
+
         greeting_text = self.script_data.get("greeting", "")
-        max_speech_w = self.box_w - (p_size + 56)
-        wrapped_lines = wrap_text(greeting_text, speech_font, max_speech_w)
+        wrapped_lines = wrap_text(greeting_text, body_font, text_max_w)
 
-        gy = p_y + 56
+        line_y = self.box_y + 28
         for line in wrapped_lines[:3]:
-            l_surf = speech_font.render(sanitize_text(line), True, (241, 245, 249))
-            self.screen.blit(l_surf, (p_x + p_size + 18, gy))
-            gy += 25
+            clean_line = sanitize_text(line)
+            # Drop shadow (+2, +2)
+            sh_surf = body_font.render(clean_line, True, shadow_color)
+            self.screen.blit(sh_surf, (text_start_x + 2, line_y + 2))
+            # Main text
+            txt_surf = body_font.render(clean_line, True, text_color)
+            self.screen.blit(txt_surf, (text_start_x, line_y))
+            line_y += 32
 
-        # CTA Bottom Button / Bar
+        # ----------------------------------------------------
+        # 5. CTA BUTTON AT BOTTOM (Hold Fist / Click to Begin)
+        # ----------------------------------------------------
         btn_rect = self.get_button_rect()
         is_hovered = btn_rect.collidepoint(cursor_pos)
-        btn_bg = theme["button_hover"] if is_hovered else theme["button_bg"]
+        btn_bg = (239, 68, 68) if is_hovered else (220, 38, 38)
 
-        pygame.draw.rect(self.screen, (0, 0, 0, 90), btn_rect.move(2, 2), border_radius=10)
-        pygame.draw.rect(self.screen, btn_bg, btn_rect, border_radius=10)
-        pygame.draw.rect(self.screen, (255, 255, 255) if is_hovered else theme["border"], btn_rect, 2, border_radius=10)
+        pygame.draw.rect(self.screen, (0, 0, 0, 80), btn_rect.move(1, 2), border_radius=8)
+        pygame.draw.rect(self.screen, btn_bg, btn_rect, border_radius=8)
+        pygame.draw.rect(self.screen, (34, 34, 38), btn_rect, 2, border_radius=8)
 
         # Fist hold progress fill
         if fist_hold_pct > 0.0:
             fill_w = int(self.btn_w * min(1.0, fist_hold_pct))
             fill_rect = pygame.Rect(self.btn_x, self.btn_y, fill_w, self.btn_h)
             fill_surf = pygame.Surface((fill_w, self.btn_h), pygame.SRCALPHA)
-            fill_surf.fill((255, 255, 255, 80))
+            fill_surf.fill((255, 255, 255, 90))
             self.screen.blit(fill_surf, fill_rect)
 
-        btn_font = get_font("Comic Sans MS", 15, bold=True)
+        btn_font = get_font("Comic Sans MS", 16, bold=True)
         if fist_hold_pct > 0.0:
             c_text = f"Opening Challenge: {int(fist_hold_pct * 100)}%"
         else:
-            c_text = "Hold Closed Fist (0.9s) or Click to Begin!" if not is_hovered else "Click or Hold Fist to Open Question!"
+            c_text = "Hold Closed Fist (0.9s) or Click to Begin! >>" if not is_hovered else "Click or Hold Fist to Open Question!"
 
         c_surf = btn_font.render(sanitize_text(c_text), True, (255, 255, 255))
         c_rect = c_surf.get_rect(center=btn_rect.center)
         self.screen.blit(c_surf, c_rect)
+
+
+GreetingDialogueBox = NPCGreetingDialog
+

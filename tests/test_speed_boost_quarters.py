@@ -22,8 +22,8 @@ class TestSpeedBoostQuarters(unittest.TestCase):
     def setUp(self):
         self.screen = screen
         self.mm = MainMenu(self.screen)
-        self.mm.student_id = "1"
-        self.mm.selected_student = {"id": 1, "student_id": "1", "first_name": "SpeedTester"}
+        self.mm.student_id = "test_speed_tester"
+        self.mm.selected_student = {"id": 9999, "student_id": "test_speed_tester", "first_name": "SpeedTester"}
 
     def test_quarter1_speed_boost(self):
         """Verify Quarter 1 grants 3.0s speed boost on question clearance and updates correctly."""
@@ -36,10 +36,10 @@ class TestSpeedBoostQuarters(unittest.TestCase):
         # State 3: Correct answer transition click
         q1.active_shape_id = 1
         q1.quiz_state = 3
-        box_w, box_h = 500, 240
+        box_w, box_h = 720, 300
         box_x = (q1.width - box_w) // 2
         box_y = (q1.height - box_h) // 2
-        btn_center = (box_x + box_w // 2, box_y + 140 + 21)
+        btn_center = (box_x + box_w // 2, box_y + 215 + 25)
 
         q1.trigger_click(btn_center)
         self.assertEqual(q1.speed_boost_timer, 3.0, "Quarter 1 state 3 click should set speed_boost_timer to 3.0")
@@ -49,19 +49,19 @@ class TestSpeedBoostQuarters(unittest.TestCase):
         q1.camera_pan_active = False
         q1.speed_boost_timer = 3.0
         class MockClock:
-            def tick(self, fps):
-                return 500  # 0.5s
+            def tick(self, fps=60):
+                return 50  # 0.05s
         q1.clock = MockClock()
         q1.update()
-        self.assertAlmostEqual(q1.speed_boost_timer, 2.5, places=2)
+        self.assertAlmostEqual(q1.speed_boost_timer, 2.95, places=2)
 
         # Verify State 4: Out of tries reveal click also gives 3.0s boost
         q1.active_shape_id = 1
         q1.quiz_state = 4
-        box_w, box_h = 560, 260
+        box_w, box_h = 740, 340
         box_x = (q1.width - box_w) // 2
         box_y = (q1.height - box_h) // 2
-        btn_center4 = (box_x + box_w // 2, box_y + 195 + 21)
+        btn_center4 = (box_x + box_w // 2, box_y + 260 + 25)
         q1.trigger_click(btn_center4)
         self.assertEqual(q1.speed_boost_timer, 3.0, "Quarter 1 state 4 click should set speed_boost_timer to 3.0")
 
@@ -75,10 +75,10 @@ class TestSpeedBoostQuarters(unittest.TestCase):
 
         # State 3: Correct answer transition click
         q2.quiz_state = 3
-        box_w, box_h = 540, 260
+        box_w, box_h = 740, 330
         box_x = (q2.width - box_w) // 2
         box_y = (q2.height - box_h) // 2
-        btn_center = (box_x + box_w // 2, box_y + 175 + 22)
+        btn_center = (box_x + box_w // 2, box_y + 245 + 25)
 
         q2.trigger_click(btn_center)
         self.assertEqual(q2.speed_boost_timer, 3.0, "Quarter 2 state 3 click should set speed_boost_timer to 3.0")
@@ -86,10 +86,10 @@ class TestSpeedBoostQuarters(unittest.TestCase):
 
         # State 4: Out of tries reveal click
         q2.quiz_state = 4
-        box_w, box_h = 580, 270
+        box_w, box_h = 740, 340
         box_x = (q2.width - box_w) // 2
         box_y = (q2.height - box_h) // 2
-        btn_center4 = (box_x + box_w // 2, box_y + 190 + 22)
+        btn_center4 = (box_x + box_w // 2, box_y + 255 + 25)
 
         q2.trigger_click(btn_center4)
         self.assertEqual(q2.speed_boost_timer, 3.0, "Quarter 2 state 4 click should set speed_boost_timer to 3.0")
@@ -128,10 +128,10 @@ class TestSpeedBoostQuarters(unittest.TestCase):
 
         # State 3: Correct answer transition click
         q4.quiz_state = 3
-        box_w, box_h = 720, 300
+        box_w, box_h = 760, 350
         box_x = (q4.width - box_w) // 2
         box_y = (q4.height - box_h) // 2
-        btn_center = (box_x + box_w // 2, box_y + 225 + 23)
+        btn_center = (box_x + box_w // 2, box_y + 275 + 25)
 
         q4.trigger_click(btn_center)
         self.assertEqual(q4.speed_boost_timer, 3.0, "Quarter 4 state 3 click should set speed_boost_timer to 3.0")
@@ -139,10 +139,10 @@ class TestSpeedBoostQuarters(unittest.TestCase):
 
         # State 4: Out of tries reveal click
         q4.quiz_state = 4
-        box_w, box_h = 720, 310
+        box_w, box_h = 760, 360
         box_x = (q4.width - box_w) // 2
         box_y = (q4.height - box_h) // 2
-        btn_center4 = (box_x + box_w // 2, box_y + 240 + 23)
+        btn_center4 = (box_x + box_w // 2, box_y + 285 + 25)
 
         q4.trigger_click(btn_center4)
         self.assertEqual(q4.speed_boost_timer, 3.0, "Quarter 4 state 4 click should set speed_boost_timer to 3.0")

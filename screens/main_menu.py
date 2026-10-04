@@ -20,6 +20,7 @@ import time
 import math
 import threading
 from core.audio_manager import audio_manager
+from core.cursor_system import OneEuroFilter
 from ui.button import Button
 from screens.stageselect import StageSelect
 from screens.studentselect import StudentSelect
@@ -39,7 +40,7 @@ class MainMenu:
         self.w, self.h = screen.get_size()
 
         # ==========================================
-        # SIMPLE GESTURE DETECTION
+        # HIGH-PRECISION GESTURE DETECTION
         # ==========================================
 
         # MediaPipe setup
@@ -50,25 +51,31 @@ class MainMenu:
                 self.mp_hands = mp.solutions.hands
                 self.hands = self.mp_hands.Hands(
                     max_num_hands=1,
-                    min_detection_confidence=0.5,
-                    min_tracking_confidence=0.5
+                    min_detection_confidence=0.35,
+                    min_tracking_confidence=0.35
                 )
         except Exception as e:
             print(f"[WARN] MediaPipe hands init exception: {e}")
             self.hands = None
 
-        # Camera setup
+        # Camera setup (640x480 crisp capture with buffer size 1 for zero lag)
         self.camera_size = (160, 120)
-        self.show_camera_overlay = False  # Set to False to remove the visual camera overlay box
+        self.show_camera_overlay = False  # Set to False to remove the visual camera overlay box (Toggle with C)
         self.cap = None
         try:
             self.cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
             if not self.cap.isOpened():
                 self.cap = cv2.VideoCapture(0)
             if self.cap.isOpened():
-                self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 320)
-                self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 240)
-                print("[OK] Camera initialized!")
+                try:
+                    self.cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*'MJPG'))
+                except Exception:
+                    pass
+                self.cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+                self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+                self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+                self.cap.set(cv2.CAP_PROP_FPS, 60)
+                print("[OK] Real-time zero-latency camera initialized (640x480 @ 60 FPS)!")
             else:
                 print("[WARN] Camera not available, falling back to mouse control.")
                 try:
@@ -272,9 +279,9 @@ class MainMenu:
                 knuckle_dists = [math.hypot(hand_data[k][0] - wrist[0], hand_data[k][1] - wrist[1]) for k in [6, 10, 14, 18]]
                 tip_dists = [math.hypot(hand_data[t][0] - wrist[0], hand_data[t][1] - wrist[1]) for t in [8, 12, 16, 20]]
             else:
-                wrist = hand_data.landmark[0]
-                knuckle_dists = [math.hypot(hand_data.landmark[k].x - wrist.x, hand_data.landmark[k].y - wrist.y) for k in [6, 10, 14, 18]]
-                tip_dists = [math.hypot(hand_data.landmark[t].x - wrist.x, hand_data.landmark[t].y - wrist.y) for t in [8, 12, 16, 20]]
+                wrist = (hand_data.landmark[0].x, hand_data.landmark[0].y)
+                knuckle_dists = [math.hypot(hand_data.landmark[k].x - wrist[0], hand_data.landmark[k].y - wrist[1]) for k in [6, 10, 14, 18]]
+                tip_dists = [math.hypot(hand_data.landmark[t].x - wrist[0], hand_data.landmark[t].y - wrist[1]) for t in [8, 12, 16, 20]]
 
             # A finger is truly folded/closed if its tip is closer to the wrist than its middle knuckle
             closed_fingers = [tip_dists[i] < knuckle_dists[i] * 1.05 for i in range(4)]
@@ -292,9 +299,9 @@ class MainMenu:
                 knuckle_dists = [math.hypot(hand_data[k][0] - wrist[0], hand_data[k][1] - wrist[1]) for k in [6, 10, 14, 18]]
                 tip_dists = [math.hypot(hand_data[t][0] - wrist[0], hand_data[t][1] - wrist[1]) for t in [8, 12, 16, 20]]
             else:
-                wrist = hand_data.landmark[0]
-                knuckle_dists = [math.hypot(hand_data.landmark[k].x - wrist.x, hand_data.landmark[k].y - wrist.y) for k in [6, 10, 14, 18]]
-                tip_dists = [math.hypot(hand_data.landmark[t].x - wrist.x, hand_data.landmark[t].y - wrist.y) for t in [8, 12, 16, 20]]
+                wrist = (hand_data.landmark[0].x, hand_data.landmark[0].y)
+                knuckle_dists = [math.hypot(hand_data.landmark[k].x - wrist[0], hand_data.landmark[k].y - wrist[1]) for k in [6, 10, 14, 18]]
+                tip_dists = [math.hypot(hand_data.landmark[t].x - wrist[0], hand_data.landmark[t].y - wrist[1]) for t in [8, 12, 16, 20]]
 
             # Index and Middle open, Ring and Pinky closed
             closed_fingers = [tip_dists[i] < knuckle_dists[i] * 1.05 for i in range(4)]
@@ -306,7 +313,10 @@ class MainMenu:
         """Asynchronous background worker for camera frame grabbing and MediaPipe ML inference (60 FPS Locked)"""
         while self.camera_running and self.cap is not None and self.cap.isOpened():
             try:
-                ret, img = self.cap.read()
+                if not self.cap.grab():
+                    time.sleep(0.01)
+                    continue
+                ret, img = self.cap.retrieve()
                 if not ret or img is None:
                     time.sleep(0.01)
                     continue
@@ -315,7 +325,14 @@ class MainMenu:
                 rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
                 preview = cv2.resize(img, self.camera_size) if getattr(self, 'show_camera_overlay', False) else None
 
-                results = self.hands.process(rgb) if self.hands is not None else None
+                # Downscale RGB frame sent to MediaPipe ML inference for ultra-fast, zero-lag 60 FPS tracking
+                h_orig, w_orig = rgb.shape[:2]
+                if w_orig > 320:
+                    infer_rgb = cv2.resize(rgb, (320, 240), interpolation=cv2.INTER_LINEAR)
+                else:
+                    infer_rgb = rgb
+
+                results = self.hands.process(infer_rgb) if self.hands is not None else None
                 coords = None
                 if results and results.multi_hand_landmarks:
                     try:
@@ -330,13 +347,14 @@ class MainMenu:
 
             except Exception:
                 pass
-            time.sleep(0.005)
+            time.sleep(0.002)
 
     def update_gesture(self):
         """Update gesture detection - Instant read from threaded worker (0ms latency, 60 FPS)"""
         if self.cap is None or not self.cap.isOpened():
             mouse_x, mouse_y = pygame.mouse.get_pos()
             self.cursor_pos = (mouse_x, mouse_y)
+            game_cursor.update(self.cursor_pos, "NO HAND", 0, self.CLICK_HOLD_TIME, 0)
             return
 
         try:
@@ -472,6 +490,15 @@ class MainMenu:
                         m_pos = pygame.mouse.get_pos()
                         self.cursor_pos = m_pos
                         self.cursor_x, self.cursor_y = float(m_pos[0]), float(m_pos[1])
+
+            # Update GameCursor with newest state
+            game_cursor.update(
+                self.cursor_pos,
+                self.current_gesture,
+                self.fist_start_time,
+                self.CLICK_HOLD_TIME,
+                self.peace_start_time
+            )
         except Exception:
             pass
 

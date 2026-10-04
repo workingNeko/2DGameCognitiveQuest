@@ -24,6 +24,7 @@ def atomic_save_json(path, data):
         for attempt in range(5):
             try:
                 os.replace(tmp_path, path)
+                invalidate_save_cache()
                 return True
             except (PermissionError, OSError) as err:
                 if attempt < 4:
@@ -37,6 +38,7 @@ def atomic_save_json(path, data):
                             os.remove(tmp_path)
                         except Exception:
                             pass
+                    invalidate_save_cache()
                     return True
     except Exception as e:
         if os.path.exists(tmp_path):
@@ -148,6 +150,7 @@ def delete_student_progress(student_id, student_db_id=None, main_menu=None):
                 if should_delete:
                     try:
                         os.remove(fpath)
+                        invalidate_save_cache()
                         print(f"[DELETE] Deleted local save file: {fpath}")
                     except Exception as e:
                         print(f"[WARN] Error deleting save file {fpath}: {e}")
@@ -415,15 +418,39 @@ def gather_quarter_data(q, quarter_name):
         
     return data
 
+_SAVE_CACHE = {}
+
+def invalidate_save_cache(student_id=None):
+    """Invalidates the in-memory save cache."""
+    global _SAVE_CACHE
+    if student_id is not None:
+        _SAVE_CACHE.pop(str(student_id), None)
+    else:
+        _SAVE_CACHE.clear()
+
 def load_student_progress(student_id):
     if not student_id:
         return None
     path = get_save_path(student_id)
     if not os.path.exists(path):
+        _SAVE_CACHE.pop(str(student_id), None)
         return None
     try:
-        with open(path, "r") as f:
-            return json.load(f)
+        now = time.time()
+        sid_str = str(student_id)
+        cached = _SAVE_CACHE.get(sid_str)
+        if cached is not None and (now - cached.get("last_check", 0) < 0.2):
+            return cached.get("data")
+
+        mtime = os.path.getmtime(path)
+        if cached is not None and cached.get("mtime") == mtime:
+            cached["last_check"] = now
+            return cached.get("data")
+
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+            _SAVE_CACHE[sid_str] = {"mtime": mtime, "last_check": now, "data": data}
+            return data
     except Exception as e:
         print(f"[WARN] Error reading save file {path}: {e}")
         return None

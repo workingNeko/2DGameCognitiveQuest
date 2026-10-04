@@ -10,6 +10,15 @@ from .vector_icons import (
     draw_vector_replay,
     draw_vector_gem
 )
+from .visual_effects import (
+    DustParticleSystem,
+    SparkleParticleSystem,
+    ScreenShake,
+    SceneTransition,
+    get_pulse_value,
+    draw_aura_glow,
+    draw_beacon_marker
+)
 
 __all__ = [
     "AudioManager",
@@ -23,7 +32,14 @@ __all__ = [
     "draw_vector_lightbulb",
     "draw_vector_arrow",
     "draw_vector_replay",
-    "draw_vector_gem"
+    "draw_vector_gem",
+    "DustParticleSystem",
+    "SparkleParticleSystem",
+    "ScreenShake",
+    "SceneTransition",
+    "get_pulse_value",
+    "draw_aura_glow",
+    "draw_beacon_marker"
 ]
 
 

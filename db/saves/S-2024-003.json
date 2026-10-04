@@ -11,14 +11,16 @@
         "gender": "male"
     },
     "current_screen": "stage_select",
-    "timestamp": 1788097229.6052861,
+    "tutorial_completed": true,
+    "completed_quarters": {},
+    "timestamp": 1790754055.8364246,
     "stage_select": {
-        "player_x": 1400,
+        "player_x": 1420.0,
         "player_y": 416,
         "oldman_dialogue_state": 0,
         "knight_dialogue_state": 0,
-        "skeleton_dialogue_state": 1,
+        "skeleton_dialogue_state": 2,
         "bromen_dialogue_state": 0,
-        "player_following_target": null
+        "player_following_target": false
     }
 }

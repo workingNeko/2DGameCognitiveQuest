@@ -373,14 +373,30 @@ class StudentSelect:
             pygame.draw.rect(self.screen, card_color, item_rect, border_radius=14)
             pygame.draw.rect(self.screen, self.BORDER_COLOR, item_rect, 2, border_radius=14)
 
-            # ICON
+            # ICON / AVATAR BOX
             icon_x = item_rect.x + 15
             icon_y = item_rect.y + 18
+            icon_drawn = False
 
-            if student["gender"] == "male" and self.boy_icon:
+            gender = str(student.get("gender", "")).lower()
+            if gender in ["male", "m", "boy"] and self.boy_icon:
                 self.screen.blit(self.boy_icon, (icon_x, icon_y))
-            elif student["gender"] == "female" and self.girl_icon:
+                icon_drawn = True
+            elif gender in ["female", "f", "girl"] and self.girl_icon:
                 self.screen.blit(self.girl_icon, (icon_x, icon_y))
+                icon_drawn = True
+            elif self.boy_icon:
+                self.screen.blit(self.boy_icon, (icon_x, icon_y))
+                icon_drawn = True
+
+            if not icon_drawn:
+                # Stylized vibrant avatar circle with student initial
+                badge_col = (59, 130, 246) if gender in ["male", "m", "boy"] else (236, 72, 153) if gender in ["female", "f", "girl"] else (99, 102, 241)
+                pygame.draw.circle(self.screen, badge_col, (icon_x + 20, icon_y + 20), 20)
+                pygame.draw.circle(self.screen, (255, 255, 255), (icon_x + 20, icon_y + 20), 20, 2)
+                initial = (student.get("first_name", "S")[:1] or "S").upper()
+                init_surf = self.font.render(initial, True, (255, 255, 255))
+                self.screen.blit(init_surf, init_surf.get_rect(center=(icon_x + 20, icon_y + 20)))
 
             # NAME
             name_x = icon_x + 60

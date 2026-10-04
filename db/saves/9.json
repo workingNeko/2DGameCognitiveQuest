@@ -3,8 +3,8 @@
     "selected_student": {
         "id": 9,
         "student_id": "9",
-        "first_name": "Jessuny",
-        "last_name": "Dado",
+        "first_name": "Jessuny Dado",
+        "last_name": "",
         "score": 0,
         "progress": 0,
         "level": "Grade 2",
@@ -13,5 +13,5 @@
     "current_screen": "menu",
     "tutorial_completed": false,
     "completed_quarters": {},
-    "timestamp": 1789979956.7628574
+    "timestamp": 1790858246.1968534
 }

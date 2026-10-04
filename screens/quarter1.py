@@ -10,6 +10,7 @@ import math
 import random
 from .map_loader import MapLoader
 from core.camera_system import LoLCamera
+from core.visual_effects import DustParticleSystem, draw_beacon_marker, draw_aura_glow
 
 
 # Import db - safe import in case db modules are missing
@@ -96,6 +97,9 @@ class Quarter1:
         self._scaled_tile_cache = {}
         self._scaled_sprite_cache = {}
         self._dim_overlay = None
+
+        # Visual Effects & Dust Footsteps
+        self.dust_particles = DustParticleSystem(max_particles=30)
 
         # ============================================================
         # PATHS
@@ -2380,11 +2384,11 @@ class Quarter1:
             return
 
         if getattr(self, 'time_up_dialog_active', False):
-            box_w, box_h = 560, 260
+            box_w, box_h = 700, 320
             box_x = (self.width - box_w) // 2
             box_y = (self.height - box_h) // 2
-            retry_rect = pygame.Rect(box_x + 40, box_y + 175, 220, 46)
-            exit_rect = pygame.Rect(box_x + box_w - 260, box_y + 175, 220, 46)
+            retry_rect = pygame.Rect(box_x + 50, box_y + 225, 270, 52)
+            exit_rect = pygame.Rect(box_x + box_w - 320, box_y + 225, 270, 52)
             if retry_rect.collidepoint(pos):
                 self.stage_time_remaining = 600.0
                 self.time_up_dialog_active = False
@@ -2469,20 +2473,20 @@ class Quarter1:
                     
         # State 2: Wrong answer retry screen click (1 try remaining)
         elif self.quiz_state == 2:
-            box_w, box_h = 560, 290
+            box_w, box_h = 740, 350
             box_x = (self.width - box_w) // 2
             box_y = (self.height - box_h) // 2
-            btn_rect = pygame.Rect(box_x + (box_w - 200) // 2, box_y + 225, 200, 42)
+            btn_rect = pygame.Rect(box_x + (box_w - 240) // 2, box_y + 275, 240, 50)
             if btn_rect.collidepoint(pos):
                 self.quiz_state = 1
                 save_student_progress(self.main_menu)
             
         # State 3: Correct answer transition screen click
         elif self.quiz_state == 3:
-            box_w, box_h = 500, 240
+            box_w, box_h = 720, 300
             box_x = (self.width - box_w) // 2
             box_y = (self.height - box_h) // 2
-            btn_rect = pygame.Rect(box_x + (box_w - 200) // 2, box_y + 140, 200, 42)
+            btn_rect = pygame.Rect(box_x + (box_w - 240) // 2, box_y + 215, 240, 50)
             if btn_rect.collidepoint(pos):
                 self.speed_boost_timer = 3.0
                 if self.is_quiz_map and self.active_shape_id in self.shape_npcs:
@@ -2519,10 +2523,10 @@ class Quarter1:
 
         # State 4: Out of tries reveal screen click (Player gets reward and continues)
         elif self.quiz_state == 4:
-            box_w, box_h = 560, 260
+            box_w, box_h = 740, 340
             box_x = (self.width - box_w) // 2
             box_y = (self.height - box_h) // 2
-            btn_rect = pygame.Rect(box_x + (box_w - 200) // 2, box_y + 195, 200, 42)
+            btn_rect = pygame.Rect(box_x + (box_w - 240) // 2, box_y + 260, 240, 50)
             if btn_rect.collidepoint(pos):
                 self.speed_boost_timer = 3.0
                 if self.is_quiz_map and self.active_shape_id in self.shape_npcs:
@@ -2559,10 +2563,10 @@ class Quarter1:
                 
         # State 5: Final speech click
         elif self.quiz_state == 5:
-            box_w, box_h = 550, 300
+            box_w, box_h = 760, 360
             box_x = (self.width - box_w) // 2
             box_y = (self.height - box_h) // 2
-            btn_rect = pygame.Rect(box_x + (box_w - 200) // 2, box_y + 210, 200, 42)
+            btn_rect = pygame.Rect(box_x + (box_w - 240) // 2, box_y + 280, 240, 50)
             if btn_rect.collidepoint(pos):
                 self.quiz_state = 6
                 self.npc_oldman_found = False
@@ -2571,10 +2575,10 @@ class Quarter1:
  
         # State 10: Old Man Warning Dialog OK Click
         elif self.quiz_state == 10:
-            box_w, box_h = 550, 240
+            box_w, box_h = 720, 300
             box_x = (self.width - box_w) // 2
             box_y = (self.height - box_h) // 2
-            btn_rect = pygame.Rect(box_x + (box_w - 200) // 2, box_y + 180, 200, 42)
+            btn_rect = pygame.Rect(box_x + (box_w - 240) // 2, box_y + 225, 240, 50)
             if btn_rect.collidepoint(pos):
                 self.quiz_state = 0
                 self.oldman_interaction_cooldown = 5.0  # 5 seconds to walk away
@@ -2583,14 +2587,14 @@ class Quarter1:
 
         # State 11: Old Man Riddle Dialog Choice Clicks
         elif self.quiz_state == 11:
-            box_w, box_h = 580, 400
+            box_w, box_h = 780, 480
             box_x = (self.width - box_w) // 2
             box_y = (self.height - box_h) // 2
             
-            button_w, button_h = 500, 42
+            button_w, button_h = 680, 52
             button_x = box_x + (box_w - button_w) // 2
-            button_y_start = box_y + 155
-            spacing = 52
+            button_y_start = box_y + 175
+            spacing = 64
             
             riddle_data = getattr(self, 'selected_riddle', self.oldman_riddle_pool[0])
             choices = riddle_data.get("choices", ["A. Triangle", "B. Square", "C. Circle", "D. Rectangle"])
@@ -2610,29 +2614,29 @@ class Quarter1:
 
         # State 12: Old Man Riddle Wrong Retry Click
         elif self.quiz_state == 12:
-            box_w, box_h = 500, 240
+            box_w, box_h = 720, 300
             box_x = (self.width - box_w) // 2
             box_y = (self.height - box_h) // 2
-            btn_rect = pygame.Rect(box_x + (box_w - 200) // 2, box_y + 160, 200, 42)
+            btn_rect = pygame.Rect(box_x + (box_w - 240) // 2, box_y + 220, 240, 50)
             if btn_rect.collidepoint(pos):
                 self.quiz_state = 11  # Go back to question
 
         # State 13: Old Man Riddle Correct Click
         elif self.quiz_state == 13:
-            box_w, box_h = 500, 240
+            box_w, box_h = 720, 300
             box_x = (self.width - box_w) // 2
             box_y = (self.height - box_h) // 2
-            btn_rect = pygame.Rect(box_x + (box_w - 200) // 2, box_y + 160, 200, 42)
+            btn_rect = pygame.Rect(box_x + (box_w - 240) // 2, box_y + 220, 240, 50)
             if btn_rect.collidepoint(pos):
                 self.oldman_riddle_answered = True
                 self.quiz_state = 14  # Go to final speech
 
         # State 14: Old Man Final speech OK Click
         elif self.quiz_state == 14:
-            box_w, box_h = 550, 300
+            box_w, box_h = 760, 320
             box_x = (self.width - box_w) // 2
             box_y = (self.height - box_h) // 2
-            btn_rect = pygame.Rect(box_x + (box_w - 200) // 2, box_y + 210, 200, 42)
+            btn_rect = pygame.Rect(box_x + (box_w - 240) // 2, box_y + 240, 240, 50)
             if btn_rect.collidepoint(pos):
                 self.speed_boost_timer = 3.0
                 self.quiz_state = 0
@@ -2642,10 +2646,10 @@ class Quarter1:
 
         # State 20: Old Man map3 Warning Dialog OK Click
         elif self.quiz_state == 20:
-            box_w, box_h = 550, 240
+            box_w, box_h = 720, 300
             box_x = (self.width - box_w) // 2
             box_y = (self.height - box_h) // 2
-            btn_rect = pygame.Rect(box_x + (box_w - 200) // 2, box_y + 180, 200, 42)
+            btn_rect = pygame.Rect(box_x + (box_w - 240) // 2, box_y + 225, 240, 50)
             if btn_rect.collidepoint(pos):
                 self.quiz_state = 0
                 self.oldman_interaction_cooldown = 5.0  # 5 seconds to walk away
@@ -2653,10 +2657,10 @@ class Quarter1:
 
         # State 21: Old Man map3 Solved Dialog OK Click
         elif self.quiz_state == 21:
-            box_w, box_h = 550, 240
+            box_w, box_h = 720, 300
             box_x = (self.width - box_w) // 2
             box_y = (self.height - box_h) // 2
-            btn_rect = pygame.Rect(box_x + (box_w - 200) // 2, box_y + 180, 200, 42)
+            btn_rect = pygame.Rect(box_x + (box_w - 240) // 2, box_y + 225, 240, 50)
             if btn_rect.collidepoint(pos):
                 self.quiz_state = 0
                 self.spawn_portals()  # Spawn the portal now!
@@ -2665,10 +2669,10 @@ class Quarter1:
 
         # State 22: Old Man map3 Intro Dialog OK Click
         elif self.quiz_state == 22:
-            box_w, box_h = 550, 240
+            box_w, box_h = 720, 300
             box_x = (self.width - box_w) // 2
             box_y = (self.height - box_h) // 2
-            btn_rect = pygame.Rect(box_x + (box_w - 200) // 2, box_y + 180, 200, 42)
+            btn_rect = pygame.Rect(box_x + (box_w - 240) // 2, box_y + 225, 240, 50)
             if btn_rect.collidepoint(pos):
                 self.quiz_state = 0
                 self.puzzle_active = True
@@ -2680,7 +2684,7 @@ class Quarter1:
     # UPDATE
     # ============================================================
     def update(self):
-        dt = self.clock.tick(FPS) / 1000.0
+        dt = min(0.05, max(0.001, self.clock.tick() / 1000.0))
         self.frame_counter += 1
 
         if self.pause_menu.is_paused:
@@ -2689,17 +2693,25 @@ class Quarter1:
         # Update celebration particles & victory report card
         if hasattr(self, 'celebration_particles'):
             self.celebration_particles.update(dt)
+        if hasattr(self, 'dust_particles'):
+            self.dust_particles.update(dt)
         if hasattr(self, 'victory_card') and self.victory_card.active:
             self.victory_card.update(dt)
             return
 
         # Update instructions modal & greeting dialog
         if hasattr(self, 'instruction_modal') and self.instruction_modal.is_active():
-            self.instruction_modal.update(dt)
-            hold_time = time.time() - self.fist_start_time if self.fist_start_time > 0 else 0.0
-            if self.instruction_modal.handle_fist_hold(self.current_gesture == "FIST", hold_time, self.CLICK_HOLD_TIME):
-                self.fist_start_time = 0
-            return
+            player_screen_x = (self.player_x - self.camera_x + TILE_SIZE / 2) * ZOOM
+            player_screen_y = (self.player_y - self.camera_y + TILE_SIZE / 2) * ZOOM
+            cx, cy = self.cursor_pos
+            if abs(cx - player_screen_x) > 45 or abs(cy - player_screen_y) > 45:
+                self.instruction_modal.hide()
+            else:
+                self.instruction_modal.update(dt)
+                hold_time = time.time() - self.fist_start_time if self.fist_start_time > 0 else 0.0
+                if self.instruction_modal.handle_fist_hold(self.current_gesture == "FIST", hold_time, self.CLICK_HOLD_TIME):
+                    self.fist_start_time = 0
+                return
 
         if hasattr(self, 'greeting_dialog') and self.greeting_dialog.is_active():
             self.greeting_dialog.update(dt)
@@ -2905,19 +2917,17 @@ class Quarter1:
         dist_factor = 1.3 if (abs(dx) > 160 or abs(dy) > 160) else 1.0
         g_speed = current_speed * dist_factor
 
-        if abs(dx) > 45:
-            vx = g_speed if dx > 0 else -g_speed
-            if dx > 0:
-                self.player_dir = "right"
-            elif dx < 0:
-                self.player_dir = "left"
+        deadzone = 45.0
+        if abs(dx) > deadzone or abs(dy) > deadzone:
+            if abs(dx) > deadzone:
+                vx = g_speed if dx > 0 else -g_speed
+            if abs(dy) > deadzone:
+                vy = g_speed if dy > 0 else -g_speed
 
-        if abs(dy) > 45:
-            vy = g_speed if dy > 0 else -g_speed
-            if dy > 0:
-                self.player_dir = "down"
-            elif dy < 0:
-                self.player_dir = "up"
+            if abs(dx) > abs(dy):
+                self.player_dir = "right" if dx > 0 else "left"
+            else:
+                self.player_dir = "down" if dy > 0 else "up"
 
         new_x = self.player_x + vx
         new_y = self.player_y + vy
@@ -2943,6 +2953,14 @@ class Quarter1:
 
         if vx != 0 or vy != 0:
             self.anim_timer += 1
+            if hasattr(self, 'dust_particles') and self.anim_timer % 8 == 0:
+                self.dust_particles.emit_footstep(
+                    (self.player_x + TILE_SIZE // 2) * ZOOM,
+                    (self.player_y + TILE_SIZE - 2) * ZOOM,
+                    direction=self.player_dir,
+                    speed_boost=getattr(self, 'speed_boost_timer', 0) > 0,
+                    terrain_color=(160, 210, 140)
+                )
             if self.anim_timer >= (10 if getattr(self, 'speed_boost_timer', 0) > 0 else 16):
                 self.anim_timer = 0
                 self.anim_frame = (self.anim_frame + 1) % 2
@@ -3055,6 +3073,10 @@ class Quarter1:
         screen_x = (self.player_x - self.camera_x) * ZOOM
         screen_y = (self.player_y - self.camera_y) * ZOOM
 
+        # Draw footstep dust beneath player feet
+        if hasattr(self, 'dust_particles'):
+            self.dust_particles.draw(self.screen, camera_offset=(self.camera_x * ZOOM, self.camera_y * ZOOM))
+
         if (-TILE_SIZE * ZOOM <= screen_x <= self.width + TILE_SIZE * ZOOM and
                 -TILE_SIZE * ZOOM <= screen_y <= self.height + TILE_SIZE * ZOOM):
             sprite = self.player_sprites[self.player_dir][self.anim_frame]
@@ -3100,7 +3122,7 @@ class Quarter1:
         # Draw Shape NPCs (1 to 5 hierarchy with glowing active station ring)
         if self.is_quiz_map:
             for num, npc in self.shape_npcs.items():
-                # Shimmering green interaction aura ring under currently active shape station
+                # Shimmering green interaction aura ring and animated question beacon above active station
                 if num == self.quiz_station_index and not npc["answered"] and self.quiz_state == 0:
                     cx = (npc["x"] + TILE_SIZE // 2 - self.camera_x) * ZOOM
                     cy = (npc["y"] + TILE_SIZE - self.camera_y) * ZOOM
@@ -3109,6 +3131,7 @@ class Quarter1:
                     pygame.draw.ellipse(aura_surf, (34, 197, 94, 90), aura_surf.get_rect())
                     pygame.draw.ellipse(aura_surf, (250, 204, 21, 140), aura_surf.get_rect(), 2)
                     self.screen.blit(aura_surf, (cx - aura_surf.get_width() // 2, cy - aura_surf.get_height() // 2))
+                    draw_beacon_marker(self.screen, cx, (npc["y"] - self.camera_y) * ZOOM, color=(250, 204, 21), beacon_type="question", offset_y=int(-30 * ZOOM))
 
                 sprite_data = self.shape_sprites.get(num)
                 if sprite_data:
@@ -3366,15 +3389,16 @@ class Quarter1:
         # Draw smooth seamless warp-out transition overlay
         if self.warp_out_active:
             progress = max(0.0, min(1.0, 1.0 - (self.warp_out_timer / self.warp_out_duration)))
-            warp_overlay = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
-            warp_overlay.fill((220, 252, 231, int(progress * 255)))
+            if not hasattr(self, '_warp_overlay_surf') or self._warp_overlay_surf.get_size() != (self.width, self.height):
+                self._warp_overlay_surf = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
+            self._warp_overlay_surf.fill((220, 252, 231, int(progress * 255)))
             center = (self.width // 2, self.height // 2)
             max_r = int(math.hypot(self.width, self.height) / 2)
             r = int(progress * max_r)
             if r > 0:
-                pygame.draw.circle(warp_overlay, (34, 197, 94, int((1.0 - progress) * 230)), center, r, max(3, int(10 * ZOOM)))
-                pygame.draw.circle(warp_overlay, (250, 204, 21, int((1.0 - progress) * 200)), center, max(1, r - 8), max(2, int(4 * ZOOM)))
-            self.screen.blit(warp_overlay, (0, 0))
+                pygame.draw.circle(self._warp_overlay_surf, (34, 197, 94, int((1.0 - progress) * 230)), center, r, max(3, int(10 * ZOOM)))
+                pygame.draw.circle(self._warp_overlay_surf, (250, 204, 21, int((1.0 - progress) * 200)), center, max(1, r - 8), max(2, int(4 * ZOOM)))
+            self.screen.blit(self._warp_overlay_surf, (0, 0))
 
         # In-Game Universal Pause Button & Modal
         self.pause_menu.draw_button(self.cursor_pos)
@@ -3443,23 +3467,24 @@ class Quarter1:
         overlay.set_alpha(150)
         self.screen.blit(overlay, (0, 0))
 
-        box_w, box_h = 560, 290
+        box_w, box_h = 740, 350
         box_x = (self.width - box_w) // 2
         box_y = (self.height - box_h) // 2
 
         dialog_rect = pygame.Rect(box_x, box_y, box_w, box_h)
-        pygame.draw.rect(self.screen, (15, 23, 42), dialog_rect, border_radius=12)
-        pygame.draw.rect(self.screen, (220, 38, 38), dialog_rect, 3, border_radius=12)
+        pygame.draw.rect(self.screen, (15, 23, 42), dialog_rect, border_radius=16)
+        pygame.draw.rect(self.screen, (220, 38, 38), dialog_rect, 3, border_radius=16)
+        pygame.draw.rect(self.screen, (248, 113, 113), dialog_rect.inflate(-6, -6), 1, border_radius=12)
 
-        speaker_font = pygame.font.SysFont("Comic Sans MS", 18, bold=True)
+        speaker_font = self.get_ui_font(24, bold=True)
         speaker_surf = speaker_font.render(speaker_name, True, (239, 68, 68))
-        self.screen.blit(speaker_surf, (box_x + 25, box_y + 16))
+        self.screen.blit(speaker_surf, (box_x + 28, box_y + 18))
 
-        q_font = pygame.font.SysFont("Comic Sans MS", 15)
+        q_font = self.get_ui_font(19, bold=True)
         msg_surf1 = q_font.render(script_data["wrong_retry"], True, (255, 255, 255))
         msg_surf2 = q_font.render("You have 1 try remaining! Think carefully.", True, (255, 215, 0))
-        self.screen.blit(msg_surf1, (box_x + 25, box_y + 48))
-        self.screen.blit(msg_surf2, (box_x + 25, box_y + 72))
+        self.screen.blit(msg_surf1, (box_x + 28, box_y + 56))
+        self.screen.blit(msg_surf2, (box_x + 28, box_y + 86))
 
         # Pedagogical Educational Hint Box
         from core.hints import get_educational_hint
@@ -3468,15 +3493,15 @@ class Quarter1:
         q_text = current_q.get("question", "")
         hint_text = get_educational_hint("quarter1", q_text)
 
-        hint_box = pygame.Rect(box_x + 20, box_y + 104, box_w - 40, 105)
-        pygame.draw.rect(self.screen, (30, 41, 59), hint_box, border_radius=8)
-        pygame.draw.rect(self.screen, (245, 158, 11), hint_box, 1, border_radius=8)
+        hint_box = pygame.Rect(box_x + 24, box_y + 124, box_w - 48, 130)
+        pygame.draw.rect(self.screen, (30, 41, 59), hint_box, border_radius=10)
+        pygame.draw.rect(self.screen, (245, 158, 11), hint_box, 2, border_radius=10)
 
-        hint_title_font = pygame.font.SysFont("Comic Sans MS", 14, bold=True)
-        hint_body_font = pygame.font.SysFont("Comic Sans MS", 13)
-        draw_vector_lightbulb(self.screen, hint_box.x + 20, hint_box.y + 15, size=6)
+        hint_title_font = self.get_ui_font(18, bold=True)
+        hint_body_font = self.get_ui_font(16, bold=True)
+        draw_vector_lightbulb(self.screen, hint_box.x + 22, hint_box.y + 18, size=7)
         h_title = hint_title_font.render("Pedagogical Hint:", True, (255, 215, 0))
-        self.screen.blit(h_title, (hint_box.x + 32, hint_box.y + 6))
+        self.screen.blit(h_title, (hint_box.x + 38, hint_box.y + 9))
 
         # Text wrap
         words = hint_text.split(" ")
@@ -3484,29 +3509,30 @@ class Quarter1:
         cur = []
         for w in words:
             cur.append(w)
-            if hint_body_font.size(" ".join(cur))[0] > (hint_box.width - 24):
+            if hint_body_font.size(" ".join(cur))[0] > (hint_box.width - 32):
                 cur.pop()
                 lines.append(" ".join(cur))
                 cur = [w]
         if cur:
             lines.append(" ".join(cur))
 
-        hy = hint_box.y + 30
+        hy = hint_box.y + 38
         for hl in lines[:3]:
             h_surf = hint_body_font.render(hl, True, (241, 245, 249))
-            self.screen.blit(h_surf, (hint_box.x + 12, hy))
-            hy += 22
+            self.screen.blit(h_surf, (hint_box.x + 16, hy))
+            hy += 26
 
-        button_w, button_h = 200, 42
+        button_w, button_h = 240, 50
         button_x = box_x + (box_w - button_w) // 2
-        button_y = box_y + 225
+        button_y = box_y + 275
         btn_rect = pygame.Rect(button_x, button_y, button_w, button_h)
 
         is_hovered = btn_rect.collidepoint(self.cursor_pos)
-        bg_color = (30, 41, 59) if not is_hovered else (220, 38, 38)
+        bg_color = (220, 38, 38) if is_hovered else (30, 41, 59)
+        border_col = (255, 255, 255) if is_hovered else (220, 38, 38)
 
         pygame.draw.rect(self.screen, bg_color, btn_rect, border_radius=12)
-        pygame.draw.rect(self.screen, (0, 0, 0), btn_rect, 3, border_radius=12)
+        pygame.draw.rect(self.screen, border_col, btn_rect, 2, border_radius=12)
 
         c_surf = speaker_font.render("Try Again", True, (255, 255, 255))
         c_rect = c_surf.get_rect(center=btn_rect.center)
@@ -3526,46 +3552,48 @@ class Quarter1:
         overlay.set_alpha(160)
         self.screen.blit(overlay, (0, 0))
 
-        box_w, box_h = 560, 260
+        box_w, box_h = 740, 340
         box_x = (self.width - box_w) // 2
         box_y = (self.height - box_h) // 2
 
         dialog_rect = pygame.Rect(box_x, box_y, box_w, box_h)
-        pygame.draw.rect(self.screen, (15, 23, 42), dialog_rect)
-        pygame.draw.rect(self.screen, (245, 158, 11), dialog_rect, 3, border_radius=8)
+        pygame.draw.rect(self.screen, (15, 23, 42), dialog_rect, border_radius=16)
+        pygame.draw.rect(self.screen, (245, 158, 11), dialog_rect, 3, border_radius=16)
+        pygame.draw.rect(self.screen, (251, 191, 36), dialog_rect.inflate(-6, -6), 1, border_radius=12)
 
-        speaker_font = pygame.font.SysFont("Comic Sans MS", 18, bold=True)
+        speaker_font = self.get_ui_font(24, bold=True)
         speaker_surf = speaker_font.render(speaker_name, True, (245, 158, 11))
-        self.screen.blit(speaker_surf, (box_x + 25, box_y + 15))
+        self.screen.blit(speaker_surf, (box_x + 28, box_y + 18))
 
         q_data = self.quiz_questions[self.current_question_index]
         correct_choice_text = q_data["choices"][q_data["correct"]]
 
-        q_font = pygame.font.SysFont("Comic Sans MS", 15)
+        q_font = self.get_ui_font(19, bold=True)
         msg1 = q_font.render(f"Out of tries! The correct answer was: {correct_choice_text}", True, (255, 255, 255))
         reward_text = script_data["out_of_tries"]
         
         # Split reward text if long
-        wrapped_reward = self.wrap_text(reward_text, q_font, box_w - 50)
-        self.screen.blit(msg1, (box_x + 25, box_y + 55))
-        ry = box_y + 85
+        wrapped_reward = self.wrap_text(reward_text, q_font, box_w - 56)
+        self.screen.blit(msg1, (box_x + 28, box_y + 65))
+        ry = box_y + 102
         for rw_line in wrapped_reward:
             msg2 = q_font.render(rw_line, True, (255, 215, 0))
-            self.screen.blit(msg2, (box_x + 25, ry))
-            ry += 22
+            self.screen.blit(msg2, (box_x + 28, ry))
+            ry += 28
 
-        button_w, button_h = 200, 42
+        button_w, button_h = 240, 50
         button_x = box_x + (box_w - button_w) // 2
-        button_y = box_y + 195
+        button_y = box_y + 260
         btn_rect = pygame.Rect(button_x, button_y, button_w, button_h)
 
         is_hovered = btn_rect.collidepoint(self.cursor_pos)
-        bg_color = (30, 41, 59) if not is_hovered else (245, 158, 11)
+        bg_color = (245, 158, 11) if is_hovered else (30, 41, 59)
+        border_col = (255, 255, 255) if is_hovered else (245, 158, 11)
 
         pygame.draw.rect(self.screen, bg_color, btn_rect, border_radius=12)
-        pygame.draw.rect(self.screen, (0, 0, 0), btn_rect, 3, border_radius=12)
+        pygame.draw.rect(self.screen, border_col, btn_rect, 2, border_radius=12)
 
-        c_surf = speaker_font.render("Continue", True, (255, 255, 255))
+        c_surf = speaker_font.render("Continue", True, (255, 255, 255) if not is_hovered else (15, 23, 42))
         c_rect = c_surf.get_rect(center=btn_rect.center)
         self.screen.blit(c_surf, c_rect)
 
@@ -3583,38 +3611,40 @@ class Quarter1:
         overlay.set_alpha(150)
         self.screen.blit(overlay, (0, 0))
 
-        box_w, box_h = 500, 240
+        box_w, box_h = 720, 300
         box_x = (self.width - box_w) // 2
         box_y = (self.height - box_h) // 2
 
         dialog_rect = pygame.Rect(box_x, box_y, box_w, box_h)
-        pygame.draw.rect(self.screen, (15, 23, 42), dialog_rect)
-        pygame.draw.rect(self.screen, (22, 163, 74), dialog_rect, 3, border_radius=8)
+        pygame.draw.rect(self.screen, (15, 23, 42), dialog_rect, border_radius=16)
+        pygame.draw.rect(self.screen, (22, 163, 74), dialog_rect, 3, border_radius=16)
+        pygame.draw.rect(self.screen, (74, 222, 128), dialog_rect.inflate(-6, -6), 1, border_radius=12)
 
-        speaker_font = pygame.font.SysFont("Comic Sans MS", 18, bold=True)
-        speaker_surf = speaker_font.render(speaker_name, True, (22, 163, 74))
-        self.screen.blit(speaker_surf, (box_x + 25, box_y + 20))
+        speaker_font = self.get_ui_font(24, bold=True)
+        speaker_surf = speaker_font.render(speaker_name, True, (74, 222, 128))
+        self.screen.blit(speaker_surf, (box_x + 28, box_y + 20))
 
-        q_font = pygame.font.SysFont("Comic Sans MS", 15)
-        wrapped_praise = self.wrap_text(self.current_correct_phrase or script_data["correct_praise"], q_font, box_w - 50)
-        py = box_y + 65
+        q_font = self.get_ui_font(20, bold=True)
+        wrapped_praise = self.wrap_text(self.current_correct_phrase or script_data["correct_praise"], q_font, box_w - 56)
+        py = box_y + 75
         for p_line in wrapped_praise:
             msg_surf = q_font.render(p_line, True, (255, 255, 255))
-            self.screen.blit(msg_surf, (box_x + 25, py))
-            py += 22
+            self.screen.blit(msg_surf, (box_x + 28, py))
+            py += 30
 
-        button_w, button_h = 200, 42
+        button_w, button_h = 240, 50
         button_x = box_x + (box_w - button_w) // 2
-        button_y = box_y + 155
+        button_y = box_y + 215
         btn_rect = pygame.Rect(button_x, button_y, button_w, button_h)
 
         is_hovered = btn_rect.collidepoint(self.cursor_pos)
-        bg_color = (30, 41, 59) if not is_hovered else (22, 163, 74)
+        bg_color = (22, 163, 74) if is_hovered else (30, 41, 59)
+        border_col = (255, 255, 255) if is_hovered else (22, 163, 74)
 
         pygame.draw.rect(self.screen, bg_color, btn_rect, border_radius=12)
-        pygame.draw.rect(self.screen, (0, 0, 0), btn_rect, 3, border_radius=12)
+        pygame.draw.rect(self.screen, border_col, btn_rect, 2, border_radius=12)
 
-        c_surf = speaker_font.render("Continue", True, (255, 255, 255))
+        c_surf = speaker_font.render("Continue >>", True, (255, 255, 255))
         c_rect = c_surf.get_rect(center=btn_rect.center)
         self.screen.blit(c_surf, c_rect)
 
@@ -3624,20 +3654,21 @@ class Quarter1:
         overlay.set_alpha(150)
         self.screen.blit(overlay, (0, 0))
 
-        box_w, box_h = 550, 300
+        box_w, box_h = 760, 360
         box_x = (self.width - box_w) // 2
         box_y = (self.height - box_h) // 2
 
         dialog_rect = pygame.Rect(box_x, box_y, box_w, box_h)
-        pygame.draw.rect(self.screen, (15, 23, 42), dialog_rect)
-        pygame.draw.rect(self.screen, (218, 165, 32), dialog_rect, 3, border_radius=8)
+        pygame.draw.rect(self.screen, (15, 23, 42), dialog_rect, border_radius=16)
+        pygame.draw.rect(self.screen, (218, 165, 32), dialog_rect, 3, border_radius=16)
+        pygame.draw.rect(self.screen, (255, 215, 0), dialog_rect.inflate(-6, -6), 1, border_radius=12)
 
-        speaker_font = pygame.font.SysFont("Comic Sans MS", 18, bold=True)
-        speaker_surf = speaker_font.render("Old Man", True, (218, 165, 32))
-        self.screen.blit(speaker_surf, (box_x + 25, box_y + 20))
-        pygame.draw.line(self.screen, (218, 165, 32), (box_x + 25, box_y + 48), (box_x + 120, box_y + 48), 2)
+        speaker_font = self.get_ui_font(24, bold=True)
+        speaker_surf = speaker_font.render("Old Man (Mentor)", True, (218, 165, 32))
+        self.screen.blit(speaker_surf, (box_x + 28, box_y + 20))
+        pygame.draw.line(self.screen, (218, 165, 32), (box_x + 28, box_y + 54), (box_x + 240, box_y + 54), 2)
 
-        q_font = pygame.font.SysFont("Comic Sans MS", 15)
+        q_font = self.get_ui_font(19, bold=True)
         speech_lines = [
             "Outstanding, young adventurer! You know your shapes very well.",
             "The Geometry Forest is peaceful once again because of your wisdom.",
@@ -3645,15 +3676,15 @@ class Quarter1:
             "waiting for a brave student like you!"
         ]
         
-        y_text = box_y + 65
+        y_text = box_y + 75
         for line in speech_lines:
             txt_surf = q_font.render(line, True, (255, 255, 255))
-            self.screen.blit(txt_surf, (box_x + 25, y_text))
-            y_text += 24
+            self.screen.blit(txt_surf, (box_x + 28, y_text))
+            y_text += 30
 
-        button_w, button_h = 200, 42
+        button_w, button_h = 240, 50
         button_x = box_x + (box_w - button_w) // 2
-        button_y = box_y + 210
+        button_y = box_y + 280
         btn_rect = pygame.Rect(button_x, button_y, button_w, button_h)
 
         is_hovered = btn_rect.collidepoint(self.cursor_pos)
@@ -3665,9 +3696,9 @@ class Quarter1:
             text_color = (255, 255, 255)
 
         pygame.draw.rect(self.screen, bg_color, btn_rect, border_radius=12)
-        pygame.draw.rect(self.screen, (0, 0, 0), btn_rect, 3, border_radius=12)
+        pygame.draw.rect(self.screen, (255, 255, 255) if is_hovered else (218, 165, 32), btn_rect, 2, border_radius=12)
 
-        c_surf = speaker_font.render("Finish", True, text_color)
+        c_surf = speaker_font.render("Finish Quest", True, text_color)
         c_rect = c_surf.get_rect(center=btn_rect.center)
         self.screen.blit(c_surf, c_rect)
 
@@ -3677,18 +3708,19 @@ class Quarter1:
         overlay.set_alpha(150)
         self.screen.blit(overlay, (0, 0))
 
-        box_w, box_h = 550, 240
+        box_w, box_h = 720, 300
         box_x = (self.width - box_w) // 2
         box_y = (self.height - box_h) // 2
 
         dialog_rect = pygame.Rect(box_x, box_y, box_w, box_h)
-        pygame.draw.rect(self.screen, (15, 23, 42), dialog_rect)
-        pygame.draw.rect(self.screen, (218, 165, 32), dialog_rect, 3, border_radius=8)
+        pygame.draw.rect(self.screen, (15, 23, 42), dialog_rect, border_radius=16)
+        pygame.draw.rect(self.screen, (218, 165, 32), dialog_rect, 3, border_radius=16)
+        pygame.draw.rect(self.screen, (255, 215, 0), dialog_rect.inflate(-6, -6), 1, border_radius=12)
 
-        speaker_font = pygame.font.SysFont("Comic Sans MS", 18, bold=True)
+        speaker_font = self.get_ui_font(24, bold=True)
         speaker_surf = speaker_font.render("Old Man", True, (218, 165, 32))
-        self.screen.blit(speaker_surf, (box_x + 25, box_y + 20))
-        pygame.draw.line(self.screen, (218, 165, 32), (box_x + 25, box_y + 48), (box_x + 120, box_y + 48), 2)
+        self.screen.blit(speaker_surf, (box_x + 28, box_y + 20))
+        pygame.draw.line(self.screen, (218, 165, 32), (box_x + 28, box_y + 54), (box_x + 160, box_y + 54), 2)
 
         from core.npc_scripts import get_mentor_script
         student_name = "Student"
@@ -3696,18 +3728,18 @@ class Quarter1:
             student_name = self.main_menu.selected_student.get('first_name', 'Student')
         mentor_data = get_mentor_script("quarter1", self.map_name, student_name)
 
-        q_font = pygame.font.SysFont("Comic Sans MS", 15)
+        q_font = self.get_ui_font(19, bold=True)
         speech_lines = mentor_data["incomplete"].split("\n")
         
-        y_text = box_y + 65
+        y_text = box_y + 75
         for line in speech_lines:
             txt_surf = q_font.render(line, True, (255, 255, 255))
-            self.screen.blit(txt_surf, (box_x + 25, y_text))
-            y_text += 24
+            self.screen.blit(txt_surf, (box_x + 28, y_text))
+            y_text += 30
 
-        button_w, button_h = 200, 42
+        button_w, button_h = 240, 50
         button_x = box_x + (box_w - button_w) // 2
-        button_y = box_y + 180
+        button_y = box_y + 225
         btn_rect = pygame.Rect(button_x, button_y, button_w, button_h)
 
         is_hovered = btn_rect.collidepoint(self.cursor_pos)
@@ -3719,7 +3751,7 @@ class Quarter1:
             text_color = (255, 255, 255)
 
         pygame.draw.rect(self.screen, bg_color, btn_rect, border_radius=12)
-        pygame.draw.rect(self.screen, (0, 0, 0), btn_rect, 2, border_radius=12)
+        pygame.draw.rect(self.screen, (255, 255, 255) if is_hovered else (218, 165, 32), btn_rect, 2, border_radius=12)
 
         c_surf = speaker_font.render("OK", True, text_color)
         c_rect = c_surf.get_rect(center=btn_rect.center)
@@ -3731,35 +3763,37 @@ class Quarter1:
         overlay.set_alpha(150)
         self.screen.blit(overlay, (0, 0))
 
-        box_w, box_h = 580, 400
+        box_w, box_h = 780, 480
         box_x = (self.width - box_w) // 2
         box_y = (self.height - box_h) // 2
 
         dialog_rect = pygame.Rect(box_x, box_y, box_w, box_h)
-        pygame.draw.rect(self.screen, (15, 23, 42), dialog_rect)
-        pygame.draw.rect(self.screen, (218, 165, 32), dialog_rect, 3, border_radius=8)
+        pygame.draw.rect(self.screen, (15, 23, 42), dialog_rect, border_radius=16)
+        pygame.draw.rect(self.screen, (218, 165, 32), dialog_rect, 3, border_radius=16)
+        pygame.draw.rect(self.screen, (255, 215, 0), dialog_rect.inflate(-6, -6), 1, border_radius=12)
 
-        speaker_font = pygame.font.SysFont("Comic Sans MS", 18, bold=True)
-        speaker_surf = speaker_font.render("Old Man", True, (218, 165, 32))
-        self.screen.blit(speaker_surf, (box_x + 25, box_y + 20))
-        pygame.draw.line(self.screen, (218, 165, 32), (box_x + 25, box_y + 48), (box_x + 120, box_y + 48), 2)
+        speaker_font = self.get_ui_font(24, bold=True)
+        speaker_surf = speaker_font.render("Old Man - Riddle Challenge", True, (218, 165, 32))
+        self.screen.blit(speaker_surf, (box_x + 28, box_y + 20))
+        pygame.draw.line(self.screen, (218, 165, 32), (box_x + 28, box_y + 54), (box_x + 360, box_y + 54), 2)
 
-        q_font = pygame.font.SysFont("Comic Sans MS", 16)
+        q_font = self.get_ui_font(21, bold=True)
         riddle_data = getattr(self, 'selected_riddle', self.oldman_riddle_pool[0])
         riddle_text = riddle_data.get("riddle", "I am perfectly round with no straight lines. What am I?")
-        wrapped_q = self.wrap_text(riddle_text, q_font, box_w - 50)
+        wrapped_q = self.wrap_text(riddle_text, q_font, box_w - 56)
         
-        y_text = box_y + 60
+        y_text = box_y + 75
         for line in wrapped_q:
             txt_surf = q_font.render(line, True, (255, 255, 255))
-            self.screen.blit(txt_surf, (box_x + 25, y_text))
-            y_text += 22
+            self.screen.blit(txt_surf, (box_x + 28, y_text))
+            y_text += 28
 
-        button_w, button_h = 500, 42
+        button_w, button_h = 680, 52
         button_x = box_x + (box_w - button_w) // 2
-        button_y_start = box_y + 155
-        spacing = 52
+        button_y_start = box_y + 175
+        spacing = 64
         
+        choice_font = self.get_ui_font(19, bold=True)
         choices = riddle_data.get("choices", ["A. Triangle", "B. Square", "C. Circle", "D. Rectangle"])
         for i, choice in enumerate(choices):
             b_y = button_y_start + i * spacing
@@ -3774,9 +3808,9 @@ class Quarter1:
                 text_color = (255, 255, 255)
             
             pygame.draw.rect(self.screen, bg_color, btn_rect, border_radius=12)
-            pygame.draw.rect(self.screen, (0, 0, 0), btn_rect, 3, border_radius=12)
+            pygame.draw.rect(self.screen, (255, 255, 255) if is_hovered else (71, 85, 105), btn_rect, 2, border_radius=12)
             
-            c_surf = q_font.render(choice, True, text_color)
+            c_surf = choice_font.render(choice, True, text_color)
             c_rect = c_surf.get_rect(center=btn_rect.center)
             self.screen.blit(c_surf, c_rect)
 
@@ -3786,35 +3820,36 @@ class Quarter1:
         overlay.set_alpha(150)
         self.screen.blit(overlay, (0, 0))
 
-        box_w, box_h = 500, 240
+        box_w, box_h = 720, 300
         box_x = (self.width - box_w) // 2
         box_y = (self.height - box_h) // 2
 
         dialog_rect = pygame.Rect(box_x, box_y, box_w, box_h)
-        pygame.draw.rect(self.screen, (15, 23, 42), dialog_rect)
-        pygame.draw.rect(self.screen, (220, 38, 38), dialog_rect, 3, border_radius=8)
+        pygame.draw.rect(self.screen, (15, 23, 42), dialog_rect, border_radius=16)
+        pygame.draw.rect(self.screen, (220, 38, 38), dialog_rect, 3, border_radius=16)
+        pygame.draw.rect(self.screen, (248, 113, 113), dialog_rect.inflate(-6, -6), 1, border_radius=12)
 
-        speaker_font = pygame.font.SysFont("Comic Sans MS", 18, bold=True)
+        speaker_font = self.get_ui_font(24, bold=True)
         speaker_surf = speaker_font.render("Old Man", True, (220, 38, 38))
-        self.screen.blit(speaker_surf, (box_x + 25, box_y + 20))
-        pygame.draw.line(self.screen, (220, 38, 38), (box_x + 25, box_y + 48), (box_x + 120, box_y + 48), 2)
+        self.screen.blit(speaker_surf, (box_x + 28, box_y + 20))
+        pygame.draw.line(self.screen, (220, 38, 38), (box_x + 28, box_y + 54), (box_x + 160, box_y + 54), 2)
 
-        q_font = pygame.font.SysFont("Comic Sans MS", 15)
+        q_font = self.get_ui_font(19, bold=True)
         speech_lines = [
             "That is incorrect, young adventurer!",
             "Think carefully and try again.",
             "Would you like to try again?"
         ]
         
-        y_text = box_y + 65
+        y_text = box_y + 75
         for line in speech_lines:
             txt_surf = q_font.render(line, True, (255, 255, 255))
-            self.screen.blit(txt_surf, (box_x + 25, y_text))
-            y_text += 24
+            self.screen.blit(txt_surf, (box_x + 28, y_text))
+            y_text += 30
 
-        button_w, button_h = 200, 42
+        button_w, button_h = 240, 50
         button_x = box_x + (box_w - button_w) // 2
-        button_y = box_y + 160
+        button_y = box_y + 220
         btn_rect = pygame.Rect(button_x, button_y, button_w, button_h)
 
         is_hovered = btn_rect.collidepoint(self.cursor_pos)
@@ -3826,7 +3861,7 @@ class Quarter1:
             text_color = (255, 255, 255)
 
         pygame.draw.rect(self.screen, bg_color, btn_rect, border_radius=12)
-        pygame.draw.rect(self.screen, (0, 0, 0), btn_rect, 2, border_radius=12)
+        pygame.draw.rect(self.screen, (255, 255, 255) if is_hovered else (220, 38, 38), btn_rect, 2, border_radius=12)
 
         c_surf = speaker_font.render("Try Again", True, text_color)
         c_rect = c_surf.get_rect(center=btn_rect.center)
@@ -3838,20 +3873,21 @@ class Quarter1:
         overlay.set_alpha(150)
         self.screen.blit(overlay, (0, 0))
 
-        box_w, box_h = 500, 240
+        box_w, box_h = 720, 300
         box_x = (self.width - box_w) // 2
         box_y = (self.height - box_h) // 2
 
         dialog_rect = pygame.Rect(box_x, box_y, box_w, box_h)
-        pygame.draw.rect(self.screen, (15, 23, 42), dialog_rect)
-        pygame.draw.rect(self.screen, (34, 197, 94), dialog_rect, 3, border_radius=8)
+        pygame.draw.rect(self.screen, (15, 23, 42), dialog_rect, border_radius=16)
+        pygame.draw.rect(self.screen, (34, 197, 94), dialog_rect, 3, border_radius=16)
+        pygame.draw.rect(self.screen, (74, 222, 128), dialog_rect.inflate(-6, -6), 1, border_radius=12)
 
-        speaker_font = pygame.font.SysFont("Comic Sans MS", 18, bold=True)
+        speaker_font = self.get_ui_font(24, bold=True)
         speaker_surf = speaker_font.render("Old Man", True, (34, 197, 94))
-        self.screen.blit(speaker_surf, (box_x + 25, box_y + 20))
-        pygame.draw.line(self.screen, (34, 197, 94), (box_x + 25, box_y + 48), (box_x + 120, box_y + 48), 2)
+        self.screen.blit(speaker_surf, (box_x + 28, box_y + 20))
+        pygame.draw.line(self.screen, (34, 197, 94), (box_x + 28, box_y + 54), (box_x + 160, box_y + 54), 2)
 
-        q_font = pygame.font.SysFont("Comic Sans MS", 15)
+        q_font = self.get_ui_font(19, bold=True)
         riddle_data = getattr(self, 'selected_riddle', self.oldman_riddle_pool[0])
         shape_name = riddle_data.get("shape_name", "Shape")
         speech_lines = [
@@ -3860,15 +3896,15 @@ class Quarter1:
             "You have solved my riddle!"
         ]
         
-        y_text = box_y + 65
+        y_text = box_y + 75
         for line in speech_lines:
             txt_surf = q_font.render(line, True, (255, 255, 255))
-            self.screen.blit(txt_surf, (box_x + 25, y_text))
-            y_text += 24
+            self.screen.blit(txt_surf, (box_x + 28, y_text))
+            y_text += 30
 
-        button_w, button_h = 200, 42
+        button_w, button_h = 240, 50
         button_x = box_x + (box_w - button_w) // 2
-        button_y = box_y + 160
+        button_y = box_y + 220
         btn_rect = pygame.Rect(button_x, button_y, button_w, button_h)
 
         is_hovered = btn_rect.collidepoint(self.cursor_pos)
@@ -3880,9 +3916,9 @@ class Quarter1:
             text_color = (255, 255, 255)
 
         pygame.draw.rect(self.screen, bg_color, btn_rect, border_radius=12)
-        pygame.draw.rect(self.screen, (0, 0, 0), btn_rect, 2, border_radius=12)
+        pygame.draw.rect(self.screen, (255, 255, 255) if is_hovered else (34, 197, 94), btn_rect, 2, border_radius=12)
 
-        c_surf = speaker_font.render("Continue", True, text_color)
+        c_surf = speaker_font.render("Continue >>", True, text_color)
         c_rect = c_surf.get_rect(center=btn_rect.center)
         self.screen.blit(c_surf, c_rect)
 
@@ -3892,34 +3928,35 @@ class Quarter1:
         overlay.set_alpha(150)
         self.screen.blit(overlay, (0, 0))
 
-        box_w, box_h = 550, 300
+        box_w, box_h = 760, 320
         box_x = (self.width - box_w) // 2
         box_y = (self.height - box_h) // 2
 
         dialog_rect = pygame.Rect(box_x, box_y, box_w, box_h)
-        pygame.draw.rect(self.screen, (15, 23, 42), dialog_rect)
-        pygame.draw.rect(self.screen, (218, 165, 32), dialog_rect, 3, border_radius=8)
+        pygame.draw.rect(self.screen, (15, 23, 42), dialog_rect, border_radius=16)
+        pygame.draw.rect(self.screen, (218, 165, 32), dialog_rect, 3, border_radius=16)
+        pygame.draw.rect(self.screen, (255, 215, 0), dialog_rect.inflate(-6, -6), 1, border_radius=12)
 
-        speaker_font = pygame.font.SysFont("Comic Sans MS", 18, bold=True)
+        speaker_font = self.get_ui_font(24, bold=True)
         speaker_surf = speaker_font.render("Old Man", True, (218, 165, 32))
-        self.screen.blit(speaker_surf, (box_x + 25, box_y + 20))
-        pygame.draw.line(self.screen, (218, 165, 32), (box_x + 25, box_y + 48), (box_x + 120, box_y + 48), 2)
+        self.screen.blit(speaker_surf, (box_x + 28, box_y + 20))
+        pygame.draw.line(self.screen, (218, 165, 32), (box_x + 28, box_y + 54), (box_x + 160, box_y + 54), 2)
 
-        q_font = pygame.font.SysFont("Comic Sans MS", 15)
+        q_font = self.get_ui_font(19, bold=True)
         speech_lines = [
             "Outstanding, young adventurer! You have built the bridge and solved my riddle!",
             "You may now enter the portal and proceed on your quest. Safe travels!"
         ]
         
-        y_text = box_y + 65
+        y_text = box_y + 75
         for line in speech_lines:
             txt_surf = q_font.render(line, True, (255, 255, 255))
-            self.screen.blit(txt_surf, (box_x + 25, y_text))
-            y_text += 24
+            self.screen.blit(txt_surf, (box_x + 28, y_text))
+            y_text += 30
 
-        button_w, button_h = 200, 42
+        button_w, button_h = 240, 50
         button_x = box_x + (box_w - button_w) // 2
-        button_y = box_y + 210
+        button_y = box_y + 240
         btn_rect = pygame.Rect(button_x, button_y, button_w, button_h)
 
         is_hovered = btn_rect.collidepoint(self.cursor_pos)
@@ -3931,7 +3968,7 @@ class Quarter1:
             text_color = (255, 255, 255)
 
         pygame.draw.rect(self.screen, bg_color, btn_rect, border_radius=12)
-        pygame.draw.rect(self.screen, (0, 0, 0), btn_rect, 2, border_radius=12)
+        pygame.draw.rect(self.screen, (255, 255, 255) if is_hovered else (218, 165, 32), btn_rect, 2, border_radius=12)
 
         c_surf = speaker_font.render("OK", True, text_color)
         c_rect = c_surf.get_rect(center=btn_rect.center)
@@ -3943,18 +3980,19 @@ class Quarter1:
         overlay.set_alpha(150)
         self.screen.blit(overlay, (0, 0))
 
-        box_w, box_h = 550, 240
+        box_w, box_h = 720, 300
         box_x = (self.width - box_w) // 2
         box_y = (self.height - box_h) // 2
 
         dialog_rect = pygame.Rect(box_x, box_y, box_w, box_h)
-        pygame.draw.rect(self.screen, (15, 23, 42), dialog_rect)
-        pygame.draw.rect(self.screen, (218, 165, 32), dialog_rect, 3, border_radius=8)
+        pygame.draw.rect(self.screen, (15, 23, 42), dialog_rect, border_radius=16)
+        pygame.draw.rect(self.screen, (218, 165, 32), dialog_rect, 3, border_radius=16)
+        pygame.draw.rect(self.screen, (255, 215, 0), dialog_rect.inflate(-6, -6), 1, border_radius=12)
 
-        speaker_font = pygame.font.SysFont("Comic Sans MS", 18, bold=True)
+        speaker_font = self.get_ui_font(24, bold=True)
         speaker_surf = speaker_font.render("Old Man", True, (218, 165, 32))
-        self.screen.blit(speaker_surf, (box_x + 25, box_y + 20))
-        pygame.draw.line(self.screen, (218, 165, 32), (box_x + 25, box_y + 48), (box_x + 120, box_y + 48), 2)
+        self.screen.blit(speaker_surf, (box_x + 28, box_y + 20))
+        pygame.draw.line(self.screen, (218, 165, 32), (box_x + 28, box_y + 54), (box_x + 160, box_y + 54), 2)
 
         from core.npc_scripts import get_mentor_script
         student_name = "Student"
@@ -3962,18 +4000,18 @@ class Quarter1:
             student_name = self.main_menu.selected_student.get('first_name', 'Student')
         mentor_data = get_mentor_script("quarter1", self.map_name, student_name)
 
-        q_font = pygame.font.SysFont("Comic Sans MS", 15)
+        q_font = self.get_ui_font(19, bold=True)
         speech_lines = mentor_data["incomplete"].split("\n")
         
-        y_text = box_y + 65
+        y_text = box_y + 75
         for line in speech_lines:
             txt_surf = q_font.render(line, True, (255, 255, 255))
-            self.screen.blit(txt_surf, (box_x + 25, y_text))
-            y_text += 24
+            self.screen.blit(txt_surf, (box_x + 28, y_text))
+            y_text += 30
 
-        button_w, button_h = 200, 42
+        button_w, button_h = 240, 50
         button_x = box_x + (box_w - button_w) // 2
-        button_y = box_y + 180
+        button_y = box_y + 225
         btn_rect = pygame.Rect(button_x, button_y, button_w, button_h)
 
         is_hovered = btn_rect.collidepoint(self.cursor_pos)
@@ -3985,7 +4023,7 @@ class Quarter1:
             text_color = (255, 255, 255)
 
         pygame.draw.rect(self.screen, bg_color, btn_rect, border_radius=12)
-        pygame.draw.rect(self.screen, (0, 0, 0), btn_rect, 2, border_radius=12)
+        pygame.draw.rect(self.screen, (255, 255, 255) if is_hovered else (218, 165, 32), btn_rect, 2, border_radius=12)
 
         c_surf = speaker_font.render("OK", True, text_color)
         c_rect = c_surf.get_rect(center=btn_rect.center)
@@ -3997,18 +4035,19 @@ class Quarter1:
         overlay.set_alpha(150)
         self.screen.blit(overlay, (0, 0))
 
-        box_w, box_h = 550, 240
+        box_w, box_h = 720, 300
         box_x = (self.width - box_w) // 2
         box_y = (self.height - box_h) // 2
 
         dialog_rect = pygame.Rect(box_x, box_y, box_w, box_h)
-        pygame.draw.rect(self.screen, (15, 23, 42), dialog_rect)
-        pygame.draw.rect(self.screen, (218, 165, 32), dialog_rect, 3, border_radius=8)
+        pygame.draw.rect(self.screen, (15, 23, 42), dialog_rect, border_radius=16)
+        pygame.draw.rect(self.screen, (218, 165, 32), dialog_rect, 3, border_radius=16)
+        pygame.draw.rect(self.screen, (255, 215, 0), dialog_rect.inflate(-6, -6), 1, border_radius=12)
 
-        speaker_font = pygame.font.SysFont("Comic Sans MS", 18, bold=True)
+        speaker_font = self.get_ui_font(24, bold=True)
         speaker_surf = speaker_font.render("Old Man", True, (218, 165, 32))
-        self.screen.blit(speaker_surf, (box_x + 25, box_y + 20))
-        pygame.draw.line(self.screen, (218, 165, 32), (box_x + 25, box_y + 48), (box_x + 120, box_y + 48), 2)
+        self.screen.blit(speaker_surf, (box_x + 28, box_y + 20))
+        pygame.draw.line(self.screen, (218, 165, 32), (box_x + 28, box_y + 54), (box_x + 160, box_y + 54), 2)
 
         from core.npc_scripts import get_mentor_script
         student_name = "Student"
@@ -4016,19 +4055,19 @@ class Quarter1:
             student_name = self.main_menu.selected_student.get('first_name', 'Student')
         mentor_data = get_mentor_script("quarter1", self.map_name, student_name)
 
-        q_font = pygame.font.SysFont("Comic Sans MS", 15)
+        q_font = self.get_ui_font(19, bold=True)
         solved_text = mentor_data.get("solved", "Well done! The portal is open—step forward!")
         speech_lines = solved_text.split("\n")
         
-        y_text = box_y + 65
+        y_text = box_y + 75
         for line in speech_lines:
             txt_surf = q_font.render(line, True, (255, 255, 255))
-            self.screen.blit(txt_surf, (box_x + 25, y_text))
-            y_text += 24
+            self.screen.blit(txt_surf, (box_x + 28, y_text))
+            y_text += 30
 
-        button_w, button_h = 200, 42
+        button_w, button_h = 240, 50
         button_x = box_x + (box_w - button_w) // 2
-        button_y = box_y + 180
+        button_y = box_y + 225
         btn_rect = pygame.Rect(button_x, button_y, button_w, button_h)
 
         is_hovered = btn_rect.collidepoint(self.cursor_pos)
@@ -4040,7 +4079,7 @@ class Quarter1:
             text_color = (255, 255, 255)
 
         pygame.draw.rect(self.screen, bg_color, btn_rect, border_radius=12)
-        pygame.draw.rect(self.screen, (0, 0, 0), btn_rect, 2, border_radius=12)
+        pygame.draw.rect(self.screen, (255, 255, 255) if is_hovered else (218, 165, 32), btn_rect, 2, border_radius=12)
 
         c_surf = speaker_font.render("OK", True, text_color)
         c_rect = c_surf.get_rect(center=btn_rect.center)
@@ -4052,18 +4091,19 @@ class Quarter1:
         overlay.set_alpha(150)
         self.screen.blit(overlay, (0, 0))
 
-        box_w, box_h = 550, 240
+        box_w, box_h = 720, 300
         box_x = (self.width - box_w) // 2
         box_y = (self.height - box_h) // 2
 
         dialog_rect = pygame.Rect(box_x, box_y, box_w, box_h)
-        pygame.draw.rect(self.screen, (15, 23, 42), dialog_rect)
-        pygame.draw.rect(self.screen, (218, 165, 32), dialog_rect, 3, border_radius=8)
+        pygame.draw.rect(self.screen, (15, 23, 42), dialog_rect, border_radius=16)
+        pygame.draw.rect(self.screen, (218, 165, 32), dialog_rect, 3, border_radius=16)
+        pygame.draw.rect(self.screen, (255, 215, 0), dialog_rect.inflate(-6, -6), 1, border_radius=12)
 
-        speaker_font = pygame.font.SysFont("Comic Sans MS", 18, bold=True)
+        speaker_font = self.get_ui_font(24, bold=True)
         speaker_surf = speaker_font.render("Old Man", True, (218, 165, 32))
-        self.screen.blit(speaker_surf, (box_x + 25, box_y + 20))
-        pygame.draw.line(self.screen, (218, 165, 32), (box_x + 25, box_y + 48), (box_x + 120, box_y + 48), 2)
+        self.screen.blit(speaker_surf, (box_x + 28, box_y + 20))
+        pygame.draw.line(self.screen, (218, 165, 32), (box_x + 28, box_y + 54), (box_x + 160, box_y + 54), 2)
 
         from core.npc_scripts import get_mentor_script
         student_name = "Student"
@@ -4071,18 +4111,18 @@ class Quarter1:
             student_name = self.main_menu.selected_student.get('first_name', 'Student')
         mentor_data = get_mentor_script("quarter1", self.map_name, student_name)
 
-        q_font = pygame.font.SysFont("Comic Sans MS", 15)
+        q_font = self.get_ui_font(19, bold=True)
         speech_lines = mentor_data["complete"].split("\n")
         
-        y_text = box_y + 65
+        y_text = box_y + 75
         for line in speech_lines:
             txt_surf = q_font.render(line, True, (255, 255, 255))
-            self.screen.blit(txt_surf, (box_x + 25, y_text))
-            y_text += 24
+            self.screen.blit(txt_surf, (box_x + 28, y_text))
+            y_text += 30
 
-        button_w, button_h = 200, 42
+        button_w, button_h = 240, 50
         button_x = box_x + (box_w - button_w) // 2
-        button_y = box_y + 180
+        button_y = box_y + 225
         btn_rect = pygame.Rect(button_x, button_y, button_w, button_h)
 
         is_hovered = btn_rect.collidepoint(self.cursor_pos)
@@ -4094,7 +4134,7 @@ class Quarter1:
             text_color = (255, 255, 255)
 
         pygame.draw.rect(self.screen, bg_color, btn_rect, border_radius=12)
-        pygame.draw.rect(self.screen, (0, 0, 0), btn_rect, 2, border_radius=12)
+        pygame.draw.rect(self.screen, (255, 255, 255) if is_hovered else (218, 165, 32), btn_rect, 2, border_radius=12)
 
         c_surf = speaker_font.render("OK", True, text_color)
         c_rect = c_surf.get_rect(center=btn_rect.center)
@@ -4485,38 +4525,38 @@ class Quarter1:
             self._dim_overlay.fill((0, 0, 0, 180))
         self.screen.blit(self._dim_overlay, (0, 0))
 
-        box_w, box_h = 560, 260
+        box_w, box_h = 700, 320
         box_x = (self.width - box_w) // 2
         box_y = (self.height - box_h) // 2
 
         pygame.draw.rect(self.screen, (15, 23, 42), (box_x, box_y, box_w, box_h), border_radius=16)
         pygame.draw.rect(self.screen, (239, 68, 68), (box_x, box_y, box_w, box_h), 3, border_radius=16)
 
-        t_font = self.get_ui_font(24, bold=True)
-        msg_font = self.get_ui_font(18)
-        btn_font = self.get_ui_font(16, bold=True)
+        t_font = self.get_ui_font(28, bold=True)
+        msg_font = self.get_ui_font(20, bold=True)
+        btn_font = self.get_ui_font(19, bold=True)
 
         title = t_font.render("TIME'S UP!", True, (239, 68, 68))
-        self.screen.blit(title, title.get_rect(center=(box_x + box_w // 2, box_y + 36)))
+        self.screen.blit(title, title.get_rect(center=(box_x + box_w // 2, box_y + 45)))
 
         m1 = msg_font.render("Your 10-minute stage time limit has expired.", True, (255, 255, 255))
         m2 = msg_font.render("Would you like to try again or return to Stage Select?", True, (203, 213, 225))
-        self.screen.blit(m1, m1.get_rect(center=(box_x + box_w // 2, box_y + 85)))
-        self.screen.blit(m2, m2.get_rect(center=(box_x + box_w // 2, box_y + 115)))
+        self.screen.blit(m1, m1.get_rect(center=(box_x + box_w // 2, box_y + 105)))
+        self.screen.blit(m2, m2.get_rect(center=(box_x + box_w // 2, box_y + 145)))
 
         # Button 1: Retry Quarter
-        retry_rect = pygame.Rect(box_x + 40, box_y + 175, 220, 46)
+        retry_rect = pygame.Rect(box_x + 50, box_y + 225, 270, 52)
         r_hov = retry_rect.collidepoint(self.cursor_pos)
-        pygame.draw.rect(self.screen, (245, 158, 11) if r_hov else (30, 41, 59), retry_rect, border_radius=10)
-        pygame.draw.rect(self.screen, (255, 255, 255), retry_rect, 2, border_radius=10)
+        pygame.draw.rect(self.screen, (245, 158, 11) if r_hov else (30, 41, 59), retry_rect, border_radius=12)
+        pygame.draw.rect(self.screen, (255, 255, 255), retry_rect, 2, border_radius=12)
         r_txt = btn_font.render("Retry Quarter", True, (15, 23, 42) if r_hov else (255, 255, 255))
         self.screen.blit(r_txt, r_txt.get_rect(center=retry_rect.center))
 
         # Button 2: Return to Stage Select
-        exit_rect = pygame.Rect(box_x + box_w - 260, box_y + 175, 220, 46)
+        exit_rect = pygame.Rect(box_x + box_w - 320, box_y + 225, 270, 52)
         e_hov = exit_rect.collidepoint(self.cursor_pos)
-        pygame.draw.rect(self.screen, (220, 38, 38) if e_hov else (30, 41, 59), exit_rect, border_radius=10)
-        pygame.draw.rect(self.screen, (255, 255, 255), exit_rect, 2, border_radius=10)
+        pygame.draw.rect(self.screen, (220, 38, 38) if e_hov else (30, 41, 59), exit_rect, border_radius=12)
+        pygame.draw.rect(self.screen, (255, 255, 255), exit_rect, 2, border_radius=12)
         e_txt = btn_font.render("Stage Select", True, (255, 255, 255))
         self.screen.blit(e_txt, e_txt.get_rect(center=exit_rect.center))
 

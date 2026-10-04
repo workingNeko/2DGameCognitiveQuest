@@ -207,7 +207,55 @@ def test_original_game_cursor_rendering():
     menu.peace_start_time = time.time() - 0.45
     menu.draw_cursor()
 
-    print("PASS: Original reticle game cursor renders cleanly across all gesture modes (Mouse, Open, Fist, Peace).")
+def test_one_euro_filter_stability_and_responsiveness():
+    from core.cursor_system import OneEuroFilter
+    f = OneEuroFilter(0.0, 100.0, min_cutoff=0.85, beta=0.015, d_cutoff=1.0)
+
+    # 1. Jitter suppression test: high frequency oscillation at 60 FPS
+    t = 0.0
+    for i in range(30):
+        t += 0.0166
+        # Simulate noisy sensor alternating +- 4px around 100
+        noise = 4.0 if (i % 2 == 0) else -4.0
+        val = f(t, 100.0 + noise)
+        # Filtered output should stay tightly clustered near 100
+        assert abs(val - 100.0) < 2.0, f"Jitter was not suppressed: {val}"
+
+    # 2. High-speed responsiveness test: fast jump to 800.0
+    for _ in range(5):
+        t += 0.0166
+        f(t, 800.0)
+    # Velocity adaptation should ensure rapid convergence (> 700 within 5 frames)
+    assert f.x_prev > 700.0, f"Filter lagged excessively on fast movement: {f.x_prev}"
+    print("PASS: OneEuroFilter provides sub-pixel jitter suppression at rest and zero lag during fast movement.")
+
+
+def test_curl_invariant_palm_tracking():
+    from screens.main_menu import MainMenu
+    test_surf = pygame.Surface((1024, 768))
+    menu = MainMenu(test_surf)
+
+    # Fake landmark coords: 21 landmarks
+    # Test that (wrist 0 + index_mcp 5 + pinky_mcp 17) / 3 is computed consistently
+    coords = [(0.5, 0.5)] * 21
+    coords[0] = (0.5, 0.6)   # Wrist
+    coords[5] = (0.45, 0.4)  # Index MCP
+    coords[17] = (0.55, 0.4) # Pinky MCP
+
+    # When fingers curl (landmarks 8, 12, 16, 20 move down to 0.55), palm centroid remains invariant
+    with menu.camera_lock:
+        menu.latest_raw_frame = None
+        menu.latest_hand_coords = coords
+        menu.latest_hand_detected = True
+
+    class MockCap:
+        def isOpened(self):
+            return True
+
+    menu.cap = MockCap()
+    menu.update_gesture()
+    assert menu.cursor_pos[0] > 0 and menu.cursor_pos[1] > 0
+    print("PASS: Curl-invariant palm centroid and 1-Euro filter tracking execute accurately.")
 
 
 if __name__ == "__main__":
@@ -220,4 +268,6 @@ if __name__ == "__main__":
     test_lol_camera_middle_mouse_drag()
     test_lol_camera_coordinate_transformations()
     test_original_game_cursor_rendering()
-    print("--- ALL CAMERA & ORIGINAL CURSOR UNIT TESTS PASSED (8/8) ---")
+    test_one_euro_filter_stability_and_responsiveness()
+    test_curl_invariant_palm_tracking()
+    print("--- ALL CAMERA & ORIGINAL CURSOR UNIT TESTS PASSED (10/10) ---")

@@ -307,31 +307,33 @@ def render_coin_surface(currency_info, size_or_w=86, height=None):
 
 
 def render_currency_token(currency_info, width=170, height=86):
-    """Universal token renderer displaying real banknote/coin images with clear denomination badges."""
+    """Universal token renderer displaying real banknote/coin images with clear, bold denomination badges for Grade 2 learners."""
     if currency_info.get("type") in ["banknote", "bill"]:
         return render_banknote_surface(currency_info, width, height)
     else:
-        # Render real coin centered inside a stylish display card with metadata
+        # Render real coin centered inside a stylish display card with large, readable text
         card_surf = pygame.Surface((width, height), pygame.SRCALPHA)
         card_rect = pygame.Rect(0, 0, width, height)
         pygame.draw.rect(card_surf, (30, 41, 59, 230), card_rect, border_radius=10)
-        pygame.draw.rect(card_surf, currency_info["main_color"], card_rect, 2, border_radius=10)
+        pygame.draw.rect(card_surf, currency_info.get("main_color", (217, 119, 6)), card_rect, 2, border_radius=10)
         
-        # Render real coin on left
+        # Render real coin on left with subtle margin
         coin_size = min(height - 10, int(width * 0.44))
         coin_img = render_coin_surface(currency_info, coin_size)
         card_surf.blit(coin_img, (8, (height - coin_size) // 2))
         
-        # Details on right
-        t_font = pygame.font.SysFont("Arial", 12, bold=True)
-        s_font = pygame.font.SysFont("Arial", 10)
+        # Large, high-contrast details on right
+        t_font = pygame.font.SysFont("Comic Sans MS", 14, bold=True)
+        s_font = pygame.font.SysFont("Segoe UI", 12, bold=True)
+        h_font = pygame.font.SysFont("Segoe UI", 11)
         
-        name_surf = t_font.render(currency_info["name"], True, (255, 255, 255))
-        tag_surf = s_font.render(currency_info.get("tagalog_name", ""), True, (254, 240, 138))
-        hint_surf = s_font.render(currency_info.get("portrait", ""), True, (148, 163, 184))
+        name_surf = t_font.render(currency_info["value_text"], True, (254, 240, 138))
+        tag_surf = s_font.render(currency_info.get("tagalog_name", ""), True, (255, 255, 255))
+        hint_surf = h_font.render(currency_info.get("portrait", ""), True, (148, 163, 184))
         
-        card_surf.blit(name_surf, (coin_size + 14, 12))
-        card_surf.blit(tag_surf, (coin_size + 14, 30))
-        card_surf.blit(hint_surf, (coin_size + 14, 48))
+        card_surf.blit(name_surf, (coin_size + 14, 10))
+        card_surf.blit(tag_surf, (coin_size + 14, 32))
+        card_surf.blit(hint_surf, (coin_size + 14, 52))
         
         return card_surf
+

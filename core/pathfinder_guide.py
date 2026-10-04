@@ -18,6 +18,8 @@ import time
 import collections
 from .font_manager import get_font, sanitize_text
 
+_HALO_CACHE = {}
+
 THEME_TRAIL_COLORS = {
     "forest": {
         "trail": (34, 197, 94),        # Emerald Green
@@ -98,7 +100,9 @@ class QuestPathfinderGuide:
         self.last_target_tile = (-1, -1)
         self.current_target_info = None
 
-        self.font = get_font("Comic Sans MS", 13, bold=True)
+        self.font = get_font("Comic Sans MS", 18, bold=True)
+        self.beacon_font = get_font("Comic Sans MS", 22, bold=True)
+        self.label_font = get_font("Comic Sans MS", 15, bold=True)
         self.active = True
 
     def update_theme(self, theme_key):
@@ -294,13 +298,25 @@ class QuestPathfinderGuide:
                     if coords:
                         return (coords[0], coords[1], "Grand Fiesta Portal", True)
 
-        # Quarter 3: Desert Vault Keeper / Pharaoh Altar
+        # Quarter 3: Skeleton Portal Guardian (Solar Array Trial)
         elif self.quarter_id == "quarter3":
-            if getattr(self.q, 'npc_oldman_found', False) and quiz_state in [5, 6]:
-                tx = getattr(self.q, 'npc_oldman_tile_x', 0)
-                ty = getattr(self.q, 'npc_oldman_tile_y', 0)
-                if tx > 0 and ty > 0:
-                    return (tx, ty, "Desert Vault Keeper", False)
+            puzzle_solved = getattr(self.q, 'solar_array_puzzle_solved', False) or getattr(self.q, 'guardian_skeleton_state', 0) >= 5 or getattr(self.q, 'quiz_state', 0) == 6
+            if not puzzle_solved:
+                sx = getattr(self.q, 'npc_skeleton_tile_x', 0)
+                sy = getattr(self.q, 'npc_skeleton_tile_y', 0)
+                if sx > 0 and sy > 0:
+                    return (sx, sy, "Skeleton (Portal Guardian)", False)
+                if getattr(self.q, 'npc_oldman_found', False):
+                    tx = getattr(self.q, 'npc_oldman_tile_x', 0)
+                    ty = getattr(self.q, 'npc_oldman_tile_y', 0)
+                    if tx > 0 and ty > 0:
+                        return (tx, ty, "Desert Vault Keeper", False)
+            else:
+                all_portals = getattr(self.q, 'portals', []) + getattr(self.q, 'locked_portals', [])
+                if all_portals:
+                    coords = self._extract_portal_tile(all_portals[0])
+                    if coords:
+                        return (coords[0], coords[1], "Sun Oasis Portal", True)
 
         # Quarter 4: Temple Elder / Guardian Bromen
         elif self.quarter_id == "quarter4":
@@ -440,7 +456,7 @@ class QuestPathfinderGuide:
         res.append(pts[-1])
         return res
 
-    def draw(self):
+    def draw(self, screen=None):
         """
         Draws the compact, radiant starlight trail along the path
         and off-screen directional compass badge.
@@ -475,7 +491,10 @@ class QuestPathfinderGuide:
         camera_x = getattr(self.q, 'camera_x', 0)
         camera_y = getattr(self.q, 'camera_y', 0)
         zoom = getattr(self.q, 'lol_camera', None).zoom if getattr(self.q, 'lol_camera', None) else 1.50
-        screen = self.q.screen
+        target_screen = screen if screen is not None else getattr(self.q, 'screen', None)
+        if target_screen is None:
+            return
+        screen = target_screen
         sw, sh = screen.get_size()
 
         theme_data = THEME_TRAIL_COLORS.get(self.theme_key, THEME_TRAIL_COLORS["forest"])
@@ -507,15 +526,25 @@ class QuestPathfinderGuide:
             return
 
         # ----------------------------------------------------
-        # 1. ANIMATED STARLIGHT MOTES & CHEVRONS ("A little bit smaller")
+        # 1. CONTINUOUS RADIANT GLOWING TRAIL BACKBONE
         # ----------------------------------------------------
-        step_dist = 24.0 * zoom  # Compact distance between trail motes
-        offset = (now_ms * 0.035) % step_dist
+        # Wide glowing path track
+        track_w = max(6, int(8 * zoom))
+        core_w = max(2, int(3 * zoom))
+        if len(screen_pts) >= 2:
+            pygame.draw.lines(screen, trail_color, False, screen_pts, track_w)
+            pygame.draw.lines(screen, (255, 255, 255), False, screen_pts, core_w)
 
-        # Halo surface for performance
-        pulse_base = 3.2 * zoom
-        d_size = max(2.5, 3.2 * zoom)
-        ch_size = max(2.5, 3.5 * zoom)
+        # ----------------------------------------------------
+        # 2. ANIMATED STARLIGHT MOTES & CHEVRONS (Enlarged for Grade 2)
+        # ----------------------------------------------------
+        step_dist = 36.0 * zoom  # Optimal distance between prominent trail motes
+        offset = (now_ms * 0.040) % step_dist
+
+        # Halo metrics & mote geometry (significantly scaled up for Grade 2 classroom visibility)
+        pulse_base = 10.0 * zoom
+        d_size = max(8.0, 10.0 * zoom)
+        ch_size = max(9.0, 12.0 * zoom)
 
         cur_d = offset
         while cur_d < total_len - 10:
@@ -535,15 +564,21 @@ class QuestPathfinderGuide:
                     break
                 acc += seg_len
 
-            if pt and -40 <= pt[0] <= sw + 40 and -40 <= pt[1] <= sh + 40:
-                pulse_r = int((pulse_base + math.sin(t * 4.5 + cur_d * 0.08) * 0.8 * zoom))
+            if pt and -50 <= pt[0] <= sw + 50 and -50 <= pt[1] <= sh + 50:
+                pulse_r = max(4, int(pulse_base + math.sin(t * 5.0 + cur_d * 0.08) * 2.5 * zoom))
 
-                # Soft glowing halo
-                halo_surf = pygame.Surface((pulse_r * 4, pulse_r * 4), pygame.SRCALPHA)
-                pygame.draw.circle(halo_surf, (*glow_color, 45), (pulse_r * 2, pulse_r * 2), pulse_r * 2)
-                screen.blit(halo_surf, (int(pt[0] - pulse_r * 2), int(pt[1] - pulse_r * 2)))
+                # Multi-layered glowing halo (zero allocation via cache)
+                h_key = (glow_color, pulse_r)
+                halo_surf = _HALO_CACHE.get(h_key)
+                if halo_surf is None:
+                    hr = int(pulse_r * 2.5)
+                    halo_surf = pygame.Surface((hr * 2, hr * 2), pygame.SRCALPHA)
+                    pygame.draw.circle(halo_surf, (*glow_color, 45), (hr, hr), hr)
+                    pygame.draw.circle(halo_surf, (*glow_color, 90), (hr, hr), int(pulse_r * 1.3))
+                    _HALO_CACHE[h_key] = halo_surf
+                screen.blit(halo_surf, (int(pt[0] - halo_surf.get_width() // 2), int(pt[1] - halo_surf.get_height() // 2)))
 
-                # Diamond Starlight Mote (compact)
+                # Diamond Starlight Mote (enlarged for Grade 2)
                 diamond = [
                     (pt[0], pt[1] - d_size),
                     (pt[0] + d_size, pt[1]),
@@ -551,17 +586,18 @@ class QuestPathfinderGuide:
                     (pt[0] - d_size, pt[1])
                 ]
                 pygame.draw.polygon(screen, glow_color, diamond)
-                pygame.draw.polygon(screen, trail_color, diamond, 1)
+                pygame.draw.polygon(screen, (255, 255, 255), diamond, 2)
+                pygame.draw.circle(screen, (255, 255, 255), (int(pt[0]), int(pt[1])), max(2, int(2.5 * zoom)))
 
                 # Directional Chevron Arrow (flows along path tangent)
                 cos_a = math.cos(angle)
                 sin_a = math.sin(angle)
-                tip_x = pt[0] + cos_a * (ch_size + 4)
-                tip_y = pt[1] + sin_a * (ch_size + 4)
+                tip_x = pt[0] + cos_a * (ch_size + 8)
+                tip_y = pt[1] + sin_a * (ch_size + 8)
 
                 # Perp vector
-                perp_x = -sin_a * (ch_size * 0.8)
-                perp_y = cos_a * (ch_size * 0.8)
+                perp_x = -sin_a * (ch_size * 0.95)
+                perp_y = cos_a * (ch_size * 0.95)
 
                 base_x = tip_x - cos_a * ch_size
                 base_y = tip_y - sin_a * ch_size
@@ -569,12 +605,15 @@ class QuestPathfinderGuide:
                 wing1 = (base_x + perp_x, base_y + perp_y)
                 wing2 = (base_x - perp_x, base_y - perp_y)
 
-                pygame.draw.lines(screen, chevron_color, False, [wing1, (tip_x, tip_y), wing2], 2)
+                # Shadow outline
+                pygame.draw.lines(screen, (15, 23, 42), False, [wing1, (tip_x, tip_y), wing2], max(6, int(7 * zoom)))
+                # Vibrant core
+                pygame.draw.lines(screen, chevron_color, False, [wing1, (tip_x, tip_y), wing2], max(4, int(4.5 * zoom)))
 
             cur_d += step_dist
 
         # ----------------------------------------------------
-        # 2. DYNAMIC COMPASS / OFF-SCREEN POINTER PILL
+        # 3. DYNAMIC COMPASS / TARGET BEACONS (Enlarged for Grade 2)
         # ----------------------------------------------------
         if self.current_target_info:
             tgt_tx, tgt_ty, tgt_name, is_portal = self.current_target_info
@@ -583,14 +622,37 @@ class QuestPathfinderGuide:
 
             is_on_screen = (40 <= target_sx <= sw - 60 and 40 <= target_sy <= sh - 80)
 
-            # On-screen gentle target beacon
+            # On-screen prominent target beacon
             if is_on_screen:
-                bob = math.sin(now_ms * 0.008) * 3 * zoom
-                beacon_rect = pygame.Rect(target_sx - 7 * zoom, target_sy - 28 * zoom + bob, 14 * zoom, 14 * zoom)
-                pygame.draw.rect(screen, glow_color, beacon_rect, border_radius=3)
-                pygame.draw.rect(screen, (0, 0, 0), beacon_rect, 1, border_radius=3)
-                excl_surf = self.font.render("!", True, (15, 23, 42))
+                # Concentric pulsing ground target rings
+                r1 = int((20 + math.sin(t * 6.0) * 4) * zoom)
+                r2 = int((30 + math.sin(t * 6.0) * 6) * zoom)
+                if r1 > 2:
+                    pygame.draw.circle(screen, glow_color, (int(target_sx), int(target_sy)), r1, max(2, int(2.5 * zoom)))
+                if r2 > 2:
+                    pygame.draw.circle(screen, trail_color, (int(target_sx), int(target_sy)), r2, max(1, int(1.5 * zoom)))
+
+                bob = math.sin(now_ms * 0.008) * 6 * zoom
+                bw, bh = int(32 * zoom), int(32 * zoom)
+                beacon_rect = pygame.Rect(int(target_sx - bw // 2), int(target_sy - 46 * zoom + bob), bw, bh)
+
+                # Outer glow shadow
+                pygame.draw.rect(screen, (0, 0, 0, 160), beacon_rect.move(2, 2), border_radius=8)
+                pygame.draw.rect(screen, glow_color, beacon_rect, border_radius=8)
+                pygame.draw.rect(screen, (255, 255, 255), beacon_rect, 3, border_radius=8)
+                excl_surf = self.beacon_font.render("!", True, (15, 23, 42))
                 screen.blit(excl_surf, excl_surf.get_rect(center=beacon_rect.center))
+
+                # Objective label pill hovering above beacon
+                label_text = f"★ {tgt_name}"
+                label_surf = self.label_font.render(sanitize_text(label_text), True, (255, 255, 255))
+                lw, lh = label_surf.get_width() + 20, 28
+                l_rect = pygame.Rect(int(target_sx - lw // 2), int(beacon_rect.top - lh - 6), lw, lh)
+
+                pygame.draw.rect(screen, (0, 0, 0, 140), l_rect.move(2, 2), border_radius=6)
+                pygame.draw.rect(screen, theme_data["pill_bg"], l_rect, border_radius=6)
+                pygame.draw.rect(screen, theme_data["pill_border"], l_rect, 2, border_radius=6)
+                screen.blit(label_surf, label_surf.get_rect(center=l_rect.center))
             else:
                 # Off-screen pointer pill clamped at screen perimeter
                 pl_sx = screen_pts[0][0]
@@ -601,17 +663,23 @@ class QuestPathfinderGuide:
                 angle = math.atan2(dy, dx)
 
                 clamp_radius = min(sw, sh) * 0.38
-                clamp_x = max(70, min(sw - 70, pl_sx + math.cos(angle) * clamp_radius))
-                clamp_y = max(60, min(sh - 70, pl_sy + math.sin(angle) * clamp_radius))
+                clamp_x = max(100, min(sw - 100, pl_sx + math.cos(angle) * clamp_radius))
+                clamp_y = max(70, min(sh - 80, pl_sy + math.sin(angle) * clamp_radius))
 
-                ptr_text = f">> {tgt_name} ({dist_tiles}m)"
+                ptr_text = f"▶  {tgt_name} ({dist_tiles}m)"
                 ptr_surf = self.font.render(sanitize_text(ptr_text), True, (255, 255, 255))
-                pw, ph = ptr_surf.get_width() + 16, 26
-                p_rect = pygame.Rect(clamp_x - pw // 2, clamp_y - ph // 2, pw, ph)
+                pw, ph = ptr_surf.get_width() + 32, 44
+                p_rect = pygame.Rect(int(clamp_x - pw // 2), int(clamp_y - ph // 2), pw, ph)
 
                 # Shadow
-                pygame.draw.rect(screen, (0, 0, 0, 140), p_rect.move(2, 2), border_radius=8)
+                pygame.draw.rect(screen, (0, 0, 0, 160), p_rect.move(3, 3), border_radius=12)
                 # Pill background
-                pygame.draw.rect(screen, theme_data["pill_bg"], p_rect, border_radius=8)
-                pygame.draw.rect(screen, theme_data["pill_border"], p_rect, 2, border_radius=8)
-                screen.blit(ptr_surf, (p_rect.x + 8, p_rect.y + 4))
+                pygame.draw.rect(screen, theme_data["pill_bg"], p_rect, border_radius=12)
+                # Border
+                border_col = (255, 255, 255) if int(t * 4) % 2 == 0 else theme_data["pill_border"]
+                pygame.draw.rect(screen, border_col, p_rect, 3, border_radius=12)
+                screen.blit(ptr_surf, ptr_surf.get_rect(center=p_rect.center))
+
+
+PathfinderGuide = QuestPathfinderGuide
+

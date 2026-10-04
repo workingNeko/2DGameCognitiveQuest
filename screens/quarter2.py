@@ -10,6 +10,7 @@ import math
 import random
 from .map_loader import MapLoader
 from core.camera_system import LoLCamera
+from core.visual_effects import DustParticleSystem, draw_beacon_marker, draw_aura_glow
 from core.npc_scripts import get_map_instructions, get_station_script, get_mentor_script
 from core.npc_dialog_system import InstructionModal, NPCGreetingDialog
 from core.philippine_currency import (
@@ -127,6 +128,9 @@ class Quarter2:
         self.currency_hovered_piece = None
         self.currency_hovered_slot = None
         self.currency_sparkles = []
+
+        # Visual Effects & Dust Footsteps
+        self.dust_particles = DustParticleSystem(max_particles=30)
         
         # Guardian Knight State: 0 = waiting for stations, 1 = guarding portal, 2 = trial prompt modal, 3 = puzzle active, 4 = victory speech, 5 = portal unlocked
         self.guardian_knight_state = 0
@@ -487,13 +491,13 @@ class Quarter2:
         self.font = self.get_ui_font(16)
         self.small_font = self.get_ui_font(12)
 
-        # High-Resolution Modal Dialog Typography Tokens
-        self.dialog_header_font = self.get_ui_font(16, bold=True)
-        self.dialog_q_font = self.get_ui_font(15)
-        self.dialog_choice_font = self.get_ui_font(14, bold=True)
-        self.dialog_badge_font = self.get_ui_font(16, bold=True)
-        self.dialog_hint_font = self.get_ui_font(13, bold=True)
-        self.dialog_stat_font = self.get_ui_font(13, bold=True)
+        # High-Resolution Modal Dialog Typography Tokens (Enlarged for Grade 2 Accessibility)
+        self.dialog_header_font = self.get_ui_font(24, bold=True)
+        self.dialog_q_font = self.get_ui_font(19, bold=True)
+        self.dialog_choice_font = self.get_ui_font(20, bold=True)
+        self.dialog_badge_font = self.get_ui_font(22, bold=True)
+        self.dialog_hint_font = self.get_ui_font(17, bold=True)
+        self.dialog_stat_font = self.get_ui_font(16, bold=True)
 
         # 50:50 Wizard Hint & Option Elimination Tracking
         self.eliminated_choices = set()
@@ -2572,11 +2576,11 @@ class Quarter2:
             return
 
         if getattr(self, 'time_up_dialog_active', False):
-            box_w, box_h = 560, 260
+            box_w, box_h = 700, 320
             box_x = (self.width - box_w) // 2
             box_y = (self.height - box_h) // 2
-            retry_rect = pygame.Rect(box_x + 40, box_y + 175, 220, 46)
-            exit_rect = pygame.Rect(box_x + box_w - 260, box_y + 175, 220, 46)
+            retry_rect = pygame.Rect(box_x + 50, box_y + 225, 270, 52)
+            exit_rect = pygame.Rect(box_x + box_w - 320, box_y + 225, 270, 52)
             if retry_rect.collidepoint(pos):
                 self.stage_time_remaining = 600.0
                 self.time_up_dialog_active = False
@@ -2629,10 +2633,10 @@ class Quarter2:
                     self.currency_puzzle_solved = True
                     self.guardian_knight_state = 4
                     self.quiz_state = 5
-                    box_w, box_h = 640, 360
+                    box_w, box_h = 780, 420
                     box_x = (self.width - box_w) // 2
                     box_y = (self.height - box_h) // 2
-                    self.victory_btn_rect = pygame.Rect(box_x + (box_w - 240) // 2, box_y + 285, 240, 44)
+                    self.victory_btn_rect = pygame.Rect(box_x + (box_w - 260) // 2, box_y + 340, 260, 50)
                     self.banner_text = "CURRENCY TRIAL COMPLETED!"
                     self.banner_sub = "Speak with the Knight Guardian to unlock the portal!"
                     self.banner_timer = 4.0
@@ -2731,21 +2735,21 @@ class Quarter2:
                     
         # State 2: Wrong answer retry screen click (1 try remaining)
         elif self.quiz_state == 2:
-            box_w, box_h = 580, 300
+            box_w, box_h = 760, 360
             box_x = (self.width - box_w) // 2
             box_y = (self.height - box_h) // 2
-            btn_rect = pygame.Rect(box_x + (box_w - 220) // 2, box_y + 235, 220, 44)
+            btn_rect = pygame.Rect(box_x + (box_w - 240) // 2, box_y + 280, 240, 50)
             if (hasattr(self, 'wrong_btn_rect') and self.wrong_btn_rect and self.wrong_btn_rect.collidepoint(pos)) or btn_rect.collidepoint(pos):
                 self.quiz_state = 1
                 save_student_progress(self.main_menu)
             
         # State 3: Correct answer transition screen click -> Award Speed Rush & In-World Banner!
         elif self.quiz_state == 3:
-            box_w, box_h = 560, 270
+            box_w, box_h = 740, 330
             box_x = (self.width - box_w) // 2
             box_y = (self.height - box_h) // 2
             box_rect = pygame.Rect(box_x, box_y, box_w, box_h)
-            btn_rect = pygame.Rect(box_x + (box_w - 240) // 2, box_y + 195, 240, 44)
+            btn_rect = pygame.Rect(box_x + (box_w - 260) // 2, box_y + 245, 260, 50)
             if (hasattr(self, 'correct_btn_rect') and self.correct_btn_rect and self.correct_btn_rect.collidepoint(pos)) or btn_rect.collidepoint(pos) or box_rect.collidepoint(pos):
                 # Award 3-second Festive Sprint Speed Boost!
                 self.speed_boost_timer = 3.0
@@ -2778,11 +2782,11 @@ class Quarter2:
 
         # State 4: Out of tries reveal screen click -> Guaranteed progression!
         elif self.quiz_state == 4:
-            box_w, box_h = 580, 280
+            box_w, box_h = 740, 340
             box_x = (self.width - box_w) // 2
             box_y = (self.height - box_h) // 2
             box_rect = pygame.Rect(box_x, box_y, box_w, box_h)
-            btn_rect = pygame.Rect(box_x + (box_w - 240) // 2, box_y + 205, 240, 44)
+            btn_rect = pygame.Rect(box_x + (box_w - 260) // 2, box_y + 260, 260, 50)
             if (hasattr(self, 'out_of_tries_btn_rect') and self.out_of_tries_btn_rect and self.out_of_tries_btn_rect.collidepoint(pos)) or btn_rect.collidepoint(pos) or box_rect.collidepoint(pos):
                 self.eliminated_choices.clear()
                 self.wrong_feedback_msg = ""
@@ -2816,11 +2820,11 @@ class Quarter2:
                 
         # State 5: Final speech click -> Unlock Grand Fiesta Portal & Warp Transition!
         elif self.quiz_state == 5:
-            box_w, box_h = 640, 360
+            box_w, box_h = 780, 420
             box_x = (self.width - box_w) // 2
             box_y = (self.height - box_h) // 2
             box_rect = pygame.Rect(box_x, box_y, box_w, box_h)
-            btn_rect = pygame.Rect(box_x + (box_w - 240) // 2, box_y + 285, 240, 44)
+            btn_rect = pygame.Rect(box_x + (box_w - 260) // 2, box_y + 340, 260, 50)
             if (hasattr(self, 'victory_btn_rect') and self.victory_btn_rect and self.victory_btn_rect.collidepoint(pos)) or btn_rect.collidepoint(pos) or box_rect.collidepoint(pos):
                 self.quiz_state = 6
                 self.guardian_knight_state = 5
@@ -2837,7 +2841,7 @@ class Quarter2:
     # UPDATE
     # ============================================================
     def update(self):
-        dt = self.clock.tick(FPS) / 1000.0
+        dt = min(0.05, max(0.001, self.clock.tick() / 1000.0))
         self.frame_counter += 1
 
         if self.pause_menu.is_paused:
@@ -2861,6 +2865,8 @@ class Quarter2:
         # Update celebration particles & victory report card
         if hasattr(self, 'celebration_particles'):
             self.celebration_particles.update(dt)
+        if hasattr(self, 'dust_particles'):
+            self.dust_particles.update(dt)
         if hasattr(self, 'victory_card') and self.victory_card.active:
             self.victory_card.update(dt)
             return
@@ -2923,15 +2929,21 @@ class Quarter2:
 
         # Update Instruction Modal & handle Fist Hold dismiss
         if getattr(self, 'instruction_modal', None) and self.instruction_modal.is_visible:
-            fist_pct = 0.0
-            if self.fist_closed and self.fist_start_time > 0:
-                elapsed = time.time() - self.fist_start_time
-                fist_pct = min(1.0, elapsed / self.CLICK_HOLD_TIME)
-                if elapsed >= self.CLICK_HOLD_TIME:
-                    self.instruction_modal.hide()
-                    self.fist_start_time = 0
-            self.instruction_modal.update(dt, self.cursor_pos, fist_pct)
-            return
+            player_screen_x = (self.player_x - self.camera_x + TILE_SIZE / 2) * ZOOM
+            player_screen_y = (self.player_y - self.camera_y + TILE_SIZE / 2) * ZOOM
+            cx, cy = self.cursor_pos
+            if abs(cx - player_screen_x) > 45 or abs(cy - player_screen_y) > 45:
+                self.instruction_modal.hide()
+            else:
+                fist_pct = 0.0
+                if self.fist_closed and self.fist_start_time > 0:
+                    elapsed = time.time() - self.fist_start_time
+                    fist_pct = min(1.0, elapsed / self.CLICK_HOLD_TIME)
+                    if elapsed >= self.CLICK_HOLD_TIME:
+                        self.instruction_modal.hide()
+                        self.fist_start_time = 0
+                self.instruction_modal.update(dt, self.cursor_pos, fist_pct)
+                return
 
         # Update NPC Greeting Dialog & handle Fist Hold to start question
         if getattr(self, 'greeting_dialog', None) and self.greeting_dialog.is_visible:
@@ -3067,16 +3079,16 @@ class Quarter2:
         overlay.fill((10, 15, 29, 170))
         self.screen.blit(overlay, (0, 0))
 
-        box_w, box_h = 580, 300
+        box_w, box_h = 760, 360
         box_x = (self.width - box_w) // 2
         box_y = (self.height - box_h) // 2
 
-        pygame.draw.rect(self.screen, (0, 0, 0, 150), (box_x + 4, box_y + 4, box_w, box_h), border_radius=14)
+        pygame.draw.rect(self.screen, (0, 0, 0, 150), (box_x + 4, box_y + 4, box_w, box_h), border_radius=16)
 
         dialog_rect = pygame.Rect(box_x, box_y, box_w, box_h)
-        pygame.draw.rect(self.screen, (15, 23, 42), dialog_rect, border_radius=14)
-        pygame.draw.rect(self.screen, (220, 38, 38), dialog_rect, 3, border_radius=14)
-        pygame.draw.rect(self.screen, (248, 113, 113), dialog_rect.inflate(-6, -6), 1, border_radius=10)
+        pygame.draw.rect(self.screen, (15, 23, 42), dialog_rect, border_radius=16)
+        pygame.draw.rect(self.screen, (220, 38, 38), dialog_rect, 3, border_radius=16)
+        pygame.draw.rect(self.screen, (248, 113, 113), dialog_rect.inflate(-6, -6), 1, border_radius=12)
 
         script = get_station_script(self.map_name, self.quiz_station_index)
         info = self.station_npc_info.get(self.quiz_station_index, {})
@@ -3085,13 +3097,13 @@ class Quarter2:
         retry_msg = script.get("retry_line", "That choice is not quite correct. You have 1 try remaining!").replace("[Player Name]", self.player_name)
 
         speaker_surf = self.dialog_header_font.render(f"{speaker} ({speaker_title}) - Try Again", True, (248, 113, 113))
-        self.screen.blit(speaker_surf, (box_x + 24, box_y + 16))
+        self.screen.blit(speaker_surf, (box_x + 28, box_y + 18))
 
-        lines = self.wrap_text(retry_msg, self.dialog_q_font, box_w - 48)
-        y_off = box_y + 46
+        lines = self.wrap_text(retry_msg, self.dialog_q_font, box_w - 56)
+        y_off = box_y + 56
         for l in lines[:2]:
-            self.screen.blit(self.dialog_q_font.render(l, True, (255, 255, 255)), (box_x + 24, y_off))
-            y_off += 22
+            self.screen.blit(self.dialog_q_font.render(l, True, (255, 255, 255)), (box_x + 28, y_off))
+            y_off += 26
 
         # Pedagogical Educational Hint Box
         from core.hints import get_educational_hint
@@ -3100,26 +3112,26 @@ class Quarter2:
         q_text = current_q.get("question", "")
         hint_text = get_educational_hint("quarter2", q_text)
 
-        hint_box = pygame.Rect(box_x + 20, box_y + 98, box_w - 40, 115)
-        pygame.draw.rect(self.screen, (30, 41, 59), hint_box, border_radius=8)
-        pygame.draw.rect(self.screen, (245, 158, 11), hint_box, 1, border_radius=8)
+        hint_box = pygame.Rect(box_x + 24, box_y + 124, box_w - 48, 130)
+        pygame.draw.rect(self.screen, (30, 41, 59), hint_box, border_radius=10)
+        pygame.draw.rect(self.screen, (245, 158, 11), hint_box, 2, border_radius=10)
 
-        hint_title_font = pygame.font.SysFont("Comic Sans MS", 14, bold=True)
-        hint_body_font = pygame.font.SysFont("Comic Sans MS", 13)
-        draw_vector_lightbulb(self.screen, hint_box.x + 20, hint_box.y + 15, size=6)
+        hint_title_font = self.get_ui_font(18, bold=True)
+        hint_body_font = self.get_ui_font(16, bold=True)
+        draw_vector_lightbulb(self.screen, hint_box.x + 22, hint_box.y + 18, size=7)
         h_title = hint_title_font.render("Pedagogical Hint:", True, (255, 215, 0))
-        self.screen.blit(h_title, (hint_box.x + 32, hint_box.y + 6))
+        self.screen.blit(h_title, (hint_box.x + 38, hint_box.y + 9))
 
-        h_lines = self.wrap_text(hint_text, hint_body_font, hint_box.width - 24)
-        hy = hint_box.y + 30
+        h_lines = self.wrap_text(hint_text, hint_body_font, hint_box.width - 32)
+        hy = hint_box.y + 38
         for hl in h_lines[:3]:
             h_surf = hint_body_font.render(hl, True, (241, 245, 249))
-            self.screen.blit(h_surf, (hint_box.x + 12, hy))
-            hy += 22
+            self.screen.blit(h_surf, (hint_box.x + 16, hy))
+            hy += 26
 
-        button_w, button_h = 220, 44
+        button_w, button_h = 240, 50
         button_x = box_x + (box_w - button_w) // 2
-        button_y = box_y + 235
+        button_y = box_y + 280
         btn_rect = pygame.Rect(button_x, button_y, button_w, button_h)
         self.wrong_btn_rect = btn_rect
 
@@ -3127,8 +3139,8 @@ class Quarter2:
         bg_color = (220, 38, 38) if is_hovered else (30, 41, 59)
         border_color = (255, 255, 255) if is_hovered else (220, 38, 38)
 
-        pygame.draw.rect(self.screen, bg_color, btn_rect, border_radius=10)
-        pygame.draw.rect(self.screen, border_color, btn_rect, 2, border_radius=10)
+        pygame.draw.rect(self.screen, bg_color, btn_rect, border_radius=12)
+        pygame.draw.rect(self.screen, border_color, btn_rect, 2, border_radius=12)
 
         c_surf = self.dialog_header_font.render("Try Again", True, (255, 255, 255))
         self.screen.blit(c_surf, c_surf.get_rect(center=btn_rect.center))
@@ -3138,16 +3150,16 @@ class Quarter2:
         overlay.fill((10, 15, 29, 175))
         self.screen.blit(overlay, (0, 0))
 
-        box_w, box_h = 580, 280
+        box_w, box_h = 740, 340
         box_x = (self.width - box_w) // 2
         box_y = (self.height - box_h) // 2
 
-        pygame.draw.rect(self.screen, (0, 0, 0, 150), (box_x + 4, box_y + 4, box_w, box_h), border_radius=14)
+        pygame.draw.rect(self.screen, (0, 0, 0, 150), (box_x + 4, box_y + 4, box_w, box_h), border_radius=16)
 
         dialog_rect = pygame.Rect(box_x, box_y, box_w, box_h)
-        pygame.draw.rect(self.screen, (15, 23, 42), dialog_rect, border_radius=14)
-        pygame.draw.rect(self.screen, (245, 158, 11), dialog_rect, 3, border_radius=14)
-        pygame.draw.rect(self.screen, (251, 191, 36), dialog_rect.inflate(-6, -6), 1, border_radius=10)
+        pygame.draw.rect(self.screen, (15, 23, 42), dialog_rect, border_radius=16)
+        pygame.draw.rect(self.screen, (245, 158, 11), dialog_rect, 3, border_radius=16)
+        pygame.draw.rect(self.screen, (251, 191, 36), dialog_rect.inflate(-6, -6), 1, border_radius=12)
 
         script = get_station_script(self.map_name, self.quiz_station_index)
         info = self.station_npc_info.get(self.quiz_station_index, {})
@@ -3156,20 +3168,20 @@ class Quarter2:
         item_name = script.get("item_awarded", "Progression Item")
 
         speaker_surf = self.dialog_header_font.render(f"{speaker_name} - Solution Revealed", True, (245, 158, 11))
-        self.screen.blit(speaker_surf, (box_x + 24, box_y + 18))
+        self.screen.blit(speaker_surf, (box_x + 28, box_y + 18))
 
-        lines = self.wrap_text(reveal_msg, self.dialog_q_font, box_w - 48)
-        y_off = box_y + 55
+        lines = self.wrap_text(reveal_msg, self.dialog_q_font, box_w - 56)
+        y_off = box_y + 65
         for l in lines[:2]:
-            self.screen.blit(self.dialog_q_font.render(l, True, (255, 255, 255)), (box_x + 24, y_off))
-            y_off += 24
+            self.screen.blit(self.dialog_q_font.render(l, True, (255, 255, 255)), (box_x + 28, y_off))
+            y_off += 28
 
         reward_surf = self.dialog_hint_font.render(f"Acquired: {item_name}! Your quest continues!", True, (254, 240, 138))
-        self.screen.blit(reward_surf, (box_x + 24, y_off + 8))
+        self.screen.blit(reward_surf, (box_x + 28, y_off + 10))
 
-        button_w, button_h = 240, 44
+        button_w, button_h = 260, 50
         button_x = box_x + (box_w - button_w) // 2
-        button_y = box_y + 205
+        button_y = box_y + 260
         btn_rect = pygame.Rect(button_x, button_y, button_w, button_h)
         self.out_of_tries_btn_rect = btn_rect
 
@@ -3177,10 +3189,10 @@ class Quarter2:
         bg_color = (245, 158, 11) if is_hovered else (30, 41, 59)
         border_color = (255, 255, 255) if is_hovered else (245, 158, 11)
 
-        pygame.draw.rect(self.screen, bg_color, btn_rect, border_radius=10)
-        pygame.draw.rect(self.screen, border_color, btn_rect, 2, border_radius=10)
+        pygame.draw.rect(self.screen, bg_color, btn_rect, border_radius=12)
+        pygame.draw.rect(self.screen, border_color, btn_rect, 2, border_radius=12)
 
-        c_surf = self.dialog_header_font.render("Continue Quest >>", True, (255, 255, 255))
+        c_surf = self.dialog_header_font.render("Continue Quest >>", True, (255, 255, 255) if not is_hovered else (15, 23, 42))
         self.screen.blit(c_surf, c_surf.get_rect(center=btn_rect.center))
 
     def draw_correct_dialog(self):
@@ -3188,16 +3200,16 @@ class Quarter2:
         overlay.fill((10, 15, 29, 170))
         self.screen.blit(overlay, (0, 0))
 
-        box_w, box_h = 560, 270
+        box_w, box_h = 740, 330
         box_x = (self.width - box_w) // 2
         box_y = (self.height - box_h) // 2
 
-        pygame.draw.rect(self.screen, (0, 0, 0, 150), (box_x + 4, box_y + 4, box_w, box_h), border_radius=14)
+        pygame.draw.rect(self.screen, (0, 0, 0, 150), (box_x + 4, box_y + 4, box_w, box_h), border_radius=16)
 
         dialog_rect = pygame.Rect(box_x, box_y, box_w, box_h)
-        pygame.draw.rect(self.screen, (15, 23, 42), dialog_rect, border_radius=14)
-        pygame.draw.rect(self.screen, (22, 163, 74), dialog_rect, 3, border_radius=14)
-        pygame.draw.rect(self.screen, (74, 222, 128), dialog_rect.inflate(-6, -6), 1, border_radius=10)
+        pygame.draw.rect(self.screen, (15, 23, 42), dialog_rect, border_radius=16)
+        pygame.draw.rect(self.screen, (22, 163, 74), dialog_rect, 3, border_radius=16)
+        pygame.draw.rect(self.screen, (74, 222, 128), dialog_rect.inflate(-6, -6), 1, border_radius=12)
 
         script = get_station_script(self.map_name, self.quiz_station_index)
         info = self.station_npc_info.get(self.quiz_station_index, {})
@@ -3206,20 +3218,20 @@ class Quarter2:
         item_name = script.get("item_awarded", "Progression Item")
 
         speaker_surf = self.dialog_header_font.render(f"{speaker_name} - Well Done! (Correct)", True, (74, 222, 128))
-        self.screen.blit(speaker_surf, (box_x + 24, box_y + 18))
+        self.screen.blit(speaker_surf, (box_x + 28, box_y + 20))
 
-        lines = self.wrap_text(praise_msg, self.dialog_q_font, box_w - 48)
-        y_off = box_y + 60
+        lines = self.wrap_text(praise_msg, self.dialog_q_font, box_w - 56)
+        y_off = box_y + 75
         for l in lines[:2]:
-            self.screen.blit(self.dialog_q_font.render(l, True, (255, 255, 255)), (box_x + 24, y_off))
-            y_off += 24
+            self.screen.blit(self.dialog_q_font.render(l, True, (255, 255, 255)), (box_x + 28, y_off))
+            y_off += 30
 
         reward_surf = self.dialog_hint_font.render(f"Awarded: {item_name}!", True, (253, 230, 138))
-        self.screen.blit(reward_surf, (box_x + 24, y_off + 8))
+        self.screen.blit(reward_surf, (box_x + 28, y_off + 10))
 
-        button_w, button_h = 240, 44
+        button_w, button_h = 260, 50
         button_x = box_x + (box_w - button_w) // 2
-        button_y = box_y + 195
+        button_y = box_y + 245
         btn_rect = pygame.Rect(button_x, button_y, button_w, button_h)
         self.correct_btn_rect = btn_rect
 
@@ -3227,8 +3239,8 @@ class Quarter2:
         bg_color = (22, 163, 74) if is_hovered else (30, 41, 59)
         border_color = (255, 255, 255) if is_hovered else (22, 163, 74)
 
-        pygame.draw.rect(self.screen, bg_color, btn_rect, border_radius=10)
-        pygame.draw.rect(self.screen, border_color, btn_rect, 2, border_radius=10)
+        pygame.draw.rect(self.screen, bg_color, btn_rect, border_radius=12)
+        pygame.draw.rect(self.screen, border_color, btn_rect, 2, border_radius=12)
 
         c_surf = self.dialog_header_font.render("Continue Fiesta >>", True, (255, 255, 255))
         self.screen.blit(c_surf, c_surf.get_rect(center=btn_rect.center))
@@ -3239,16 +3251,16 @@ class Quarter2:
         overlay.fill((10, 15, 29, 175))
         self.screen.blit(overlay, (0, 0))
 
-        box_w, box_h = 640, 360
+        box_w, box_h = 780, 420
         box_x = (self.width - box_w) // 2
         box_y = (self.height - box_h) // 2
 
-        pygame.draw.rect(self.screen, (0, 0, 0, 150), (box_x + 4, box_y + 4, box_w, box_h), border_radius=14)
+        pygame.draw.rect(self.screen, (0, 0, 0, 150), (box_x + 4, box_y + 4, box_w, box_h), border_radius=16)
 
         dialog_rect = pygame.Rect(box_x, box_y, box_w, box_h)
-        pygame.draw.rect(self.screen, (15, 23, 42), dialog_rect, border_radius=14)
-        pygame.draw.rect(self.screen, (218, 165, 32), dialog_rect, 3, border_radius=14)
-        pygame.draw.rect(self.screen, (255, 215, 0), dialog_rect.inflate(-6, -6), 1, border_radius=10)
+        pygame.draw.rect(self.screen, (15, 23, 42), dialog_rect, border_radius=16)
+        pygame.draw.rect(self.screen, (218, 165, 32), dialog_rect, 3, border_radius=16)
+        pygame.draw.rect(self.screen, (255, 215, 0), dialog_rect.inflate(-6, -6), 1, border_radius=12)
 
         mentor = get_mentor_script(self.map_name)
         m_name = mentor.get("mentor_name", "Barrio Leader Mang Jose")
@@ -3256,18 +3268,18 @@ class Quarter2:
         complete_speech = mentor.get("complete_dialogue", "Mabuhay! You have solved all five challenges!").replace("[Player Name]", self.player_name)
 
         speaker_surf = self.dialog_header_font.render(f"{m_name} ({m_title})", True, (255, 215, 0))
-        self.screen.blit(speaker_surf, (box_x + 24, box_y + 18))
+        self.screen.blit(speaker_surf, (box_x + 28, box_y + 20))
 
-        lines = self.wrap_text(complete_speech, self.dialog_q_font, box_w - 48)
-        y_text = box_y + 65
+        lines = self.wrap_text(complete_speech, self.dialog_q_font, box_w - 56)
+        y_text = box_y + 75
         for line in lines[:5]:
             txt_surf = self.dialog_q_font.render(line, True, (248, 250, 252))
-            self.screen.blit(txt_surf, (box_x + 24, y_text))
-            y_text += 26
+            self.screen.blit(txt_surf, (box_x + 28, y_text))
+            y_text += 32
 
-        button_w, button_h = 240, 44
+        button_w, button_h = 260, 50
         button_x = box_x + (box_w - button_w) // 2
-        button_y = box_y + 285
+        button_y = box_y + 340
         btn_rect = pygame.Rect(button_x, button_y, button_w, button_h)
         self.victory_btn_rect = btn_rect
 
@@ -3276,8 +3288,8 @@ class Quarter2:
         text_color = (15, 23, 42) if is_hovered else (255, 215, 0)
         border_color = (255, 255, 255) if is_hovered else (218, 165, 32)
 
-        pygame.draw.rect(self.screen, bg_color, btn_rect, border_radius=10)
-        pygame.draw.rect(self.screen, border_color, btn_rect, 2, border_radius=10)
+        pygame.draw.rect(self.screen, bg_color, btn_rect, border_radius=12)
+        pygame.draw.rect(self.screen, border_color, btn_rect, 2, border_radius=12)
 
         c_surf = self.dialog_header_font.render("Enter Portal >>", True, text_color)
         self.screen.blit(c_surf, c_surf.get_rect(center=btn_rect.center))
@@ -3539,7 +3551,7 @@ class Quarter2:
 
             if is_matched and slot["matched_item"]:
                 # Draw small matched badge
-                match_badge = self.get_ui_font(10, bold=True).render("MATCHED ✓", True, (74, 222, 128))
+                match_badge = self.get_ui_font(10, bold=True).render("MATCHED", True, (74, 222, 128))
                 self.screen.blit(match_badge, (s_rect.centerx - match_badge.get_width() // 2, s_rect.bottom - 22))
             else:
                 # Dashed Drop Target Box
@@ -3592,7 +3604,7 @@ class Quarter2:
         r_hov = self.currency_puzzle_reset_btn_rect.collidepoint(self.cursor_pos)
         pygame.draw.rect(self.screen, (51, 65, 85) if r_hov else (30, 41, 59), self.currency_puzzle_reset_btn_rect, border_radius=8)
         pygame.draw.rect(self.screen, (203, 213, 225) if r_hov else (100, 116, 139), self.currency_puzzle_reset_btn_rect, 1, border_radius=8)
-        r_txt = btn_font.render("↺ Reset Tray", True, (241, 245, 249))
+        r_txt = btn_font.render("Reset Tray", True, (241, 245, 249))
         self.screen.blit(r_txt, r_txt.get_rect(center=self.currency_puzzle_reset_btn_rect.center))
 
         # 2. Continue / Unlock Button (Only if all placed)
@@ -3670,19 +3682,19 @@ class Quarter2:
         overlay.fill((10, 15, 29, 180))
         self.screen.blit(overlay, (0, 0))
 
-        box_w, box_h = 620, 320
+        box_w, box_h = 780, 380
         box_x = (self.width - box_w) // 2
         box_y = (self.height - box_h) // 2
 
-        pygame.draw.rect(self.screen, (0, 0, 0, 150), (box_x + 4, box_y + 4, box_w, box_h), border_radius=14)
+        pygame.draw.rect(self.screen, (0, 0, 0, 150), (box_x + 4, box_y + 4, box_w, box_h), border_radius=16)
         dialog_rect = pygame.Rect(box_x, box_y, box_w, box_h)
-        pygame.draw.rect(self.screen, (15, 23, 42), dialog_rect, border_radius=14)
-        pygame.draw.rect(self.screen, (218, 165, 32), dialog_rect, 3, border_radius=14)
-        pygame.draw.rect(self.screen, (255, 215, 0), dialog_rect.inflate(-6, -6), 1, border_radius=10)
+        pygame.draw.rect(self.screen, (15, 23, 42), dialog_rect, border_radius=16)
+        pygame.draw.rect(self.screen, (218, 165, 32), dialog_rect, 3, border_radius=16)
+        pygame.draw.rect(self.screen, (255, 215, 0), dialog_rect.inflate(-6, -6), 1, border_radius=12)
 
         # Title
         t_surf = self.dialog_header_font.render("Knight (Grand Fiesta Portal Guardian)", True, (255, 215, 0))
-        self.screen.blit(t_surf, (box_x + 24, box_y + 20))
+        self.screen.blit(t_surf, (box_x + 28, box_y + 20))
 
         speech = (
             f"Mabuhay, {self.player_name}! You have solved all 5 barrio math challenges.\n\n"
@@ -3691,21 +3703,21 @@ class Quarter2:
         )
 
         lines = speech.split('\n')
-        y_text = box_y + 65
+        y_text = box_y + 70
         for line in lines:
             if line:
-                sub_lines = self.wrap_text(line, self.dialog_q_font, box_w - 48)
+                sub_lines = self.wrap_text(line, self.dialog_q_font, box_w - 56)
                 for sl in sub_lines:
                     txt_surf = self.dialog_q_font.render(sl, True, (248, 250, 252))
-                    self.screen.blit(txt_surf, (box_x + 24, y_text))
-                    y_text += 24
+                    self.screen.blit(txt_surf, (box_x + 28, y_text))
+                    y_text += 28
             else:
-                y_text += 8
+                y_text += 10
 
         # Button
-        button_w, button_h = 240, 44
+        button_w, button_h = 280, 50
         button_x = box_x + (box_w - button_w) // 2
-        button_y = box_y + 245
+        button_y = box_y + 300
         btn_rect = pygame.Rect(button_x, button_y, button_w, button_h)
         self.currency_trial_start_btn_rect = btn_rect
 
@@ -3713,8 +3725,8 @@ class Quarter2:
         bg_col = (255, 215, 0) if is_hovered else (30, 41, 59)
         txt_col = (15, 23, 42) if is_hovered else (255, 215, 0)
 
-        pygame.draw.rect(self.screen, bg_col, btn_rect, border_radius=10)
-        pygame.draw.rect(self.screen, (255, 255, 255) if is_hovered else (218, 165, 32), btn_rect, 2, border_radius=10)
+        pygame.draw.rect(self.screen, bg_col, btn_rect, border_radius=12)
+        pygame.draw.rect(self.screen, (255, 255, 255) if is_hovered else (218, 165, 32), btn_rect, 2, border_radius=12)
 
         c_surf = self.dialog_header_font.render("Begin Currency Trial >>", True, txt_col)
         self.screen.blit(c_surf, c_surf.get_rect(center=btn_rect.center))
@@ -3989,19 +4001,17 @@ class Quarter2:
         dist_factor = 1.3 if (abs(dx) > 160 or abs(dy) > 160) else 1.0
         g_speed = current_speed * dist_factor
 
-        if abs(dx) > 45:
-            vx = g_speed if dx > 0 else -g_speed
-            if dx > 0:
-                self.player_dir = "right"
-            elif dx < 0:
-                self.player_dir = "left"
+        deadzone = 45.0
+        if abs(dx) > deadzone or abs(dy) > deadzone:
+            if abs(dx) > deadzone:
+                vx = g_speed if dx > 0 else -g_speed
+            if abs(dy) > deadzone:
+                vy = g_speed if dy > 0 else -g_speed
 
-        if abs(dy) > 45:
-            vy = g_speed if dy > 0 else -g_speed
-            if dy > 0:
-                self.player_dir = "down"
-            elif dy < 0:
-                self.player_dir = "up"
+            if abs(dx) > abs(dy):
+                self.player_dir = "right" if dx > 0 else "left"
+            else:
+                self.player_dir = "down" if dy > 0 else "up"
 
         new_x = self.player_x + vx
         new_y = self.player_y + vy
@@ -4034,6 +4044,14 @@ class Quarter2:
 
         if vx != 0 or vy != 0:
             self.anim_timer += 1
+            if hasattr(self, 'dust_particles') and self.anim_timer % 8 == 0:
+                self.dust_particles.emit_footstep(
+                    (self.player_x + TILE_SIZE // 2) * ZOOM,
+                    (self.player_y + TILE_SIZE - 2) * ZOOM,
+                    direction=self.player_dir,
+                    speed_boost=getattr(self, 'speed_boost_timer', 0) > 0,
+                    terrain_color=(200, 190, 170)
+                )
             if self.anim_timer >= (10 if self.speed_boost_timer > 0 else 16):
                 self.anim_timer = 0
                 self.anim_frame = (self.anim_frame + 1) % 2
@@ -4153,6 +4171,10 @@ class Quarter2:
         screen_x = (self.player_x - self.camera_x) * ZOOM
         screen_y = (self.player_y - self.camera_y) * ZOOM
 
+        # Draw footstep dust beneath player feet
+        if hasattr(self, 'dust_particles'):
+            self.dust_particles.draw(self.screen, camera_offset=(self.camera_x * ZOOM, self.camera_y * ZOOM))
+
         if (-TILE_SIZE * ZOOM <= screen_x <= self.width + TILE_SIZE * ZOOM and
                 -TILE_SIZE * ZOOM <= screen_y <= self.height + TILE_SIZE * ZOOM):
             sprite = self.player_sprites[self.player_dir][self.anim_frame]
@@ -4241,7 +4263,7 @@ class Quarter2:
                 scaled_sign = pygame.transform.scale(sign_img, (int(TILE_SIZE * ZOOM), int(TILE_SIZE * ZOOM)))
                 self.screen.blit(scaled_sign, ((sx - self.camera_x) * ZOOM, (sy - self.camera_y) * ZOOM))
 
-            # Active Target NPC Floor Aura
+            # Active Target NPC Floor Aura & Question Beacon
             if num == self.quiz_station_index and self.quiz_state == 0:
                 sx = (world_x - self.camera_x) * ZOOM
                 sy = (world_y - self.camera_y) * ZOOM
@@ -4250,12 +4272,15 @@ class Quarter2:
                 aura_alpha = int(80 + 80 * pulse)
                 pygame.draw.ellipse(aura_surf, (255, 215, 0, aura_alpha), (0, 0, int(36 * ZOOM), int(16 * ZOOM)))
                 self.screen.blit(aura_surf, (sx - int(2 * ZOOM), sy + int(22 * ZOOM)))
+                draw_beacon_marker(self.screen, sx + int(TILE_SIZE // 2 * ZOOM), sy, color=(251, 191, 36), beacon_type="question", offset_y=int(-30 * ZOOM))
 
             if frames:
                 self.draw_npc_animated(world_x, world_y, frames, anim_frame)
 
         # Draw Knight Portal Guardian
         self.draw_knight_guardian()
+        if self.quiz_state == 6 and getattr(self, 'knight_guardian_active', True):
+            draw_beacon_marker(self.screen, (self.knight_guardian_x + TILE_SIZE // 2 - self.camera_x) * ZOOM, (self.knight_guardian_y - self.camera_y) * ZOOM, color=(59, 130, 246), beacon_type="exclamation", offset_y=int(-35 * ZOOM))
 
         self.draw_player()
 
@@ -4541,14 +4566,15 @@ class Quarter2:
         # Draw smooth seamless warp-out transition overlay
         if self.warp_out_active:
             progress = max(0.0, min(1.0, 1.0 - (self.warp_out_timer / self.warp_out_duration)))
-            warp_overlay = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
-            warp_overlay.fill((254, 243, 199, int(progress * 255)))
+            if not hasattr(self, '_warp_overlay_surf') or self._warp_overlay_surf.get_size() != (self.width, self.height):
+                self._warp_overlay_surf = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
+            self._warp_overlay_surf.fill((254, 243, 199, int(progress * 255)))
             center = (self.width // 2, self.height // 2)
             max_r = int(math.hypot(self.width, self.height) / 2)
             r = int(progress * max_r)
             if r > 0:
-                pygame.draw.circle(warp_overlay, (255, 215, 0, int((1.0 - progress) * 230)), center, r, max(3, int(10 * ZOOM)))
-            self.screen.blit(warp_overlay, (0, 0))
+                pygame.draw.circle(self._warp_overlay_surf, (255, 215, 0, int((1.0 - progress) * 230)), center, r, max(3, int(10 * ZOOM)))
+            self.screen.blit(self._warp_overlay_surf, (0, 0))
 
         # In-Game Universal Pause Button & Modal
         self.pause_menu.draw_button(self.cursor_pos)
@@ -4830,38 +4856,38 @@ class Quarter2:
             self._dim_overlay.fill((0, 0, 0, 180))
         self.screen.blit(self._dim_overlay, (0, 0))
 
-        box_w, box_h = 560, 260
+        box_w, box_h = 700, 320
         box_x = (self.width - box_w) // 2
         box_y = (self.height - box_h) // 2
 
         pygame.draw.rect(self.screen, (15, 23, 42), (box_x, box_y, box_w, box_h), border_radius=16)
         pygame.draw.rect(self.screen, (239, 68, 68), (box_x, box_y, box_w, box_h), 3, border_radius=16)
 
-        t_font = self.get_ui_font(24, bold=True)
-        msg_font = self.get_ui_font(18)
-        btn_font = self.get_ui_font(16, bold=True)
+        t_font = self.get_ui_font(28, bold=True)
+        msg_font = self.get_ui_font(20, bold=True)
+        btn_font = self.get_ui_font(19, bold=True)
 
         title = t_font.render("TIME'S UP!", True, (239, 68, 68))
-        self.screen.blit(title, title.get_rect(center=(box_x + box_w // 2, box_y + 36)))
+        self.screen.blit(title, title.get_rect(center=(box_x + box_w // 2, box_y + 45)))
 
         m1 = msg_font.render("Your 10-minute stage time limit has expired.", True, (255, 255, 255))
         m2 = msg_font.render("Would you like to try again or return to Stage Select?", True, (203, 213, 225))
-        self.screen.blit(m1, m1.get_rect(center=(box_x + box_w // 2, box_y + 85)))
-        self.screen.blit(m2, m2.get_rect(center=(box_x + box_w // 2, box_y + 115)))
+        self.screen.blit(m1, m1.get_rect(center=(box_x + box_w // 2, box_y + 105)))
+        self.screen.blit(m2, m2.get_rect(center=(box_x + box_w // 2, box_y + 145)))
 
         # Button 1: Retry Quarter
-        retry_rect = pygame.Rect(box_x + 40, box_y + 175, 220, 46)
+        retry_rect = pygame.Rect(box_x + 50, box_y + 225, 270, 52)
         r_hov = retry_rect.collidepoint(self.cursor_pos)
-        pygame.draw.rect(self.screen, (245, 158, 11) if r_hov else (30, 41, 59), retry_rect, border_radius=10)
-        pygame.draw.rect(self.screen, (255, 255, 255), retry_rect, 2, border_radius=10)
+        pygame.draw.rect(self.screen, (245, 158, 11) if r_hov else (30, 41, 59), retry_rect, border_radius=12)
+        pygame.draw.rect(self.screen, (255, 255, 255), retry_rect, 2, border_radius=12)
         r_txt = btn_font.render("Retry Quarter", True, (15, 23, 42) if r_hov else (255, 255, 255))
         self.screen.blit(r_txt, r_txt.get_rect(center=retry_rect.center))
 
         # Button 2: Return to Stage Select
-        exit_rect = pygame.Rect(box_x + box_w - 260, box_y + 175, 220, 46)
+        exit_rect = pygame.Rect(box_x + box_w - 320, box_y + 225, 270, 52)
         e_hov = exit_rect.collidepoint(self.cursor_pos)
-        pygame.draw.rect(self.screen, (220, 38, 38) if e_hov else (30, 41, 59), exit_rect, border_radius=10)
-        pygame.draw.rect(self.screen, (255, 255, 255), exit_rect, 2, border_radius=10)
+        pygame.draw.rect(self.screen, (220, 38, 38) if e_hov else (30, 41, 59), exit_rect, border_radius=12)
+        pygame.draw.rect(self.screen, (255, 255, 255), exit_rect, 2, border_radius=12)
         e_txt = btn_font.render("Stage Select", True, (255, 255, 255))
         self.screen.blit(e_txt, e_txt.get_rect(center=exit_rect.center))
 

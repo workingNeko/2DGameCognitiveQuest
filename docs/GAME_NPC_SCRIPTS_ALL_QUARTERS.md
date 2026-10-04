@@ -14,11 +14,13 @@
 
 ---
 
-# 🌟 Act 0: The Awakening (Stage Select Hub / Global Intro)
+# 🌟 Act 0: The Awakening (Stage Select Hub & Quarter Portal Guardians)
 
-*Setting: The Stage Select Hub. The Student is walking past the glowing quarter portals when the Old Man (Mentor Wizard) appears.*
+*Setting: The Stage Select Hub. The Student explores the central sanctuary surrounded by four ancient portals.*
 
+### 🧙‍♂️ 1. Old Man (Mentor Wizard - Quarter 1 Geometry Forest Portal / West)
 ```
+[Before Quarter 1 Completion]:
 Old Man:
 “Stop right there!”
 
@@ -26,7 +28,7 @@ Student:
 “Huh? Why?”
 
 Old Man:
-“I see in you such greatness! Someday you will do these lands great good. But only when trained. For now, it is only potential.”
+“I see in you such greatness, [Player Name]! Someday you will do these lands great good. But only when trained. For now, it is only potential.”
 
 Student:
 “What shall I do?”
@@ -39,6 +41,97 @@ Student:
 
 Old Man:
 “I like your enthusiasm! Follow me into the portal!”
+
+[After Quarter 1 Completion]:
+Old Man:
+“Well done on mastering Quarter 1, [Player Name]!
+The path south to Quarter 2 (Barangay Geometry) is now open!
+Remember, each completed quarter brings you closer to becoming a Master Mathematician!”
+
+[After All 4 Quarters Completed]:
+Old Man:
+(Delivers the Grand Victory Report Card Speech!)
+```
+
+### 🛡️ 2. Knight (Guardian of Barangay Kalye - Quarter 2 Portal / South)
+```
+[Before Quarter 2 Completion]:
+Knight:
+“Mabuhay, young adventurer [Player Name]! Beyond this southern gate lies Barangay Kalye.”
+
+Student:
+“What kind of challenges await me there?”
+
+Knight:
+“You shall discover the power of Bayanihan! Measure perimeters, calculate fair market prices, and help build a Bahay Kubo with the community.”
+
+Student:
+“I am ready to help the barangay!”
+
+Knight:
+“Walk through the southern portal down below to proceed. Best of luck on your quest!”
+
+[After Quarter 2 Completion]:
+Knight:
+“Outstanding valor, [Player Name]! You have mastered Quarter 2 (Barangay Geometry)!
+Head east through the corridor to explore the Monetary Desert in Quarter 3!”
+```
+
+### 💀 3. Skeleton Guardian (Ancient Desert Sage - Quarter 3 Portal / East)
+```
+[Before Quarter 3 Completion]:
+Skeleton:
+“Greetings, brave traveler [Player Name]! I am the Desert Guardian of the Ancient Sands.”
+
+Student:
+“What lies beyond this eastern portal?”
+
+Skeleton:
+“The great Monetary Desert! Ancient ruins filled with trade tablets, golden currency calculations, and the Pharaoh's Vault.”
+
+Student:
+“Are the sands dangerous?”
+
+Skeleton:
+“Only to those without mathematical courage! Decode the trade seals and solve the multiplication puzzles to uncover the lost treasures.”
+
+Student:
+“I am ready to brave the desert!”
+
+Skeleton:
+“Walk through the eastern portal to begin your expedition. May the sun guide your journey!”
+
+[After Quarter 3 Completion]:
+Skeleton:
+“Incredible wisdom across the sands, [Player Name]! You have mastered Quarter 3 (Monetary Desert)!
+Head north along the corridor to meet Bromen at the Water Temple in Quarter 4!”
+```
+
+### 🗝️ 4. Guardian Bromen (Master of the Water Temple - Quarter 4 Portal / North)
+```
+[Before Quarter 4 Completion]:
+Bromen:
+“Greetings, voyager [Player Name]! I am Bromen, guardian of the celestial Water Temple.”
+
+Student:
+“Are you guarding the entrance to Quarter 4?”
+
+Bromen:
+“Indeed! In the sunken aqueducts, you must master fractions, solve rudder equations, and balance the elemental waterways.”
+
+Student:
+“I will restore harmony to the temple!”
+
+Bromen:
+“Spoken like a true champion! Follow me to the north portal to enter Quarter 4.”
+
+Bromen:
+“Let us go!”
+
+[After Quarter 4 Completion]:
+Bromen:
+“Magnificent achievement, [Player Name]! You have mastered Quarter 4 (The Water Temple)!
+Speak with the Old Man at the central sanctuary to celebrate your Grand Champion victory!”
 ```
 
 ---

@@ -15,6 +15,9 @@ class TestTutorialClicks(unittest.TestCase):
         self.main_menu = MainMenu(self.screen)
         from screens.tutorial import TutorialScreen
         self.tut = TutorialScreen(self.screen, self.main_menu)
+        self.tut.intro_anim_active = False
+        self.tut.demo_video_active = False
+        self.tut.intro_dialog_open = False
         self.main_menu.tutorial = self.tut
         self.main_menu.current_screen = "tutorial"
 

@@ -1,15 +1,14 @@
 {
-    "student_id": "1",
+    "student_id": "1001",
     "selected_student": {
         "id": 1,
-        "student_id": "1",
-        "first_name": "Maria",
-        "last_name": "Santos",
+        "student_id": "1001",
+        "first_name": "HeroTester",
         "score": 0,
         "progress": 0
     },
     "current_screen": "menu",
     "tutorial_completed": false,
     "completed_quarters": {},
-    "timestamp": 1791091524.8707874
+    "timestamp": 1791091571.9886236
 }

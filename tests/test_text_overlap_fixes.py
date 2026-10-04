@@ -78,10 +78,13 @@ class TestTextOverlapFixes(unittest.TestCase):
         button_0_rect = dialog.get_button_rect(0)
 
         # Calculate where the question + hint end
-        q_font = get_font(["Segoe UI", "Comic Sans MS"], 18, bold=True)
-        wrapped = dialog.wrap_text(long_q_data["question"], q_font, dialog.box_w - 60)
-        y_text = dialog.box_y + 88 + len(wrapped) * 23
-        y_hint_bottom = y_text + 26
+        q_text = long_q_data["question"]
+        q_font_size = 24 if len(q_text) < 130 else 22
+        q_font = get_font(["Segoe UI", "Comic Sans MS"], q_font_size, bold=True)
+        wrapped = dialog.wrap_text(q_text, q_font, dialog.box_w - 60)
+        line_height = 32 if q_font_size == 24 else 28
+        y_text = dialog.box_y + 96 + len(wrapped) * line_height
+        y_hint_bottom = y_text + 30
 
         # Button 0 top must be strictly below the hint bottom
         self.assertGreater(

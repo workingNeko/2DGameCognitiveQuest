@@ -9,6 +9,7 @@ import random
 import collections
 from .map_loader import MapLoader
 from core.camera_system import LoLCamera
+from core.visual_effects import DustParticleSystem, draw_beacon_marker, draw_aura_glow
 from core.npc_scripts import get_map_instructions, get_station_script, get_mentor_script
 from core.npc_dialog_system import InstructionModal, NPCGreetingDialog
 
@@ -105,6 +106,9 @@ class Quarter3:
         # Performance Overlay Cache
         self._dim_overlay = None
 
+        # Visual Effects & Dust Footsteps
+        self.dust_particles = DustParticleSystem(max_particles=30)
+
         # ============================================================
         # PATHS
         # ============================================================
@@ -163,6 +167,16 @@ class Quarter3:
         self.NPC_PATH_NUM3 = os.path.join(self.BASE_DIR, "assets", "images", "sprites", "objects", "NPC", "Number3NPC")
         self.NPC_PATH_NUM4 = os.path.join(self.BASE_DIR, "assets", "images", "sprites", "objects", "NPC", "Number4NPC")
         self.NPC_PATH_NUM5 = os.path.join(self.BASE_DIR, "assets", "images", "sprites", "objects", "NPC", "Number5NPC")
+
+        self.NPC_PATH_SKELETON = os.path.join(
+            self.BASE_DIR,
+            "assets",
+            "images",
+            "sprites",
+            "objects",
+            "NPC",
+            "skeleton"
+        )
 
         self.NPC_PATH_KNIGHT = os.path.join(
             self.BASE_DIR,
@@ -243,6 +257,45 @@ class Quarter3:
         self.station_npcs = {}
         self.load_station_shape_npcs()
 
+        # Skeleton NPC (Quarter 3 Portal Guardian & Solar Array Trial)
+        self.npc_skeleton_sprite = None
+        self.npc_skeleton_x = 0
+        self.npc_skeleton_y = 0
+        self.npc_skeleton_tile_x = 0
+        self.npc_skeleton_tile_y = 0
+        self.npc_skeleton_found = False
+        self.npc_skeleton_left_sprites = []
+        self.npc_skeleton_down_sprites = []
+        self.npc_skeleton_right_sprites = []
+        self.npc_skeleton_up_sprites = []
+        self.npc_skeleton_dir = "left"
+        self.npc_skeleton_anim_frame = 0
+        self.npc_skeleton_anim_timer = 0
+
+        # Guardian Skeleton State: 0 = waiting for stations, 1 = guarding portal (aura & badge), 2 = trial prompt modal, 3 = puzzle active, 4 = victory speech, 5 = portal unlocked
+        self.guardian_skeleton_state = 0
+        self.guardian_skeleton_proximity_cooldown = 0
+        p_box_w, p_box_h = 760, 360
+        p_box_x = (self.width - p_box_w) // 2
+        p_box_y = (self.height - p_box_h) // 2
+        self.guardian_skeleton_btn_rect = pygame.Rect(p_box_x + (p_box_w - 320) // 2, p_box_y + 280, 320, 50)
+
+        # Solar Array Keystone Math Puzzle (Guardian Skeleton Trial)
+        self.solar_array_puzzle_active = False
+        self.solar_array_puzzle_solved = False
+        self.solar_array_puzzle_solved_time = 0
+        self.solar_array_puzzle_all_placed = False
+        self.solar_array_puzzle_slots = []
+        self.solar_array_puzzle_pieces = []
+        self.dragged_solar_piece = None
+        self.solar_drag_offset_x = 0
+        self.solar_drag_offset_y = 0
+        self.solar_hovered_piece = None
+        self.solar_hovered_slot = None
+        self.solar_sparkles = []
+        self.solar_puzzle_reset_btn_rect = None
+        self.solar_puzzle_continue_btn_rect = None
+
         # Knight NPC (static & interactive)
         self.npc_knight_sprite = None
         self.npc_knight_x = 0
@@ -322,17 +375,17 @@ class Quarter3:
         # ============================================================
         self.show_info = True
         self.font = pygame.font.SysFont("Comic Sans MS", 16)
-        self.small_font = pygame.font.SysFont("Comic Sans MS", 12)
-        self.dialog_header_font = pygame.font.SysFont("Comic Sans MS", 17, bold=True)
-        self.dialog_q_font = pygame.font.SysFont("Comic Sans MS", 15, bold=True)
-        self.dialog_choice_font = pygame.font.SysFont("Comic Sans MS", 14, bold=True)
-        self.dialog_badge_font = pygame.font.SysFont("Comic Sans MS", 15, bold=True)
-        self.dialog_hint_font = pygame.font.SysFont("Comic Sans MS", 13, bold=True)
-        self.dialog_speaker_font = pygame.font.SysFont("Comic Sans MS", 18, bold=True)
-        self.dialog_btn_font = pygame.font.SysFont("Comic Sans MS", 16, bold=True)
-        self.dialog_msg_font = pygame.font.SysFont("Comic Sans MS", 16, bold=True)
-        self.dialog_regular_font = pygame.font.SysFont("Comic Sans MS", 15)
-        self.dialog_stat_font = pygame.font.SysFont("Comic Sans MS", 13, bold=True)
+        self.small_font = pygame.font.SysFont(["Segoe UI", "Tahoma", "Comic Sans MS", "Arial"], 13, bold=True)
+        self.dialog_header_font = pygame.font.SysFont(["Segoe UI", "Tahoma", "Comic Sans MS", "Arial"], 24, bold=True)
+        self.dialog_q_font = pygame.font.SysFont(["Segoe UI", "Tahoma", "Comic Sans MS", "Arial"], 19, bold=True)
+        self.dialog_choice_font = pygame.font.SysFont(["Segoe UI", "Tahoma", "Comic Sans MS", "Arial"], 20, bold=True)
+        self.dialog_badge_font = pygame.font.SysFont(["Segoe UI", "Tahoma", "Comic Sans MS", "Arial"], 22, bold=True)
+        self.dialog_hint_font = pygame.font.SysFont(["Segoe UI", "Tahoma", "Comic Sans MS", "Arial"], 17, bold=True)
+        self.dialog_speaker_font = pygame.font.SysFont(["Segoe UI", "Tahoma", "Comic Sans MS", "Arial"], 24, bold=True)
+        self.dialog_btn_font = pygame.font.SysFont(["Segoe UI", "Tahoma", "Comic Sans MS", "Arial"], 20, bold=True)
+        self.dialog_msg_font = pygame.font.SysFont(["Segoe UI", "Tahoma", "Comic Sans MS", "Arial"], 19, bold=True)
+        self.dialog_regular_font = pygame.font.SysFont(["Segoe UI", "Tahoma", "Comic Sans MS", "Arial"], 18)
+        self.dialog_stat_font = pygame.font.SysFont(["Segoe UI", "Tahoma", "Comic Sans MS", "Arial"], 16, bold=True)
 
         # Pre-created cached surfaces for high performance and zero allocations in draw()
         shadow_w = int(24 * ZOOM)
@@ -673,9 +726,19 @@ class Quarter3:
                     pygame.transform.scale(f, (self.scaled_tile_size, self.scaled_tile_size)).convert_alpha() for f in data["frames"]
                 ]
 
-        # 5. Pre-scale static & walking NPCs
+        # 5. Pre-scale static & walking NPCs (Oldman, Skeleton Guardian, Knight)
         if getattr(self, 'npc_oldman_sprite', None):
             self.npc_oldman_sprite = pygame.transform.scale(self.npc_oldman_sprite, (self.scaled_tile_size, self.scaled_tile_size)).convert_alpha()
+        if getattr(self, 'npc_skeleton_sprite', None):
+            self.npc_skeleton_sprite = pygame.transform.scale(self.npc_skeleton_sprite, (self.scaled_tile_size, self.scaled_tile_size)).convert_alpha()
+        if getattr(self, 'npc_skeleton_left_sprites', None):
+            self.npc_skeleton_left_sprites = [pygame.transform.scale(f, (self.scaled_tile_size, self.scaled_tile_size)).convert_alpha() for f in self.npc_skeleton_left_sprites]
+        if getattr(self, 'npc_skeleton_right_sprites', None):
+            self.npc_skeleton_right_sprites = [pygame.transform.scale(f, (self.scaled_tile_size, self.scaled_tile_size)).convert_alpha() for f in self.npc_skeleton_right_sprites]
+        if getattr(self, 'npc_skeleton_down_sprites', None):
+            self.npc_skeleton_down_sprites = [pygame.transform.scale(f, (self.scaled_tile_size, self.scaled_tile_size)).convert_alpha() for f in self.npc_skeleton_down_sprites]
+        if getattr(self, 'npc_skeleton_up_sprites', None):
+            self.npc_skeleton_up_sprites = [pygame.transform.scale(f, (self.scaled_tile_size, self.scaled_tile_size)).convert_alpha() for f in self.npc_skeleton_up_sprites]
         if getattr(self, 'npc_knight_sprite', None):
             self.npc_knight_sprite = pygame.transform.scale(self.npc_knight_sprite, (self.scaled_tile_size, self.scaled_tile_size)).convert_alpha()
         if getattr(self, 'npc_knight_left_sprites', None):
@@ -1133,9 +1196,6 @@ class Quarter3:
                 pygame.draw.circle(placeholder, (0, 0, 0), (TILE_SIZE // 2, TILE_SIZE // 2), 12)
                 pygame.draw.circle(placeholder, (255, 255, 255), (TILE_SIZE // 2 - 4, TILE_SIZE // 2 - 4), 3)
                 pygame.draw.circle(placeholder, (255, 255, 255), (TILE_SIZE // 2 + 4, TILE_SIZE // 2 - 4), 3)
-                font = pygame.font.SysFont(None, 10)
-                text = font.render("OLD", True, (0, 0, 0))
-                placeholder.blit(text, (4, TILE_SIZE - 12))
                 self.npc_oldman_sprite = placeholder
         except Exception as e:
             print(f"[FAIL] Error loading Oldman: {e}")
@@ -1143,7 +1203,55 @@ class Quarter3:
             placeholder.fill((200, 200, 200))
             self.npc_oldman_sprite = placeholder
 
-        pass
+        # Load Skeleton Guardian (Quarter 3 Guardian)
+        skeleton_path = os.path.join(self.NPC_PATH_SKELETON, "skeleton.png")
+        try:
+            if os.path.exists(skeleton_path):
+                img = pygame.image.load(skeleton_path).convert_alpha()
+                self.npc_skeleton_sprite = pygame.transform.scale(img, (TILE_SIZE, TILE_SIZE))
+                print(f"[OK] Loaded Skeleton Guardian sprite")
+            else:
+                print(f"[WARN] Skeleton sprite not found at: {skeleton_path}")
+                placeholder = pygame.Surface((TILE_SIZE, TILE_SIZE))
+                placeholder.fill((220, 220, 220))
+                self.npc_skeleton_sprite = placeholder
+
+            self.npc_skeleton_left_sprites = []
+            for name in ["skeleton_left.png", "skeleton_left_1.png", "skeleton_left_2.png"]:
+                path = os.path.join(self.NPC_PATH_SKELETON, name)
+                if os.path.exists(path):
+                    img = pygame.image.load(path).convert_alpha()
+                    scaled = pygame.transform.scale(img, (TILE_SIZE, TILE_SIZE))
+                    self.npc_skeleton_left_sprites.append(scaled)
+
+            self.npc_skeleton_down_sprites = []
+            for name in ["skeleton_down.png", "skeleton_down_1.png", "skeleton_down_2.png"]:
+                path = os.path.join(self.NPC_PATH_SKELETON, name)
+                if os.path.exists(path):
+                    img = pygame.image.load(path).convert_alpha()
+                    scaled = pygame.transform.scale(img, (TILE_SIZE, TILE_SIZE))
+                    self.npc_skeleton_down_sprites.append(scaled)
+
+            self.npc_skeleton_right_sprites = []
+            for name in ["skeleton_right.png", "skeleton_right_1.png", "skeleton_right_2.png"]:
+                path = os.path.join(self.NPC_PATH_SKELETON, name)
+                if os.path.exists(path):
+                    img = pygame.image.load(path).convert_alpha()
+                    scaled = pygame.transform.scale(img, (TILE_SIZE, TILE_SIZE))
+                    self.npc_skeleton_right_sprites.append(scaled)
+
+            self.npc_skeleton_up_sprites = []
+            for name in ["skeleton_up.png", "skeleton_up_1.png", "skeleton_up_2.png"]:
+                path = os.path.join(self.NPC_PATH_SKELETON, name)
+                if os.path.exists(path):
+                    img = pygame.image.load(path).convert_alpha()
+                    scaled = pygame.transform.scale(img, (TILE_SIZE, TILE_SIZE))
+                    self.npc_skeleton_up_sprites.append(scaled)
+        except Exception as e:
+            print(f"[FAIL] Error loading Skeleton Guardian: {e}")
+            placeholder = pygame.Surface((TILE_SIZE, TILE_SIZE))
+            placeholder.fill((220, 220, 220))
+            self.npc_skeleton_sprite = placeholder
 
     def load_station_shape_npcs(self):
         """Load 8-frame animations for 5 shape NPCs assigned to stations 1-5"""
@@ -1451,6 +1559,50 @@ class Quarter3:
                     self.render_map[y] = ''.join(row_list)
                 self.game_map[y] = ''.join(game_row_list)
 
+        # Position Skeleton Guardian guarding the exit portal
+        if self.map_name == "map7.txt":
+            self.npc_skeleton_tile_x = 46
+            self.npc_skeleton_tile_y = 16
+            self.npc_skeleton_dir = "left"
+            self.npc_skeleton_found = True
+        elif self.map_name == "map8.txt":
+            self.npc_skeleton_tile_x = 46
+            self.npc_skeleton_tile_y = 7
+            self.npc_skeleton_dir = "left"
+            self.npc_skeleton_found = True
+        elif self.map_name == "map9.txt":
+            self.npc_skeleton_tile_x = 1
+            self.npc_skeleton_tile_y = 10
+            self.npc_skeleton_dir = "right"
+            self.npc_skeleton_found = True
+        elif self.portals:
+            p = self.portals[0]
+            if p.direction == 'right':
+                self.npc_skeleton_tile_x = max(0, p.x - 1)
+                self.npc_skeleton_tile_y = p.y
+                self.npc_skeleton_dir = "left"
+            elif p.direction == 'left':
+                self.npc_skeleton_tile_x = min(self.COLS - 1, p.x + p.width_tiles)
+                self.npc_skeleton_tile_y = p.y
+                self.npc_skeleton_dir = "right"
+            elif p.direction == 'up':
+                self.npc_skeleton_tile_x = p.x
+                self.npc_skeleton_tile_y = min(self.ROWS - 1, p.y + p.height_tiles)
+                self.npc_skeleton_dir = "up"
+            else:
+                self.npc_skeleton_tile_x = p.x
+                self.npc_skeleton_tile_y = max(0, p.y - 1)
+                self.npc_skeleton_dir = "down"
+            self.npc_skeleton_found = True
+        else:
+            self.npc_skeleton_tile_x = 46
+            self.npc_skeleton_tile_y = 16
+            self.npc_skeleton_dir = "left"
+            self.npc_skeleton_found = True
+
+        self.npc_skeleton_x = self.npc_skeleton_tile_x * TILE_SIZE
+        self.npc_skeleton_y = self.npc_skeleton_tile_y * TILE_SIZE
+
     def find_path(self, start, end):
         """BFS pathfinder from start (col, row) to end (col, row) on the grid"""
         import collections
@@ -1561,7 +1713,7 @@ class Quarter3:
                     score = int(correct_answers * 20)
                     from db.save_system import mark_quarter_completed
                     mark_quarter_completed(self.main_menu, "quarter3", score=score, percentage=percentage, total_questions=total_questions)
-                    if hasattr(self.main_menu, 'audio_manager'):
+                    if getattr(self.main_menu, 'audio_manager', None):
                         self.main_menu.audio_manager.play_sfx("victory_fanfare")
                         self.main_menu.audio_manager.play_sfx("portal_warp")
                 except Exception as e:
@@ -1611,7 +1763,7 @@ class Quarter3:
             if self.quiz_state == 6:
                 if current_portal.direction == self.goal_portal_direction or current_portal.is_static:
                     print("* Entering Desert Sun Portal - Initiating seamless warp transition...")
-                    if hasattr(self.main_menu, 'audio_manager'):
+                    if getattr(self.main_menu, 'audio_manager', None):
                         self.main_menu.audio_manager.play_sfx("portal_transition")
                     self.warp_out_active = True
                     self.warp_out_timer = self.warp_out_duration
@@ -1686,7 +1838,7 @@ class Quarter3:
             self.quiz_state = 3
             self.eliminated_choices.clear()
             self.wrong_feedback_msg = ""
-            if hasattr(self.main_menu, 'audio_manager'):
+            if getattr(self.main_menu, 'audio_manager', None):
                 self.main_menu.audio_manager.play_sfx("correct")
                 self.main_menu.audio_manager.play_sfx("star_chime")
             if hasattr(self, 'celebration_particles'):
@@ -1699,7 +1851,7 @@ class Quarter3:
                 self.first_attempt_correct[self.current_question_index + 1] = False
             
             self.station_attempts[self.quiz_station_index] = self.station_attempts.get(self.quiz_station_index, 0) + 1
-            if hasattr(self.main_menu, 'audio_manager'):
+            if getattr(self.main_menu, 'audio_manager', None):
                 self.main_menu.audio_manager.play_sfx("wrong")
             if self.station_attempts[self.quiz_station_index] < 2:
                 self.quiz_state = 2
@@ -1807,30 +1959,30 @@ class Quarter3:
             self.quiz_state = 0
             print(f"[OK] Advanced to Quiz Station {self.quiz_station_index}")
         else:
+            self.quiz_station_index = 6
             self.current_question_index += 1
-            if self.is_puzzle_hybrid_mode:
-                # In Map 9 Hybrid mode, completing question 5 activates the Grand Sun Temple Altar Jigsaw!
-                self.quiz_state = 8
-                self.init_sun_relic_puzzle()
-                print("All 5 Map 9 Stations Solved! Grand Sun Temple Altar Puzzle Opened!")
-            else:
-                self.quiz_state = 5
-                if self.is_caravan_mode:
-                    self.caravan_x = self.player_x
-                    self.caravan_y = self.player_y
-                    self.caravan_dir = self.player_dir
-                    self.speed_boost_timer = 999.0
+            self.guardian_skeleton_state = 1
+            self.quiz_state = 0
+            if self.is_caravan_mode:
+                self.caravan_x = self.player_x
+                self.caravan_y = self.player_y
+                self.caravan_dir = self.player_dir
+                self.speed_boost_timer = 999.0
+            self.caravan_upgrade_banner_text = "ALL 5 STATIONS SOLVED!"
+            self.caravan_upgrade_banner_sub = "Approach the Skeleton Guardian to begin the Solar Array Trial!"
+            self.caravan_upgrade_banner_timer = 5.0
+            print("[GUARDIAN] All 5 stations solved! Skeleton Guardian activated at the exit portal!")
 
     def trigger_click(self, pos):
         if self.pause_menu.handle_click(pos):
             return
 
         if getattr(self, 'time_up_dialog_active', False):
-            box_w, box_h = 560, 260
+            box_w, box_h = 700, 320
             box_x = (self.width - box_w) // 2
             box_y = (self.height - box_h) // 2
-            retry_rect = pygame.Rect(box_x + 40, box_y + 175, 220, 46)
-            exit_rect = pygame.Rect(box_x + box_w - 260, box_y + 175, 220, 46)
+            retry_rect = pygame.Rect(box_x + 50, box_y + 225, 270, 52)
+            exit_rect = pygame.Rect(box_x + box_w - 320, box_y + 225, 270, 52)
             if retry_rect.collidepoint(pos):
                 self.stage_time_remaining = 600.0
                 self.time_up_dialog_active = False
@@ -1871,6 +2023,88 @@ class Quarter3:
                 return
             return
 
+        # Skeleton Guardian Trial Prompt Click Interaction
+        if self.guardian_skeleton_state == 2 and self.guardian_skeleton_btn_rect:
+            if self.guardian_skeleton_btn_rect.collidepoint(pos):
+                self.guardian_skeleton_state = 3
+                self.solar_array_puzzle_active = True
+                self.init_solar_array_puzzle()
+                if getattr(self.main_menu, 'audio_manager', None):
+                    self.main_menu.audio_manager.play_sfx("portal_transition")
+                return
+
+        # Solar Array Keystone Math Puzzle Click Interactions
+        if self.solar_array_puzzle_active or self.guardian_skeleton_state == 3:
+            # 1. Reset Button
+            if hasattr(self, 'solar_puzzle_reset_btn_rect') and self.solar_puzzle_reset_btn_rect:
+                if self.solar_puzzle_reset_btn_rect.collidepoint(pos):
+                    self.reset_solar_array_puzzle()
+                    return
+
+            # 2. Continue / Unlock Portal Button
+            if getattr(self, 'solar_array_puzzle_all_placed', False) and hasattr(self, 'solar_puzzle_continue_btn_rect') and self.solar_puzzle_continue_btn_rect:
+                if self.solar_puzzle_continue_btn_rect.collidepoint(pos):
+                    self.solar_array_puzzle_solved = True
+                    self.solar_array_puzzle_active = False
+                    self.guardian_skeleton_state = 5  # Unlocked portal!
+                    self.quiz_state = 6
+                    self.clear_portal_overlapping_tiles()
+                    self.save_results_to_database()
+                    try:
+                        from db.save_system import save_student_progress
+                        save_student_progress(self.main_menu)
+                    except Exception as e:
+                        print(f"[WARN] Failed to save student progress: {e}")
+                    if getattr(self.main_menu, 'audio_manager', None):
+                        self.main_menu.audio_manager.play_sfx("victory_fanfare")
+                        self.main_menu.audio_manager.play_sfx("portal_warp")
+                    if hasattr(self, 'celebration_particles'):
+                        self.celebration_particles.spawn_burst(self.width // 2, self.height // 2, count=40)
+                    print("[SOLAR ARRAY PUZZLE] Solved! Skeleton Guardian unlocked the Sun Portal!")
+                    return
+
+            # 3. Direct Click-to-Slot Magnetic Snap
+            for piece in self.solar_array_puzzle_pieces:
+                if not piece["is_placed"]:
+                    p_rect = pygame.Rect(piece["x"], piece["y"], piece["w"], piece["h"])
+                    if p_rect.collidepoint(pos):
+                        # Snap into matching slot
+                        for slot in self.solar_array_puzzle_slots:
+                            if slot["id"] == piece["id"] and not slot["matched"]:
+                                slot["matched"] = True
+                                slot["matched_item"] = piece["data"]
+                                piece["is_placed"] = True
+                                piece["is_dragging"] = False
+                                piece["x"] = slot["rect"].x + (slot["rect"].w - piece["w"]) // 2
+                                piece["y"] = slot["rect"].y + slot["rect"].h - piece["h"] - 8
+                                if getattr(self, 'snap_sound', None):
+                                    self.snap_sound.play()
+                                if getattr(self.main_menu, 'audio_manager', None):
+                                    self.main_menu.audio_manager.play_sfx("correct")
+
+                                for _ in range(16):
+                                    self.solar_sparkles.append({
+                                        "x": slot["rect"].centerx + random.randint(-40, 40),
+                                        "y": slot["rect"].centery + random.randint(-30, 30),
+                                        "vx": random.uniform(-2.5, 2.5),
+                                        "vy": random.uniform(-3.5, 0.5),
+                                        "color": random.choice([(255, 215, 0), (245, 158, 11), (255, 255, 255), (251, 191, 36)]),
+                                        "life": 0.6,
+                                        "max_life": 0.6,
+                                        "rad": random.randint(3, 5)
+                                    })
+
+                                if all(s["matched"] for s in self.solar_array_puzzle_slots):
+                                    self.solar_array_puzzle_all_placed = True
+                                    self.solar_array_puzzle_solved_time = pygame.time.get_ticks()
+                                    if getattr(self, 'success_sound', None):
+                                        self.success_sound.play()
+                                    if hasattr(self, 'celebration_particles'):
+                                        self.celebration_particles.spawn_burst(self.width // 2, self.height // 2, count=35)
+                                break
+                        return
+            return
+
         import random
         from db.save_system import save_student_progress
         
@@ -1887,7 +2121,7 @@ class Quarter3:
                     self.quiz_state = 3
                     self.eliminated_choices.clear()
                     self.wrong_feedback_msg = ""
-                    if hasattr(self.main_menu, 'audio_manager'):
+                    if getattr(self.main_menu, 'audio_manager', None):
                         self.main_menu.audio_manager.play_sfx("correct")
                         self.main_menu.audio_manager.play_sfx("star_chime")
                     if hasattr(self, 'celebration_particles'):
@@ -1903,7 +2137,7 @@ class Quarter3:
                         self.first_attempt_correct[self.current_question_index + 1] = False
                     
                     self.station_attempts[self.quiz_station_index] = self.station_attempts.get(self.quiz_station_index, 0) + 1
-                    if hasattr(self.main_menu, 'audio_manager'):
+                    if getattr(self.main_menu, 'audio_manager', None):
                         self.main_menu.audio_manager.play_sfx("wrong")
                     if self.station_attempts[self.quiz_station_index] < 2:
                         self.quiz_state = 2
@@ -1918,30 +2152,30 @@ class Quarter3:
                     
         # State 2: Retry click fallback
         elif self.quiz_state == 2:
-            box_w, box_h = 580, 300
+            box_w, box_h = 760, 360
             box_x = (self.width - box_w) // 2
             box_y = (self.height - box_h) // 2
-            btn_rect = pygame.Rect(box_x + (box_w - 220) // 2, box_y + 235, 220, 46)
+            btn_rect = pygame.Rect(box_x + (box_w - 240) // 2, box_y + 280, 240, 50)
             if btn_rect.collidepoint(pos):
                 self.quiz_state = 1
                 save_student_progress(self.main_menu)
             
         # State 3: Correct answer transition screen click -> Award Cargo & Speed Rush!
         elif self.quiz_state == 3:
-            box_w, box_h = 580, 270
+            box_w, box_h = 740, 330
             box_x = (self.width - box_w) // 2
             box_y = (self.height - box_h) // 2
-            btn_rect = pygame.Rect(box_x + (box_w - 240) // 2, box_y + 195, 240, 46)
+            btn_rect = pygame.Rect(box_x + (box_w - 260) // 2, box_y + 245, 260, 50)
             if btn_rect.collidepoint(pos):
                 self.advance_station_progress()
                 save_student_progress(self.main_menu)
 
         # State 4: Out of tries reveal screen click -> Guaranteed progression!
         elif self.quiz_state == 4:
-            box_w, box_h = 600, 280
+            box_w, box_h = 740, 340
             box_x = (self.width - box_w) // 2
             box_y = (self.height - box_h) // 2
-            btn_rect = pygame.Rect(box_x + (box_w - 240) // 2, box_y + 205, 240, 46)
+            btn_rect = pygame.Rect(box_x + (box_w - 260) // 2, box_y + 260, 260, 50)
             if btn_rect.collidepoint(pos):
                 self.advance_station_progress()
                 save_student_progress(self.main_menu)
@@ -1977,10 +2211,10 @@ class Quarter3:
                 
         # State 5: Final speech click -> Unlock Goal Portal for manual player guidance!
         elif self.quiz_state == 5:
-            box_w, box_h = 640, 350
+            box_w, box_h = 780, 420
             box_x = (self.width - box_w) // 2
             box_y = (self.height - box_h) // 2
-            btn_rect = pygame.Rect(box_x + (box_w - 240) // 2, box_y + 285, 240, 46)
+            btn_rect = pygame.Rect(box_x + (box_w - 260) // 2, box_y + 340, 260, 50)
             if btn_rect.collidepoint(pos):
                 self.quiz_state = 6
                 self.clear_portal_overlapping_tiles()
@@ -2001,7 +2235,7 @@ class Quarter3:
     # UPDATE
     # ============================================================
     def update(self):
-        dt = self.clock.tick(FPS) / 1000.0
+        dt = min(0.05, max(0.001, self.clock.tick() / 1000.0))
         self.frame_counter += 1
 
         if self.pause_menu.is_paused:
@@ -2010,6 +2244,8 @@ class Quarter3:
         # Update celebration particles & victory report card
         if hasattr(self, 'celebration_particles'):
             self.celebration_particles.update(dt)
+        if hasattr(self, 'dust_particles'):
+            self.dust_particles.update(dt)
         if hasattr(self, 'victory_card') and self.victory_card.active:
             self.victory_card.update(dt)
             return
@@ -2034,7 +2270,7 @@ class Quarter3:
             self.stage_time_remaining = max(0.0, self.stage_time_remaining - dt)
             if self.stage_time_remaining <= 60.0 and not getattr(self, 'timer_warning_played', False):
                 self.timer_warning_played = True
-                if hasattr(self.main_menu, 'audio_manager'):
+                if getattr(self.main_menu, 'audio_manager', None):
                     self.main_menu.audio_manager.play_sfx("timer_warning")
             if self.stage_time_remaining <= 0.0:
                 self.stage_time_remaining = 0.0
@@ -2068,15 +2304,21 @@ class Quarter3:
 
         # Update Instruction Modal & handle Fist Hold dismiss
         if getattr(self, 'instruction_modal', None) and self.instruction_modal.is_visible:
-            fist_pct = 0.0
-            if self.fist_closed and self.fist_start_time > 0:
-                elapsed = time.time() - self.fist_start_time
-                fist_pct = min(1.0, elapsed / self.CLICK_HOLD_TIME)
-                if elapsed >= self.CLICK_HOLD_TIME:
-                    self.instruction_modal.hide()
-                    self.fist_start_time = 0
-            self.instruction_modal.update(dt, self.cursor_pos, fist_pct)
-            return
+            player_screen_x = (self.player_x - self.camera_x + TILE_SIZE / 2) * ZOOM
+            player_screen_y = (self.player_y - self.camera_y + TILE_SIZE / 2) * ZOOM
+            cx, cy = self.cursor_pos
+            if abs(cx - player_screen_x) > 45 or abs(cy - player_screen_y) > 45:
+                self.instruction_modal.hide()
+            else:
+                fist_pct = 0.0
+                if self.fist_closed and self.fist_start_time > 0:
+                    elapsed = time.time() - self.fist_start_time
+                    fist_pct = min(1.0, elapsed / self.CLICK_HOLD_TIME)
+                    if elapsed >= self.CLICK_HOLD_TIME:
+                        self.instruction_modal.hide()
+                        self.fist_start_time = 0
+                self.instruction_modal.update(dt, self.cursor_pos, fist_pct)
+                return
 
         # Update NPC Greeting Dialog & handle Fist Hold to start question
         if getattr(self, 'greeting_dialog', None) and self.greeting_dialog.is_visible:
@@ -2127,6 +2369,26 @@ class Quarter3:
                             sprite_frame = st_data["frames"][anim_idx]
                             
                     self.greeting_dialog.show(speaker_name, speaker_title, greeting_text, sprite_frame=sprite_frame)
+
+        # Proximity interaction check for Skeleton Guardian (when stations 1-5 cleared)
+        if self.guardian_skeleton_state == 1 and self.npc_skeleton_found and self.quiz_station_index >= 6:
+            if getattr(self, 'guardian_skeleton_proximity_cooldown', 0) > 0:
+                self.guardian_skeleton_proximity_cooldown -= dt
+            else:
+                skel_center_x = self.npc_skeleton_x + TILE_SIZE // 2
+                skel_center_y = self.npc_skeleton_y + TILE_SIZE // 2
+                player_center_x = self.player_x + TILE_SIZE // 2
+                player_center_y = self.player_y + TILE_SIZE // 2
+                dist_skel = math.hypot(player_center_x - skel_center_x, player_center_y - skel_center_y)
+                if dist_skel < TILE_SIZE * 2.2:
+                    if not self.greeting_dialog.is_visible and not self.instruction_modal.is_visible:
+                        self.guardian_skeleton_state = 2  # Open Guardian Trial Prompt modal
+                        if getattr(self.main_menu, 'audio_manager', None):
+                            self.main_menu.audio_manager.play_sfx("correct")
+
+        # Update Solar Array Keystone Math Puzzle
+        if self.solar_array_puzzle_active or self.guardian_skeleton_state == 3:
+            self.update_solar_array_puzzle(dt)
 
         # Skeleton walking sequence along BFS path
         if self.quiz_state == 4:
@@ -2349,19 +2611,17 @@ class Quarter3:
         dist_factor = 1.3 if (abs(dx) > 160 or abs(dy) > 160) else 1.0
         g_speed = base_speed * dist_factor
 
-        if abs(dx) > 45:
-            vx = g_speed if dx > 0 else -g_speed
-            if dx > 0:
-                self.player_dir = "right"
-            elif dx < 0:
-                self.player_dir = "left"
+        deadzone = 45.0
+        if abs(dx) > deadzone or abs(dy) > deadzone:
+            if abs(dx) > deadzone:
+                vx = g_speed if dx > 0 else -g_speed
+            if abs(dy) > deadzone:
+                vy = g_speed if dy > 0 else -g_speed
 
-        if abs(dy) > 45:
-            vy = g_speed if dy > 0 else -g_speed
-            if dy > 0:
-                self.player_dir = "down"
-            elif dy < 0:
-                self.player_dir = "up"
+            if abs(dx) > abs(dy):
+                self.player_dir = "right" if dx > 0 else "left"
+            else:
+                self.player_dir = "down" if dy > 0 else "up"
 
         new_x = self.player_x + vx
         new_y = self.player_y + vy
@@ -2374,10 +2634,18 @@ class Quarter3:
         if vx != 0 or vy != 0:
             self.player_trail.append((self.player_x, self.player_y, self.player_dir))
             self.anim_timer += 1
+            if hasattr(self, 'dust_particles') and self.anim_timer % 8 == 0:
+                self.dust_particles.emit_footstep(
+                    (self.player_x + TILE_SIZE // 2) * ZOOM,
+                    (self.player_y + TILE_SIZE - 2) * ZOOM,
+                    direction=self.player_dir,
+                    speed_boost=getattr(self, 'speed_boost_timer', 0) > 0,
+                    terrain_color=(230, 200, 140)
+                )
             if self.anim_timer >= (10 if self.speed_boost_timer > 0 else 16):
                 self.anim_timer = 0
                 self.anim_frame = (self.anim_frame + 1) % 2
-                if hasattr(self.main_menu, 'audio_manager'):
+                if getattr(self.main_menu, 'audio_manager', None):
                     self.main_menu.audio_manager.play_sfx("footstep_wood")
         else:
             self.anim_frame = 0
@@ -2435,6 +2703,10 @@ class Quarter3:
         screen_x = int((self.player_x - self.camera_x) * ZOOM)
         screen_y = int((self.player_y - self.camera_y) * ZOOM)
 
+        # Draw footstep dust beneath player feet
+        if hasattr(self, 'dust_particles'):
+            self.dust_particles.draw(self.screen, camera_offset=(self.camera_x * ZOOM, self.camera_y * ZOOM))
+
         if -self.scaled_tile_size <= screen_x <= self.width + self.scaled_tile_size and \
            -self.scaled_tile_size <= screen_y <= self.height + self.scaled_tile_size:
             sprite = self.scaled_player_sprites[self.player_dir][self.anim_frame]
@@ -2480,15 +2752,21 @@ class Quarter3:
                     data = self.station_npcs[num]
                     frame = data["frames"][data["anim_frame"]]
                     
-                    # If this is the currently active station, draw pre-cached glowing interaction aura
+                    # If this is the currently active station, draw pre-cached glowing interaction aura and beacon
                     if num == self.quiz_station_index and self.quiz_state == 0:
                         aura_idx = (self.frame_counter // 4) % len(self.cached_station_auras)
                         aura_surf = self.cached_station_auras[aura_idx]
                         cx = (pos[0] * TILE_SIZE + TILE_SIZE // 2 - self.camera_x) * ZOOM
                         cy = (pos[1] * TILE_SIZE + TILE_SIZE - self.camera_y) * ZOOM
                         self.screen.blit(aura_surf, (cx - aura_surf.get_width() // 2, cy - aura_surf.get_height() // 2))
+                        draw_beacon_marker(self.screen, cx, (pos[1] * TILE_SIZE - self.camera_y) * ZOOM, color=(251, 191, 36), beacon_type="question", offset_y=int(-30 * ZOOM))
 
                     self.draw_npc_static(pos[0] * TILE_SIZE, pos[1] * TILE_SIZE, frame)
+
+        # Draw Skeleton Portal Guardian
+        self.draw_skeleton_guardian()
+        if self.quiz_state == 6 and getattr(self, 'skeleton_guardian_active', True):
+            draw_beacon_marker(self.screen, (self.skeleton_guardian_x + TILE_SIZE // 2 - self.camera_x) * ZOOM, (self.skeleton_guardian_y - self.camera_y) * ZOOM, color=(168, 85, 247), beacon_type="exclamation", offset_y=int(-35 * ZOOM))
 
         if self.npc_knight_found:
             sprites = None
@@ -2565,6 +2843,12 @@ class Quarter3:
         elif self.quiz_state == 9:
             self.draw_station_mini_puzzle()
 
+        # Draw Skeleton Guardian Prompt & Solar Array Puzzle modals
+        if self.guardian_skeleton_state == 2:
+            self.draw_skeleton_guardian_prompt()
+        elif self.guardian_skeleton_state == 3 or self.solar_array_puzzle_active:
+            self.draw_solar_array_puzzle()
+
         # Draw Area Title Animation
         if self.title_active:
             timer = self.title_elapsed
@@ -2627,15 +2911,16 @@ class Quarter3:
         # Draw smooth seamless warp-out transition overlay
         if self.warp_out_active:
             progress = max(0.0, min(1.0, 1.0 - (self.warp_out_timer / self.warp_out_duration)))
-            warp_overlay = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
-            warp_overlay.fill((254, 240, 138, int(progress * 255)))
+            if not hasattr(self, '_warp_overlay_surf') or self._warp_overlay_surf.get_size() != (self.width, self.height):
+                self._warp_overlay_surf = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
+            self._warp_overlay_surf.fill((254, 240, 138, int(progress * 255)))
             center = (self.width // 2, self.height // 2)
             max_r = int(math.hypot(self.width, self.height) / 2)
             r = int(progress * max_r)
             if r > 0:
-                pygame.draw.circle(warp_overlay, (245, 158, 11, int((1.0 - progress) * 230)), center, r, max(3, int(10 * ZOOM)))
-                pygame.draw.circle(warp_overlay, (255, 255, 255, int((1.0 - progress) * 200)), center, max(1, r - 8), max(2, int(4 * ZOOM)))
-            self.screen.blit(warp_overlay, (0, 0))
+                pygame.draw.circle(self._warp_overlay_surf, (245, 158, 11, int((1.0 - progress) * 230)), center, r, max(3, int(10 * ZOOM)))
+                pygame.draw.circle(self._warp_overlay_surf, (255, 255, 255, int((1.0 - progress) * 200)), center, max(1, r - 8), max(2, int(4 * ZOOM)))
+            self.screen.blit(self._warp_overlay_surf, (0, 0))
 
         # In-Game Universal Pause Button & Modal
         self.pause_menu.draw_button(self.cursor_pos)
@@ -3736,14 +4021,14 @@ class Quarter3:
             self._dim_overlay.fill((10, 15, 29, 170))
         self.screen.blit(self._dim_overlay, (0, 0))
 
-        box_w, box_h = 580, 300
+        box_w, box_h = 760, 360
         box_x = (self.width - box_w) // 2
         box_y = (self.height - box_h) // 2
 
         dialog_rect = pygame.Rect(box_x, box_y, box_w, box_h)
-        pygame.draw.rect(self.screen, (15, 23, 42), dialog_rect, border_radius=14)
-        pygame.draw.rect(self.screen, (220, 38, 38), dialog_rect, 3, border_radius=14)
-        pygame.draw.rect(self.screen, (248, 113, 113), dialog_rect.inflate(-6, -6), 1, border_radius=10)
+        pygame.draw.rect(self.screen, (15, 23, 42), dialog_rect, border_radius=16)
+        pygame.draw.rect(self.screen, (220, 38, 38), dialog_rect, 3, border_radius=16)
+        pygame.draw.rect(self.screen, (248, 113, 113), dialog_rect.inflate(-6, -6), 1, border_radius=12)
 
         script = get_station_script(self.map_name, self.quiz_station_index)
         npc_info = self.station_npcs.get(self.quiz_station_index, {})
@@ -3752,13 +4037,13 @@ class Quarter3:
         retry_msg = script.get("retry_line", "Think carefully about the fraction or grouping! You have 1 try remaining!").replace("[Player Name]", self.player_name)
 
         speaker_surf = self.dialog_header_font.render(f"{speaker} ({speaker_title}) - Try Again", True, (248, 113, 113))
-        self.screen.blit(speaker_surf, (box_x + 24, box_y + 16))
+        self.screen.blit(speaker_surf, (box_x + 28, box_y + 18))
 
-        lines = self.wrap_text(retry_msg, self.dialog_q_font, box_w - 48)
-        y_off = box_y + 46
+        lines = self.wrap_text(retry_msg, self.dialog_q_font, box_w - 56)
+        y_off = box_y + 56
         for l in lines[:2]:
-            self.screen.blit(self.dialog_q_font.render(l, True, (255, 255, 255)), (box_x + 24, y_off))
-            y_off += 22
+            self.screen.blit(self.dialog_q_font.render(l, True, (255, 255, 255)), (box_x + 28, y_off))
+            y_off += 26
 
         # Pedagogical Educational Hint Box
         from core.hints import get_educational_hint
@@ -3767,15 +4052,15 @@ class Quarter3:
         q_text = current_q.get("question", "")
         hint_text = get_educational_hint("quarter3", q_text)
 
-        hint_box = pygame.Rect(box_x + 20, box_y + 104, box_w - 40, 110)
-        pygame.draw.rect(self.screen, (30, 41, 59), hint_box, border_radius=8)
-        pygame.draw.rect(self.screen, (245, 158, 11), hint_box, 1, border_radius=8)
+        hint_box = pygame.Rect(box_x + 24, box_y + 124, box_w - 48, 130)
+        pygame.draw.rect(self.screen, (30, 41, 59), hint_box, border_radius=10)
+        pygame.draw.rect(self.screen, (245, 158, 11), hint_box, 2, border_radius=10)
 
-        hint_title_font = pygame.font.SysFont("Comic Sans MS", 14, bold=True)
-        hint_body_font = pygame.font.SysFont("Comic Sans MS", 13)
-        draw_vector_lightbulb(self.screen, hint_box.x + 20, hint_box.y + 15, size=6)
+        hint_title_font = self.get_ui_font(18, bold=True)
+        hint_body_font = self.get_ui_font(16, bold=True)
+        draw_vector_lightbulb(self.screen, hint_box.x + 22, hint_box.y + 18, size=7)
         h_title = hint_title_font.render("Pedagogical Hint:", True, (255, 215, 0))
-        self.screen.blit(h_title, (hint_box.x + 32, hint_box.y + 6))
+        self.screen.blit(h_title, (hint_box.x + 38, hint_box.y + 9))
 
         # Text wrap
         words = hint_text.split(" ")
@@ -3783,22 +4068,22 @@ class Quarter3:
         cur = []
         for w in words:
             cur.append(w)
-            if hint_body_font.size(" ".join(cur))[0] > (hint_box.width - 24):
+            if hint_body_font.size(" ".join(cur))[0] > (hint_box.width - 32):
                 cur.pop()
                 lines.append(" ".join(cur))
                 cur = [w]
         if cur:
             lines.append(" ".join(cur))
 
-        hy = hint_box.y + 30
+        hy = hint_box.y + 38
         for hl in lines[:3]:
             h_surf = hint_body_font.render(hl, True, (241, 245, 249))
-            self.screen.blit(h_surf, (hint_box.x + 12, hy))
-            hy += 22
+            self.screen.blit(h_surf, (hint_box.x + 16, hy))
+            hy += 26
 
-        button_w, button_h = 220, 44
+        button_w, button_h = 240, 50
         button_x = box_x + (box_w - button_w) // 2
-        button_y = box_y + 235
+        button_y = box_y + 280
         btn_rect = pygame.Rect(button_x, button_y, button_w, button_h)
         is_hov = btn_rect.collidepoint(self.cursor_pos)
         bg_c = (220, 38, 38) if is_hov else (153, 27, 27)
@@ -3816,14 +4101,14 @@ class Quarter3:
             self._dim_overlay.fill((10, 15, 29, 170))
         self.screen.blit(self._dim_overlay, (0, 0))
 
-        box_w, box_h = 600, 280
+        box_w, box_h = 740, 340
         box_x = (self.width - box_w) // 2
         box_y = (self.height - box_h) // 2
 
         dialog_rect = pygame.Rect(box_x, box_y, box_w, box_h)
-        pygame.draw.rect(self.screen, (15, 23, 42), dialog_rect, border_radius=14)
-        pygame.draw.rect(self.screen, (245, 158, 11), dialog_rect, 3, border_radius=14)
-        pygame.draw.rect(self.screen, (251, 191, 36), dialog_rect.inflate(-6, -6), 1, border_radius=10)
+        pygame.draw.rect(self.screen, (15, 23, 42), dialog_rect, border_radius=16)
+        pygame.draw.rect(self.screen, (245, 158, 11), dialog_rect, 3, border_radius=16)
+        pygame.draw.rect(self.screen, (251, 191, 36), dialog_rect.inflate(-6, -6), 1, border_radius=12)
 
         script = get_station_script(self.map_name, self.quiz_station_index)
         npc_info = self.station_npcs.get(self.quiz_station_index, {})
@@ -3832,30 +4117,30 @@ class Quarter3:
         item_name = script.get("item_awarded", "Progression Item")
 
         speaker_surf = self.dialog_header_font.render(f"{speaker_name} - Solution Revealed", True, (245, 158, 11))
-        self.screen.blit(speaker_surf, (box_x + 24, box_y + 18))
+        self.screen.blit(speaker_surf, (box_x + 28, box_y + 18))
 
-        lines = self.wrap_text(reveal_msg, self.dialog_q_font, box_w - 48)
-        y_off = box_y + 55
+        lines = self.wrap_text(reveal_msg, self.dialog_q_font, box_w - 56)
+        y_off = box_y + 65
         for l in lines[:2]:
-            self.screen.blit(self.dialog_q_font.render(l, True, (255, 255, 255)), (box_x + 24, y_off))
-            y_off += 24
+            self.screen.blit(self.dialog_q_font.render(l, True, (255, 255, 255)), (box_x + 28, y_off))
+            y_off += 28
 
         reward_surf = self.dialog_hint_font.render(f"Acquired: {item_name}! Your quest continues!", True, (254, 240, 138))
-        self.screen.blit(reward_surf, (box_x + 24, y_off + 8))
+        self.screen.blit(reward_surf, (box_x + 28, y_off + 10))
 
-        button_w, button_h = 240, 44
+        button_w, button_h = 260, 50
         button_x = box_x + (box_w - button_w) // 2
-        button_y = box_y + 205
+        button_y = box_y + 260
         btn_rect = pygame.Rect(button_x, button_y, button_w, button_h)
 
         is_hovered = btn_rect.collidepoint(self.cursor_pos)
         bg_color = (245, 158, 11) if is_hovered else (30, 41, 59)
         border_color = (255, 255, 255) if is_hovered else (245, 158, 11)
 
-        pygame.draw.rect(self.screen, bg_color, btn_rect, border_radius=10)
-        pygame.draw.rect(self.screen, border_color, btn_rect, 2, border_radius=10)
+        pygame.draw.rect(self.screen, bg_color, btn_rect, border_radius=12)
+        pygame.draw.rect(self.screen, border_color, btn_rect, 2, border_radius=12)
 
-        c_surf = self.dialog_header_font.render("Continue Quest >>", True, (255, 255, 255))
+        c_surf = self.dialog_header_font.render("Continue Quest >>", True, (255, 255, 255) if not is_hovered else (15, 23, 42))
         self.screen.blit(c_surf, c_surf.get_rect(center=btn_rect.center))
 
     def draw_correct_dialog(self):
@@ -3864,14 +4149,14 @@ class Quarter3:
             self._dim_overlay.fill((10, 15, 29, 170))
         self.screen.blit(self._dim_overlay, (0, 0))
 
-        box_w, box_h = 580, 270
+        box_w, box_h = 740, 330
         box_x = (self.width - box_w) // 2
         box_y = (self.height - box_h) // 2
 
         dialog_rect = pygame.Rect(box_x, box_y, box_w, box_h)
-        pygame.draw.rect(self.screen, (15, 23, 42), dialog_rect, border_radius=14)
-        pygame.draw.rect(self.screen, (22, 163, 74), dialog_rect, 3, border_radius=14)
-        pygame.draw.rect(self.screen, (74, 222, 128), dialog_rect.inflate(-6, -6), 1, border_radius=10)
+        pygame.draw.rect(self.screen, (15, 23, 42), dialog_rect, border_radius=16)
+        pygame.draw.rect(self.screen, (22, 163, 74), dialog_rect, 3, border_radius=16)
+        pygame.draw.rect(self.screen, (74, 222, 128), dialog_rect.inflate(-6, -6), 1, border_radius=12)
 
         script = get_station_script(self.map_name, self.quiz_station_index)
         npc_info = self.station_npcs.get(self.quiz_station_index, {})
@@ -3880,28 +4165,28 @@ class Quarter3:
         item_name = script.get("item_awarded", "Progression Item")
 
         speaker_surf = self.dialog_header_font.render(f"{speaker_name} - Well Done! (Correct)", True, (74, 222, 128))
-        self.screen.blit(speaker_surf, (box_x + 24, box_y + 18))
+        self.screen.blit(speaker_surf, (box_x + 28, box_y + 20))
 
-        lines = self.wrap_text(praise_msg, self.dialog_q_font, box_w - 48)
-        y_off = box_y + 60
+        lines = self.wrap_text(praise_msg, self.dialog_q_font, box_w - 56)
+        y_off = box_y + 75
         for l in lines[:2]:
-            self.screen.blit(self.dialog_q_font.render(l, True, (255, 255, 255)), (box_x + 24, y_off))
-            y_off += 24
+            self.screen.blit(self.dialog_q_font.render(l, True, (255, 255, 255)), (box_x + 28, y_off))
+            y_off += 30
 
         reward_surf = self.dialog_hint_font.render(f"Awarded: {item_name}!", True, (253, 230, 138))
-        self.screen.blit(reward_surf, (box_x + 24, y_off + 8))
+        self.screen.blit(reward_surf, (box_x + 28, y_off + 10))
 
-        button_w, button_h = 240, 44
+        button_w, button_h = 260, 50
         button_x = box_x + (box_w - button_w) // 2
-        button_y = box_y + 195
+        button_y = box_y + 245
         btn_rect = pygame.Rect(button_x, button_y, button_w, button_h)
 
         is_hovered = btn_rect.collidepoint(self.cursor_pos)
         bg_color = (22, 163, 74) if is_hovered else (30, 41, 59)
         border_color = (255, 255, 255) if is_hovered else (22, 163, 74)
 
-        pygame.draw.rect(self.screen, bg_color, btn_rect, border_radius=10)
-        pygame.draw.rect(self.screen, border_color, btn_rect, 2, border_radius=10)
+        pygame.draw.rect(self.screen, bg_color, btn_rect, border_radius=12)
+        pygame.draw.rect(self.screen, border_color, btn_rect, 2, border_radius=12)
 
         c_surf = self.dialog_header_font.render("Continue >>", True, (255, 255, 255))
         self.screen.blit(c_surf, c_surf.get_rect(center=btn_rect.center))
@@ -3909,14 +4194,14 @@ class Quarter3:
     def draw_final_dialog(self):
         self.screen.blit(self.dialog_dim_overlay, (0, 0))
 
-        box_w, box_h = 640, 350
+        box_w, box_h = 780, 420
         box_x = (self.width - box_w) // 2
         box_y = (self.height - box_h) // 2
 
         dialog_rect = pygame.Rect(box_x, box_y, box_w, box_h)
-        pygame.draw.rect(self.screen, (15, 23, 42), dialog_rect, border_radius=14)
-        pygame.draw.rect(self.screen, (218, 165, 32), dialog_rect, 3, border_radius=14)
-        pygame.draw.rect(self.screen, (255, 215, 0), dialog_rect.inflate(-6, -6), 1, border_radius=10)
+        pygame.draw.rect(self.screen, (15, 23, 42), dialog_rect, border_radius=16)
+        pygame.draw.rect(self.screen, (218, 165, 32), dialog_rect, 3, border_radius=16)
+        pygame.draw.rect(self.screen, (255, 215, 0), dialog_rect.inflate(-6, -6), 1, border_radius=12)
 
         mentor = get_mentor_script(self.map_name)
         m_name = mentor.get("mentor_name", "Desert Vault Keeper")
@@ -3924,18 +4209,18 @@ class Quarter3:
         complete_speech = mentor.get("complete_dialogue", "Outstanding! You have solved all challenges!").replace("[Player Name]", self.player_name)
 
         speaker_surf = self.dialog_header_font.render(f"{m_name} ({m_title})", True, (255, 215, 0))
-        self.screen.blit(speaker_surf, (box_x + 24, box_y + 18))
+        self.screen.blit(speaker_surf, (box_x + 28, box_y + 20))
 
-        lines = self.wrap_text(complete_speech, self.dialog_q_font, box_w - 48)
-        y_text = box_y + 65
+        lines = self.wrap_text(complete_speech, self.dialog_q_font, box_w - 56)
+        y_text = box_y + 75
         for line in lines[:5]:
             txt_surf = self.dialog_q_font.render(line, True, (248, 250, 252))
-            self.screen.blit(txt_surf, (box_x + 24, y_text))
-            y_text += 26
+            self.screen.blit(txt_surf, (box_x + 28, y_text))
+            y_text += 32
 
-        button_w, button_h = 240, 46
+        button_w, button_h = 260, 50
         button_x = box_x + (box_w - button_w) // 2
-        button_y = box_y + 285
+        button_y = box_y + 340
         btn_rect = pygame.Rect(button_x, button_y, button_w, button_h)
 
         is_hovered = btn_rect.collidepoint(self.cursor_pos)
@@ -3945,9 +4230,795 @@ class Quarter3:
         pygame.draw.rect(self.screen, bg_color, btn_rect, border_radius=12)
         pygame.draw.rect(self.screen, border_color, btn_rect, 2, border_radius=12)
 
-        c_surf = self.dialog_btn_font.render("Complete Quest >>", True, (255, 255, 255))
+        c_surf = self.dialog_btn_font.render("Complete Quest >>", True, (255, 255, 255) if not is_hovered else (15, 23, 42))
         c_rect = c_surf.get_rect(center=btn_rect.center)
         self.screen.blit(c_surf, c_rect)
+
+    # ============================================================
+    # ANCIENT SUN TEMPLE SOLAR ARRAY PUZZLE ENGINE (Skeleton Guardian)
+    # ============================================================
+    def render_solar_gem_slab(self, item, width, height):
+        """Renders a beautiful Egyptian Sun Temple gemstone matrix slab with dynamic scaling"""
+        surf = pygame.Surface((width, height), pygame.SRCALPHA)
+        bg_rect = pygame.Rect(0, 0, width, height)
+        pygame.draw.rect(surf, (20, 26, 38), bg_rect, border_radius=10)
+        pygame.draw.rect(surf, item.get("color", (245, 158, 11)), bg_rect, 2, border_radius=10)
+        pygame.draw.rect(surf, (15, 23, 42), bg_rect.inflate(-6, -6), border_radius=8)
+
+        gem_color = item.get("color", (245, 158, 11))
+        item_type = item.get("type", "array")
+        
+        if item_type == "array":
+            rows = item.get("rows", 3)
+            cols = item.get("cols", 4)
+            gem_area_w = width - 16
+            gem_area_h = height - 28
+            dx = gem_area_w / (cols + 1)
+            dy = gem_area_h / (rows + 1)
+            r_rad = max(2, min(4, int(min(dx, dy) * 0.45)))
+            for r in range(rows):
+                for c in range(cols):
+                    gx = int(8 + (c + 1) * dx)
+                    gy = int(6 + (r + 1) * dy)
+                    pygame.draw.circle(surf, gem_color, (gx, gy), r_rad)
+                    pygame.draw.circle(surf, (255, 255, 255), (gx - 1, gy - 1), max(1, r_rad // 2))
+        elif item_type == "groups":
+            groups = item.get("groups", 4)
+            per_group = item.get("per_group", 2)
+            g_area_w = width - 12
+            dx = g_area_w / max(1, groups)
+            r_rad = max(2, min(4, int(dx * 0.22)))
+            for g in range(groups):
+                gx_center = int(6 + g * dx + dx / 2)
+                gy_center = int((height - 24) / 2 + 4)
+                ring_w = max(10, int(dx * 0.85))
+                ring_h = min(height - 30, max(22, per_group * 8 + 10))
+                pygame.draw.ellipse(surf, (40, 50, 70), (gx_center - ring_w // 2, gy_center - ring_h // 2, ring_w, ring_h), 1)
+                for p in range(per_group):
+                    p_offset = (p - (per_group - 1) / 2.0) * min(9, (ring_h - 10) / max(1, per_group))
+                    py = int(gy_center + p_offset)
+                    pygame.draw.circle(surf, gem_color, (gx_center, py), r_rad)
+                    pygame.draw.circle(surf, (255, 255, 255), (gx - 1 if 'gx' in locals() else gx_center - 1, py - 1), max(1, r_rad // 2))
+
+        lbl_font = self.get_ui_font(10, bold=True)
+        lbl = lbl_font.render(item.get("slab_label", ""), True, (254, 240, 138))
+        surf.blit(lbl, lbl.get_rect(center=(width // 2, height - 12)))
+        return surf
+
+    def init_solar_array_puzzle(self):
+        """Initializes the Solar Array Keystone Math Puzzle with dynamically randomized elements per map"""
+        self.solar_array_puzzle_slots = []
+        self.solar_array_puzzle_pieces = []
+        self.solar_array_puzzle_solved = False
+        self.solar_array_puzzle_all_placed = False
+        self.dragged_solar_piece = None
+        self.solar_drag_offset_x = 0
+        self.solar_drag_offset_y = 0
+        self.solar_sparkles = []
+
+        # Master Catalog of Multi-Themed Egyptian Sun Temple Math Elements
+        master_catalog = {
+            "map7": [
+                {
+                    "id": "mat_3x4_topaz",
+                    "name": "Topaz Sun Matrix",
+                    "equation": "3 × 4 = 12",
+                    "factor_desc": "3 Rows of 4 Sun Topazes",
+                    "total_text": "12 Topazes",
+                    "color": (245, 158, 11),
+                    "type": "array",
+                    "rows": 3,
+                    "cols": 4,
+                    "slab_label": "3 Rows × 4 Gems"
+                },
+                {
+                    "id": "mat_4x2_citrine",
+                    "name": "Citrine Duo Crystals",
+                    "equation": "4 × 2 = 8",
+                    "factor_desc": "4 Groups of 2 Citrines",
+                    "total_text": "8 Citrines",
+                    "color": (234, 88, 12),
+                    "type": "groups",
+                    "groups": 4,
+                    "per_group": 2,
+                    "slab_label": "4 Groups of 2 Gems"
+                },
+                {
+                    "id": "mat_3x5_emerald",
+                    "name": "Oasis Emerald Prisms",
+                    "equation": "3 × 5 = 15",
+                    "factor_desc": "3 Rows of 5 Emerald Prisms",
+                    "total_text": "15 Emeralds",
+                    "color": (16, 185, 129),
+                    "type": "array",
+                    "rows": 3,
+                    "cols": 5,
+                    "slab_label": "3 Rows × 5 Gems"
+                },
+                {
+                    "id": "mat_2x4_turq",
+                    "name": "Turquoise Palm Amulets",
+                    "equation": "2 × 4 = 8",
+                    "factor_desc": "2 Rows of 4 Turquoise Gems",
+                    "total_text": "8 Turquoise Gems",
+                    "color": (20, 184, 166),
+                    "type": "array",
+                    "rows": 2,
+                    "cols": 4,
+                    "slab_label": "2 Rows × 4 Gems"
+                },
+                {
+                    "id": "mat_5x2_peridot",
+                    "name": "Peridot Lily Clusters",
+                    "equation": "5 × 2 = 10",
+                    "factor_desc": "5 Groups of 2 Peridot Gems",
+                    "total_text": "10 Peridots",
+                    "color": (132, 204, 22),
+                    "type": "groups",
+                    "groups": 5,
+                    "per_group": 2,
+                    "slab_label": "5 Groups of 2 Gems"
+                },
+                {
+                    "id": "mat_2x3_aqua",
+                    "name": "Aquamarine Dewdrops",
+                    "equation": "2 × 3 = 6",
+                    "factor_desc": "2 Groups of 3 Aquamarines",
+                    "total_text": "6 Aquamarines",
+                    "color": (6, 182, 212),
+                    "type": "groups",
+                    "groups": 2,
+                    "per_group": 3,
+                    "slab_label": "2 Groups of 3 Gems"
+                },
+                {
+                    "id": "mat_3x3_lapis",
+                    "name": "Lapis Spring Relics",
+                    "equation": "3 × 3 = 9",
+                    "factor_desc": "3 Rows of 3 Lapis Relics",
+                    "total_text": "9 Lapis Relics",
+                    "color": (59, 130, 246),
+                    "type": "array",
+                    "rows": 3,
+                    "cols": 3,
+                    "slab_label": "3 Rows × 3 Gems"
+                },
+                {
+                    "id": "mat_4x3_jade",
+                    "name": "Jade Scarab Tablets",
+                    "equation": "4 × 3 = 12",
+                    "factor_desc": "4 Rows of 3 Jade Tablets",
+                    "total_text": "12 Jade Tablets",
+                    "color": (34, 197, 94),
+                    "type": "array",
+                    "rows": 4,
+                    "cols": 3,
+                    "slab_label": "4 Rows × 3 Gems"
+                }
+            ],
+            "map8": [
+                {
+                    "id": "mat_2x5_scarab",
+                    "name": "Solar Scarab Coins",
+                    "equation": "2 × 5 = 10",
+                    "factor_desc": "2 Chests of 5 Gold Coins",
+                    "total_text": "10 Scarab Coins",
+                    "color": (234, 179, 8),
+                    "type": "groups",
+                    "groups": 2,
+                    "per_group": 5,
+                    "slab_label": "2 Groups of 5 Coins"
+                },
+                {
+                    "id": "mat_4x4_ruby",
+                    "name": "Radiant Ruby Lattice",
+                    "equation": "4 × 4 = 16",
+                    "factor_desc": "4 Rows of 4 Radiant Rubies",
+                    "total_text": "16 Rubies",
+                    "color": (220, 38, 38),
+                    "type": "array",
+                    "rows": 4,
+                    "cols": 4,
+                    "slab_label": "4 Rows × 4 Gems"
+                },
+                {
+                    "id": "mat_3x2_amber",
+                    "name": "Amber Pyramid Runes",
+                    "equation": "3 × 2 = 6",
+                    "factor_desc": "3 Rows of 2 Amber Runes",
+                    "total_text": "6 Amber Runes",
+                    "color": (217, 119, 6),
+                    "type": "array",
+                    "rows": 3,
+                    "cols": 2,
+                    "slab_label": "3 Rows × 2 Gems"
+                },
+                {
+                    "id": "mat_5x3_ankh",
+                    "name": "Golden Ankh Relics",
+                    "equation": "5 × 3 = 15",
+                    "factor_desc": "5 Groups of 3 Golden Ankhs",
+                    "total_text": "15 Golden Ankhs",
+                    "color": (245, 158, 11),
+                    "type": "groups",
+                    "groups": 5,
+                    "per_group": 3,
+                    "slab_label": "5 Groups of 3 Relics"
+                },
+                {
+                    "id": "mat_2x6_carnelian",
+                    "name": "Carnelian Dune Pillars",
+                    "equation": "2 × 6 = 12",
+                    "factor_desc": "2 Rows of 6 Carnelian Pillars",
+                    "total_text": "12 Carnelian Pillars",
+                    "color": (239, 68, 68),
+                    "type": "array",
+                    "rows": 2,
+                    "cols": 6,
+                    "slab_label": "2 Rows × 6 Gems"
+                },
+                {
+                    "id": "mat_4x5_pyrite",
+                    "name": "Pyrite Pharaoh Treasures",
+                    "equation": "4 × 5 = 20",
+                    "factor_desc": "4 Groups of 5 Pyrite Crystals",
+                    "total_text": "20 Pyrite Crystals",
+                    "color": (250, 204, 21),
+                    "type": "groups",
+                    "groups": 4,
+                    "per_group": 5,
+                    "slab_label": "4 Groups of 5 Gems"
+                },
+                {
+                    "id": "mat_5x4_jasper",
+                    "name": "Jasper Sphinx Stones",
+                    "equation": "5 × 4 = 20",
+                    "factor_desc": "5 Rows of 4 Jasper Stones",
+                    "total_text": "20 Jasper Stones",
+                    "color": (180, 83, 9),
+                    "type": "array",
+                    "rows": 5,
+                    "cols": 4,
+                    "slab_label": "5 Rows × 4 Gems"
+                },
+                {
+                    "id": "mat_3x6_onyx",
+                    "name": "Onyx Hieroglyph Slabs",
+                    "equation": "3 × 6 = 18",
+                    "factor_desc": "3 Rows of 6 Onyx Glyphs",
+                    "total_text": "18 Onyx Glyphs",
+                    "color": (148, 163, 184),
+                    "type": "array",
+                    "rows": 3,
+                    "cols": 6,
+                    "slab_label": "3 Rows × 6 Gems"
+                }
+            ],
+            "map9": [
+                {
+                    "id": "mat_2x7_amethyst",
+                    "name": "Amethyst Cosmic Obelisks",
+                    "equation": "2 × 7 = 14",
+                    "factor_desc": "2 Rows of 7 Amethyst Crystals",
+                    "total_text": "14 Amethysts",
+                    "color": (168, 85, 247),
+                    "type": "array",
+                    "rows": 2,
+                    "cols": 7,
+                    "slab_label": "2 Rows × 7 Gems"
+                },
+                {
+                    "id": "mat_6x2_sapphire",
+                    "name": "Sapphire Star Clusters",
+                    "equation": "6 × 2 = 12",
+                    "factor_desc": "6 Groups of 2 Sapphires",
+                    "total_text": "12 Sapphires",
+                    "color": (99, 102, 241),
+                    "type": "groups",
+                    "groups": 6,
+                    "per_group": 2,
+                    "slab_label": "6 Groups of 2 Gems"
+                },
+                {
+                    "id": "mat_5x5_diamond",
+                    "name": "Diamond Solar Corona",
+                    "equation": "5 × 5 = 25",
+                    "factor_desc": "5 Groups of 5 Diamond Stars",
+                    "total_text": "25 Diamond Stars",
+                    "color": (224, 242, 254),
+                    "type": "groups",
+                    "groups": 5,
+                    "per_group": 5,
+                    "slab_label": "5 Groups of 5 Stars"
+                },
+                {
+                    "id": "mat_6x3_garnet",
+                    "name": "Garnet Eclipse Sigils",
+                    "equation": "6 × 3 = 18",
+                    "factor_desc": "6 Groups of 3 Garnet Sigils",
+                    "total_text": "18 Garnet Sigils",
+                    "color": (244, 63, 94),
+                    "type": "groups",
+                    "groups": 6,
+                    "per_group": 3,
+                    "slab_label": "6 Groups of 3 Sigils"
+                },
+                {
+                    "id": "mat_4x5_sunstone",
+                    "name": "Sunstone Ra Emblems",
+                    "equation": "4 × 5 = 20",
+                    "factor_desc": "4 Rows of 5 Sunstone Emblems",
+                    "total_text": "20 Sunstones",
+                    "color": (251, 146, 60),
+                    "type": "array",
+                    "rows": 4,
+                    "cols": 5,
+                    "slab_label": "4 Rows × 5 Gems"
+                },
+                {
+                    "id": "mat_3x6_cobalt",
+                    "name": "Cobalt Zenith Shards",
+                    "equation": "3 × 6 = 18",
+                    "factor_desc": "3 Groups of 6 Cobalt Shards",
+                    "total_text": "18 Cobalt Shards",
+                    "color": (79, 70, 229),
+                    "type": "groups",
+                    "groups": 3,
+                    "per_group": 6,
+                    "slab_label": "3 Groups of 6 Gems"
+                },
+                {
+                    "id": "mat_4x4_opal",
+                    "name": "Celestial Opal Orbs",
+                    "equation": "4 × 4 = 16",
+                    "factor_desc": "4 Rows of 4 Opal Orbs",
+                    "total_text": "16 Opal Orbs",
+                    "color": (56, 189, 248),
+                    "type": "array",
+                    "rows": 4,
+                    "cols": 4,
+                    "slab_label": "4 Rows × 4 Gems"
+                },
+                {
+                    "id": "mat_2x8_obsidian",
+                    "name": "Obsidian Solar Beams",
+                    "equation": "2 × 8 = 16",
+                    "factor_desc": "2 Rows of 8 Obsidian Beams",
+                    "total_text": "16 Obsidian Beams",
+                    "color": (148, 163, 184),
+                    "type": "array",
+                    "rows": 2,
+                    "cols": 8,
+                    "slab_label": "2 Rows × 8 Gems"
+                }
+            ]
+        }
+
+        # Resolve map theme key (map7, map8, map9, or fallback)
+        map_key = "map7"
+        cur_map_lower = str(getattr(self, 'map_name', '')).lower()
+        if "map8" in cur_map_lower:
+            map_key = "map8"
+        elif "map9" in cur_map_lower:
+            map_key = "map9"
+
+        # Combine preferred map items with universal catalog pool to ensure maximum variety
+        preferred_items = list(master_catalog.get(map_key, []))
+        all_other_items = []
+        for k, v in master_catalog.items():
+            if k != map_key:
+                all_other_items.extend(v)
+
+        random.shuffle(preferred_items)
+        random.shuffle(all_other_items)
+
+        # Build candidate pool prioritizing map theme while blending other items
+        candidate_pool = preferred_items + all_other_items
+        
+        # Deduplicate by equation so no two slots have identical math answers
+        seen_equations = set()
+        unique_pool = []
+        for item in candidate_pool:
+            if item["equation"] not in seen_equations:
+                seen_equations.add(item["equation"])
+                unique_pool.append(item)
+
+        # Select 5 unique randomized items for this puzzle trial
+        num_slots = 5
+        if len(unique_pool) >= num_slots:
+            selected_items = random.sample(unique_pool, num_slots)
+        else:
+            selected_items = unique_pool[:num_slots]
+
+        # Geometry
+        panel_w = min(1140, self.width - 60)
+        panel_h = min(620, self.height - 50)
+        panel_x = (self.width - panel_w) // 2
+        panel_y = (self.height - panel_h) // 2
+
+        num_items = len(selected_items)
+        gap = 16
+        slot_w = (panel_w - 60 - (num_items - 1) * gap) // max(1, num_items)
+        slot_h = 165
+        slot_y = panel_y + 115
+
+        # 1. Target Pedestal Slots (Top Row - Shuffled independently)
+        slots_items = list(selected_items)
+        random.shuffle(slots_items)
+
+        for i, item in enumerate(slots_items):
+            slot_x = panel_x + 30 + i * (slot_w + gap)
+            slot_rect = pygame.Rect(slot_x, slot_y, slot_w, slot_h)
+            self.solar_array_puzzle_slots.append({
+                "id": item["id"],
+                "rect": slot_rect,
+                "name": item["name"],
+                "equation": item["equation"],
+                "factor_desc": item["factor_desc"],
+                "total_text": item["total_text"],
+                "color": item["color"],
+                "matched": False,
+                "matched_item": None
+            })
+
+        # 2. Draggable Slabs (Bottom Tray - Shuffled independently)
+        shuffled_tray_items = list(selected_items)
+        random.shuffle(shuffled_tray_items)
+
+        tray_y = slot_y + slot_h + 45
+        piece_w = slot_w - 10
+        piece_h = 95
+
+        for i, item in enumerate(shuffled_tray_items):
+            piece_x = panel_x + 30 + i * (slot_w + gap) + 5
+            piece_rect = pygame.Rect(piece_x, tray_y, piece_w, piece_h)
+            slab_surf = self.render_solar_gem_slab(item, piece_w, piece_h)
+            self.solar_array_puzzle_pieces.append({
+                "id": item["id"],
+                "data": item,
+                "orig_x": piece_x,
+                "orig_y": tray_y,
+                "x": piece_x,
+                "y": tray_y,
+                "w": piece_w,
+                "h": piece_h,
+                "rect": piece_rect,
+                "slab_surf": slab_surf,
+                "is_dragging": False,
+                "is_placed": False
+            })
+
+        self.solar_puzzle_reset_btn_rect = pygame.Rect(panel_x + 30, panel_y + panel_h - 55, 180, 42)
+        self.solar_puzzle_continue_btn_rect = pygame.Rect(panel_x + panel_w - 240, panel_y + panel_h - 55, 210, 42)
+        print(f"[SOLAR ARRAY PUZZLE] ({map_key.upper()}) Initialized with {len(selected_items)} randomized multiplication items: {[it['equation'] for it in selected_items]}")
+
+    def reset_solar_array_puzzle(self):
+        """Resets all gem slabs back to the tray"""
+        for piece in self.solar_array_puzzle_pieces:
+            piece["x"] = piece["orig_x"]
+            piece["y"] = piece["orig_y"]
+            piece["is_dragging"] = False
+            piece["is_placed"] = False
+        for slot in self.solar_array_puzzle_slots:
+            slot["matched"] = False
+            slot["matched_item"] = None
+        self.solar_array_puzzle_all_placed = False
+        self.dragged_solar_piece = None
+        if getattr(self, 'snap_sound', None):
+            self.snap_sound.play()
+
+    def release_dragged_solar_piece(self):
+        """Handles dropping a dragged solar slab onto pedestals"""
+        if not self.dragged_solar_piece:
+            return
+
+        piece = self.dragged_solar_piece
+        piece_center = (piece["x"] + piece["w"] // 2, piece["y"] + piece["h"] // 2)
+
+        matched_any = False
+        for slot in self.solar_array_puzzle_slots:
+            if slot["rect"].collidepoint(piece_center):
+                if slot["id"] == piece["id"] and not slot["matched"]:
+                    # Correct Match!
+                    slot["matched"] = True
+                    slot["matched_item"] = piece["data"]
+                    piece["is_placed"] = True
+                    piece["is_dragging"] = False
+                    piece["x"] = slot["rect"].x + (slot["rect"].w - piece["w"]) // 2
+                    piece["y"] = slot["rect"].y + slot["rect"].h - piece["h"] - 8
+                    matched_any = True
+
+                    if getattr(self, 'snap_sound', None):
+                        self.snap_sound.play()
+                    if getattr(self.main_menu, 'audio_manager', None):
+                        self.main_menu.audio_manager.play_sfx("correct")
+
+                    # Sparkles
+                    for _ in range(16):
+                        self.solar_sparkles.append({
+                            "x": slot["rect"].centerx + random.randint(-40, 40),
+                            "y": slot["rect"].centery + random.randint(-30, 30),
+                            "vx": random.uniform(-2.5, 2.5),
+                            "vy": random.uniform(-3.5, 0.5),
+                            "color": random.choice([(255, 215, 0), (245, 158, 11), (255, 255, 255), (251, 191, 36)]),
+                            "life": 0.6,
+                            "max_life": 0.6,
+                            "rad": random.randint(3, 5)
+                        })
+
+                    # Check if all slots matched
+                    if all(s["matched"] for s in self.solar_array_puzzle_slots):
+                        self.solar_array_puzzle_all_placed = True
+                        self.solar_array_puzzle_solved_time = pygame.time.get_ticks()
+                        if getattr(self, 'success_sound', None):
+                            self.success_sound.play()
+                        if hasattr(self, 'celebration_particles'):
+                            self.celebration_particles.spawn_burst(self.width // 2, self.height // 2, count=35)
+                    break
+                else:
+                    break
+
+        if not matched_any:
+            piece["x"] = piece["orig_x"]
+            piece["y"] = piece["orig_y"]
+            piece["is_dragging"] = False
+            if getattr(self, 'snap_sound', None):
+                self.snap_sound.play()
+
+        self.dragged_solar_piece = None
+
+    def update_solar_array_puzzle(self, dt):
+        """Updates gesture interaction and particles in solar array puzzle"""
+        if not self.solar_array_puzzle_active:
+            return
+
+        for sp in self.solar_sparkles[:]:
+            sp["x"] += sp["vx"]
+            sp["y"] += sp["vy"]
+            sp["life"] -= dt
+            if sp["life"] <= 0:
+                self.solar_sparkles.remove(sp)
+
+        # Gesture Fist Hold Dragging Support
+        if self.fist_closed and not self.dragged_solar_piece and not self.solar_array_puzzle_all_placed:
+            for piece in reversed(self.solar_array_puzzle_pieces):
+                if not piece["is_placed"]:
+                    p_rect = pygame.Rect(piece["x"], piece["y"], piece["w"], piece["h"])
+                    if p_rect.collidepoint(self.cursor_pos):
+                        self.dragged_solar_piece = piece
+                        piece["is_dragging"] = True
+                        self.solar_drag_offset_x = self.cursor_pos[0] - piece["x"]
+                        self.solar_drag_offset_y = self.cursor_pos[1] - piece["y"]
+                        if getattr(self, 'snap_sound', None):
+                            self.snap_sound.play()
+                        break
+
+        if self.dragged_solar_piece:
+            if self.fist_closed or pygame.mouse.get_pressed()[0]:
+                self.dragged_solar_piece["x"] = self.cursor_pos[0] - self.solar_drag_offset_x
+                self.dragged_solar_piece["y"] = self.cursor_pos[1] - self.solar_drag_offset_y
+            else:
+                self.release_dragged_solar_piece()
+
+    def draw_skeleton_guardian(self):
+        """Draws the Skeleton Portal Guardian with interactive indicator and direction"""
+        if not getattr(self, 'npc_skeleton_found', False):
+            return
+
+        screen_x = (self.npc_skeleton_x - self.camera_x) * ZOOM
+        screen_y = (self.npc_skeleton_y - self.camera_y) * ZOOM
+
+        skeleton_sprite = self.npc_skeleton_sprite
+        if self.npc_skeleton_dir == "left" and self.npc_skeleton_left_sprites:
+            skeleton_sprite = self.npc_skeleton_left_sprites[self.npc_skeleton_anim_frame % len(self.npc_skeleton_left_sprites)]
+        elif self.npc_skeleton_dir == "right" and self.npc_skeleton_right_sprites:
+            skeleton_sprite = self.npc_skeleton_right_sprites[self.npc_skeleton_anim_frame % len(self.npc_skeleton_right_sprites)]
+        elif self.npc_skeleton_dir == "up" and self.npc_skeleton_up_sprites:
+            skeleton_sprite = self.npc_skeleton_up_sprites[self.npc_skeleton_anim_frame % len(self.npc_skeleton_up_sprites)]
+        elif self.npc_skeleton_dir == "down" and self.npc_skeleton_down_sprites:
+            skeleton_sprite = self.npc_skeleton_down_sprites[self.npc_skeleton_anim_frame % len(self.npc_skeleton_down_sprites)]
+
+        if skeleton_sprite:
+            scaled_size = int(TILE_SIZE * ZOOM)
+            scaled_sprite = pygame.transform.scale(skeleton_sprite, (scaled_size, scaled_size))
+            self.screen.blit(scaled_sprite, (screen_x, screen_y))
+
+        # Golden Floor Aura when awaiting challenge
+        if self.guardian_skeleton_state == 1:
+            pulse = (math.sin(self.frame_counter * 0.12) + 1) * 0.5
+            aura_surf = pygame.Surface((int(36 * ZOOM), int(16 * ZOOM)), pygame.SRCALPHA)
+            pygame.draw.ellipse(aura_surf, (255, 215, 0, int(90 + 70 * pulse)), (0, 0, int(36 * ZOOM), int(16 * ZOOM)))
+            self.screen.blit(aura_surf, (screen_x - int(2 * ZOOM), screen_y + int(22 * ZOOM)))
+
+            # Floating Quest Indicator above Skeleton
+            bob = math.sin(self.frame_counter * 0.15) * 3 * ZOOM
+            badge_x = screen_x + (TILE_SIZE * ZOOM) / 2 - 8 * ZOOM
+            badge_y = screen_y - 20 * ZOOM + bob
+
+            badge_rect = pygame.Rect(badge_x, badge_y, 16 * ZOOM, 16 * ZOOM)
+            pygame.draw.rect(self.screen, (255, 215, 0), badge_rect, border_radius=4)
+            pygame.draw.rect(self.screen, (0, 0, 0), badge_rect, 1, border_radius=4)
+
+            excl_surf = self.font.render("!", True, (0, 0, 0))
+            self.screen.blit(excl_surf, excl_surf.get_rect(center=badge_rect.center))
+
+    def draw_skeleton_guardian_prompt(self):
+        """Prompt dialog shown when approaching the Skeleton Guardian"""
+        overlay = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
+        overlay.fill((10, 15, 29, 175))
+        self.screen.blit(overlay, (0, 0))
+
+        box_w, box_h = 760, 360
+        box_x = (self.width - box_w) // 2
+        box_y = (self.height - box_h) // 2
+
+        pygame.draw.rect(self.screen, (0, 0, 0, 150), (box_x + 4, box_y + 4, box_w, box_h), border_radius=16)
+
+        dialog_rect = pygame.Rect(box_x, box_y, box_w, box_h)
+        pygame.draw.rect(self.screen, (15, 23, 42), dialog_rect, border_radius=16)
+        pygame.draw.rect(self.screen, (245, 158, 11), dialog_rect, 3, border_radius=16)
+        pygame.draw.rect(self.screen, (251, 191, 36), dialog_rect.inflate(-6, -6), 1, border_radius=12)
+
+        speaker_surf = self.dialog_header_font.render("Ancient Skeleton Guardian (Portal Keeper)", True, (255, 215, 0))
+        self.screen.blit(speaker_surf, (box_x + 28, box_y + 20))
+
+        msg = (f"Halt, courageous adventurer {self.player_name}! You have solved all 5 Desert Station challenges! "
+               f"To break the ancient seal on this Portal, you must solve the Ancient Sun Temple Solar Array Puzzle "
+               f"by aligning each Gemstone Matrix Slab with its matching Multiplication Equation Pedestal!")
+        lines = self.wrap_text(msg, self.dialog_q_font, box_w - 56)
+        y_text = box_y + 75
+        for line in lines[:4]:
+            txt_surf = self.dialog_q_font.render(line, True, (248, 250, 252))
+            self.screen.blit(txt_surf, (box_x + 28, y_text))
+            y_text += 30
+
+        button_w, button_h = 320, 50
+        button_x = box_x + (box_w - button_w) // 2
+        button_y = box_y + 280
+        btn_rect = pygame.Rect(button_x, button_y, button_w, button_h)
+        self.guardian_skeleton_btn_rect = btn_rect
+
+        is_hovered = btn_rect.collidepoint(self.cursor_pos)
+        bg_color = (245, 158, 11) if is_hovered else (30, 41, 59)
+        text_color = (15, 23, 42) if is_hovered else (255, 215, 0)
+        border_color = (255, 255, 255) if is_hovered else (245, 158, 11)
+
+        pygame.draw.rect(self.screen, bg_color, btn_rect, border_radius=12)
+        pygame.draw.rect(self.screen, border_color, btn_rect, 2, border_radius=12)
+
+        c_surf = self.dialog_header_font.render("Begin Solar Array Trial >>", True, text_color)
+        self.screen.blit(c_surf, c_surf.get_rect(center=btn_rect.center))
+
+    def draw_solar_array_puzzle(self):
+        """Renders the Ancient Sun Temple Solar Array Puzzle modal dialog"""
+        overlay = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
+        overlay.fill((10, 15, 29, 230))
+        self.screen.blit(overlay, (0, 0))
+
+        panel_w = min(1140, self.width - 60)
+        panel_h = min(620, self.height - 50)
+        panel_x = (self.width - panel_w) // 2
+        panel_y = (self.height - panel_h) // 2
+
+        # Outer Shadow & Card
+        pygame.draw.rect(self.screen, (0, 0, 0, 150), (panel_x + 6, panel_y + 6, panel_w, panel_h), border_radius=16)
+        dialog_rect = pygame.Rect(panel_x, panel_y, panel_w, panel_h)
+        pygame.draw.rect(self.screen, (15, 23, 42), dialog_rect, border_radius=16)
+        pygame.draw.rect(self.screen, (245, 158, 11), dialog_rect, 3, border_radius=16)
+        pygame.draw.rect(self.screen, (251, 191, 36), dialog_rect.inflate(-6, -6), 1, border_radius=12)
+
+        # Header Title
+        h_font = self.get_ui_font(22, bold=True)
+        sub_font = self.get_ui_font(13)
+        h_surf = h_font.render("ANCIENT SUN TEMPLE SOLAR ARRAY PUZZLE", True, (255, 215, 0))
+        self.screen.blit(h_surf, h_surf.get_rect(center=(panel_x + panel_w // 2, panel_y + 32)))
+
+        sub_text = "Match each Sacred Gem Matrix Slab to its corresponding multiplication equation pedestal!"
+        sub_surf = sub_font.render(sub_text, True, (203, 213, 225))
+        self.screen.blit(sub_surf, sub_surf.get_rect(center=(panel_x + panel_w // 2, panel_y + 62)))
+
+        # Section Divider
+        pygame.draw.line(self.screen, (71, 85, 105), (panel_x + 30, panel_y + 82), (panel_x + panel_w - 30, panel_y + 82), 1)
+
+        # Draw Target Slots (Top Row)
+        label_font = self.get_ui_font(14, bold=True)
+        sub_label_font = self.get_ui_font(11, bold=True)
+        stat_font = self.get_ui_font(10)
+
+        for slot in self.solar_array_puzzle_slots:
+            s_rect = slot["rect"]
+            is_matched = slot["matched"]
+            accent_col = slot["color"]
+
+            # Slot background card
+            bg_col = (20, 35, 30) if is_matched else (24, 32, 47)
+            border_col = (34, 197, 94) if is_matched else (100, 116, 139)
+            border_w = 3 if is_matched else 2
+
+            pygame.draw.rect(self.screen, bg_col, s_rect, border_radius=12)
+            pygame.draw.rect(self.screen, border_col, s_rect, border_w, border_radius=12)
+
+            # Slot Header Accent Bar
+            h_bar_rect = pygame.Rect(s_rect.x + 4, s_rect.y + 4, s_rect.w - 8, 30)
+            pygame.draw.rect(self.screen, (15, 23, 42), h_bar_rect, border_radius=8)
+            pygame.draw.rect(self.screen, accent_col, h_bar_rect, 1, border_radius=8)
+
+            eq_surf = label_font.render(slot["equation"], True, accent_col)
+            self.screen.blit(eq_surf, (h_bar_rect.x + 8, h_bar_rect.y + 5))
+
+            # Full Factor Description Label
+            name_lines = self.wrap_text(slot["factor_desc"], sub_label_font, s_rect.w - 16)
+            ny = s_rect.y + 38
+            for nl in name_lines[:2]:
+                nl_surf = sub_label_font.render(nl, True, (255, 255, 255))
+                self.screen.blit(nl_surf, (s_rect.x + 8, ny))
+                ny += 16
+
+            if is_matched and slot["matched_item"]:
+                match_badge = self.get_ui_font(10, bold=True).render("SOLVED", True, (74, 222, 128))
+                self.screen.blit(match_badge, (s_rect.centerx - match_badge.get_width() // 2, s_rect.bottom - 22))
+            else:
+                drop_box = pygame.Rect(s_rect.x + 8, s_rect.y + 68, s_rect.w - 16, s_rect.h - 78)
+                pygame.draw.rect(self.screen, (30, 41, 59), drop_box, border_radius=8)
+                pygame.draw.rect(self.screen, (71, 85, 105), drop_box, 1, border_radius=8)
+                drop_lbl = stat_font.render("Drop Slab Here", True, (148, 163, 184))
+                self.screen.blit(drop_lbl, drop_lbl.get_rect(center=drop_box.center))
+
+        # Tray Header Label
+        tray_lbl_font = self.get_ui_font(12, bold=True)
+        tray_lbl = tray_lbl_font.render("SOLAR GEM MATRIX TRAY (DRAG & DROP OR CLICK SLAB TO MATCH PEDESTAL)", True, (251, 191, 36))
+        self.screen.blit(tray_lbl, (panel_x + 32, panel_y + 300))
+
+        # Draw Placed Pieces (inside their matched slots)
+        for piece in self.solar_array_puzzle_pieces:
+            if piece["is_placed"] and piece != self.dragged_solar_piece:
+                self.screen.blit(piece["slab_surf"], (piece["x"], piece["y"]))
+
+        # Draw Unplaced Pieces in Tray
+        for piece in self.solar_array_puzzle_pieces:
+            if not piece["is_placed"] and piece != self.dragged_solar_piece:
+                p_rect = pygame.Rect(piece["x"], piece["y"], piece["w"], piece["h"])
+                is_hovered = p_rect.collidepoint(self.cursor_pos)
+
+                pygame.draw.rect(self.screen, (0, 0, 0, 80), (piece["x"] + 3, piece["y"] + 3, piece["w"], piece["h"]), border_radius=8)
+                self.screen.blit(piece["slab_surf"], (piece["x"], piece["y"]))
+
+                if is_hovered:
+                    pygame.draw.rect(self.screen, (255, 215, 0), (piece["x"] - 2, piece["y"] - 2, piece["w"] + 4, piece["h"] + 4), 2, border_radius=8)
+
+        # Draw Dragged Piece on top
+        if self.dragged_solar_piece:
+            dp = self.dragged_solar_piece
+            pygame.draw.rect(self.screen, (0, 0, 0, 120), (dp["x"] + 6, dp["y"] + 6, dp["w"], dp["h"]), border_radius=8)
+            self.screen.blit(dp["slab_surf"], (dp["x"], dp["y"]))
+            pygame.draw.rect(self.screen, (255, 215, 0), (dp["x"] - 2, dp["y"] - 2, dp["w"] + 4, dp["h"] + 4), 2, border_radius=8)
+
+        # Draw Sparkles
+        for sp in self.solar_sparkles:
+            life_pct = max(0.0, min(1.0, sp["life"] / sp["max_life"]))
+            r = max(1, int(sp["rad"] * life_pct))
+            pygame.draw.circle(self.screen, sp["color"], (int(sp["x"]), int(sp["y"])), r)
+
+        # Bottom Controls
+        # 1. Reset Button
+        btn_font = self.get_ui_font(13, bold=True)
+        r_hov = self.solar_puzzle_reset_btn_rect.collidepoint(self.cursor_pos)
+        pygame.draw.rect(self.screen, (51, 65, 85) if r_hov else (30, 41, 59), self.solar_puzzle_reset_btn_rect, border_radius=8)
+        pygame.draw.rect(self.screen, (203, 213, 225) if r_hov else (100, 116, 139), self.solar_puzzle_reset_btn_rect, 1, border_radius=8)
+        r_txt = btn_font.render("Reset Tray", True, (241, 245, 249))
+        self.screen.blit(r_txt, r_txt.get_rect(center=self.solar_puzzle_reset_btn_rect.center))
+
+        # 2. Continue / Unlock Button (Only if all placed)
+        if self.solar_array_puzzle_all_placed:
+            pulse = (math.sin(pygame.time.get_ticks() * 0.008) + 1) * 0.5
+            c_hov = self.solar_puzzle_continue_btn_rect.collidepoint(self.cursor_pos)
+            bg_col = (255, 215, 0) if c_hov else (22, 163, 74)
+            txt_col = (15, 23, 42) if c_hov else (255, 255, 255)
+
+            pygame.draw.rect(self.screen, bg_col, self.solar_puzzle_continue_btn_rect, border_radius=10)
+            pygame.draw.rect(self.screen, (255, 255, 255), self.solar_puzzle_continue_btn_rect, int(2 + pulse * 2), border_radius=10)
+            c_txt = self.get_ui_font(14, bold=True).render("Unlock Portal >>", True, txt_col)
+            self.screen.blit(c_txt, c_txt.get_rect(center=self.solar_puzzle_continue_btn_rect.center))
 
     def wrap_text(self, text, font, max_width):
         words = text.split(' ')
@@ -4784,39 +5855,39 @@ class Quarter3:
             self._dim_overlay.fill((0, 0, 0, 180))
         self.screen.blit(self._dim_overlay, (0, 0))
 
-        box_w, box_h = 560, 260
+        box_w, box_h = 700, 320
         box_x = (self.width - box_w) // 2
         box_y = (self.height - box_h) // 2
 
         pygame.draw.rect(self.screen, (15, 23, 42), (box_x, box_y, box_w, box_h), border_radius=16)
         pygame.draw.rect(self.screen, (239, 68, 68), (box_x, box_y, box_w, box_h), 3, border_radius=16)
 
-        t_font = self.get_ui_font(24, bold=True)
-        msg_font = self.get_ui_font(18)
-        btn_font = self.get_ui_font(16, bold=True)
+        t_font = self.get_ui_font(28, bold=True)
+        msg_font = self.get_ui_font(20, bold=True)
+        btn_font = self.get_ui_font(19, bold=True)
 
         title = t_font.render("TIME'S UP!", True, (239, 68, 68))
-        self.screen.blit(title, title.get_rect(center=(box_x + box_w // 2, box_y + 36)))
+        self.screen.blit(title, title.get_rect(center=(box_x + box_w // 2, box_y + 45)))
 
         m1 = msg_font.render("Your 10-minute stage time limit has expired.", True, (255, 255, 255))
         m2 = msg_font.render("Would you like to try again or return to Stage Select?", True, (203, 213, 225))
-        self.screen.blit(m1, m1.get_rect(center=(box_x + box_w // 2, box_y + 85)))
-        self.screen.blit(m2, m2.get_rect(center=(box_x + box_w // 2, box_y + 115)))
+        self.screen.blit(m1, m1.get_rect(center=(box_x + box_w // 2, box_y + 105)))
+        self.screen.blit(m2, m2.get_rect(center=(box_x + box_w // 2, box_y + 145)))
 
         # Button 1: Retry Quarter
-        retry_rect = pygame.Rect(box_x + 40, box_y + 175, 220, 46)
+        retry_rect = pygame.Rect(box_x + 50, box_y + 225, 270, 52)
         r_hov = retry_rect.collidepoint(self.cursor_pos)
-        pygame.draw.rect(self.screen, (245, 158, 11) if r_hov else (30, 41, 59), retry_rect, border_radius=10)
-        pygame.draw.rect(self.screen, (255, 255, 255), retry_rect, 2, border_radius=10)
-        r_txt = btn_font.render("Retry Quarter ", True, (15, 23, 42) if r_hov else (255, 255, 255))
+        pygame.draw.rect(self.screen, (245, 158, 11) if r_hov else (30, 41, 59), retry_rect, border_radius=12)
+        pygame.draw.rect(self.screen, (255, 255, 255), retry_rect, 2, border_radius=12)
+        r_txt = btn_font.render("Retry Quarter", True, (15, 23, 42) if r_hov else (255, 255, 255))
         self.screen.blit(r_txt, r_txt.get_rect(center=retry_rect.center))
 
         # Button 2: Return to Stage Select
-        exit_rect = pygame.Rect(box_x + box_w - 260, box_y + 175, 220, 46)
+        exit_rect = pygame.Rect(box_x + box_w - 320, box_y + 225, 270, 52)
         e_hov = exit_rect.collidepoint(self.cursor_pos)
-        pygame.draw.rect(self.screen, (220, 38, 38) if e_hov else (30, 41, 59), exit_rect, border_radius=10)
-        pygame.draw.rect(self.screen, (255, 255, 255), exit_rect, 2, border_radius=10)
-        e_txt = btn_font.render("Stage Select ", True, (255, 255, 255))
+        pygame.draw.rect(self.screen, (220, 38, 38) if e_hov else (30, 41, 59), exit_rect, border_radius=12)
+        pygame.draw.rect(self.screen, (255, 255, 255), exit_rect, 2, border_radius=12)
+        e_txt = btn_font.render("Stage Select", True, (255, 255, 255))
         self.screen.blit(e_txt, e_txt.get_rect(center=exit_rect.center))
 
     # ============================================================

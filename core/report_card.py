@@ -226,9 +226,12 @@ class VictoryReportCard:
             pygame.draw.polygon(surface, (51, 65, 85), points)
             pygame.draw.polygon(surface, (100, 116, 139), points, 2)
 
-    def draw(self, cursor_pos):
+    def draw(self, cursor_pos=None):
         if not self.active:
             return
+
+        if cursor_pos is None or not isinstance(cursor_pos, (tuple, list)) or len(cursor_pos) < 2 or not isinstance(cursor_pos[0], (int, float)):
+            cursor_pos = (-1000, -1000)
 
         # Dimmed backdrop
         if not hasattr(self, '_dim_surf') or self._dim_surf is None or self._dim_surf.get_size() != (self.width, self.height):
@@ -350,6 +353,9 @@ class VictoryReportCard:
         if not self.active:
             return None
 
+        if pos is None or not isinstance(pos, (tuple, list)) or len(pos) < 2 or not isinstance(pos[0], (int, float)):
+            return "handled"
+
         if self.replay_rect.collidepoint(pos):
             self.active = False
             self._play_sfx("click")
@@ -383,3 +389,7 @@ class VictoryReportCard:
                     self.replay_callback()
                 return True
         return False
+
+
+ReportCard = VictoryReportCard
+

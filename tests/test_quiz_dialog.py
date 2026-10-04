@@ -1,6 +1,7 @@
 # tests/test_quiz_dialog.py
 import os
 import sys
+import unittest
 
 # Ensure project root is in sys.path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -18,86 +19,79 @@ install_font_cache()
 
 from core.quiz_dialog import RPGQuizDialog
 
-def test_quiz_dialog_initialization_and_hitbox():
-    screen = pygame.display.set_mode((1280, 720))
-    dialog = RPGQuizDialog(screen, 1280, 720)
+class TestQuizDialog(unittest.TestCase):
+    def setUp(self):
+        self.screen = pygame.display.set_mode((1280, 720))
 
-    assert dialog.box_w == 840
-    assert dialog.box_h == 520
-    assert dialog.box_x == (1280 - 840) // 2
-    assert dialog.box_y == (720 - 520) // 2
+    def test_quiz_dialog_initialization_and_hitbox(self):
+        dialog = RPGQuizDialog(self.screen, 1280, 720)
 
-    # Check button rects
-    rect0 = dialog.get_button_rect(0)
-    assert rect0.width == 740
-    assert rect0.height == 50
+        self.assertEqual(dialog.box_w, 960)
+        self.assertEqual(dialog.box_h, 570)
+        self.assertEqual(dialog.box_x, (1280 - 960) // 2)
+        self.assertEqual(dialog.box_y, (720 - 570) // 2)
 
-    # Test click detection
-    center0 = rect0.center
-    clicked = dialog.get_clicked_choice(center0)
-    assert clicked == 0
+        # Check button rects
+        rect0 = dialog.get_button_rect(0)
+        self.assertEqual(rect0.width, 840)
+        self.assertEqual(rect0.height, 56)
 
-    # Test click on eliminated choice
-    clicked_elim = dialog.get_clicked_choice(center0, eliminated_choices={0})
-    assert clicked_elim is None
+        # Test click detection
+        center0 = rect0.center
+        clicked = dialog.get_clicked_choice(center0)
+        self.assertEqual(clicked, 0)
 
-    # Test click outside
-    clicked_none = dialog.get_clicked_choice((10, 10))
-    assert clicked_none is None
+        # Test click on eliminated choice
+        clicked_elim = dialog.get_clicked_choice(center0, eliminated_choices={0})
+        self.assertIsNone(clicked_elim)
 
-    print("PASS: RPGQuizDialog initialization and hit-testing verified.")
+        # Test click outside
+        clicked_none = dialog.get_clicked_choice((10, 10))
+        self.assertIsNone(clicked_none)
 
-def test_quiz_dialog_drawing():
-    screen = pygame.display.set_mode((1280, 720))
-    dialog = RPGQuizDialog(screen, 1280, 720)
+    def test_quiz_dialog_drawing(self):
+        dialog = RPGQuizDialog(self.screen, 1280, 720)
 
-    q_data = {
-        "question": "Which shape has 4 equal sides and 4 right angles?",
-        "choices": ["Circle", "Square", "Triangle", "Star"],
-        "correct": 1
-    }
+        q_data = {
+            "question": "Which shape has 4 equal sides and 4 right angles?",
+            "choices": ["Circle", "Square", "Triangle", "Star"],
+            "correct": 1
+        }
 
-    dummy_sprite = pygame.Surface((32, 32))
-    dummy_sprite.fill((255, 215, 0))
+        dummy_sprite = pygame.Surface((32, 32))
+        dummy_sprite.fill((255, 215, 0))
 
-    # Draw with sprite, station 2 of 5, one choice eliminated, and hint message
-    dialog.update(0.016)
-    dialog.draw(
-        cursor_pos=(dialog.btn_x + 50, dialog.button_y_start + 10),
-        q_data=q_data,
-        speaker_name="Square Guardian",
-        speaker_subtitle="Quest Station 2 of 5 - Storybook Meadow",
-        sprite_frame=dummy_sprite,
-        station_idx=2,
-        total_stations=5,
-        eliminated_choices={2},
-        hint_msg="Count all 4 equal corners!"
-    )
+        # Draw with sprite, station 2 of 5, one choice eliminated, and hint message
+        dialog.update(0.016)
+        dialog.draw(
+            cursor_pos=(dialog.btn_x + 50, dialog.button_y_start + 10),
+            q_data=q_data,
+            speaker_name="Square Guardian",
+            speaker_subtitle="Quest Station 2 of 5 - Storybook Meadow",
+            sprite_frame=dummy_sprite,
+            station_idx=2,
+            total_stations=5,
+            eliminated_choices={2},
+            hint_msg="Count all 4 equal corners!"
+        )
 
-    print("PASS: RPGQuizDialog draws cleanly with all elements.")
+    def test_clean_choice_text(self):
+        from core.quiz_dialog import clean_choice_text
 
-def test_clean_choice_text():
-    from core.quiz_dialog import clean_choice_text
-
-    assert clean_choice_text("A. Pentagon") == "Pentagon"
-    assert clean_choice_text("B. Triagle") == "Triagle"
-    assert clean_choice_text("C. Square") == "Square"
-    assert clean_choice_text("D. Rectangle") == "Rectangle"
-    assert clean_choice_text("A. ₱23") == "₱23"
-    assert clean_choice_text("A) Circle") == "Circle"
-    assert clean_choice_text("B: Heart") == "Heart"
-    assert clean_choice_text("[C] Star") == "Star"
-    assert clean_choice_text("(D) Diamond") == "Diamond"
-    assert clean_choice_text("A - Line") == "Line"
-    assert clean_choice_text("All of the above") == "All of the above"
-    assert clean_choice_text("Apple") == "Apple"
-    assert clean_choice_text("7 mangoes") == "7 mangoes"
-
-    print("PASS: clean_choice_text strips duplicate A/B/C/D prefixes accurately.")
+        self.assertEqual(clean_choice_text("A. Pentagon"), "Pentagon")
+        self.assertEqual(clean_choice_text("B. Triagle"), "Triagle")
+        self.assertEqual(clean_choice_text("C. Square"), "Square")
+        self.assertEqual(clean_choice_text("D. Rectangle"), "Rectangle")
+        self.assertEqual(clean_choice_text("A. ₱23"), "₱23")
+        self.assertEqual(clean_choice_text("A) Circle"), "Circle")
+        self.assertEqual(clean_choice_text("B: Heart"), "Heart")
+        self.assertEqual(clean_choice_text("[C] Star"), "Star")
+        self.assertEqual(clean_choice_text("(D) Diamond"), "Diamond")
+        self.assertEqual(clean_choice_text("A - Line"), "Line")
+        self.assertEqual(clean_choice_text("All of the above"), "All of the above")
+        self.assertEqual(clean_choice_text("Apple"), "Apple")
+        self.assertEqual(clean_choice_text("7 mangoes"), "7 mangoes")
 
 if __name__ == "__main__":
-    test_clean_choice_text()
-    test_quiz_dialog_initialization_and_hitbox()
-    test_quiz_dialog_drawing()
-    print("ALL RPG QUIZ DIALOG TESTS PASSED!")
+    unittest.main()
 

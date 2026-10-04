@@ -464,10 +464,14 @@ def test_mouse_clicks_quarter2_to_quarter4():
     assert q3.quiz_state == 3, f"Mouse click on Q3 correct answer did not advance to State 3! (State: {q3.quiz_state})"
     
     # D. Correct transition proceed button click (State 3 -> State 0)
-    b_w, b_h = 580, 260
-    b_x = (q3.width - b_w) // 2
-    b_y = (q3.height - b_h) // 2
-    proceed_btn_rect = pygame.Rect(b_x + (b_w - 220) // 2, b_y + 175, 220, 46)
+    q3.draw_correct_dialog()
+    if hasattr(q3, 'correct_btn_rect') and q3.correct_btn_rect:
+        proceed_btn_rect = q3.correct_btn_rect
+    else:
+        b_w, b_h = 740, 330
+        b_x = (q3.width - b_w) // 2
+        b_y = (q3.height - b_h) // 2
+        proceed_btn_rect = pygame.Rect(b_x + (b_w - 260) // 2, b_y + 245, 260, 50)
     proceed_click_ev = pygame.event.Event(pygame.MOUSEBUTTONDOWN, {'button': 1, 'pos': proceed_btn_rect.center})
     menu.handle_event(proceed_click_ev)
     assert q3.quiz_state == 0, f"Mouse click on Q3 proceed button did not advance station! (State: {q3.quiz_state})"
