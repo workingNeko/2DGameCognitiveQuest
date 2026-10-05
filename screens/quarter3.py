@@ -274,6 +274,7 @@ class Quarter3:
 
         # Guardian Skeleton State: 0 = waiting for stations, 1 = guarding portal (aura & badge), 2 = trial prompt modal, 3 = puzzle active, 4 = victory speech, 5 = portal unlocked
         self.guardian_skeleton_state = 0
+        self.skeleton_guardian_active = True
         self.guardian_skeleton_proximity_cooldown = 0
         p_box_w, p_box_h = 760, 360
         p_box_x = (self.width - p_box_w) // 2
@@ -1818,7 +1819,6 @@ class Quarter3:
 
     def submit_identification_answer(self):
         """Validates student's answer in Identification Question Mode"""
-        import random
         q_data = self.quiz_questions[self.current_question_index]
         clean_input = self.ident_input_text.strip().lower().replace(" ", "")
 
@@ -1870,7 +1870,6 @@ class Quarter3:
 
     def advance_station_progress(self):
         """Executes guaranteed reward & station progression after answering or out-of-tries"""
-        import random
         self.eliminated_choices.clear()
         self.wrong_feedback_msg = ""
         self.ident_input_text = ""
@@ -2033,6 +2032,28 @@ class Quarter3:
                     self.main_menu.audio_manager.play_sfx("portal_transition")
                 return
 
+        # Check clicking directly on the Skeleton Guardian sprite
+        if getattr(self, 'npc_skeleton_found', False) and not getattr(self, 'solar_array_puzzle_active', False):
+            sx_screen = (self.npc_skeleton_x - self.camera_x) * ZOOM
+            sy_screen = (self.npc_skeleton_y - self.camera_y) * ZOOM
+            s_rect = pygame.Rect(sx_screen, sy_screen, TILE_SIZE * ZOOM, TILE_SIZE * ZOOM).inflate(32, 32)
+            if s_rect.collidepoint(pos):
+                if self.quiz_station_index >= 6 and not self.solar_array_puzzle_solved:
+                    self.guardian_skeleton_state = 2
+                    if getattr(self.main_menu, 'audio_manager', None):
+                        self.main_menu.audio_manager.play_sfx("correct")
+                    return
+                elif self.quiz_station_index < 6:
+                    self.caravan_upgrade_banner_text = "SKELETON GUARDIAN"
+                    self.caravan_upgrade_banner_sub = "Solve all 5 mathematical stations first before taking the Solar Array Trial!"
+                    self.caravan_upgrade_banner_timer = 4.0
+                    return
+                elif self.solar_array_puzzle_solved:
+                    self.caravan_upgrade_banner_text = "SKELETON GUARDIAN"
+                    self.caravan_upgrade_banner_sub = "The Desert Sun Exit Portal is unlocked! Step through to complete Quarter 3!"
+                    self.caravan_upgrade_banner_timer = 4.0
+                    return
+
         # Solar Array Keystone Math Puzzle Click Interactions
         if self.solar_array_puzzle_active or self.guardian_skeleton_state == 3:
             # 1. Reset Button
@@ -2105,7 +2126,6 @@ class Quarter3:
                         return
             return
 
-        import random
         from db.save_system import save_student_progress
         
         # State 1: Multiple Choice Answer Selection (No icons)
@@ -2230,6 +2250,10 @@ class Quarter3:
                 self.caravan_upgrade_banner_sub = "Cross to the Eastern Sun Portal to finish!"
                 self.caravan_upgrade_banner_timer = 5.0
                 print("[TARGET] All stations cleared! Guide your Royal Caravan to the Sun Portal!")
+
+    def handle_click(self, pos):
+        """Standardized interface for clicking events, redirects to trigger_click"""
+        return self.trigger_click(pos)
 
     # ============================================================
     # UPDATE
@@ -2380,7 +2404,7 @@ class Quarter3:
                 player_center_x = self.player_x + TILE_SIZE // 2
                 player_center_y = self.player_y + TILE_SIZE // 2
                 dist_skel = math.hypot(player_center_x - skel_center_x, player_center_y - skel_center_y)
-                if dist_skel < TILE_SIZE * 2.2:
+                if dist_skel < TILE_SIZE * 2.8:
                     if not self.greeting_dialog.is_visible and not self.instruction_modal.is_visible:
                         self.guardian_skeleton_state = 2  # Open Guardian Trial Prompt modal
                         if getattr(self.main_menu, 'audio_manager', None):
@@ -2765,8 +2789,8 @@ class Quarter3:
 
         # Draw Skeleton Portal Guardian
         self.draw_skeleton_guardian()
-        if self.quiz_state == 6 and getattr(self, 'skeleton_guardian_active', True):
-            draw_beacon_marker(self.screen, (self.skeleton_guardian_x + TILE_SIZE // 2 - self.camera_x) * ZOOM, (self.skeleton_guardian_y - self.camera_y) * ZOOM, color=(168, 85, 247), beacon_type="exclamation", offset_y=int(-35 * ZOOM))
+        if getattr(self, 'guardian_skeleton_state', 0) in [1, 2, 3] and getattr(self, 'skeleton_guardian_active', True) and getattr(self, 'npc_skeleton_found', False):
+            draw_beacon_marker(self.screen, (self.npc_skeleton_x + TILE_SIZE // 2 - self.camera_x) * ZOOM, (self.npc_skeleton_y - self.camera_y) * ZOOM, color=(168, 85, 247), beacon_type="exclamation", offset_y=int(-35 * ZOOM))
 
         if self.npc_knight_found:
             sprites = None
@@ -3718,6 +3742,122 @@ class Quarter3:
             r = max(1, int(p["rad"] * ZOOM * (p["life"] / 1.0)))
             pygame.draw.circle(self.screen, p["color"], (int(sx), int(sy)), r)
 
+    def complete_all_objectives_shortcut(self):
+        """Cheat/Debug shortcut to complete stations, teleport to Skeleton Guardian, enable dialogue, and unlock portal."""
+        print("[CHEAT] Quarter 3 Complete Objectives shortcut activated!")
+        
+        # Tier 2: If already talking to Skeleton Guardian or inside the Solar Array Trial, solve the puzzle & unlock portal
+        if getattr(self, 'guardian_skeleton_state', 0) in [2, 3, 4] or getattr(self, 'solar_array_puzzle_active', False):
+            self.solar_array_puzzle_solved = True
+            self.solar_array_puzzle_all_placed = True
+            self.solar_array_puzzle_active = False
+            self.guardian_skeleton_state = 5  # Unlocked portal
+            self.quiz_state = 6  # Ready for exit portal
+            if hasattr(self, 'clear_portal_overlapping_tiles'):
+                self.clear_portal_overlapping_tiles()
+            self.caravan_upgrade_banner_text = "SOLAR ARRAY TRIAL COMPLETED!"
+            self.caravan_upgrade_banner_sub = "Desert Sun Exit Portal is Unlocked!"
+            self.caravan_upgrade_banner_timer = 5.0
+            if hasattr(self.main_menu, 'audio_manager') and self.main_menu.audio_manager:
+                self.main_menu.audio_manager.play_sfx("victory_fanfare")
+        else:
+            # Tier 1: Complete stations 1-5, build world structures, teleport player directly to Skeleton Guardian, and open dialog
+            self.quiz_station_index = 6
+            self.current_question_index = 5
+            if hasattr(self, 'station_npc_info'):
+                for s in self.station_npc_info.values():
+                    s["answered"] = True
+            if hasattr(self, 'shape_npcs'):
+                for s in self.shape_npcs.values():
+                    s["answered"] = True
+                    
+            # Aqueduct bridge tiles on Map 8
+            if "map8" in str(self.map_name).lower():
+                bridge_locs = [(32, 10), (33, 10), (34, 10), (35, 10), (36, 10)]
+                for bx, by in bridge_locs:
+                    if 0 <= by < len(self.render_map) and 0 <= bx < len(self.render_map[by]):
+                        row = list(self.render_map[by])
+                        row[bx] = 'B'
+                        self.render_map[by] = ''.join(row)
+                    if 0 <= by < len(self.game_map) and 0 <= bx < len(self.game_map[by]):
+                        row = list(self.game_map[by])
+                        row[bx] = 'B'
+                        self.game_map[by] = ''.join(row)
+                        
+            # Keystones on Map 9
+            if hasattr(self, 'keystones_collected'):
+                self.keystones_collected = {1: True, 2: True, 3: True, 4: True, 5: True}
+            if hasattr(self, 'relic_pieces_collected'):
+                self.relic_pieces_collected = 5
+                
+            self.solar_array_puzzle_solved = False
+            self.solar_array_puzzle_active = False
+            self.player_block_timer = 0
+            self.camera_pan_active = False
+            self.ident_dialog_active = False
+            self.ident_input_text = ""
+            self.quiz_state = 0
+            
+            # Teleport player directly in front of the Skeleton Guardian
+            if getattr(self, 'npc_skeleton_found', False):
+                gx, gy = self.npc_skeleton_tile_x, self.npc_skeleton_tile_y
+                candidates = [(gx - 1, gy), (gx + 1, gy), (gx, gy + 1), (gx, gy - 1), (gx - 2, gy), (gx + 2, gy)]
+                placed = False
+                for cx, cy in candidates:
+                    if 0 <= cy < len(self.game_map) and 0 <= cx < len(self.game_map[cy]):
+                        if self.game_map[cy][cx] in self.WALKABLE_TILES:
+                            self.player_x = cx * TILE_SIZE
+                            self.player_y = cy * TILE_SIZE
+                            self.player_tile_x = cx
+                            self.player_tile_y = cy
+                            placed = True
+                            break
+                if not placed:
+                    self.player_x = self.npc_skeleton_x
+                    self.player_y = self.npc_skeleton_y
+                    self.player_tile_x = self.npc_skeleton_tile_x
+                    self.player_tile_y = self.npc_skeleton_tile_y
+
+                if self.player_x < self.npc_skeleton_x:
+                    self.player_dir = "right"
+                    self.npc_skeleton_dir = "left"
+                elif self.player_x > self.npc_skeleton_x:
+                    self.player_dir = "left"
+                    self.npc_skeleton_dir = "right"
+                elif self.player_y < self.npc_skeleton_y:
+                    self.player_dir = "down"
+                    self.npc_skeleton_dir = "up"
+                else:
+                    self.player_dir = "up"
+                    self.npc_skeleton_dir = "down"
+
+                # Snap camera immediately
+                self.camera_x = self.player_x - (self.width / (2 * ZOOM)) + TILE_SIZE / 2
+                self.camera_y = self.player_y - (self.height / (2 * ZOOM)) + TILE_SIZE / 2
+                if hasattr(self, 'lol_camera'):
+                    self.lol_camera.cam_x = self.camera_x
+                    self.lol_camera.cam_y = self.camera_y
+
+            # Immediately open the Skeleton Guardian Dialogue & Trial Prompt modal
+            self.guardian_skeleton_state = 2
+            box_w, box_h = 760, 360
+            box_x = (self.width - box_w) // 2
+            box_y = (self.height - box_h) // 2
+            self.guardian_skeleton_btn_rect = pygame.Rect(box_x + (box_w - 320) // 2, box_y + 280, 320, 50)
+            
+            self.caravan_upgrade_banner_text = "ALL 5 STATIONS SOLVED!"
+            self.caravan_upgrade_banner_sub = "Skeleton Guardian Trial Ready! Press Space or Click to begin!"
+            self.caravan_upgrade_banner_timer = 5.0
+            if hasattr(self.main_menu, 'audio_manager') and self.main_menu.audio_manager:
+                self.main_menu.audio_manager.play_sfx("success")
+        
+        if hasattr(self, 'instruction_modal'):
+            self.instruction_modal.hide()
+        if hasattr(self, 'greeting_dialog'):
+            self.greeting_dialog.hide()
+        if hasattr(self, 'mentor_dialog'):
+            self.mentor_dialog.hide()
+
     # ============================================================
     # HANDLE EVENT
     # ============================================================
@@ -3744,7 +3884,28 @@ class Quarter3:
             self.cursor_pos = event.pos
 
         if event.type == pygame.KEYDOWN:
-            if event.key in [pygame.K_SPACE, pygame.K_RETURN]:
+            combined_mod = pygame.key.get_mods() if hasattr(pygame.key, 'get_mods') else 0
+            ctrl_pressed = bool(combined_mod & pygame.KMOD_CTRL)
+            shift_pressed = bool(combined_mod & pygame.KMOD_SHIFT)
+
+            pressed_keys = pygame.key.get_pressed() if hasattr(pygame.key, 'get_pressed') else None
+            if pressed_keys is not None:
+                if pressed_keys[pygame.K_LCTRL] or pressed_keys[pygame.K_RCTRL]:
+                    ctrl_pressed = True
+                if pressed_keys[pygame.K_LSHIFT] or pressed_keys[pygame.K_RSHIFT]:
+                    shift_pressed = True
+
+            is_typing = (self.quiz_state == 1 and hasattr(self, 'quiz_questions') and 0 <= self.current_question_index < len(self.quiz_questions) and self.quiz_questions[self.current_question_index].get("q_type") == "identification")
+            is_complete_shortcut = (
+                event.key in [pygame.K_F7, pygame.K_F10]
+                or ((ctrl_pressed or shift_pressed) and event.key in [pygame.K_c, pygame.K_o])
+                or (not is_typing and event.key in [pygame.K_c, pygame.K_o])
+            )
+            if is_complete_shortcut:
+                self.complete_all_objectives_shortcut()
+                return "shortcut_complete"
+
+            if event.key in [pygame.K_SPACE, pygame.K_RETURN, pygame.K_e]:
                 if getattr(self, 'instruction_modal', None) and self.instruction_modal.is_visible:
                     self.instruction_modal.hide()
                     return "handled"
@@ -3757,6 +3918,35 @@ class Quarter3:
                     self.current_question_index = self.quiz_station_index - 1
                     if getattr(self, 'coin_clink', None):
                         self.coin_clink.play()
+                    return "handled"
+                elif getattr(self, 'guardian_skeleton_state', 0) == 2:
+                    self.guardian_skeleton_state = 3
+                    self.solar_array_puzzle_active = True
+                    self.init_solar_array_puzzle()
+                    if getattr(self.main_menu, 'audio_manager', None):
+                        self.main_menu.audio_manager.play_sfx("portal_transition")
+                    return "handled"
+                elif getattr(self, 'guardian_skeleton_state', 0) == 1 and getattr(self, 'npc_skeleton_found', False):
+                    skel_center_x = self.npc_skeleton_x + TILE_SIZE // 2
+                    skel_center_y = self.npc_skeleton_y + TILE_SIZE // 2
+                    player_center_x = self.player_x + TILE_SIZE // 2
+                    player_center_y = self.player_y + TILE_SIZE // 2
+                    if math.hypot(player_center_x - skel_center_x, player_center_y - skel_center_y) < TILE_SIZE * 3.5:
+                        self.guardian_skeleton_state = 2
+                        box_w, box_h = 760, 360
+                        box_x = (self.width - box_w) // 2
+                        box_y = (self.height - box_h) // 2
+                        self.guardian_skeleton_btn_rect = pygame.Rect(box_x + (box_w - 320) // 2, box_y + 280, 320, 50)
+                        return "handled"
+                elif getattr(self, 'solar_array_puzzle_active', False) and getattr(self, 'solar_array_puzzle_all_placed', False):
+                    self.solar_array_puzzle_solved = True
+                    self.solar_array_puzzle_active = False
+                    self.guardian_skeleton_state = 5
+                    self.quiz_state = 6
+                    if hasattr(self, 'clear_portal_overlapping_tiles'):
+                        self.clear_portal_overlapping_tiles()
+                    if getattr(self.main_menu, 'audio_manager', None):
+                        self.main_menu.audio_manager.play_sfx("victory_fanfare")
                     return "handled"
                 if self.quiz_state == 0:
                     self.lol_camera.recenter()
@@ -4800,6 +4990,14 @@ class Quarter3:
             else:
                 self.release_dragged_solar_piece()
 
+    @property
+    def skeleton_guardian_x(self):
+        return getattr(self, 'npc_skeleton_x', 0)
+
+    @property
+    def skeleton_guardian_y(self):
+        return getattr(self, 'npc_skeleton_y', 0)
+
     def draw_skeleton_guardian(self):
         """Draws the Skeleton Portal Guardian with interactive indicator and direction"""
         if not getattr(self, 'npc_skeleton_found', False):
@@ -5021,19 +5219,8 @@ class Quarter3:
             self.screen.blit(c_txt, c_txt.get_rect(center=self.solar_puzzle_continue_btn_rect.center))
 
     def wrap_text(self, text, font, max_width):
-        words = text.split(' ')
-        lines = []
-        current_line = []
-        for word in words:
-            test_line = ' '.join(current_line + [word])
-            if font.size(test_line)[0] <= max_width:
-                current_line.append(word)
-            else:
-                lines.append(' '.join(current_line))
-                current_line = [word]
-        if current_line:
-            lines.append(' '.join(current_line))
-        return lines
+        from core.font_manager import wrap_multiline_text
+        return wrap_multiline_text(text, font, max_width)
 
     # ============================================================
     # SUN RELIC ALTAR SOUND SYNTHESIS
@@ -5113,11 +5300,11 @@ class Quarter3:
         random.shuffle(shuffled_indices)
         
         slab_configs = [
-            {"idx": 0, "title": "Array", "math": "3 x 4", "ans": "= 12", "color": (239, 68, 68), "border": (248, 113, 113), "icon_key": "apple"},
-            {"idx": 1, "title": "Groups", "math": "4 x 2", "ans": "= 8", "color": (180, 83, 9), "border": (217, 119, 6), "icon_key": "coconut"},
-            {"idx": 2, "title": "Sharing", "math": "10 / 2", "ans": "= 5", "color": (245, 158, 11), "border": (251, 191, 36), "icon_key": "chest"},
-            {"idx": 3, "title": "Half", "math": "1/2", "ans": "Fraction", "color": (217, 119, 6), "border": (245, 158, 11), "icon_key": "pizza"},
-            {"idx": 4, "title": "Third", "math": "1/3", "ans": "Fraction", "color": (168, 85, 247), "border": (192, 132, 252), "icon_key": "chocolate"},
+            {"idx": 0, "title": "Array", "math": "4 × 3", "ans": "= 12 Gems", "color": (239, 68, 68), "border": (248, 113, 113), "icon_key": "apple"},
+            {"idx": 1, "title": "Groups", "math": "5 × 4", "ans": "= 20 Gems", "color": (180, 83, 9), "border": (217, 119, 6), "icon_key": "coconut"},
+            {"idx": 2, "title": "Sharing", "math": "18 ÷ 3", "ans": "= 6 Coins", "color": (245, 158, 11), "border": (251, 191, 36), "icon_key": "chest"},
+            {"idx": 3, "title": "Division", "math": "15 ÷ 5", "ans": "= 3 Sunstones", "color": (217, 119, 6), "border": (245, 158, 11), "icon_key": "pizza"},
+            {"idx": 4, "title": "Solar Time", "math": "60 Min", "ans": "= 1 Hour", "color": (168, 85, 247), "border": (192, 132, 252), "icon_key": "chocolate"},
         ]
         
         self.sun_relic_slabs = []
@@ -5308,56 +5495,59 @@ class Quarter3:
                 })
 
         elif station_num == 4:
-            # Station 4: Unit Fraction (1 / 2) Solar Disk
-            self.mini_puzzle_title = "PUZZLE 4 - UNIT FRACTION (ONE-HALF = 1/2)"
-            self.mini_puzzle_sub = "Slot 1 shaded half out of 2 equal parts into the Solar Keystone!"
-            self.mini_puzzle_math_target = "1 Part out of 2 Equal Parts = 1/2"
-            self.mini_puzzle_type = "fraction_half"
+            # Station 4: Solar Clock Time Division (60 Minutes = 1 Hour)
+            self.mini_puzzle_title = "PUZZLE 4 - SOLAR CLOCK TIME (60 MINUTES = 1 HOUR)"
+            self.mini_puzzle_sub = "Slot the 4 Quarter-Hour Crystals (15 min each) to charge the 1-Hour Sundial!"
+            self.mini_puzzle_math_target = "4 Quarters × 15 Minutes = 60 Minutes (1 Full Hour)"
+            self.mini_puzzle_type = "clock_quarter"
             
-            self.mini_puzzle_slots.append({
-                "id": 0, "title": "Left Half (1/2)", "x": box_x + 220, "y": box_y + 130, "w": 140, "h": 140, "filled": False
-            })
-            self.mini_puzzle_slots.append({
-                "id": 1, "title": "Right Half (1/2)", "x": box_x + 400, "y": box_y + 130, "w": 140, "h": 140, "filled": False
-            })
-            
-            # 2 Halves
-            self.mini_puzzle_items.append({
-                "id": 0, "icon": "sun_disk", "color": (245, 158, 11),
-                "x": box_x + 230, "y": box_y + 340, "deck_x": box_x + 230, "deck_y": box_y + 340,
-                "w": 120, "h": 80, "is_placed": False, "slot_id": None, "label": "Half A (1/2)"
-            })
-            self.mini_puzzle_items.append({
-                "id": 1, "icon": "sun_disk", "color": (245, 158, 11),
-                "x": box_x + 410, "y": box_y + 340, "deck_x": box_x + 410, "deck_y": box_y + 340,
-                "w": 120, "h": 80, "is_placed": False, "slot_id": None, "label": "Half B (1/2)"
-            })
-
-        elif station_num == 5:
-            # Station 5: Unit Fraction (1 / 3) Ingot Bar
-            self.mini_puzzle_title = "PUZZLE 5 - UNIT FRACTION (ONE-THIRD = 1/3)"
-            self.mini_puzzle_sub = "Slot the 3 equal segments (1/3 each) to assemble the Whole Ingot Bar!"
-            self.mini_puzzle_math_target = "3 Segments (1/3 + 1/3 + 1/3) = 1 Whole Bar"
-            self.mini_puzzle_type = "fraction_third"
-            
-            bar_start_x = box_x + 130
-            bar_y = box_y + 140
-            seg_w, seg_h = 150, 100
-            for i in range(3):
+            clock_start_x = box_x + 90
+            clock_y = box_y + 130
+            slot_w, slot_h = 130, 110
+            for i in range(4):
                 self.mini_puzzle_slots.append({
-                    "id": i, "title": f"Segment {i+1} (1/3)",
-                    "x": bar_start_x + i * 170, "y": bar_y, "w": seg_w, "h": seg_h,
+                    "id": i, "title": f"Quarter {i+1} (15m)",
+                    "x": clock_start_x + i * 145, "y": clock_y, "w": slot_w, "h": slot_h,
                     "filled": False
                 })
-                
-            tray_start_x = box_x + 130
-            tray_start_y = box_y + 340
-            for i in range(3):
+            
+            # 4 Quarter Crystals (15 min each)
+            tray_start_x = box_x + 90
+            tray_y = box_y + 340
+            for i in range(4):
                 self.mini_puzzle_items.append({
-                    "id": i, "icon": "ingot", "color": (217, 119, 6),
-                    "x": tray_start_x + i * 170, "y": tray_start_y,
-                    "deck_x": tray_start_x + i * 170, "deck_y": tray_start_y,
-                    "w": 140, "h": 70, "is_placed": False, "slot_id": None, "label": "1/3 Ingot"
+                    "id": i, "icon": "sun_disk", "color": (245, 158, 11),
+                    "x": tray_start_x + i * 145, "y": tray_y,
+                    "deck_x": tray_start_x + i * 145, "deck_y": tray_y,
+                    "w": 120, "h": 70, "is_placed": False, "slot_id": None, "label": "15 Min"
+                })
+
+        elif station_num == 5:
+            # Station 5: Equal Sharing Division (12 Gems / 3 Altars = 4 Gems Each)
+            self.mini_puzzle_title = "PUZZLE 5 - EQUAL SHARING DIVISION (12 ÷ 3 = 4)"
+            self.mini_puzzle_sub = "Distribute 12 Emerald Prisms evenly into 3 Desert Altars (4 each)!"
+            self.mini_puzzle_math_target = "12 Gems ÷ 3 Altars = 4 Gems Each (12 ÷ 3 = 4)"
+            self.mini_puzzle_type = "sharing"
+            
+            altar_w, altar_h = 200, 130
+            for a in range(3):
+                ax = box_x + 55 + a * 225
+                self.mini_puzzle_slots.append({
+                    "id": a, "title": f"Altar {a+1} (Needs 4)",
+                    "x": ax, "y": box_y + 120, "w": altar_w, "h": altar_h,
+                    "capacity": 4, "count": 0, "filled": False
+                })
+                
+            # Tray of 12 emerald gems
+            tray_start_x = box_x + 50
+            tray_start_y = box_y + 355
+            for i in range(12):
+                tx = tray_start_x + i * 55
+                ty = tray_start_y
+                self.mini_puzzle_items.append({
+                    "id": i, "icon": "apple", "color": (16, 185, 129),
+                    "x": tx, "y": ty, "deck_x": tx, "deck_y": ty,
+                    "w": 44, "h": 44, "is_placed": False, "slot_id": None
                 })
 
     def update_station_mini_puzzle(self, dt):
@@ -5460,7 +5650,7 @@ class Quarter3:
                 if i_rect.collidepoint(pos):
                     # Snap to next available slot
                     for slot in self.mini_puzzle_slots:
-                        if self.mini_puzzle_type in ["array", "fraction_half", "fraction_third"]:
+                        if self.mini_puzzle_type in ["array", "fraction_half", "fraction_third", "clock_quarter"]:
                             if not slot["filled"]:
                                 item["x"] = slot["x"] + (slot["w"] - item["w"]) // 2
                                 item["y"] = slot["y"] + (slot["h"] - item["h"]) // 2
@@ -5488,7 +5678,7 @@ class Quarter3:
 
     def auto_solve_mini_puzzle(self):
         """Automatically fills all slots for hands-free or quick progression"""
-        if self.mini_puzzle_type in ["array", "fraction_half", "fraction_third"]:
+        if self.mini_puzzle_type in ["array", "fraction_half", "fraction_third", "clock_quarter"]:
             for slot, item in zip(self.mini_puzzle_slots, self.mini_puzzle_items):
                 item["x"] = slot["x"] + (slot["w"] - item["w"]) // 2
                 item["y"] = slot["y"] + (slot["h"] - item["h"]) // 2

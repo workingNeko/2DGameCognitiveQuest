@@ -197,5 +197,32 @@ class TestQuarter3GuardianPuzzle(unittest.TestCase):
         self.assertTrue(target[3], "Should target exit portal")
 
 
+    def test_draw_when_objective_completed_and_talking_to_skeleton(self):
+        """Test that drawing Quarter3 does not crash when stations are completed and skeleton guardian is active"""
+        for map_file in ["map7.txt", "map8.txt", "map9.txt"]:
+            q3 = Quarter3(self.screen, self.main_menu, map_file)
+            # 1. Test drawing when stations 1-5 cleared (guardian waiting)
+            q3.quiz_station_index = 6
+            q3.guardian_skeleton_state = 1
+            q3.draw()
+
+            # 2. Test drawing when talking to guardian (prompt modal open)
+            q3.guardian_skeleton_state = 2
+            q3.draw()
+
+            # 3. Test drawing during solar array puzzle
+            q3.guardian_skeleton_state = 3
+            q3.solar_array_puzzle_active = True
+            q3.init_solar_array_puzzle()
+            q3.draw()
+
+            # 4. Test drawing when objective solved and stage complete (quiz_state = 6)
+            q3.solar_array_puzzle_active = False
+            q3.solar_array_puzzle_solved = True
+            q3.guardian_skeleton_state = 5
+            q3.quiz_state = 6
+            q3.draw()
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -13,10 +13,10 @@
     "current_screen": "menu",
     "tutorial_completed": true,
     "completed_quarters": {},
-    "timestamp": 1791101633.913199,
+    "timestamp": 1791206573.3787827,
     "stage_select": {
-        "player_x": 57.15999999999694,
-        "player_y": 413.8,
+        "player_x": 54.95999999999694,
+        "player_y": 411.6,
         "oldman_dialogue_state": 2,
         "knight_dialogue_state": 0,
         "skeleton_dialogue_state": 0,

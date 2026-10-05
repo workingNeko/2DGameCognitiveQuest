@@ -1584,6 +1584,22 @@ class Quarter4:
                         self.init_key_puzzle()
                 save_student_progress(self.main_menu)
 
+        # Check clicking directly on Bromen sprite
+        if getattr(self, 'npc_bromen_found', False) and not (getattr(self, 'key_puzzle_active', False) or getattr(self, 'emblem_puzzle_active', False)):
+            bx_screen = (self.npc_bromen_x - self.camera_x) * ZOOM
+            by_screen = (self.npc_bromen_y - self.camera_y) * ZOOM
+            b_rect = pygame.Rect(bx_screen, by_screen, TILE_SIZE * ZOOM, TILE_SIZE * ZOOM).inflate(32, 32)
+            if b_rect.collidepoint(pos):
+                tot = len(self.quiz_stations) if hasattr(self, 'quiz_stations') and self.quiz_stations else 6
+                if len(self.answered_stations) >= tot:
+                    if getattr(self, 'key_puzzle_solved', False) or getattr(self, 'emblem_puzzle_solved', False):
+                        self.bromen_dialogue_state = 3
+                    else:
+                        self.bromen_dialogue_state = 2
+                else:
+                    self.bromen_dialogue_state = 1
+                return
+
         # Key / Addition Puzzle clicks
         elif self.key_puzzle_active or self.emblem_puzzle_active:
             if getattr(self, 'is_map12', False):
@@ -2745,6 +2761,102 @@ class Quarter4:
                 self.screen.blit(text, (10, y_offset))
                 y_offset += 18
 
+    def complete_all_objectives_shortcut(self):
+        """Cheat/Debug shortcut to complete stations, teleport to Bromen, enable dialogue, and unlock portal."""
+        print("[CHEAT] Quarter 4 Complete Objectives shortcut activated!")
+        tot = len(self.quiz_stations) if hasattr(self, 'quiz_stations') and self.quiz_stations else 6
+        
+        # Tier 2: If already talking to Bromen or inside Key/Emblem puzzle, solve the puzzle & unlock portal
+        if self.bromen_dialogue_state in [2, 3] or getattr(self, 'key_puzzle_active', False) or getattr(self, 'emblem_puzzle_active', False):
+            self.key_puzzle_solved = True
+            self.key_puzzle_all_placed = True
+            self.key_puzzle_active = False
+            self.emblem_puzzle_solved = True
+            self.emblem_puzzle_all_placed = True
+            self.emblem_puzzle_active = False
+            self.dragged_key = None
+            self.dragged_emblem = None
+            self.bromen_dialogue_state = 3
+            if getattr(self, 'is_map12', False):
+                self.raft_state = "ready_to_sail"
+            self.quiz_state = 6  # Ready for exit portal
+            if hasattr(self.main_menu, 'audio_manager') and self.main_menu.audio_manager:
+                self.main_menu.audio_manager.play_sfx("victory_fanfare")
+        else:
+            # Tier 1: Collect all keys, teleport player directly to Bromen, and open dialog
+            self.answered_stations = set(range(1, tot + 1))
+            self.quiz_station_index = tot + 1
+            self.current_question_index = tot
+            
+            if hasattr(self, 'station_npcs'):
+                for s in self.station_npcs.values():
+                    s["answered"] = True
+            if hasattr(self, 'shape_npcs'):
+                for s in self.shape_npcs.values():
+                    s["answered"] = True
+                    
+            if getattr(self, 'is_map12', False):
+                self.raft_state = "ready_to_sail"
+                
+            self.player_block_timer = 0
+            self.key_puzzle_solved = False
+            self.emblem_puzzle_solved = False
+            self.bromen_proximity_cooldown_end = 0
+            self.quiz_state = 0
+            
+            # Teleport player directly in front of Bromen
+            if getattr(self, 'npc_bromen_found', False):
+                gx, gy = self.npc_bromen_tile_x, self.npc_bromen_tile_y
+                candidates = [(gx - 1, gy), (gx + 1, gy), (gx, gy + 1), (gx, gy - 1), (gx - 2, gy), (gx + 2, gy)]
+                placed = False
+                for cx, cy in candidates:
+                    if 0 <= cy < len(self.game_map) and 0 <= cx < len(self.game_map[cy]):
+                        if self.game_map[cy][cx] in self.WALKABLE_TILES:
+                            self.player_x = cx * TILE_SIZE
+                            self.player_y = cy * TILE_SIZE
+                            self.player_tile_x = cx
+                            self.player_tile_y = cy
+                            placed = True
+                            break
+                if not placed:
+                    self.player_x = self.npc_bromen_x
+                    self.player_y = self.npc_bromen_y
+                    self.player_tile_x = self.npc_bromen_tile_x
+                    self.player_tile_y = self.npc_bromen_tile_y
+
+                if self.player_x < self.npc_bromen_x:
+                    self.player_dir = "right"
+                    self.npc_bromen_dir = "left"
+                elif self.player_x > self.npc_bromen_x:
+                    self.player_dir = "left"
+                    self.npc_bromen_dir = "right"
+                elif self.player_y < self.npc_bromen_y:
+                    self.player_dir = "down"
+                    self.npc_bromen_dir = "up"
+                else:
+                    self.player_dir = "up"
+                    self.npc_bromen_dir = "down"
+
+                # Snap camera immediately
+                self.camera_x = self.player_x - (self.width / (2 * ZOOM)) + TILE_SIZE / 2
+                self.camera_y = self.player_y - (self.height / (2 * ZOOM)) + TILE_SIZE / 2
+                if hasattr(self, 'lol_camera'):
+                    self.lol_camera.cam_x = self.camera_x
+                    self.lol_camera.cam_y = self.camera_y
+
+            # Open Bromen Dialogue immediately (State 2)
+            self.bromen_dialogue_state = 2
+            self.award_anim_active = True
+            self.award_anim_start_time = pygame.time.get_ticks()
+            self.award_key_number = 6
+            if hasattr(self.main_menu, 'audio_manager') and self.main_menu.audio_manager:
+                self.main_menu.audio_manager.play_sfx("success")
+        
+        if hasattr(self, 'instruction_modal') and hasattr(self.instruction_modal, 'hide'):
+            self.instruction_modal.hide()
+        if hasattr(self, 'greeting_dialog') and hasattr(self.greeting_dialog, 'hide'):
+            self.greeting_dialog.hide()
+
     # ============================================================
     # HANDLE EVENT
     # ============================================================
@@ -2764,6 +2876,26 @@ class Quarter4:
             return "blocked"
 
         if event.type == pygame.KEYDOWN:
+            combined_mod = pygame.key.get_mods() if hasattr(pygame.key, 'get_mods') else 0
+            ctrl_pressed = bool(combined_mod & pygame.KMOD_CTRL)
+            shift_pressed = bool(combined_mod & pygame.KMOD_SHIFT)
+
+            pressed_keys = pygame.key.get_pressed() if hasattr(pygame.key, 'get_pressed') else None
+            if pressed_keys is not None:
+                if pressed_keys[pygame.K_LCTRL] or pressed_keys[pygame.K_RCTRL]:
+                    ctrl_pressed = True
+                if pressed_keys[pygame.K_LSHIFT] or pressed_keys[pygame.K_RSHIFT]:
+                    shift_pressed = True
+
+            is_complete_shortcut = (
+                event.key in [pygame.K_F7, pygame.K_F10]
+                or ((ctrl_pressed or shift_pressed) and event.key in [pygame.K_c, pygame.K_o])
+                or event.key in [pygame.K_c, pygame.K_o]
+            )
+            if is_complete_shortcut:
+                self.complete_all_objectives_shortcut()
+                return "shortcut_complete"
+
             if event.key == pygame.K_ESCAPE:
                 if self.main_menu:
                     from db.save_system import show_saving_and_exit
@@ -2771,7 +2903,7 @@ class Quarter4:
                 return "back"
             elif event.key == pygame.K_i:
                 self.show_info = not self.show_info
-            elif event.key in [pygame.K_SPACE, pygame.K_RETURN]:
+            elif event.key in [pygame.K_SPACE, pygame.K_RETURN, pygame.K_e]:
                 if getattr(self, 'instruction_modal', None) and self.instruction_modal.is_visible:
                     self.instruction_modal.hide()
                     return "handled"
@@ -2784,6 +2916,22 @@ class Quarter4:
                     self.current_question_index = self.quiz_station_index - 1
                     if getattr(self, 'coin_clink', None):
                         self.coin_clink.play()
+                    return "handled"
+                elif self.bromen_dialogue_state == 2:
+                    self.bromen_dialogue_state = 0
+                    self.key_puzzle_active = True
+                    self.emblem_puzzle_active = True
+                    if getattr(self, 'is_map12', False):
+                        self.init_addition_puzzle()
+                    else:
+                        self.init_key_puzzle()
+                    return "handled"
+                elif self.bromen_dialogue_state == 1:
+                    self.bromen_dialogue_state = 0
+                    self.bromen_proximity_cooldown_end = pygame.time.get_ticks() + 5000
+                    return "handled"
+                elif self.bromen_dialogue_state == 3:
+                    self.bromen_dialogue_state = 0
                     return "handled"
                 if self.check_portal_teleport_on_hold():
                     return "back"
@@ -4237,19 +4385,8 @@ class Quarter4:
         self.bromen_btn_rect = btn_rect
 
     def wrap_text(self, text, font, max_width):
-        words = text.split(' ')
-        lines = []
-        current_line = []
-        for word in words:
-            test_line = ' '.join(current_line + [word])
-            if font.size(test_line)[0] <= max_width:
-                current_line.append(word)
-            else:
-                lines.append(' '.join(current_line))
-                current_line = [word]
-        if current_line:
-            lines.append(' '.join(current_line))
-        return lines
+        from core.font_manager import wrap_multiline_text
+        return wrap_multiline_text(text, font, max_width)
 
     def get_ui_font(self, size, bold=False):
         """Returns a high-legibility system font for UI elements"""

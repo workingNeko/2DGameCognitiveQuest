@@ -97,45 +97,8 @@ class RPGQuizDialog:
         return None
 
     def wrap_text(self, text, font, max_width):
-        """Wraps string into lines that fit within max_width."""
-        if text is None:
-            return []
-        text = str(text)
-        words = text.split(" ")
-        lines = []
-        current_line = []
-
-        for word in words:
-            if not word:
-                continue
-            # Handle long unbroken word
-            if font.size(word)[0] > max_width:
-                if current_line:
-                    lines.append(" ".join(current_line))
-                    current_line = []
-                chunk = ""
-                for char in word:
-                    if font.size(chunk + char)[0] <= max_width:
-                        chunk += char
-                    else:
-                        if chunk:
-                            lines.append(chunk)
-                        chunk = char
-                if chunk:
-                    current_line = [chunk]
-                continue
-
-            test_line = " ".join(current_line + [word])
-            if font.size(test_line)[0] <= max_width:
-                current_line.append(word)
-            else:
-                if current_line:
-                    lines.append(" ".join(current_line))
-                current_line = [word]
-
-        if current_line:
-            lines.append(" ".join(current_line))
-        return lines
+        from core.font_manager import wrap_multiline_text
+        return wrap_multiline_text(text, font, max_width)
 
     def draw(
         self,
@@ -383,6 +346,11 @@ class RPGQuizDialog:
                 if choice_surf.get_width() > avail_w:
                     tiny_font = get_font(["Segoe UI", "Comic Sans MS"], 15, bold=True)
                     choice_surf = tiny_font.render(display_text, True, text_color)
+                    if choice_surf.get_width() > avail_w:
+                        trunc = display_text
+                        while len(trunc) > 3 and tiny_font.size(trunc + "...")[0] > avail_w:
+                            trunc = trunc[:-1]
+                        choice_surf = tiny_font.render(trunc + "...", True, text_color)
             txt_rect = choice_surf.get_rect(midleft=(btn_rect.x + 64, btn_rect.centery))
             self.screen.blit(choice_surf, txt_rect)
 

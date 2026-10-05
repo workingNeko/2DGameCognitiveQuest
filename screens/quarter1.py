@@ -1782,12 +1782,12 @@ class Quarter1:
                 print(f"[FAIL] Error loading shape matching puzzle: {e}")
                 return
 
-        if self.map_name.lower() == 'map3.txt':
+        if self.map_name.lower() in ['map1.txt', 'map3.txt']:
             import random
             puzzle_files = ["CircleNPC.png", "DiamondNPC.png", "HeartNPC.png", "SquareNPC.png", "StarNPC.png"]
             selected_file = random.choice(puzzle_files)
             puzzle_img_path = os.path.join(self.BASE_DIR, "assets", "images", "sprites", "objects", "tiles", "quarter1tiles", "puzzleimages", selected_file)
-            print(f"[DICE] Randomized puzzle image for map3.txt: {selected_file}")
+            print(f"[DICE] Randomized puzzle image for {self.map_name}: {selected_file}")
         else:
             puzzle_img_path = os.path.join(self.BASE_DIR, "assets", "images", "sprites", "objects", "tiles", "quarter1tiles", "puzzleimages", "CircleNPC.png")
         if os.path.exists(puzzle_img_path):
@@ -2159,7 +2159,13 @@ class Quarter1:
         
         # Text Header
         title_font = pygame.font.SysFont("Comic Sans MS", 22, bold=True)
-        title_surf = title_font.render("CircleNPC Jigsaw Puzzle", True, (255, 215, 0))
+        if self.map_name.lower() == 'map1.txt':
+            title_text = "Forest Keystone Jigsaw Puzzle"
+        elif self.map_name.lower() == 'map3.txt':
+            title_text = "Grand Altar Jigsaw Puzzle"
+        else:
+            title_text = "Sacred Keystone Jigsaw Puzzle"
+        title_surf = title_font.render(title_text, True, (255, 215, 0))
         self.screen.blit(title_surf, (box_x + (box_w - title_surf.get_width()) // 2, box_y + 20))
         
         desc_font = pygame.font.SysFont("Comic Sans MS", 13)
@@ -2258,20 +2264,12 @@ class Quarter1:
                         self.show_bridge_warning("I should gather all 5 shape pieces first!")
                     return False
 
-                # Require answering the Old Man's question near the portal first
-                if self.map_name.lower() == 'map1.txt' and not self.oldman_riddle_answered:
-                    self.show_bridge_warning("Answer the Old Man's riddle near the portal first!")
-                    if self.npc_oldman_found and self.quiz_state == 0:
-                        p_dx = self.npc_oldman_x - self.player_x
-                        p_dy = self.npc_oldman_y - self.player_y
-                        if abs(p_dx) > abs(p_dy):
-                            self.player_dir = "right" if p_dx > 0 else "left"
-                        else:
-                            self.player_dir = "down" if p_dy > 0 else "up"
-                        self.quiz_state = 11  # Riddle dialog state
-                    return False
-                elif self.map_name.lower() in ['map2.txt', 'map3.txt'] and not self.puzzle_solved:
-                    self.show_bridge_warning("Complete the Old Man's puzzle near the portal first!")
+                # Require solving the Old Man's puzzle near/across the portal first
+                if not self.puzzle_solved:
+                    if self.map_name.lower() == 'map1.txt':
+                        self.show_bridge_warning("Complete the Old Man's puzzle across the river first!")
+                    else:
+                        self.show_bridge_warning("Complete the Old Man's puzzle near the portal first!")
                     if self.npc_oldman_found and self.quiz_state == 0:
                         self.quiz_state = 22  # Jigsaw puzzle intro dialog state
                     return False
@@ -2435,6 +2433,22 @@ class Quarter1:
                 self.current_question_index = self.quiz_station_index - 1
                 self.quiz_state = 1
                 self.selected_choice_index = -1
+                return
+
+        # Check clicking directly on the Old Man NPC
+        if getattr(self, 'npc_oldman_found', False) and not getattr(self, 'puzzle_active', False):
+            ox_screen = (self.npc_oldman_x - self.camera_x) * ZOOM
+            oy_screen = (self.npc_oldman_y - self.camera_y) * ZOOM
+            o_rect = pygame.Rect(ox_screen, oy_screen, TILE_SIZE * ZOOM, TILE_SIZE * ZOOM).inflate(32, 32)
+            if o_rect.collidepoint(pos):
+                answered_count = sum(1 for s in self.shape_npcs.values() if s['answered']) if self.is_quiz_map else 5
+                if answered_count < 5:
+                    self.quiz_state = 20  # Warning dialog
+                elif not self.puzzle_solved:
+                    self.quiz_state = 22  # Jigsaw intro
+                    self.player_block_timer = 0.5
+                else:
+                    self.show_bridge_warning("Old Man: The forest puzzle is complete! Proceed through the Exit Portal!")
                 return
 
         # State 1: Dialog with choices
@@ -2834,8 +2848,8 @@ class Quarter1:
                     if self.greeting_dialog.is_active() and self.greeting_dialog.target_station_idx == self.quiz_station_index:
                         self.greeting_dialog.hide()
 
-        # Proximity interaction check for Old Man NPC (map1.txt)
-        if self.quiz_state == 0 and self.map_name.lower() == 'map1.txt' and self.npc_oldman_found and self.player_block_timer <= 0 and not self.oldman_riddle_answered and getattr(self, 'oldman_interaction_cooldown', 0.0) <= 0:
+        # Proximity interaction check for Old Man NPC (All Quarter 1 Maps: map1, map2, map3)
+        if self.quiz_state == 0 and self.map_name.lower() in ['map1.txt', 'map2.txt', 'map3.txt'] and self.npc_oldman_found and self.player_block_timer <= 0 and not self.puzzle_solved and getattr(self, 'oldman_interaction_cooldown', 0.0) <= 0:
             player_center_x = self.player_x + TILE_SIZE // 2
             player_center_y = self.player_y + TILE_SIZE // 2
             oldman_center_x = self.npc_oldman_x + TILE_SIZE // 2
@@ -2852,38 +2866,11 @@ class Quarter1:
                 else:
                     self.player_dir = "down" if p_dy > 0 else "up"
 
-                # Check if bridge is built (all 5 shapes answered)
+                # Check if all 5 shape questions are answered (bridge built in map1, tokens collected in map2/map3)
                 if answered_count < 5:
-                    self.quiz_state = 10  # Warning dialog state
+                    self.quiz_state = 20  # Warning dialog state
                 else:
-                    if not self.oldman_riddle_answered:
-                        self.quiz_state = 11  # Riddle dialog state
-                    else:
-                        self.quiz_state = 14  # Final Speech dialog state
-
-        # Proximity interaction check for Old Man NPC (map2.txt and map3.txt)
-        if self.quiz_state == 0 and self.map_name.lower() in ['map2.txt', 'map3.txt'] and self.npc_oldman_found and self.player_block_timer <= 0 and not self.puzzle_solved and getattr(self, 'oldman_interaction_cooldown', 0.0) <= 0:
-            player_center_x = self.player_x + TILE_SIZE // 2
-            player_center_y = self.player_y + TILE_SIZE // 2
-            oldman_center_x = self.npc_oldman_x + TILE_SIZE // 2
-            oldman_center_y = self.npc_oldman_y + TILE_SIZE // 2
-            dist = math.hypot(player_center_x - oldman_center_x, player_center_y - oldman_center_y)
-            answered_count = sum(1 for s in self.shape_npcs.values() if s['answered']) if self.is_quiz_map else 5
-            trigger_dist = TILE_SIZE * 3.5 if answered_count >= 5 else TILE_SIZE * 1.5
-            if dist < trigger_dist:
-                # Face player towards Old Man
-                p_dx = self.npc_oldman_x - self.player_x
-                p_dy = self.npc_oldman_y - self.player_y
-                if abs(p_dx) > abs(p_dy):
-                    self.player_dir = "right" if p_dx > 0 else "left"
-                else:
-                    self.player_dir = "down" if p_dy > 0 else "up"
-
-                # Check if 5 shapes are answered
-                if answered_count < 5:
-                    self.quiz_state = 20  # Warning dialog state (need to gather pieces)
-                else:
-                    # Let him solve the puzzle! Go to introduction dialog first
+                    # Let player solve the puzzle! Go to introduction dialog first
                     self.quiz_state = 22
                     self.player_block_timer = 0.5
 
@@ -3467,7 +3454,7 @@ class Quarter1:
         overlay.set_alpha(150)
         self.screen.blit(overlay, (0, 0))
 
-        box_w, box_h = 740, 350
+        box_w, box_h = 760, 360
         box_x = (self.width - box_w) // 2
         box_y = (self.height - box_h) // 2
 
@@ -3480,11 +3467,13 @@ class Quarter1:
         speaker_surf = speaker_font.render(speaker_name, True, (239, 68, 68))
         self.screen.blit(speaker_surf, (box_x + 28, box_y + 18))
 
-        q_font = self.get_ui_font(19, bold=True)
-        msg_surf1 = q_font.render(script_data["wrong_retry"], True, (255, 255, 255))
-        msg_surf2 = q_font.render("You have 1 try remaining! Think carefully.", True, (255, 215, 0))
-        self.screen.blit(msg_surf1, (box_x + 28, box_y + 56))
-        self.screen.blit(msg_surf2, (box_x + 28, box_y + 86))
+        q_font = self.get_ui_font(18, bold=True)
+        retry_lines = self.wrap_text(script_data["wrong_retry"], q_font, box_w - 56)
+        y_off = box_y + 54
+        for r_line in retry_lines[:2]:
+            self.screen.blit(q_font.render(r_line, True, (255, 255, 255)), (box_x + 28, y_off))
+            y_off += 24
+        self.screen.blit(q_font.render("You have 1 try remaining! Think carefully.", True, (255, 215, 0)), (box_x + 28, y_off))
 
         # Pedagogical Educational Hint Box
         from core.hints import get_educational_hint
@@ -3493,7 +3482,7 @@ class Quarter1:
         q_text = current_q.get("question", "")
         hint_text = get_educational_hint("quarter1", q_text)
 
-        hint_box = pygame.Rect(box_x + 24, box_y + 124, box_w - 48, 130)
+        hint_box = pygame.Rect(box_x + 24, box_y + 128, box_w - 48, 130)
         pygame.draw.rect(self.screen, (30, 41, 59), hint_box, border_radius=10)
         pygame.draw.rect(self.screen, (245, 158, 11), hint_box, 2, border_radius=10)
 
@@ -3503,28 +3492,16 @@ class Quarter1:
         h_title = hint_title_font.render("Pedagogical Hint:", True, (255, 215, 0))
         self.screen.blit(h_title, (hint_box.x + 38, hint_box.y + 9))
 
-        # Text wrap
-        words = hint_text.split(" ")
-        lines = []
-        cur = []
-        for w in words:
-            cur.append(w)
-            if hint_body_font.size(" ".join(cur))[0] > (hint_box.width - 32):
-                cur.pop()
-                lines.append(" ".join(cur))
-                cur = [w]
-        if cur:
-            lines.append(" ".join(cur))
-
+        h_lines = self.wrap_text(hint_text, hint_body_font, hint_box.width - 32)
         hy = hint_box.y + 38
-        for hl in lines[:3]:
+        for hl in h_lines[:3]:
             h_surf = hint_body_font.render(hl, True, (241, 245, 249))
             self.screen.blit(h_surf, (hint_box.x + 16, hy))
             hy += 26
 
         button_w, button_h = 240, 50
         button_x = box_x + (box_w - button_w) // 2
-        button_y = box_y + 275
+        button_y = box_y + 285
         btn_rect = pygame.Rect(button_x, button_y, button_w, button_h)
 
         is_hovered = btn_rect.collidepoint(self.cursor_pos)
@@ -3552,7 +3529,7 @@ class Quarter1:
         overlay.set_alpha(160)
         self.screen.blit(overlay, (0, 0))
 
-        box_w, box_h = 740, 340
+        box_w, box_h = 760, 350
         box_x = (self.width - box_w) // 2
         box_y = (self.height - box_h) // 2
 
@@ -3565,25 +3542,29 @@ class Quarter1:
         speaker_surf = speaker_font.render(speaker_name, True, (245, 158, 11))
         self.screen.blit(speaker_surf, (box_x + 28, box_y + 18))
 
-        q_data = self.quiz_questions[self.current_question_index]
-        correct_choice_text = q_data["choices"][q_data["correct"]]
+        q_data = self.quiz_questions[self.current_question_index] if self.current_question_index < len(self.quiz_questions) else {}
+        correct_choice_text = q_data.get("choices", [""])[q_data.get("correct", 0)] if q_data.get("choices") else ""
 
-        q_font = self.get_ui_font(19, bold=True)
-        msg1 = q_font.render(f"Out of tries! The correct answer was: {correct_choice_text}", True, (255, 255, 255))
-        reward_text = script_data["out_of_tries"]
+        q_font = self.get_ui_font(18, bold=True)
+        ans_msg = f"Out of tries! The correct answer was: {correct_choice_text}"
+        ans_lines = self.wrap_text(ans_msg, q_font, box_w - 56)
         
-        # Split reward text if long
+        y_cur = box_y + 58
+        for al in ans_lines[:2]:
+            self.screen.blit(q_font.render(al, True, (255, 255, 255)), (box_x + 28, y_cur))
+            y_cur += 26
+
+        reward_text = script_data["out_of_tries"]
         wrapped_reward = self.wrap_text(reward_text, q_font, box_w - 56)
-        self.screen.blit(msg1, (box_x + 28, box_y + 65))
-        ry = box_y + 102
-        for rw_line in wrapped_reward:
+        y_cur += 6
+        for rw_line in wrapped_reward[:3]:
             msg2 = q_font.render(rw_line, True, (255, 215, 0))
-            self.screen.blit(msg2, (box_x + 28, ry))
-            ry += 28
+            self.screen.blit(msg2, (box_x + 28, y_cur))
+            y_cur += 26
 
         button_w, button_h = 240, 50
         button_x = box_x + (box_w - button_w) // 2
-        button_y = box_y + 260
+        button_y = box_y + 275
         btn_rect = pygame.Rect(button_x, button_y, button_w, button_h)
 
         is_hovered = btn_rect.collidepoint(self.cursor_pos)
@@ -3611,7 +3592,7 @@ class Quarter1:
         overlay.set_alpha(150)
         self.screen.blit(overlay, (0, 0))
 
-        box_w, box_h = 720, 300
+        box_w, box_h = 740, 320
         box_x = (self.width - box_w) // 2
         box_y = (self.height - box_h) // 2
 
@@ -3624,17 +3605,17 @@ class Quarter1:
         speaker_surf = speaker_font.render(speaker_name, True, (74, 222, 128))
         self.screen.blit(speaker_surf, (box_x + 28, box_y + 20))
 
-        q_font = self.get_ui_font(20, bold=True)
+        q_font = self.get_ui_font(19, bold=True)
         wrapped_praise = self.wrap_text(self.current_correct_phrase or script_data["correct_praise"], q_font, box_w - 56)
-        py = box_y + 75
-        for p_line in wrapped_praise:
+        py = box_y + 70
+        for p_line in wrapped_praise[:3]:
             msg_surf = q_font.render(p_line, True, (255, 255, 255))
             self.screen.blit(msg_surf, (box_x + 28, py))
-            py += 30
+            py += 28
 
         button_w, button_h = 240, 50
         button_x = box_x + (box_w - button_w) // 2
-        button_y = box_y + 215
+        button_y = box_y + 235
         btn_rect = pygame.Rect(button_x, button_y, button_w, button_h)
 
         is_hovered = btn_rect.collidepoint(self.cursor_pos)
@@ -3668,19 +3649,19 @@ class Quarter1:
         self.screen.blit(speaker_surf, (box_x + 28, box_y + 20))
         pygame.draw.line(self.screen, (218, 165, 32), (box_x + 28, box_y + 54), (box_x + 240, box_y + 54), 2)
 
-        q_font = self.get_ui_font(19, bold=True)
-        speech_lines = [
-            "Outstanding, young adventurer! You know your shapes very well.",
-            "The Geometry Forest is peaceful once again because of your wisdom.",
-            "Keep exploring and learning. There are many more adventures",
-            "waiting for a brave student like you!"
-        ]
+        q_font = self.get_ui_font(18, bold=True)
+        full_speech = (
+            "Outstanding, young adventurer! You know your shapes very well.\n"
+            "The Geometry Forest is peaceful once again because of your wisdom.\n"
+            "Keep exploring and learning. There are many more adventures waiting for a brave student like you!"
+        )
+        wrapped_speech = self.wrap_text(full_speech, q_font, box_w - 56)
         
-        y_text = box_y + 75
-        for line in speech_lines:
+        y_text = box_y + 70
+        for line in wrapped_speech[:5]:
             txt_surf = q_font.render(line, True, (255, 255, 255))
             self.screen.blit(txt_surf, (box_x + 28, y_text))
-            y_text += 30
+            y_text += 28
 
         button_w, button_h = 240, 50
         button_x = box_x + (box_w - button_w) // 2
@@ -3708,7 +3689,7 @@ class Quarter1:
         overlay.set_alpha(150)
         self.screen.blit(overlay, (0, 0))
 
-        box_w, box_h = 720, 300
+        box_w, box_h = 740, 320
         box_x = (self.width - box_w) // 2
         box_y = (self.height - box_h) // 2
 
@@ -3728,18 +3709,18 @@ class Quarter1:
             student_name = self.main_menu.selected_student.get('first_name', 'Student')
         mentor_data = get_mentor_script("quarter1", self.map_name, student_name)
 
-        q_font = self.get_ui_font(19, bold=True)
-        speech_lines = mentor_data["incomplete"].split("\n")
+        q_font = self.get_ui_font(18, bold=True)
+        speech_lines = self.wrap_text(mentor_data["incomplete"], q_font, box_w - 56)
         
-        y_text = box_y + 75
-        for line in speech_lines:
+        y_text = box_y + 70
+        for line in speech_lines[:4]:
             txt_surf = q_font.render(line, True, (255, 255, 255))
             self.screen.blit(txt_surf, (box_x + 28, y_text))
-            y_text += 30
+            y_text += 28
 
         button_w, button_h = 240, 50
         button_x = box_x + (box_w - button_w) // 2
-        button_y = box_y + 225
+        button_y = box_y + 240
         btn_rect = pygame.Rect(button_x, button_y, button_w, button_h)
 
         is_hovered = btn_rect.collidepoint(self.cursor_pos)
@@ -3777,16 +3758,16 @@ class Quarter1:
         self.screen.blit(speaker_surf, (box_x + 28, box_y + 20))
         pygame.draw.line(self.screen, (218, 165, 32), (box_x + 28, box_y + 54), (box_x + 360, box_y + 54), 2)
 
-        q_font = self.get_ui_font(21, bold=True)
+        q_font = self.get_ui_font(20, bold=True)
         riddle_data = getattr(self, 'selected_riddle', self.oldman_riddle_pool[0])
         riddle_text = riddle_data.get("riddle", "I am perfectly round with no straight lines. What am I?")
         wrapped_q = self.wrap_text(riddle_text, q_font, box_w - 56)
         
-        y_text = box_y + 75
-        for line in wrapped_q:
+        y_text = box_y + 70
+        for line in wrapped_q[:3]:
             txt_surf = q_font.render(line, True, (255, 255, 255))
             self.screen.blit(txt_surf, (box_x + 28, y_text))
-            y_text += 28
+            y_text += 26
 
         button_w, button_h = 680, 52
         button_x = box_x + (box_w - button_w) // 2
@@ -3811,6 +3792,9 @@ class Quarter1:
             pygame.draw.rect(self.screen, (255, 255, 255) if is_hovered else (71, 85, 105), btn_rect, 2, border_radius=12)
             
             c_surf = choice_font.render(choice, True, text_color)
+            if c_surf.get_width() > button_w - 24:
+                small_c_font = self.get_ui_font(16, bold=True)
+                c_surf = small_c_font.render(choice, True, text_color)
             c_rect = c_surf.get_rect(center=btn_rect.center)
             self.screen.blit(c_surf, c_rect)
 
@@ -3942,17 +3926,18 @@ class Quarter1:
         self.screen.blit(speaker_surf, (box_x + 28, box_y + 20))
         pygame.draw.line(self.screen, (218, 165, 32), (box_x + 28, box_y + 54), (box_x + 160, box_y + 54), 2)
 
-        q_font = self.get_ui_font(19, bold=True)
-        speech_lines = [
-            "Outstanding, young adventurer! You have built the bridge and solved my riddle!",
+        q_font = self.get_ui_font(18, bold=True)
+        full_speech = (
+            "Outstanding, young adventurer! You have built the bridge and solved my riddle!\n"
             "You may now enter the portal and proceed on your quest. Safe travels!"
-        ]
+        )
+        speech_lines = self.wrap_text(full_speech, q_font, box_w - 56)
         
-        y_text = box_y + 75
-        for line in speech_lines:
+        y_text = box_y + 70
+        for line in speech_lines[:3]:
             txt_surf = q_font.render(line, True, (255, 255, 255))
             self.screen.blit(txt_surf, (box_x + 28, y_text))
-            y_text += 30
+            y_text += 28
 
         button_w, button_h = 240, 50
         button_x = box_x + (box_w - button_w) // 2
@@ -3980,7 +3965,7 @@ class Quarter1:
         overlay.set_alpha(150)
         self.screen.blit(overlay, (0, 0))
 
-        box_w, box_h = 720, 300
+        box_w, box_h = 740, 320
         box_x = (self.width - box_w) // 2
         box_y = (self.height - box_h) // 2
 
@@ -4000,18 +3985,18 @@ class Quarter1:
             student_name = self.main_menu.selected_student.get('first_name', 'Student')
         mentor_data = get_mentor_script("quarter1", self.map_name, student_name)
 
-        q_font = self.get_ui_font(19, bold=True)
-        speech_lines = mentor_data["incomplete"].split("\n")
+        q_font = self.get_ui_font(18, bold=True)
+        speech_lines = self.wrap_text(mentor_data["incomplete"], q_font, box_w - 56)
         
-        y_text = box_y + 75
-        for line in speech_lines:
+        y_text = box_y + 70
+        for line in speech_lines[:4]:
             txt_surf = q_font.render(line, True, (255, 255, 255))
             self.screen.blit(txt_surf, (box_x + 28, y_text))
-            y_text += 30
+            y_text += 28
 
         button_w, button_h = 240, 50
         button_x = box_x + (box_w - button_w) // 2
-        button_y = box_y + 225
+        button_y = box_y + 240
         btn_rect = pygame.Rect(button_x, button_y, button_w, button_h)
 
         is_hovered = btn_rect.collidepoint(self.cursor_pos)
@@ -4035,7 +4020,7 @@ class Quarter1:
         overlay.set_alpha(150)
         self.screen.blit(overlay, (0, 0))
 
-        box_w, box_h = 720, 300
+        box_w, box_h = 740, 320
         box_x = (self.width - box_w) // 2
         box_y = (self.height - box_h) // 2
 
@@ -4055,19 +4040,19 @@ class Quarter1:
             student_name = self.main_menu.selected_student.get('first_name', 'Student')
         mentor_data = get_mentor_script("quarter1", self.map_name, student_name)
 
-        q_font = self.get_ui_font(19, bold=True)
+        q_font = self.get_ui_font(18, bold=True)
         solved_text = mentor_data.get("solved", "Well done! The portal is open—step forward!")
-        speech_lines = solved_text.split("\n")
+        speech_lines = self.wrap_text(solved_text, q_font, box_w - 56)
         
-        y_text = box_y + 75
-        for line in speech_lines:
+        y_text = box_y + 70
+        for line in speech_lines[:4]:
             txt_surf = q_font.render(line, True, (255, 255, 255))
             self.screen.blit(txt_surf, (box_x + 28, y_text))
-            y_text += 30
+            y_text += 28
 
         button_w, button_h = 240, 50
         button_x = box_x + (box_w - button_w) // 2
-        button_y = box_y + 225
+        button_y = box_y + 240
         btn_rect = pygame.Rect(button_x, button_y, button_w, button_h)
 
         is_hovered = btn_rect.collidepoint(self.cursor_pos)
@@ -4091,7 +4076,7 @@ class Quarter1:
         overlay.set_alpha(150)
         self.screen.blit(overlay, (0, 0))
 
-        box_w, box_h = 720, 300
+        box_w, box_h = 740, 320
         box_x = (self.width - box_w) // 2
         box_y = (self.height - box_h) // 2
 
@@ -4111,18 +4096,18 @@ class Quarter1:
             student_name = self.main_menu.selected_student.get('first_name', 'Student')
         mentor_data = get_mentor_script("quarter1", self.map_name, student_name)
 
-        q_font = self.get_ui_font(19, bold=True)
-        speech_lines = mentor_data["complete"].split("\n")
+        q_font = self.get_ui_font(18, bold=True)
+        speech_lines = self.wrap_text(mentor_data["complete"], q_font, box_w - 56)
         
-        y_text = box_y + 75
-        for line in speech_lines:
+        y_text = box_y + 70
+        for line in speech_lines[:4]:
             txt_surf = q_font.render(line, True, (255, 255, 255))
             self.screen.blit(txt_surf, (box_x + 28, y_text))
-            y_text += 30
+            y_text += 28
 
         button_w, button_h = 240, 50
         button_x = box_x + (box_w - button_w) // 2
-        button_y = box_y + 225
+        button_y = box_y + 240
         btn_rect = pygame.Rect(button_x, button_y, button_w, button_h)
 
         is_hovered = btn_rect.collidepoint(self.cursor_pos)
@@ -4141,19 +4126,8 @@ class Quarter1:
         self.screen.blit(c_surf, c_rect)
 
     def wrap_text(self, text, font, max_width):
-        words = text.split(' ')
-        lines = []
-        current_line = []
-        for word in words:
-            test_line = ' '.join(current_line + [word])
-            if font.size(test_line)[0] <= max_width:
-                current_line.append(word)
-            else:
-                lines.append(' '.join(current_line))
-                current_line = [word]
-        if current_line:
-            lines.append(' '.join(current_line))
-        return lines
+        from core.font_manager import wrap_multiline_text
+        return wrap_multiline_text(text, font, max_width)
 
     # ============================================================
     # DRAW UI
@@ -4260,6 +4234,93 @@ class Quarter1:
                 self.screen.blit(text, (10, y_offset))
                 y_offset += 18
 
+    def complete_all_objectives_shortcut(self):
+        """Cheat/Debug shortcut to complete stations, teleport to Old Man NPC, enable dialogue, and unlock portal."""
+        print("[CHEAT] Quarter 1 Complete Objectives shortcut activated!")
+        
+        # Tier 2: If already talking to Old Man or inside the Bridge/Jigsaw puzzle, solve the puzzle & unlock portal
+        if self.quiz_state in [20, 22] or getattr(self, 'puzzle_active', False):
+            self.puzzle_solved = True
+            self.puzzle_active = False
+            self.dragged_piece = None
+            for p in getattr(self, 'puzzle_pieces', []):
+                p["is_placed"] = True
+                p["x"] = p.get("target_x", p.get("x", 0))
+                p["y"] = p.get("target_y", p.get("y", 0))
+            self.update_bridge_tiles()
+            self.camera_pan_active = False
+            self.player_block_timer = 0
+            self.quiz_state = 0
+            self.show_bridge_warning("Jigsaw Puzzle Solved! Exit Portal Unlocked!")
+            if hasattr(self.main_menu, 'audio_manager') and self.main_menu.audio_manager:
+                self.main_menu.audio_manager.play_sfx("victory_fanfare")
+        else:
+            # Tier 1: Clear all 5 questions, build bridge, teleport player directly to Old Man, and open dialog
+            self.quiz_station_index = 6
+            self.current_question_index = 5
+            if hasattr(self, 'shape_npcs'):
+                for s in self.shape_npcs.values():
+                    s["answered"] = True
+                    
+            self.update_bridge_tiles()
+            self.camera_pan_active = False
+            self.player_block_timer = 0
+            self.puzzle_solved = False
+            self.puzzle_active = False
+            self.dragged_piece = None
+            self.oldman_interaction_cooldown = 0
+            
+            # Teleport player directly in front of the Old Man NPC
+            if getattr(self, 'npc_oldman_found', False):
+                gx, gy = self.npc_oldman_tile_x, self.npc_oldman_tile_y
+                candidates = [(gx - 1, gy), (gx + 1, gy), (gx, gy + 1), (gx, gy - 1), (gx - 2, gy), (gx + 2, gy)]
+                placed = False
+                for cx, cy in candidates:
+                    if 0 <= cy < len(self.game_map) and 0 <= cx < len(self.game_map[cy]):
+                        if self.game_map[cy][cx] in self.WALKABLE_TILES:
+                            self.player_x = cx * TILE_SIZE
+                            self.player_y = cy * TILE_SIZE
+                            self.player_tile_x = cx
+                            self.player_tile_y = cy
+                            placed = True
+                            break
+                if not placed:
+                    self.player_x = self.npc_oldman_x
+                    self.player_y = self.npc_oldman_y
+                    self.player_tile_x = self.npc_oldman_tile_x
+                    self.player_tile_y = self.npc_oldman_tile_y
+
+                if self.player_x < self.npc_oldman_x:
+                    self.player_dir = "right"
+                    self.npc_oldman_dir = "left"
+                elif self.player_x > self.npc_oldman_x:
+                    self.player_dir = "left"
+                    self.npc_oldman_dir = "right"
+                elif self.player_y < self.npc_oldman_y:
+                    self.player_dir = "down"
+                    self.npc_oldman_dir = "up"
+                else:
+                    self.player_dir = "up"
+                    self.npc_oldman_dir = "down"
+
+                # Snap camera immediately
+                self.camera_x = self.player_x - (self.width / (2 * ZOOM)) + TILE_SIZE / 2
+                self.camera_y = self.player_y - (self.height / (2 * ZOOM)) + TILE_SIZE / 2
+                if hasattr(self, 'lol_camera'):
+                    self.lol_camera.cam_x = self.camera_x
+                    self.lol_camera.cam_y = self.camera_y
+
+            # Immediately trigger Old Man Guardian Dialog (state 22)
+            self.quiz_state = 22
+            self.show_bridge_warning("All 5 Questions Answered! Talk to the Old Man across the river!")
+            if hasattr(self.main_menu, 'audio_manager') and self.main_menu.audio_manager:
+                self.main_menu.audio_manager.play_sfx("success")
+            
+        if hasattr(self, 'instruction_modal'):
+            self.instruction_modal.hide()
+        if hasattr(self, 'greeting_dialog'):
+            self.greeting_dialog.hide()
+
     # ============================================================
     # HANDLE EVENT
     # ============================================================
@@ -4279,7 +4340,27 @@ class Quarter1:
             return "blocked"
 
         if event.type == pygame.KEYDOWN:
-            if event.key in (pygame.K_SPACE, pygame.K_RETURN):
+            combined_mod = pygame.key.get_mods() if hasattr(pygame.key, 'get_mods') else 0
+            ctrl_pressed = bool(combined_mod & pygame.KMOD_CTRL)
+            shift_pressed = bool(combined_mod & pygame.KMOD_SHIFT)
+
+            pressed_keys = pygame.key.get_pressed() if hasattr(pygame.key, 'get_pressed') else None
+            if pressed_keys is not None:
+                if pressed_keys[pygame.K_LCTRL] or pressed_keys[pygame.K_RCTRL]:
+                    ctrl_pressed = True
+                if pressed_keys[pygame.K_LSHIFT] or pressed_keys[pygame.K_RSHIFT]:
+                    shift_pressed = True
+
+            is_complete_shortcut = (
+                event.key in [pygame.K_F7, pygame.K_F10]
+                or ((ctrl_pressed or shift_pressed) and event.key in [pygame.K_c, pygame.K_o])
+                or event.key in [pygame.K_c, pygame.K_o]
+            )
+            if is_complete_shortcut:
+                self.complete_all_objectives_shortcut()
+                return "shortcut_complete"
+
+            if event.key in (pygame.K_SPACE, pygame.K_RETURN, pygame.K_e):
                 if hasattr(self, 'instruction_modal') and self.instruction_modal.is_active():
                     self.instruction_modal.hide()
                     return "blocked"
@@ -4290,7 +4371,16 @@ class Quarter1:
                     self.quiz_state = 1
                     self.selected_choice_index = -1
                     return "blocked"
-
+                elif self.quiz_state == 22:
+                    self.quiz_state = 0
+                    self.puzzle_active = True
+                    if not self.puzzle_pieces:
+                        self.init_puzzle()
+                    self.player_block_timer = 0.5
+                    return "blocked"
+                elif self.quiz_state == 20:
+                    self.quiz_state = 0
+                    return "blocked"
 
         if self.puzzle_active:
             if event.type == pygame.KEYDOWN:
@@ -4377,9 +4467,7 @@ class Quarter1:
             if hasattr(self, 'shape_npcs') and self.quiz_station_index in self.shape_npcs and not self.shape_npcs[self.quiz_station_index]['answered']:
                 npc_data = self.shape_npcs[self.quiz_station_index]
                 target_info = (npc_data["tile_x"], npc_data["tile_y"], f"Station {self.quiz_station_index}: {npc_data['name'].capitalize()}")
-            elif self.map_name.lower() == 'map1.txt' and not self.oldman_riddle_answered and self.npc_oldman_found:
-                target_info = (self.npc_oldman_tile_x, self.npc_oldman_tile_y, "Old Man")
-            elif self.map_name.lower() in ['map2.txt', 'map3.txt'] and not self.puzzle_solved and self.npc_oldman_found:
+            elif not self.puzzle_solved and self.npc_oldman_found:
                 target_info = (self.npc_oldman_tile_x, self.npc_oldman_tile_y, "Old Man")
             elif self.portals:
                 target_info = (self.portals[0].get_world_x() // TILE_SIZE, self.portals[0].get_world_y() // TILE_SIZE, "Exit Portal")
@@ -4445,7 +4533,7 @@ class Quarter1:
                 self.screen.blit(ptr_surf, (ptr_rect.x + 8, ptr_rect.y + 4))
 
         # 2. Exit Portal Compass Pointer (When stage is completed)
-        is_stage_completed = (self.quiz_state == 6) or (self.map_name.lower() == 'map1.txt' and self.oldman_riddle_answered) or (self.map_name.lower() in ['map2.txt', 'map3.txt'] and self.puzzle_solved)
+        is_stage_completed = (self.quiz_state == 6) or self.puzzle_solved
         if is_stage_completed and self.portals:
             exit_p = self.portals[0]
             portal_cx = exit_p.get_center_x()

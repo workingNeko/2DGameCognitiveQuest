@@ -1,0 +1,55 @@
+{
+    "student_id": "S-2024-007",
+    "selected_student": {
+        "id": 24,
+        "student_id": "S-2024-007",
+        "first_name": "Jose Villanueva",
+        "last_name": "",
+        "score": 0,
+        "progress": 0,
+        "level": "Grade 2",
+        "gender": "male",
+        "section": "B",
+        "avatarColor": "#14b8a6"
+    },
+    "current_screen": "quarter3",
+    "tutorial_completed": true,
+    "completed_quarters": {},
+    "timestamp": 1791209330.3865697,
+    "stage_select": {
+        "player_x": 1392.5599999999881,
+        "player_y": 402.53999999999985,
+        "oldman_dialogue_state": 0,
+        "knight_dialogue_state": 0,
+        "skeleton_dialogue_state": 2,
+        "bromen_dialogue_state": 0,
+        "player_following_target": false,
+        "barriers_lifted": true
+    },
+    "quarter_data": {
+        "quarter_name": "quarter3",
+        "map_name": "map7.txt",
+        "player_x": 1363.4180000000065,
+        "player_y": 162.9330000000013,
+        "player_dir": "right",
+        "quiz_state": 0,
+        "quiz_station_index": 6,
+        "current_question_index": 5,
+        "stage_time_remaining": 574.4339999999788,
+        "completed": false,
+        "first_attempt_correct": {
+            "1": true,
+            "2": true,
+            "3": true,
+            "4": true,
+            "5": false
+        },
+        "station_attempts": {
+            "1": 0,
+            "2": 0,
+            "3": 0,
+            "4": 0,
+            "5": 1
+        }
+    }
+}

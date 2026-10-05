@@ -209,7 +209,7 @@ class QuestPathfinderGuide:
         # ----------------------------------------------------
         # 1. QUIZ STATIONS (Hierarchy 1 to 5 or 6)
         # ----------------------------------------------------
-        if st_idx <= max_stations and quiz_state < 6:
+        if st_idx <= max_stations:
             # Check if current station has valid tile coords
             if st_idx in quiz_stations:
                 tx, ty = quiz_stations[st_idx]

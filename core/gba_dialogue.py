@@ -326,48 +326,24 @@ def draw_gba_dialogue(
     # ----------------------------------------------------
     # 4. TYPOGRAPHY (GBA Indigo Blue with Periwinkle Drop Shadow)
     # ----------------------------------------------------
-    body_font = get_font("Comic Sans MS", 23, bold=True)
+    from .font_manager import wrap_multiline_text
+    body_font = get_font("Comic Sans MS", 22, bold=True)
     text_color = (52, 76, 136)         # Classic Pokemon GBA Indigo Blue
     shadow_color = (164, 180, 214)     # Soft Periwinkle Lavender Drop Shadow
 
     text_start_x = box_x + 36
     text_max_w = box_w - 72
 
-    # Wrap words
-    words = str(text_content).split(" ")
-    lines = []
-    current_line = []
-    for word in words:
-        if not word:
-            continue
-        if body_font.size(word)[0] > text_max_w:
-            if current_line:
-                lines.append(" ".join(current_line))
-                current_line = []
-            chunk = ""
-            for char in word:
-                if body_font.size(chunk + char)[0] <= text_max_w:
-                    chunk += char
-                else:
-                    if chunk:
-                        lines.append(chunk)
-                    chunk = char
-            if chunk:
-                current_line = [chunk]
-            continue
-
-        current_line.append(word)
-        test_str = " ".join(current_line)
-        if body_font.size(test_str)[0] > text_max_w:
-            current_line.pop()
-            lines.append(" ".join(current_line))
-            current_line = [word]
-    if current_line:
-        lines.append(" ".join(current_line))
+    lines = wrap_multiline_text(text_content, body_font, text_max_w)
+    line_spacing = 34
+    if len(lines) > 3:
+        body_font = get_font("Comic Sans MS", 19, bold=True)
+        lines = wrap_multiline_text(text_content, body_font, text_max_w)
+        line_spacing = 28
 
     # Render lines with typewriter char clipping
     chars_left = len(text_content) if char_index is None else int(char_index)
-    line_y = box_y + 36
+    line_y = box_y + 30
 
     for line in lines:
         if chars_left <= 0:
@@ -383,7 +359,7 @@ def draw_gba_dialogue(
         txt_surf = body_font.render(clean_line, True, text_color)
         screen.blit(txt_surf, (text_start_x, line_y))
 
-        line_y += 36
+        line_y += line_spacing
 
     # ----------------------------------------------------
     # 5. RETRO BOUNCING CONTINUE INDICATOR (GBA Down Triangle)

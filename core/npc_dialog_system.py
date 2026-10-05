@@ -55,43 +55,7 @@ THEME_PALETTES = {
 }
 
 
-def wrap_text(text, font, max_width):
-    """Utility to split text into wrapped lines for rendering."""
-    if text is None:
-        return []
-    text = str(text)
-    words = text.split(" ")
-    lines = []
-    current_line = []
-    for word in words:
-        if not word:
-            continue
-        if font.size(word)[0] > max_width:
-            if current_line:
-                lines.append(" ".join(current_line))
-                current_line = []
-            chunk = ""
-            for char in word:
-                if font.size(chunk + char)[0] <= max_width:
-                    chunk += char
-                else:
-                    if chunk:
-                        lines.append(chunk)
-                    chunk = char
-            if chunk:
-                current_line = [chunk]
-            continue
-
-        test_line = " ".join(current_line + [word])
-        if font.size(test_line)[0] <= max_width:
-            current_line.append(word)
-        else:
-            if current_line:
-                lines.append(" ".join(current_line))
-            current_line = [word]
-    if current_line:
-        lines.append(" ".join(current_line))
-    return lines
+from core.font_manager import wrap_multiline_text as wrap_text, sanitize_text
 
 
 class InstructionModal:

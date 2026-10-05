@@ -91,7 +91,7 @@ def test_stage_select_interactables():
 
     # Simulate frames to ensure chest finishes opening
     for _ in range(60):
-        stage.update()
+        stage.update(0.05)
     assert chest["frame"] == 3, f"Chest frame should be 3, got {chest['frame']}"
 
     while stage.interactable_dialogue_state == 1:

@@ -718,6 +718,7 @@ class StageSelect:
         self.active_interactable = None
         self.interactable_dialogue_state = 0  # 0: idle, 1: dialogue active
         self.interactable_dialogue_index = 0
+        self.interactable_standoff = None  # Tracks object ID to prevent dialogue looping until player steps away
         self.hub_particles = []
 
     def trigger_interactable(self, obj):
@@ -725,6 +726,7 @@ class StageSelect:
         if not obj or self.interactable_dialogue_state != 0:
             return
 
+        self.interactable_standoff = None
         self.active_interactable = obj
         self.interactable_dialogue_state = 1
         self.interactable_dialogue_index = 0
@@ -2100,8 +2102,11 @@ class StageSelect:
             self.interactable_dialogue_index += 1
             lines = self.active_interactable.get("dialogue", [])
             if self.interactable_dialogue_index >= len(lines):
+                finished_id = self.active_interactable.get("id")
                 self.interactable_dialogue_state = 0
                 self.active_interactable = None
+                self.interactable_standoff = finished_id
+                self.teleport_cooldown = 1.0
             return True
 
         return False
@@ -2139,8 +2144,8 @@ class StageSelect:
         if self.advance_dialogue():
             return
 
-        # Trigger interaction if clicking nearby interactable object
-        if self.nearby_interactable and self.interactable_dialogue_state == 0:
+        # Trigger interaction if clicking nearby interactable object (and not standing off from just finishing)
+        if self.nearby_interactable and self.interactable_dialogue_state == 0 and (getattr(self, 'interactable_standoff', None) != self.nearby_interactable.get("id")):
             obj = self.nearby_interactable
             screen_ox = (obj["world_x"] - self.camera_x + obj["width"] / 2) * ZOOM
             screen_oy = (obj["world_y"] - self.camera_y + obj["height"] / 2) * ZOOM
@@ -2172,7 +2177,7 @@ class StageSelect:
                 elif not self.is_quarter_unlocked('quarter2'):
                     self.locked_portal_banner_msg = "Complete Quarter 1 to unlock Quarter 2!"
                     self.locked_portal_banner_timer = 2.0
-                elif self.knight_dialogue_state == 0:
+                elif self.knight_dialogue_state == 0 and not getattr(self, 'barriers_lifted', False):
                     self.locked_portal_banner_msg = "Talk to the Knight first to unlock Quarter 2!"
                     self.locked_portal_banner_timer = 1.5
                 else:
@@ -2184,7 +2189,7 @@ class StageSelect:
                 elif not self.is_quarter_unlocked('quarter3'):
                     self.locked_portal_banner_msg = "Complete Quarter 2 to unlock Quarter 3!"
                     self.locked_portal_banner_timer = 2.0
-                elif self.skeleton_dialogue_state == 0:
+                elif self.skeleton_dialogue_state == 0 and not getattr(self, 'barriers_lifted', False):
                     self.locked_portal_banner_msg = "Talk to the Skeleton first to unlock Quarter 3!"
                     self.locked_portal_banner_timer = 1.5
                 else:
@@ -2196,7 +2201,7 @@ class StageSelect:
                 elif not self.is_quarter_unlocked('quarter4'):
                     self.locked_portal_banner_msg = "Complete Quarter 3 to unlock Quarter 4!"
                     self.locked_portal_banner_timer = 2.0
-                elif self.bromen_dialogue_state == 0:
+                elif self.bromen_dialogue_state == 0 and not getattr(self, 'barriers_lifted', False):
                     self.locked_portal_banner_msg = "Talk to Bromen first to unlock Quarter 4!"
                     self.locked_portal_banner_timer = 1.5
                 else:
@@ -2205,8 +2210,9 @@ class StageSelect:
     # ============================================================
     # UPDATE
     # ============================================================
-    def update(self):
-        dt = min(0.05, max(0.001, self.clock.tick() / 1000.0))
+    def update(self, dt=None):
+        if dt is None:
+            dt = min(0.05, max(0.001, self.clock.tick() / 1000.0))
         self.frame_counter += 1
 
         # Check Portal Warp Screen Transition (3-second black LOADING screen)
@@ -2662,8 +2668,13 @@ class StageSelect:
                     closest_obj = obj
             self.nearby_interactable = closest_obj
 
-            # If player holds fist near interactable, trigger interaction
-            if self.nearby_interactable and self.fist_closed and self.teleport_cooldown <= 0:
+            # Clear standoff once player steps away from the interactable (or moves near another)
+            if self.interactable_standoff:
+                if not self.nearby_interactable or closest_dist >= TILE_SIZE * 3.5 or (self.nearby_interactable and self.nearby_interactable.get("id") != self.interactable_standoff):
+                    self.interactable_standoff = None
+
+            # If player holds fist near interactable, trigger interaction (only if not in standoff)
+            if self.nearby_interactable and self.fist_closed and self.teleport_cooldown <= 0 and (self.interactable_standoff != self.nearby_interactable.get("id")):
                 self.trigger_interactable(self.nearby_interactable)
                 self.teleport_cooldown = 1.0
 
@@ -3390,7 +3401,7 @@ class StageSelect:
             self.path_guide.draw()
 
         # Draw Minimal Proximity Inspection Prompt Badge above active nearby interactable
-        if self.nearby_interactable and self.interactable_dialogue_state == 0 and not self.is_dialogue_active():
+        if self.nearby_interactable and self.interactable_dialogue_state == 0 and not self.is_dialogue_active() and (getattr(self, 'interactable_standoff', None) != self.nearby_interactable.get("id")):
             n_obj = self.nearby_interactable
             nx = (n_obj["world_x"] - self.camera_x + n_obj["width"] / 2) * ZOOM
             ny = (n_obj["world_y"] - self.camera_y) * ZOOM
@@ -3653,8 +3664,8 @@ class StageSelect:
                 bh = 44
                 b_surf = pygame.Surface((bw, bh), pygame.SRCALPHA)
                 b_surf.fill((15, 23, 42, 238))
-                if getattr(self, 'barriers_lifted', False) and "Lifted" in self.locked_portal_banner_msg:
-                    border_color = (34, 197, 94)  # Emerald green for barriers lifted
+                if getattr(self, 'barriers_lifted', False) and ("Lifted" in self.locked_portal_banner_msg or "Unlocked" in self.locked_portal_banner_msg):
+                    border_color = (34, 197, 94)  # Emerald green for barriers lifted & stages unlocked
                 elif "Restored" in self.locked_portal_banner_msg:
                     border_color = (245, 158, 11)  # Amber for barriers restored
                 else:
@@ -3782,7 +3793,7 @@ class StageSelect:
             self.cursor_pos = event.pos
 
         if event.type == pygame.KEYDOWN:
-            # Shortcut: Ctrl + Shift + B toggles lifting corridor barriers for Quarter 2, 3, and 4
+            # Shortcut: Unlock All Stages & Portals (U, Ctrl+U, Ctrl+Shift+U, F8, F9, Ctrl+Shift+B, Ctrl+B)
             mods = pygame.key.get_mods() if hasattr(pygame.key, 'get_mods') else 0
             event_mod = getattr(event, 'mod', 0)
             combined_mod = mods | event_mod
@@ -3796,16 +3807,22 @@ class StageSelect:
                 if pressed_keys[pygame.K_LSHIFT] or pressed_keys[pygame.K_RSHIFT]:
                     shift_pressed = True
 
-            if event.key == pygame.K_b and ctrl_pressed and shift_pressed:
+            is_unlock_shortcut = (
+                event.key in [pygame.K_u, pygame.K_F7, pygame.K_F8, pygame.K_F9, pygame.K_F10]
+                or ((ctrl_pressed or shift_pressed) and event.key in [pygame.K_b, pygame.K_c, pygame.K_o])
+                or (not getattr(self, 'active_dialogue_key', None) and event.key in [pygame.K_c, pygame.K_o, pygame.K_u])
+            )
+
+            if is_unlock_shortcut:
                 self.barriers_lifted = not getattr(self, 'barriers_lifted', False)
                 if self.barriers_lifted:
-                    print("[STAGE SELECT CHEAT] Ctrl+Shift+B pressed: Barriers for Quarter 2, 3, and 4 lifted!")
-                    self.locked_portal_banner_msg = "Barrier Override: Quarter 2, 3 & 4 Barriers Lifted!"
+                    print("[STAGE SELECT CHEAT] Unlock All Stages shortcut activated: All Quarters (1-4) & Portals Unlocked!")
+                    self.locked_portal_banner_msg = "Shortcut: All Stages & Portals Unlocked! (Q1-Q4)"
                     if hasattr(self.main_menu, 'audio_manager') and self.main_menu.audio_manager:
                         self.main_menu.audio_manager.play_sfx("success")
                 else:
-                    print("[STAGE SELECT CHEAT] Ctrl+Shift+B pressed: Barriers restored!")
-                    self.locked_portal_banner_msg = "Barrier Override: Quarter Barriers Restored!"
+                    print("[STAGE SELECT CHEAT] Unlock shortcut toggled off: Barriers & Progression Restored!")
+                    self.locked_portal_banner_msg = "Shortcut: Stage Barriers & Progression Restored!"
                     if hasattr(self.main_menu, 'audio_manager') and self.main_menu.audio_manager:
                         self.main_menu.audio_manager.play_sfx("snap")
                 self.locked_portal_banner_timer = 3.0
@@ -3815,8 +3832,8 @@ class StageSelect:
                 if self.advance_dialogue():
                     return "dialogue_advance"
 
-                # Trigger nearby interactive element if present
-                if self.nearby_interactable and self.interactable_dialogue_state == 0:
+                # Trigger nearby interactive element if present (and not standing off from just finishing)
+                if self.nearby_interactable and self.interactable_dialogue_state == 0 and (getattr(self, 'interactable_standoff', None) != self.nearby_interactable.get("id")):
                     self.trigger_interactable(self.nearby_interactable)
                     return "interactable_triggered"
 
@@ -3831,28 +3848,28 @@ class StageSelect:
                         if self.is_quarter_completed('quarter1'):
                             self.locked_portal_banner_msg = "Quarter 1 is already completed!"
                             self.locked_portal_banner_timer = 2.0
-                        elif self.oldman_dialogue_state >= 2:
+                        elif self.oldman_dialogue_state >= 2 or getattr(self, 'barriers_lifted', False):
                             self.enter_quarter("quarter1")
                             return "quarter_entered"
                     elif current_portal.direction == 'up':
                         if self.is_quarter_completed('quarter2'):
                             self.locked_portal_banner_msg = "Quarter 2 is already completed!"
                             self.locked_portal_banner_timer = 2.0
-                        elif self.is_quarter_unlocked('quarter2') and self.knight_dialogue_state >= 2:
+                        elif (self.is_quarter_unlocked('quarter2') and self.knight_dialogue_state >= 2) or getattr(self, 'barriers_lifted', False):
                             self.enter_quarter("quarter2")
                             return "quarter_entered"
                     elif current_portal.direction == 'right':
                         if self.is_quarter_completed('quarter3'):
                             self.locked_portal_banner_msg = "Quarter 3 is already completed!"
                             self.locked_portal_banner_timer = 2.0
-                        elif self.is_quarter_unlocked('quarter3') and self.skeleton_dialogue_state >= 2:
+                        elif (self.is_quarter_unlocked('quarter3') and self.skeleton_dialogue_state >= 2) or getattr(self, 'barriers_lifted', False):
                             self.enter_quarter("quarter3")
                             return "quarter_entered"
                     elif current_portal.direction == 'down':
                         if self.is_quarter_completed('quarter4'):
                             self.locked_portal_banner_msg = "Quarter 4 is already completed!"
                             self.locked_portal_banner_timer = 2.0
-                        elif self.is_quarter_unlocked('quarter4') and self.bromen_dialogue_state >= 2:
+                        elif (self.is_quarter_unlocked('quarter4') and self.bromen_dialogue_state >= 2) or getattr(self, 'barriers_lifted', False):
                             self.enter_quarter("quarter4")
                             return "quarter_entered"
 

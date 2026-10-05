@@ -31,8 +31,8 @@ def test_portal_gated_by_oldman():
     q1.quiz_station_index = 6
     q1.spawn_portals()
 
-    # Verify Old Man riddle is not yet answered
-    assert not q1.oldman_riddle_answered, "Old Man riddle should not be answered yet"
+    # Verify Old Man puzzle is not yet solved
+    assert not q1.puzzle_solved, "Old Man puzzle should not be solved yet"
 
     # Find the goal portal
     portal = q1.portals[0] if q1.portals else None
@@ -46,28 +46,25 @@ def test_portal_gated_by_oldman():
     # Attempt to trigger portal teleport
     teleport_result = q1.check_portal_teleport_on_hold()
 
-    # MUST be blocked because Old Man riddle is not answered!
-    assert teleport_result is False, "Portal should NOT activate before Old Man riddle is answered!"
+    # MUST be blocked because Old Man puzzle is not solved!
+    assert teleport_result is False, "Portal should NOT activate before Old Man puzzle is solved!"
     assert q1.bridge_warning_message != "", "Warning banner should be displayed!"
-    assert q1.quiz_state == 11, f"Old Man riddle dialog should open! Got quiz_state={q1.quiz_state}"
-    print("[PASS] Portal is strictly gated by Old Man riddle!")
+    assert q1.quiz_state == 22, f"Old Man puzzle intro dialog should open! Got quiz_state={q1.quiz_state}"
+    print("[PASS] Portal is strictly gated by Old Man puzzle on Map 1!")
 
-    # 2. Simulate answering Old Man riddle correctly
-    # Choice index 2 is Circle ("C. Circle")
-    # Click Correct Choice in state 11
-    q1.quiz_state = 13  # Answered correct
-    # Progress from state 13 to state 14 (final speech)
-    q1.oldman_riddle_answered = True
-    q1.quiz_state = 14
-    # Close final speech (state 14 -> state 0)
+    # 2. Simulate solving the Forest Keystone Jigsaw puzzle
+    q1.init_puzzle()
+    for p in q1.puzzle_pieces:
+        p["is_placed"] = True
+    q1.puzzle_solved = True
     q1.quiz_state = 0
     q1.teleport_cooldown = 0
 
     # 3. Now step on the portal again
     teleport_result_after = q1.check_portal_teleport_on_hold()
-    assert teleport_result_after is True, "Portal SHOULD activate after Old Man riddle is answered!"
+    assert teleport_result_after is True, "Portal SHOULD activate after Old Man puzzle is solved!"
     assert q1.warp_out_active is True, "Warp transition should be active!"
-    print("[PASS] Portal successfully opens after answering Old Man riddle!")
+    print("[PASS] Portal successfully opens after solving Old Man puzzle!")
 
     # 4. Finish warp transition and trigger victory card
     q1.warp_out_timer = 0

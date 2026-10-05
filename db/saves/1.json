@@ -5,11 +5,19 @@
         "student_id": "1",
         "first_name": "Maria",
         "last_name": "Santos",
-        "score": 0,
-        "progress": 0
+        "score": 100,
+        "progress": 25
     },
     "current_screen": "menu",
     "tutorial_completed": true,
-    "completed_quarters": {},
-    "timestamp": 1791105448.6734166
+    "completed_quarters": {
+        "quarter1": {
+            "completed": true,
+            "score": 100,
+            "percentage": 100.0,
+            "total_questions": 5,
+            "timestamp": 1791208734.6900623
+        }
+    },
+    "timestamp": 1791221694.7271414
 }

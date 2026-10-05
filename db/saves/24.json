@@ -1,9 +1,9 @@
 {
-    "student_id": "18",
+    "student_id": "24",
     "selected_student": {
-        "id": 18,
-        "student_id": "18",
-        "first_name": "Juan Dela Cruz",
+        "id": 24,
+        "student_id": "24",
+        "first_name": "Jose Villanueva",
         "last_name": "",
         "score": 0,
         "progress": 0,
@@ -13,5 +13,5 @@
     "current_screen": "menu",
     "tutorial_completed": false,
     "completed_quarters": {},
-    "timestamp": 1791219135.2980213
+    "timestamp": 1791209259.1623616
 }

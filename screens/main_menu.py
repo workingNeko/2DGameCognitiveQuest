@@ -43,7 +43,7 @@ class MainMenu:
         # HIGH-PRECISION GESTURE DETECTION
         # ==========================================
 
-        # MediaPipe setup
+        # MediaPipe setup with higher recall and balanced tracking
         self.mp_hands = None
         self.hands = None
         try:
@@ -51,8 +51,9 @@ class MainMenu:
                 self.mp_hands = mp.solutions.hands
                 self.hands = self.mp_hands.Hands(
                     max_num_hands=1,
-                    min_detection_confidence=0.35,
-                    min_tracking_confidence=0.35
+                    min_detection_confidence=0.25,
+                    min_tracking_confidence=0.25,
+                    model_complexity=1
                 )
         except Exception as e:
             print(f"[WARN] MediaPipe hands init exception: {e}")
@@ -61,31 +62,7 @@ class MainMenu:
         # Camera setup (640x480 crisp capture with buffer size 1 for zero lag)
         self.camera_size = (160, 120)
         self.show_camera_overlay = False  # Set to False to remove the visual camera overlay box (Toggle with C)
-        self.cap = None
-        try:
-            self.cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
-            if not self.cap.isOpened():
-                self.cap = cv2.VideoCapture(0)
-            if self.cap.isOpened():
-                try:
-                    self.cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*'MJPG'))
-                except Exception:
-                    pass
-                self.cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
-                self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
-                self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
-                self.cap.set(cv2.CAP_PROP_FPS, 60)
-                print("[OK] Real-time zero-latency camera initialized (640x480 @ 60 FPS)!")
-            else:
-                print("[WARN] Camera not available, falling back to mouse control.")
-                try:
-                    self.cap.release()
-                except Exception:
-                    pass
-                self.cap = None
-        except Exception as e:
-            print(f"[WARN] Camera init exception: {e}")
-            self.cap = None
+        self.cap = self._open_camera()
 
         # Threaded Camera & MediaPipe Background Worker (60 FPS Unlocked)
         self.camera_running = True
@@ -111,20 +88,22 @@ class MainMenu:
         self.popup_state = None
 
         # Cursor sensitivity, active camera bounds & jitter suppression
-        self.cursor_sensitivity = 1.6
-        self.cam_x_min = 0.20
-        self.cam_x_max = 0.80
-        self.cam_y_min = 0.18
-        self.cam_y_max = 0.82
+        self.cursor_sensitivity = 2.0
+        self.cam_x_min = 0.25
+        self.cam_x_max = 0.75
+        self.cam_y_min = 0.22
+        self.cam_y_max = 0.78
 
         self.cursor_x = float(self.w // 2)
         self.cursor_y = float(self.h // 2)
         self.target_history = []
         self.hand_was_detected = False
 
-        # OneEuroFilter for instant response without high-frequency jitter
-        self.cursor_filter_x = OneEuroFilter(t0=time.time(), x0=self.cursor_x, min_cutoff=0.85, beta=0.03, d_cutoff=1.0)
-        self.cursor_filter_y = OneEuroFilter(t0=time.time(), x0=self.cursor_y, min_cutoff=0.85, beta=0.03, d_cutoff=1.0)
+        # OneEuroFilter tuned for high sensitivity and zero lag with sub-pixel jitter suppression
+        self.cursor_filter_x = OneEuroFilter(t0=time.time(), x0=self.cursor_x, min_cutoff=0.95, beta=0.06, d_cutoff=1.0)
+        self.cursor_filter_y = OneEuroFilter(t0=time.time(), x0=self.cursor_y, min_cutoff=0.95, beta=0.06, d_cutoff=1.0)
+        self.fist_anchor_x = None
+        self.fist_anchor_y = None
 
         # Store last cursor position for when hand is lost
         self.last_cursor_x = self.w // 2
@@ -379,6 +358,33 @@ class MainMenu:
         except Exception:
             return False
 
+    def _open_camera(self):
+        """Discovers and initializes the best active webcam hardware across available device indices and backends."""
+        backends = [(cv2.CAP_DSHOW, "DirectShow"), (cv2.CAP_MSMF, "Media Foundation"), (cv2.CAP_ANY, "Default")]
+        for idx in range(4):
+            for backend_flag, backend_name in backends:
+                try:
+                    cap = cv2.VideoCapture(idx, backend_flag)
+                    if cap.isOpened():
+                        # Verify with actual frame grab
+                        ret, test_frame = cap.read()
+                        if ret and test_frame is not None and test_frame.size > 0:
+                            try:
+                                cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*'MJPG'))
+                            except Exception:
+                                pass
+                            cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+                            cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+                            cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+                            cap.set(cv2.CAP_PROP_FPS, 60)
+                            print(f"[OK] Camera initialized on Device Index {idx} via {backend_name} (640x480 @ 60 FPS)!")
+                            return cap
+                        cap.release()
+                except Exception:
+                    pass
+        print("[WARN] No working camera found, falling back to mouse control.")
+        return None
+
     def _camera_worker(self):
         """Asynchronous background worker for camera frame grabbing and MediaPipe ML inference (60 FPS Locked)"""
         while self.camera_running and self.cap is not None and self.cap.isOpened():
@@ -393,12 +399,12 @@ class MainMenu:
 
                 img = cv2.flip(img, 1)
                 rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-                preview = cv2.resize(img, self.camera_size) if getattr(self, 'show_camera_overlay', False) else None
+                preview = cv2.resize(img, self.camera_size)
 
-                # Downscale RGB frame sent to MediaPipe ML inference for ultra-fast, zero-lag 60 FPS tracking
+                # Maintain sufficient image resolution (480x360) for long-range, sitting-distance palm detection
                 h_orig, w_orig = rgb.shape[:2]
-                if w_orig > 320:
-                    infer_rgb = cv2.resize(rgb, (320, 240), interpolation=cv2.INTER_LINEAR)
+                if w_orig > 480:
+                    infer_rgb = cv2.resize(rgb, (480, 360), interpolation=cv2.INTER_LINEAR)
                 else:
                     infer_rgb = rgb
 
@@ -447,11 +453,19 @@ class MainMenu:
                 self.mouse_active = False
                 self.last_mouse_pos = pygame.mouse.get_pos()
 
-                # 1. Use Stable Palm Center (blend between wrist 0 and middle MCP 9)
+                # Detect gestures with relative palm scaling
+                fist_detected = self.is_fist(hand_coords)
+                open_detected = self.is_open_hand(hand_coords)
+                peace_detected = self.is_peace_sign(hand_coords) if (not fist_detected and not open_detected) else False
+
+                # 1. Rigid Palm Base Tracking:
+                # Wrist (0), Index MCP (5), Pinky MCP (17) form a rigid palm triangle that
+                # does NOT move or curl when fingers close into a fist.
                 wrist = hand_coords[0]
-                knuckle = hand_coords[9]
-                palm_x = wrist[0] * 0.35 + knuckle[0] * 0.65
-                palm_y = wrist[1] * 0.35 + knuckle[1] * 0.65
+                idx_mcp = hand_coords[5]
+                pky_mcp = hand_coords[17]
+                palm_x = (wrist[0] + idx_mcp[0] + pky_mcp[0]) / 3.0
+                palm_y = (wrist[1] + idx_mcp[1] + pky_mcp[1]) / 3.0
 
                 # Map palm position to screen coordinates with increased sensitivity bounds
                 target_x = float(np.interp(palm_x, [self.cam_x_min, self.cam_x_max], [0, self.w]))
@@ -474,39 +488,54 @@ class MainMenu:
                 dy = filtered_target_y - self.cursor_y
                 dist = math.hypot(dx, dy)
 
-                # Detect gestures with relative palm scaling
-                fist_detected = self.is_fist(hand_coords)
-                open_detected = self.is_open_hand(hand_coords)
-                peace_detected = self.is_peace_sign(hand_coords) if (not fist_detected and not open_detected) else False
-
                 # Adaptive Jitter Deadzone & High-Sensitivity Dynamic Interpolation
                 if fist_detected:
+                    if self.fist_anchor_x is None:
+                        self.fist_anchor_x = self.cursor_x
+                        self.fist_anchor_y = self.cursor_y
+
+                    anchor_dist = math.hypot(filtered_target_x - self.fist_anchor_x, filtered_target_y - self.fist_anchor_y)
+
                     if self.current_screen == "student_select":
                         # In student select, enable smooth fluid movement for dragging and scrolling
-                        if dist < 4.0:
+                        if anchor_dist < 10.0:
                             smooth = 0.0
-                        elif dist < 16.0:
+                            self.cursor_x = self.fist_anchor_x
+                            self.cursor_y = self.fist_anchor_y
+                        elif anchor_dist < 24.0:
                             smooth = 0.70
+                            self.fist_anchor_x = filtered_target_x
+                            self.fist_anchor_y = filtered_target_y
                         else:
                             smooth = 0.92
+                            self.fist_anchor_x = filtered_target_x
+                            self.fist_anchor_y = filtered_target_y
                     else:
-                        # Click Stabilization: when holding a fist on buttons, lock cursor still to prevent drifting
-                        if dist < 14.0:
+                        # Click Stabilization: when holding a fist on buttons, lock cursor rock-solid to prevent drifting
+                        if anchor_dist < 32.0:
                             smooth = 0.0  # Rock-solid lock on target button
+                            self.cursor_x = self.fist_anchor_x
+                            self.cursor_y = self.fist_anchor_y
                         else:
-                            smooth = 0.60 # Snappy repositioning even while holding fist
-                elif dist < 2.0:
-                    # Micro-deadzone: eliminates sensor noise when hand is held steady
-                    smooth = 0.0
-                elif dist < 12.0:
-                    # Precision aim zone (hovering over buttons): snappy yet smooth
-                    smooth = 0.55
-                elif dist < 40.0:
-                    # Normal movement: fluid, swift, and highly sensitive
-                    smooth = 0.85
+                            # Intentional deliberate repositioning while holding fist
+                            smooth = 0.65
+                            self.fist_anchor_x = filtered_target_x
+                            self.fist_anchor_y = filtered_target_y
                 else:
-                    # Fast swipe / flick: immediate 1:1 snap
-                    smooth = 0.98
+                    self.fist_anchor_x = None
+                    self.fist_anchor_y = None
+                    if dist < 2.0:
+                        # Micro-deadzone: eliminates sensor noise when hand is held steady
+                        smooth = 0.0
+                    elif dist < 10.0:
+                        # Precision aim zone (hovering over buttons): snappy, crisp response
+                        smooth = 0.68
+                    elif dist < 30.0:
+                        # Normal movement: nimble, fluid, and highly sensitive
+                        smooth = 0.90
+                    else:
+                        # Fast swipe / flick: immediate 1:1 snap
+                        smooth = 0.99
 
                 if smooth > 0.0:
                     self.cursor_x = self.cursor_x * (1 - smooth) + filtered_target_x * smooth
@@ -1538,6 +1567,18 @@ class MainMenu:
                     self.trigger_click()
                 elif event.key == pygame.K_ESCAPE:
                     self.confirm_exit_game()
+                elif event.key in [pygame.K_u, pygame.K_F8, pygame.K_F9] or (event.key == pygame.K_b and bool(pygame.key.get_mods() & (pygame.KMOD_CTRL | pygame.KMOD_SHIFT))):
+                    if self.selected_student:
+                        current_lifted = self.last_stage_select_data.get("barriers_lifted", False)
+                        self.last_stage_select_data["barriers_lifted"] = not current_lifted
+                        if not current_lifted:
+                            print("[MAIN MENU CHEAT] Unlock All Stages shortcut activated: All Quarters (1-4) Unlocked!")
+                            if hasattr(self, 'audio_manager') and self.audio_manager:
+                                self.audio_manager.play_sfx("success")
+                        else:
+                            print("[MAIN MENU CHEAT] Unlock shortcut toggled off: Barriers & Progression Restored!")
+                            if hasattr(self, 'audio_manager') and self.audio_manager:
+                                self.audio_manager.play_sfx("snap")
         elif self.current_screen == "stage_select" and self.stage_select:
             result = self.stage_select.handle_event(event)
             if result == "back":

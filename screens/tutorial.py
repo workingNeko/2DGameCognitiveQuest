@@ -582,6 +582,32 @@ class TutorialScreen:
         elif event.type == pygame.MOUSEMOTION:
             self.cursor_pos = event.pos
         elif event.type == pygame.KEYDOWN:
+            combined_mod = pygame.key.get_mods() if hasattr(pygame.key, 'get_mods') else 0
+            ctrl_pressed = bool(combined_mod & pygame.KMOD_CTRL)
+            shift_pressed = bool(combined_mod & pygame.KMOD_SHIFT)
+
+            pressed_keys = pygame.key.get_pressed() if hasattr(pygame.key, 'get_pressed') else None
+            if pressed_keys is not None:
+                if pressed_keys[pygame.K_LCTRL] or pressed_keys[pygame.K_RCTRL]:
+                    ctrl_pressed = True
+                if pressed_keys[pygame.K_LSHIFT] or pressed_keys[pygame.K_RSHIFT]:
+                    shift_pressed = True
+
+            is_complete_shortcut = (
+                event.key in [pygame.K_F7, pygame.K_F10]
+                or ((ctrl_pressed or shift_pressed) and event.key in [pygame.K_c, pygame.K_o])
+                or event.key in [pygame.K_c, pygame.K_o]
+            )
+            if is_complete_shortcut:
+                self.phase = 4
+                self.quiz_state = 0
+                self.intro_anim_active = False
+                self.intro_dialog_open = False
+                self.demo_video_active = False
+                if hasattr(self.main_menu, 'audio_manager') and self.main_menu.audio_manager:
+                    self.main_menu.audio_manager.play_sfx("success")
+                return "shortcut_complete"
+
             if event.key in [pygame.K_SPACE, pygame.K_RETURN]:
                 if getattr(self, 'intro_dialog_open', False) and self.phase == 1 and self.quiz_state == 0:
                     self.intro_dialog_open = False

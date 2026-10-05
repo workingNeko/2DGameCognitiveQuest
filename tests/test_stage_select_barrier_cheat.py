@@ -63,7 +63,7 @@ def test_stage_select_ctrl_shift_b_barrier_cheat():
         
         # Verify audio feedback and banner message
         mock_menu.audio_manager.play_sfx.assert_called_with("success")
-        assert "Lifted" in ss.locked_portal_banner_msg
+        assert "Unlocked" in ss.locked_portal_banner_msg or "Lifted" in ss.locked_portal_banner_msg
         assert ss.locked_portal_banner_timer > 0
         print("[PASS] Ctrl+Shift+B activates barrier lifting across all quarters!")
 
@@ -80,6 +80,30 @@ def test_stage_select_ctrl_shift_b_barrier_cheat():
         assert "Restored" in ss.locked_portal_banner_msg
         print("[PASS] Pressing Ctrl+Shift+B again successfully toggles barriers back on!")
 
+        # 5. Test 'U' key shortcut
+        u_event = pygame.event.Event(pygame.KEYDOWN, key=pygame.K_u, mod=0)
+        res_u = ss.handle_event(u_event)
+        assert res_u == "barriers_toggled"
+        assert ss.barriers_lifted is True, "Pressing 'U' must unlock all stages"
+        assert ss.is_quarter_unlocked("quarter2") is True
+        assert ss.is_quarter_unlocked("quarter3") is True
+        assert ss.is_quarter_unlocked("quarter4") is True
+        print("[PASS] Pressing 'U' successfully unlocks all stages!")
+
+        # Toggle off with 'U'
+        res_u_off = ss.handle_event(u_event)
+        assert res_u_off == "barriers_toggled"
+        assert ss.barriers_lifted is False
+        print("[PASS] Pressing 'U' again successfully toggles stages back to locked!")
+
+        # 6. Test 'F8' key shortcut
+        f8_event = pygame.event.Event(pygame.KEYDOWN, key=pygame.K_F8, mod=0)
+        res_f8 = ss.handle_event(f8_event)
+        assert res_f8 == "barriers_toggled"
+        assert ss.barriers_lifted is True, "Pressing 'F8' must unlock all stages"
+        print("[PASS] Pressing 'F8' successfully unlocks all stages!")
+
 
 if __name__ == "__main__":
     test_stage_select_ctrl_shift_b_barrier_cheat()
+

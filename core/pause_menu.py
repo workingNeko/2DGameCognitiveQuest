@@ -265,14 +265,19 @@ class InGamePauseMenu:
             ("Speed Burst", "Move your hand further from center to accelerate into a sprint.", (147, 197, 253)),
         ]
 
+        from .font_manager import wrap_multiline_text
         curr_y = self.guide_y + 68
         for name, desc, col in controls_data:
             badge = h_font.render(name, True, col)
             self.screen.blit(badge, (self.guide_x + 30, curr_y))
+            curr_y += 24
 
-            desc_surf = b_font.render(desc, True, (241, 245, 249))
-            self.screen.blit(desc_surf, (self.guide_x + 30, curr_y + 24))
-            curr_y += 56
+            desc_lines = wrap_multiline_text(desc, b_font, self.guide_w - 60)
+            for dl in desc_lines:
+                desc_surf = b_font.render(dl, True, (241, 245, 249))
+                self.screen.blit(desc_surf, (self.guide_x + 30, curr_y))
+                curr_y += 20
+            curr_y += 8
 
         # Back Button
         b_hov = self.guide_back_rect.collidepoint(cursor_pos)

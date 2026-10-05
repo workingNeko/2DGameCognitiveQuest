@@ -211,6 +211,7 @@ def test_original_game_cursor_rendering():
     menu.current_gesture = "PEACE"
     menu.peace_start_time = time.time() - 0.45
     menu.draw_cursor()
+    menu.camera_running = False
 
 
 def test_mouse_inactivity_when_no_hand():
@@ -235,6 +236,7 @@ def test_mouse_inactivity_when_no_hand():
     menu.update_gesture()
     assert menu.mouse_active is False
     print("PASS: When no hand is detected, mouse cursor only activates upon physical mouse motion and stays hidden when idle.")
+    menu.camera_running = False
 
 
 def test_one_euro_filter_stability_and_responsiveness():
@@ -286,6 +288,7 @@ def test_curl_invariant_palm_tracking():
     menu.update_gesture()
     assert menu.cursor_pos[0] > 0 and menu.cursor_pos[1] > 0
     print("PASS: Curl-invariant palm centroid and 1-Euro filter tracking execute accurately.")
+    menu.camera_running = False
 
 
 def test_gesture_open_and_close_fist_cycle():
@@ -369,6 +372,7 @@ def test_gesture_open_and_close_fist_cycle():
     assert clicked_count[0] == 2
     assert menu.click_ready is True
     print("PASS: Hand open-to-close gesture cycle successfully triggers repeated clicks without sticking.")
+    menu.camera_running = False
 
 
 def test_half_closed_hand_not_detected_as_fist():
@@ -386,9 +390,10 @@ def test_half_closed_hand_not_detected_as_fist():
         half_coords[dip_i] = (0.5, 0.38)
         half_coords[tip_i] = (0.5, 0.36) # Relaxed / half-closed curve
 
-    # Must NOT be detected as a fist!
+    # Must NOT be detected as a拳fist!
     assert menu.is_fist(half_coords) is False
     print("PASS: Half-closed / relaxed hand is properly rejected and not detected as a fist.")
+    menu.camera_running = False
 
 
 def test_scale_invariance_fist_and_open():
@@ -419,6 +424,62 @@ def test_scale_invariance_fist_and_open():
 
     assert menu.is_open_hand(small_open) is True
     print("PASS: Fist and open-hand gesture detection are scale-invariant across distances.")
+    menu.camera_running = False
+    menu.camera_running = False
+
+
+def test_fist_cursor_lock_stability():
+    from screens.main_menu import MainMenu
+    test_surf = pygame.Surface((1024, 768))
+    menu = MainMenu(test_surf)
+
+    # 1. Start with open hand at screen center
+    open_coords = [(0.5, 0.5)] * 21
+    open_coords[0] = (0.5, 0.7)  # Wrist
+    open_coords[9] = (0.5, 0.5)  # Knuckle
+    for mcp_i, pip_i, dip_i, tip_i in [(5, 6, 7, 8), (9, 10, 11, 12), (13, 14, 15, 16), (17, 18, 19, 20)]:
+        open_coords[mcp_i] = (0.5, 0.50)
+        open_coords[pip_i] = (0.5, 0.40)
+        open_coords[dip_i] = (0.5, 0.32)
+        open_coords[tip_i] = (0.5, 0.25)
+
+    with menu.camera_lock:
+        menu.latest_hand_coords = open_coords
+        menu.latest_hand_detected = True
+
+    class MockCap:
+        def isOpened(self):
+            return True
+
+    menu.cap = MockCap()
+    menu.update_gesture()
+    open_cursor_pos = menu.cursor_pos
+
+    # 2. Transition to FIST (fingers curled down into palm, knuckle shifting slightly)
+    fist_coords = [(0.5, 0.5)] * 21
+    fist_coords[0] = (0.5, 0.7)
+    fist_coords[9] = (0.5, 0.53) # Slight 3% curl shift towards palm
+    for mcp_i, pip_i, dip_i, tip_i in [(5, 6, 7, 8), (9, 10, 11, 12), (13, 14, 15, 16), (17, 18, 19, 20)]:
+        fist_coords[mcp_i] = (0.5, 0.50)
+        fist_coords[pip_i] = (0.5, 0.44)
+        fist_coords[dip_i] = (0.5, 0.47)
+        fist_coords[tip_i] = (0.5, 0.52)
+
+    with menu.camera_lock:
+        menu.latest_hand_coords = fist_coords
+        menu.latest_hand_detected = True
+
+    # Run gesture update several frames while holding fist
+    for _ in range(10):
+        menu.update_gesture()
+
+    fist_cursor_pos = menu.cursor_pos
+    # Fist cursor position should stay locked right at the anchor (difference < 2 pixels)
+    drift = math.hypot(fist_cursor_pos[0] - open_cursor_pos[0], fist_cursor_pos[1] - open_cursor_pos[1])
+    assert drift <= 2.0, f"Cursor drifted by {drift}px when holding fist!"
+    assert menu.current_gesture == "FIST"
+    print(f"PASS: Fist cursor lock stability verified (drift = {drift:.2f}px <= 2.0px).")
+    menu.camera_running = False
 
 
 if __name__ == "__main__":
@@ -437,4 +498,6 @@ if __name__ == "__main__":
     test_gesture_open_and_close_fist_cycle()
     test_half_closed_hand_not_detected_as_fist()
     test_scale_invariance_fist_and_open()
-    print("--- ALL CAMERA & ORIGINAL CURSOR UNIT TESTS PASSED (14/14) ---")
+    test_fist_cursor_lock_stability()
+    print("--- ALL CAMERA & ORIGINAL CURSOR UNIT TESTS PASSED (15/15) ---")
+

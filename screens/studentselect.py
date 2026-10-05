@@ -524,14 +524,41 @@ class StudentSelect:
 
             # NAME
             name_x = icon_x + 60
-            full_name = f"{student['first_name']} {student['last_name']}"
+            avail_w = max(100, item_rect.right - name_x - 30)
+            full_name = f"{student.get('first_name', '')} {student.get('last_name', '')}".strip() or "Student"
             name_surface = self.font.render(full_name, True, self.TEXT_COLOR)
-            self.screen.blit(name_surface, (name_x, item_rect.y + 8))
+            if name_surface.get_width() > avail_w:
+                name_surface = self.small_font.render(full_name, True, self.TEXT_COLOR)
+                if name_surface.get_width() > avail_w:
+                    trunc_name = full_name
+                    while len(trunc_name) > 3 and self.small_font.size(trunc_name + "...")[0] > avail_w:
+                        trunc_name = trunc_name[:-1]
+                    name_surface = self.small_font.render(trunc_name + "...", True, self.TEXT_COLOR)
+            self.screen.blit(name_surface, (name_x, item_rect.y + 10))
 
             # INFO
-            info = f"Score: {student['score']}   Progress: {student['progress']}%   Level: {student['level']}"
+            info = f"Score: {student.get('score', 0)}   Progress: {student.get('progress', 0)}%   Level: {student.get('level', 1)}"
             info_surface = self.small_font.render(info, True, (90, 90, 120))
-            self.screen.blit(info_surface, (name_x, item_rect.y + 42))
+            if info_surface.get_width() > avail_w:
+                from core.font_manager import get_font
+                tiny_f = get_font("Comic Sans MS", 16)
+                info_surface = tiny_f.render(info, True, (90, 90, 120))
+            self.screen.blit(info_surface, (name_x, item_rect.y + 44))
+
+        # Subtle Top / Bottom scroll fades when content overflows
+        if self.scroll_y > 10.0:
+            top_fade = pygame.Surface((list_rect.width - 25, 18), pygame.SRCALPHA)
+            for i in range(18):
+                alpha = int(120 * (1.0 - i / 18.0))
+                pygame.draw.line(top_fade, (210, 225, 245, alpha), (0, i), (list_rect.width - 25, i))
+            self.screen.blit(top_fade, (list_rect.x, list_rect.y))
+
+        if self.max_scroll_y > 0 and self.scroll_y < self.max_scroll_y - 10.0:
+            bot_fade = pygame.Surface((list_rect.width - 25, 18), pygame.SRCALPHA)
+            for i in range(18):
+                alpha = int(120 * (i / 18.0))
+                pygame.draw.line(bot_fade, (210, 225, 245, alpha), (0, i), (list_rect.width - 25, i))
+            self.screen.blit(bot_fade, (list_rect.x, list_rect.bottom - 18))
 
         # Subtle Top / Bottom scroll fades when content overflows
         if self.scroll_y > 10.0:

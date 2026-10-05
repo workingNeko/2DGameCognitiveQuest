@@ -2672,6 +2672,34 @@ class Quarter2:
                 return
             return
 
+        # Check clicking directly on the Knight Guardian
+        if getattr(self, 'npc_knight_found', False) and not getattr(self, 'currency_puzzle_active', False):
+            kx_screen = (self.npc_knight_tile_x * TILE_SIZE - self.camera_x) * ZOOM
+            ky_screen = (self.npc_knight_tile_y * TILE_SIZE - self.camera_y) * ZOOM
+            k_rect = pygame.Rect(kx_screen, ky_screen, TILE_SIZE * ZOOM, TILE_SIZE * ZOOM).inflate(32, 32)
+            if k_rect.collidepoint(pos):
+                if self.quiz_station_index > 5 and not self.currency_puzzle_solved:
+                    self.guardian_knight_state = 2
+                    box_w, box_h = 660, 320
+                    box_x = (self.width - box_w) // 2
+                    box_y = (self.height - box_h) // 2
+                    self.currency_trial_start_btn_rect = pygame.Rect(box_x + (box_w - 240) // 2, box_y + 245, 240, 44)
+                    if getattr(self, 'coin_clink', None):
+                        self.coin_clink.play()
+                    return
+                elif self.quiz_station_index <= 5:
+                    self.banner_text = "KNIGHT GUARDIAN"
+                    self.banner_sub = "Solve all 5 barrio math stalls first before taking my Currency Trial!"
+                    self.banner_timer = 4.0
+                    if getattr(self, 'coin_clink', None):
+                        self.coin_clink.play()
+                    return
+                elif self.currency_puzzle_solved:
+                    self.banner_text = "KNIGHT GUARDIAN"
+                    self.banner_sub = "The Grand Fiesta Exit Portal is open! Step through to complete Quarter 2!"
+                    self.banner_timer = 4.0
+                    return
+
         # State 1: Choice Button Selection (No icons)
         if self.quiz_state == 1:
             q_idx = max(0, min(self.current_question_index, len(self.quiz_questions) - 1)) if self.quiz_questions else 0
@@ -3010,7 +3038,7 @@ class Quarter2:
                 player_center_x = self.player_x + TILE_SIZE // 2
                 player_center_y = self.player_y + TILE_SIZE // 2
                 dist_k = math.hypot(player_center_x - kx, player_center_y - ky)
-                if dist_k < TILE_SIZE * 2.0:
+                if dist_k < TILE_SIZE * 2.8:
                     if self.guardian_knight_state == 1:
                         self.guardian_knight_state = 2
                         box_w, box_h = 660, 320
@@ -3019,7 +3047,7 @@ class Quarter2:
                         self.currency_trial_start_btn_rect = pygame.Rect(box_x + (box_w - 240) // 2, box_y + 245, 240, 44)
                         if getattr(self, 'coin_clink', None):
                             self.coin_clink.play()
-                elif dist_k > TILE_SIZE * 3.0:
+                elif dist_k > TILE_SIZE * 3.5:
                     if self.guardian_knight_state == 2:
                         self.guardian_knight_state = 1
 
@@ -3965,19 +3993,8 @@ class Quarter2:
     # WRAP TEXT HELPER
     # ============================================================
     def wrap_text(self, text, font, max_width):
-        words = text.split(' ')
-        lines = []
-        current_line = []
-        for word in words:
-            test_line = ' '.join(current_line + [word])
-            if font.size(test_line)[0] <= max_width:
-                current_line.append(word)
-            else:
-                lines.append(' '.join(current_line))
-                current_line = [word]
-        if current_line:
-            lines.append(' '.join(current_line))
-        return lines
+        from core.font_manager import wrap_multiline_text
+        return wrap_multiline_text(text, font, max_width)
 
     # ============================================================
     # UPDATE PLAYER MOVEMENT (Sprint Boost & Particle Trails)
@@ -4695,6 +4712,104 @@ class Quarter2:
                 self.screen.blit(text, (10, y_offset))
                 y_offset += 18
 
+    def complete_all_objectives_shortcut(self):
+        """Cheat/Debug shortcut to complete stations, teleport to Knight Guardian, enable dialogue, and unlock portal."""
+        print("[CHEAT] Quarter 2 Complete Objectives shortcut activated!")
+        
+        # Tier 2: If already talking to Knight Guardian or inside the Currency Matching Trial, solve the puzzle & unlock portal
+        if getattr(self, 'guardian_knight_state', 0) in [2, 3, 4] or getattr(self, 'currency_puzzle_active', False):
+            self.currency_puzzle_solved = True
+            self.currency_puzzle_all_placed = True
+            self.currency_puzzle_active = False
+            self.dragged_currency_piece = None
+            self.guardian_knight_state = 5  # Unlocked portal
+            self.quiz_state = 6  # Ready for exit portal
+            self.banner_text = "CURRENCY TRIAL COMPLETED!"
+            self.banner_sub = "Head to the Grand Fiesta Exit Portal to complete Quarter 2!"
+            self.banner_timer = 5.0
+            if hasattr(self.main_menu, 'audio_manager') and self.main_menu.audio_manager:
+                self.main_menu.audio_manager.play_sfx("victory_fanfare")
+        else:
+            # Tier 1: Complete stalls 1-5, build Bahay Kubo, teleport player directly to Knight Guardian, and open dialog
+            self.quiz_station_index = 6
+            self.current_question_index = 5
+            if hasattr(self, 'station_npc_info'):
+                for s in self.station_npc_info.values():
+                    s["answered"] = True
+                    
+            if self.map_name == "map5.txt":
+                self.kubo_built = True
+                self.kubo_stage = 5
+                self.kubo_placed_pieces = 5
+                self.kubo_award_anim_active = False
+                self.camera_pan_active = False
+                
+            self.currency_puzzle_solved = False
+            self.currency_puzzle_active = False
+            self.dragged_currency_piece = None
+            self.player_block_timer = 0
+            self.quiz_state = 0
+            
+            # Teleport player directly in front of the Knight Guardian
+            if getattr(self, 'npc_knight_found', False):
+                gx, gy = self.npc_knight_tile_x, self.npc_knight_tile_y
+                candidates = [(gx - 1, gy), (gx + 1, gy), (gx, gy + 1), (gx, gy - 1), (gx - 2, gy), (gx + 2, gy)]
+                placed = False
+                for cx, cy in candidates:
+                    if 0 <= cy < len(self.game_map) and 0 <= cx < len(self.game_map[cy]):
+                        if self.game_map[cy][cx] in self.WALKABLE_TILES:
+                            self.player_x = cx * TILE_SIZE
+                            self.player_y = cy * TILE_SIZE
+                            self.player_tile_x = cx
+                            self.player_tile_y = cy
+                            placed = True
+                            break
+                if not placed:
+                    self.player_x = self.npc_knight_x
+                    self.player_y = self.npc_knight_y
+                    self.player_tile_x = self.npc_knight_tile_x
+                    self.player_tile_y = self.npc_knight_tile_y
+
+                if self.player_x < self.npc_knight_x:
+                    self.player_dir = "right"
+                    self.npc_knight_dir = "left"
+                elif self.player_x > self.npc_knight_x:
+                    self.player_dir = "left"
+                    self.npc_knight_dir = "right"
+                elif self.player_y < self.npc_knight_y:
+                    self.player_dir = "down"
+                    self.npc_knight_dir = "up"
+                else:
+                    self.player_dir = "up"
+                    self.npc_knight_dir = "down"
+
+                # Snap camera immediately
+                self.camera_x = self.player_x - (self.width / (2 * ZOOM)) + TILE_SIZE / 2
+                self.camera_y = self.player_y - (self.height / (2 * ZOOM)) + TILE_SIZE / 2
+                if hasattr(self, 'lol_camera'):
+                    self.lol_camera.cam_x = self.camera_x
+                    self.lol_camera.cam_y = self.camera_y
+
+            # Immediately open the Knight Guardian Dialogue & Trial Prompt modal
+            self.guardian_knight_state = 2
+            box_w, box_h = 660, 320
+            box_x = (self.width - box_w) // 2
+            box_y = (self.height - box_h) // 2
+            self.currency_trial_start_btn_rect = pygame.Rect(box_x + (box_w - 240) // 2, box_y + 245, 240, 44)
+            
+            self.banner_text = "ALL 5 BARRIO STALLS CLEARED!"
+            self.banner_sub = "Knight Guardian Trial Ready! Press Space or Click to begin!"
+            self.banner_timer = 5.0
+            if hasattr(self.main_menu, 'audio_manager') and self.main_menu.audio_manager:
+                self.main_menu.audio_manager.play_sfx("success")
+            
+        if hasattr(self, 'instruction_modal'):
+            self.instruction_modal.hide()
+        if hasattr(self, 'greeting_dialog'):
+            self.greeting_dialog.hide()
+        if hasattr(self, 'mentor_dialog'):
+            self.mentor_dialog.hide()
+
     # ============================================================
     # HANDLE EVENT
     # ============================================================
@@ -4713,10 +4828,28 @@ class Quarter2:
         if self.pause_menu.handle_event(event):
             return "blocked"
 
-
-
         if event.type == pygame.KEYDOWN:
-            if event.key in [pygame.K_SPACE, pygame.K_RETURN]:
+            combined_mod = pygame.key.get_mods() if hasattr(pygame.key, 'get_mods') else 0
+            ctrl_pressed = bool(combined_mod & pygame.KMOD_CTRL)
+            shift_pressed = bool(combined_mod & pygame.KMOD_SHIFT)
+
+            pressed_keys = pygame.key.get_pressed() if hasattr(pygame.key, 'get_pressed') else None
+            if pressed_keys is not None:
+                if pressed_keys[pygame.K_LCTRL] or pressed_keys[pygame.K_RCTRL]:
+                    ctrl_pressed = True
+                if pressed_keys[pygame.K_LSHIFT] or pressed_keys[pygame.K_RSHIFT]:
+                    shift_pressed = True
+
+            is_complete_shortcut = (
+                event.key in [pygame.K_F7, pygame.K_F10]
+                or ((ctrl_pressed or shift_pressed) and event.key in [pygame.K_c, pygame.K_o])
+                or event.key in [pygame.K_c, pygame.K_o]
+            )
+            if is_complete_shortcut:
+                self.complete_all_objectives_shortcut()
+                return "shortcut_complete"
+
+            if event.key in [pygame.K_SPACE, pygame.K_RETURN, pygame.K_e]:
                 if getattr(self, 'instruction_modal', None) and self.instruction_modal.is_visible:
                     self.instruction_modal.hide()
                     return "handled"
@@ -4737,6 +4870,20 @@ class Quarter2:
                     if getattr(self, 'coin_clink', None):
                         self.coin_clink.play()
                     return "handled"
+                elif getattr(self, 'guardian_knight_state', 0) == 1 and getattr(self, 'npc_knight_found', False):
+                    kx = self.npc_knight_tile_x * TILE_SIZE + TILE_SIZE // 2
+                    ky = self.npc_knight_tile_y * TILE_SIZE + TILE_SIZE // 2
+                    player_center_x = self.player_x + TILE_SIZE // 2
+                    player_center_y = self.player_y + TILE_SIZE // 2
+                    if math.hypot(player_center_x - kx, player_center_y - ky) < TILE_SIZE * 3.5:
+                        self.guardian_knight_state = 2
+                        box_w, box_h = 660, 320
+                        box_x = (self.width - box_w) // 2
+                        box_y = (self.height - box_h) // 2
+                        self.currency_trial_start_btn_rect = pygame.Rect(box_x + (box_w - 240) // 2, box_y + 245, 240, 44)
+                        if getattr(self, 'coin_clink', None):
+                            self.coin_clink.play()
+                        return "handled"
                 elif getattr(self, 'currency_puzzle_active', False) and getattr(self, 'currency_puzzle_all_placed', False):
                     self.currency_puzzle_active = False
                     self.currency_puzzle_solved = True

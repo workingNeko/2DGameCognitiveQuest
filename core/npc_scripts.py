@@ -67,9 +67,9 @@ MAP_INSTRUCTIONS_DATA = {
                 ]
             },
             {
-                "title": "3. Solve the Old Man's Shape Riddle:",
+                "title": "3. Assemble the Forest Keystone Jigsaw Puzzle:",
                 "bullets": [
-                    "Speak to the Old Man and select the shape that solves his riddle!"
+                    "Speak to the Old Man and fit the interlocking shape pieces together to activate the Goal Portal!"
                 ]
             },
             {
@@ -920,8 +920,9 @@ MENTOR_SCRIPTS_DATA = {
     ("quarter1", "map1.txt"): {
         "name": "Old Man",
         "role": "Forest Mentor",
-        "incomplete": "Halt, young traveler! Beyond this point lies the portal.\nBut to pass, you must build the bridge first and answer my riddle!\nGo back and solve the shape puzzles in the forest.",
-        "complete": "Ah! You have crossed the Bridge of Shapes! But before the portal opens, you must prove your wisdom. Hear my riddle:",
+        "incomplete": "Halt, young traveler! Beyond this point lies the portal.\nBut to pass, you must build the bridge first and solve my puzzle!\nGo back and answer the 5 shape stations in the forest.",
+        "complete": "Ah! You have crossed the Bridge of Shapes! But before the portal opens, you must prove your wisdom.\nFit the interlocking Forest Keystone pieces together to activate the Goal Portal!\nAre you ready?",
+        "solved": "Outstanding, young adventurer {player_name}! You have built the bridge and assembled the Forest Keystone!\nYou may now enter the portal and proceed on your quest. Safe travels!",
         "wrong_riddle": "That is incorrect, young adventurer! Think carefully and try again.",
         "correct_riddle": "Outstanding, young adventurer! You have built the bridge and solved my riddle!\nYou may now enter the portal and proceed on your quest. Safe travels!"
     },
