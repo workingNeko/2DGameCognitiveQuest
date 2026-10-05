@@ -560,21 +560,6 @@ class StudentSelect:
                 pygame.draw.line(bot_fade, (210, 225, 245, alpha), (0, i), (list_rect.width - 25, i))
             self.screen.blit(bot_fade, (list_rect.x, list_rect.bottom - 18))
 
-        # Subtle Top / Bottom scroll fades when content overflows
-        if self.scroll_y > 10.0:
-            top_fade = pygame.Surface((list_rect.width - 25, 18), pygame.SRCALPHA)
-            for i in range(18):
-                alpha = int(120 * (1.0 - i / 18.0))
-                pygame.draw.line(top_fade, (210, 225, 245, alpha), (0, i), (list_rect.width - 25, i))
-            self.screen.blit(top_fade, (list_rect.x, list_rect.y))
-
-        if self.max_scroll_y > 0 and self.scroll_y < self.max_scroll_y - 10.0:
-            bot_fade = pygame.Surface((list_rect.width - 25, 18), pygame.SRCALPHA)
-            for i in range(18):
-                alpha = int(120 * (i / 18.0))
-                pygame.draw.line(bot_fade, (210, 225, 245, alpha), (0, i), (list_rect.width - 25, i))
-            self.screen.blit(bot_fade, (list_rect.x, list_rect.bottom - 18))
-
         self.screen.set_clip(old_clip)
 
         # SCROLLBAR
