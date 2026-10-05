@@ -44,3 +44,10 @@ dist/
 *.spec.bak
 *.zip
 
+
+# Build / packaging scripts (kept locally, not tracked)
+CognitivePlay.spec
+build_exe.bat
+deploy_desktop.ps1
+analyze_size.py
+tools/deploy_to_desktop.py
