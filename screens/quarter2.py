@@ -2615,6 +2615,7 @@ class Quarter2:
                 self.quiz_state = 1
                 self.selected_choice_index = -1
                 self.eliminated_choices.clear()
+                self.station_attempts[self.quiz_station_index] = 0
                 self.wrong_feedback_msg = ""
                 self.current_question_index = self.quiz_station_index - 1
                 if getattr(self, 'coin_clink', None):
@@ -2808,7 +2809,7 @@ class Quarter2:
                 
                 save_student_progress(self.main_menu)
 
-        # State 4: Out of tries reveal screen click -> Guaranteed progression!
+        # State 4: Out of tries reveal screen click -> Closes window without advancing
         elif self.quiz_state == 4:
             box_w, box_h = 740, 340
             box_x = (self.width - box_w) // 2
@@ -2819,31 +2820,13 @@ class Quarter2:
                 self.eliminated_choices.clear()
                 self.wrong_feedback_msg = ""
                 self.speed_boost_timer = 3.0
-                cleared_info = self.station_npc_info.get(self.quiz_station_index, {})
-                cleared_name = cleared_info.get("name", f"Station {self.quiz_station_index}")
-                self.banner_text = f"STALL CLEARED: {cleared_name.upper()}!"
-                self.banner_sub = "Festive Sprint active! Proceed to the next barrio stall!"
+                self.station_attempts[self.quiz_station_index] = 0
+                self.quiz_state = 0
+                st_info = self.station_npc_info.get(self.quiz_station_index, {})
+                st_name = st_info.get("name", f"Station {self.quiz_station_index}")
+                self.banner_text = "2 TRIES EXHAUSTED!"
+                self.banner_sub = f"Speak with {st_name} again to retry the question!"
                 self.banner_timer = 3.0
-
-                current_st = self.quiz_station_index
-                if self.map_name == "map5.txt":
-                    self.kubo_pieces_collected = current_st
-                    self.trigger_kubo_pan_sequence(current_st)
-
-                if self.quiz_station_index < 5:
-                    self.quiz_station_index += 1
-                    self.current_question_index = self.quiz_station_index - 1
-                    self.quiz_state = 0
-                    print(f"[TARGET] Proceeding to Station {self.quiz_station_index}")
-                else:
-                    self.quiz_station_index = 6
-                    self.current_question_index = 5
-                    self.quiz_state = 0
-                    self.guardian_knight_state = 1
-                    self.banner_text = "ALL 5 BARRIO STALLS CLEARED!"
-                    self.banner_sub = "Find the Knight Guardian at the portal to take the Currency Matching Trial!"
-                    self.banner_timer = 5.0
-
                 save_student_progress(self.main_menu)
                 
         # State 5: Final speech click -> Unlock Grand Fiesta Portal & Warp Transition!
@@ -3195,16 +3178,17 @@ class Quarter2:
         reveal_msg = script.get("out_of_tries_line", "Here is the answer. Keep moving forward!").replace("[Player Name]", self.player_name)
         item_name = script.get("item_awarded", "Progression Item")
 
-        speaker_surf = self.dialog_header_font.render(f"{speaker_name} - Solution Revealed", True, (245, 158, 11))
+        speaker_surf = self.dialog_header_font.render(f"{speaker_name} — 2 Tries Exhausted", True, (245, 158, 11))
         self.screen.blit(speaker_surf, (box_x + 28, box_y + 18))
 
+        reveal_msg = "You have used both of your 2 attempts for this challenge."
         lines = self.wrap_text(reveal_msg, self.dialog_q_font, box_w - 56)
         y_off = box_y + 65
         for l in lines[:2]:
             self.screen.blit(self.dialog_q_font.render(l, True, (255, 255, 255)), (box_x + 28, y_off))
             y_off += 28
 
-        reward_surf = self.dialog_hint_font.render(f"Acquired: {item_name}! Your quest continues!", True, (254, 240, 138))
+        reward_surf = self.dialog_hint_font.render(f"Review the stall items and talk to {speaker_name} again to retry!", True, (254, 240, 138))
         self.screen.blit(reward_surf, (box_x + 28, y_off + 10))
 
         button_w, button_h = 260, 50
@@ -3220,7 +3204,7 @@ class Quarter2:
         pygame.draw.rect(self.screen, bg_color, btn_rect, border_radius=12)
         pygame.draw.rect(self.screen, border_color, btn_rect, 2, border_radius=12)
 
-        c_surf = self.dialog_header_font.render("Continue Quest >>", True, (255, 255, 255) if not is_hovered else (15, 23, 42))
+        c_surf = self.dialog_header_font.render("Close Window [Esc]", True, (255, 255, 255) if not is_hovered else (15, 23, 42))
         self.screen.blit(c_surf, c_surf.get_rect(center=btn_rect.center))
 
     def draw_correct_dialog(self):
@@ -4898,7 +4882,7 @@ class Quarter2:
                     if self.quiz_state == 2:
                         self.quiz_state = 1
                         save_student_progress(self.main_menu)
-                    elif self.quiz_state in [3, 4]:
+                    elif self.quiz_state == 3:
                         current_st = self.quiz_station_index
                         if self.map_name == "map5.txt":
                             self.kubo_pieces_collected = current_st
@@ -4916,6 +4900,18 @@ class Quarter2:
                             self.banner_text = "ALL 5 BARRIO STALLS CLEARED!"
                             self.banner_sub = "Find the Knight Guardian at the portal to take the Currency Matching Trial!"
                             self.banner_timer = 5.0
+                        save_student_progress(self.main_menu)
+                    elif self.quiz_state == 4:
+                        self.eliminated_choices.clear()
+                        self.wrong_feedback_msg = ""
+                        self.speed_boost_timer = 3.0
+                        self.station_attempts[self.quiz_station_index] = 0
+                        self.quiz_state = 0
+                        st_info = self.station_npc_info.get(self.quiz_station_index, {})
+                        st_name = st_info.get("name", f"Station {self.quiz_station_index}")
+                        self.banner_text = "2 TRIES EXHAUSTED!"
+                        self.banner_sub = f"Speak with {st_name} again to retry the question!"
+                        self.banner_timer = 3.0
                         save_student_progress(self.main_menu)
                     elif self.quiz_state == 5:
                         self.quiz_state = 6
@@ -4935,6 +4931,11 @@ class Quarter2:
                     self.reset_currency_matching_puzzle()
                     return "handled"
             elif event.key == pygame.K_ESCAPE:
+                if self.quiz_state in [1, 2, 4]:
+                    self.quiz_state = 0
+                    self.eliminated_choices.clear()
+                    self.station_attempts[self.quiz_station_index] = 0
+                    return "handled"
                 if self.main_menu:
                     from db.save_system import show_saving_and_exit
                     show_saving_and_exit(self.main_menu)

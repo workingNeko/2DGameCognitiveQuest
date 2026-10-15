@@ -42,58 +42,58 @@ class TestQuarter3GuardianPuzzle(unittest.TestCase):
             self.assertFalse(q3.solar_array_puzzle_solved, f"Puzzle should start unsolved in {map_file}")
 
     def test_solar_array_puzzle_initialization(self):
-        """Test that init_solar_array_puzzle creates 5 distinct pedestals and 5 matching gem matrix slabs"""
+        """Test that init_solar_array_puzzle creates authentic array matrix grid and matching gems"""
         q3 = Quarter3(self.screen, self.main_menu, "map7.txt")
         q3.init_solar_array_puzzle()
 
-        self.assertEqual(len(q3.solar_array_puzzle_slots), 5, "Must have 5 target equation pedestals")
-        self.assertEqual(len(q3.solar_array_puzzle_pieces), 5, "Must have 5 draggable/clickable gem slabs")
+        total_expected = q3.solar_matrix_rows * q3.solar_matrix_cols
+        self.assertEqual(len(q3.solar_array_puzzle_slots), total_expected, f"Must have {total_expected} matrix sockets")
+        self.assertEqual(len(q3.solar_array_puzzle_pieces), total_expected, f"Must have {total_expected} draggable solar crystals")
 
-        slot_ids = [s["id"] for s in q3.solar_array_puzzle_slots]
-        piece_ids = [p["id"] for p in q3.solar_array_puzzle_pieces]
-        self.assertEqual(set(slot_ids), set(piece_ids), "All slots must have matching pieces in tray")
-
-        # Verify slabs have pre-rendered surfaces
+        # Verify pieces have pre-rendered surfaces and valid data
         for piece in q3.solar_array_puzzle_pieces:
-            self.assertIsNotNone(piece["slab_surf"])
+            self.assertIsNotNone(piece["gem_surf"])
             self.assertFalse(piece["is_placed"])
 
     def test_solar_array_puzzle_randomization_across_maps_and_sessions(self):
-        """Test that different maps and successive initializations produce randomized item configurations"""
+        """Test that different maps and successive initializations produce randomized array matrix configurations"""
         q3_map7 = Quarter3(self.screen, self.main_menu, "map7.txt")
         q3_map7.init_solar_array_puzzle()
-        eqs_map7 = [s["equation"] for s in q3_map7.solar_array_puzzle_slots]
+        eq_map7 = q3_map7.solar_array_target_equation
 
         q3_map8 = Quarter3(self.screen, self.main_menu, "map8.txt")
         q3_map8.init_solar_array_puzzle()
-        eqs_map8 = [s["equation"] for s in q3_map8.solar_array_puzzle_slots]
+        eq_map8 = q3_map8.solar_array_target_equation
 
         q3_map9 = Quarter3(self.screen, self.main_menu, "map9.txt")
         q3_map9.init_solar_array_puzzle()
-        eqs_map9 = [s["equation"] for s in q3_map9.solar_array_puzzle_slots]
+        eq_map9 = q3_map9.solar_array_target_equation
 
-        self.assertEqual(len(eqs_map7), 5)
-        self.assertEqual(len(eqs_map8), 5)
-        self.assertEqual(len(eqs_map9), 5)
+        self.assertIn("=", eq_map7)
+        self.assertIn("=", eq_map8)
+        self.assertIn("=", eq_map9)
 
         # Re-initialization on the same map generates dynamic fresh ordering or combinations
         q3_map7_second = Quarter3(self.screen, self.main_menu, "map7.txt")
         q3_map7_second.init_solar_array_puzzle()
-        self.assertEqual(len(q3_map7_second.solar_array_puzzle_slots), 5)
+        self.assertEqual(len(q3_map7_second.solar_array_puzzle_slots), q3_map7_second.solar_matrix_rows * q3_map7_second.solar_matrix_cols)
 
     def test_solar_array_puzzle_matching_and_reset(self):
-        """Test matching slabs into pedestals and resetting the tray"""
+        """Test matching solar crystals into matrix sockets and resetting the altar"""
         q3 = Quarter3(self.screen, self.main_menu, "map7.txt")
         q3.init_solar_array_puzzle()
 
-        # Match 1 piece
+        # Match 1 piece via mouse drag-and-drop
         piece = q3.solar_array_puzzle_pieces[0]
-        target_slot = next(s for s in q3.solar_array_puzzle_slots if s["id"] == piece["id"])
-        
-        # Position piece inside slot rect and release
+        target_slot = q3.solar_array_puzzle_slots[0]
+
+        handled = q3.handle_solar_array_mouse_down((piece["x"] + 5, piece["y"] + 5))
+        self.assertTrue(handled, "Mouse down on gem should initiate drag")
+        self.assertEqual(q3.dragged_solar_piece, piece)
+
+        # Move piece to target socket center and release
         piece["x"] = target_slot["rect"].centerx - piece["w"] // 2
         piece["y"] = target_slot["rect"].centery - piece["h"] // 2
-        q3.dragged_solar_piece = piece
         q3.release_dragged_solar_piece()
 
         self.assertTrue(target_slot["matched"])
@@ -105,6 +105,31 @@ class TestQuarter3GuardianPuzzle(unittest.TestCase):
         self.assertFalse(piece["is_placed"])
         self.assertEqual(piece["x"], piece["orig_x"])
         self.assertEqual(piece["y"], piece["orig_y"])
+
+    def test_solar_array_puzzle_gesture_drag_and_drop(self):
+        """Test gesture closed fist grab, motion, and open fist drop into matrix sockets"""
+        q3 = Quarter3(self.screen, self.main_menu, "map7.txt")
+        q3.init_solar_array_puzzle()
+
+        piece = q3.solar_array_puzzle_pieces[0]
+        target_slot = q3.solar_array_puzzle_slots[0]
+
+        # Fist closed over piece
+        q3.cursor_pos = (piece["x"] + 5, piece["y"] + 5)
+        q3.fist_closed = True
+        q3.update_solar_array_puzzle(0.016)
+        self.assertEqual(q3.dragged_solar_piece, piece, "Closed fist over crystal must grab it")
+
+        # Move cursor to target slot
+        q3.cursor_pos = target_slot["rect"].center
+        q3.update_solar_array_puzzle(0.016)
+
+        # Open fist to drop
+        q3.fist_closed = False
+        q3.update_solar_array_puzzle(0.016)
+
+        self.assertTrue(target_slot["matched"], "Socket must be matched upon gesture drop")
+        self.assertTrue(piece["is_placed"], "Piece must be marked placed")
 
     def test_full_station_to_guardian_and_puzzle_solve_progression(self):
         """Test full progression: Stations 1-5 cleared -> Guardian activated -> Trial prompt -> Puzzle solve -> Portal unlocked"""
@@ -141,13 +166,9 @@ class TestQuarter3GuardianPuzzle(unittest.TestCase):
         self.assertEqual(q3.guardian_skeleton_state, 3, "Guardian state must become 3 (puzzle active)")
         self.assertTrue(q3.solar_array_puzzle_active, "Solar Array puzzle must be active")
 
-        # Solve all 5 slots via click-to-slot simulation
-        for piece in q3.solar_array_puzzle_pieces:
-            slot = next(s for s in q3.solar_array_puzzle_slots if s["id"] == piece["id"])
-            slot["matched"] = True
-            slot["matched_item"] = piece["data"]
-            piece["is_placed"] = True
-        q3.solar_array_puzzle_all_placed = True
+        # Solve all matrix sockets via auto solve
+        q3.auto_solve_solar_array_puzzle()
+        self.assertTrue(q3.solar_array_puzzle_all_placed)
 
         # Click Unlock Portal button
         self.assertIsNotNone(q3.solar_puzzle_continue_btn_rect)
@@ -222,6 +243,77 @@ class TestQuarter3GuardianPuzzle(unittest.TestCase):
             q3.guardian_skeleton_state = 5
             q3.quiz_state = 6
             q3.draw()
+
+    def test_solar_array_puzzle_click_to_place_accessibility(self):
+        """Test quick click on a tray crystal snaps it to the first unoccupied socket without manual dragging"""
+        q3 = Quarter3(self.screen, self.main_menu, "map7.txt")
+        q3.init_solar_array_puzzle()
+
+        piece = q3.solar_array_puzzle_pieces[0]
+        first_slot = q3.solar_array_puzzle_slots[0]
+
+        # Simulate quick click via trigger_click
+        q3.trigger_click((piece["x"] + 5, piece["y"] + 5))
+
+        self.assertTrue(first_slot["matched"], "First socket must be filled by click-to-place")
+        self.assertTrue(piece["is_placed"], "Piece must be marked placed")
+        self.assertEqual(piece["target_slot_id"], first_slot["id"])
+
+    def test_solar_array_puzzle_row_beam_activation(self):
+        """Test completing all sockets in a row activates that row's solar beam"""
+        q3 = Quarter3(self.screen, self.main_menu, "map7.txt")
+        q3.init_solar_array_puzzle()
+
+        cols = q3.solar_matrix_cols
+        # Place crystals in row 0
+        for c in range(cols):
+            slot = q3.solar_array_puzzle_slots[c]
+            piece = q3.solar_array_puzzle_pieces[c]
+            # Drag piece directly to slot
+            piece["x"] = slot["rect"].centerx - piece["w"] // 2
+            piece["y"] = slot["rect"].centery - piece["h"] // 2
+            q3.dragged_solar_piece = piece
+            q3.release_dragged_solar_piece()
+
+        self.assertTrue(q3.solar_matrix_row_completed[0], "Row 0 must be marked completed")
+        self.assertGreater(q3.solar_matrix_beam_alphas[0], 0.0, "Row 0 solar laser beam must be activated")
+
+    def test_talk_to_skeleton_guardian_accesses_mini_game(self):
+        """Test that talking to the Skeleton Guardian directly opens dialogue and provides access to the Scales of Anubis mini-game"""
+        q3 = Quarter3(self.screen, self.main_menu, "map7.txt")
+        q3.instruction_modal.hide()
+        q3.greeting_dialog.hide()
+
+        # 1. Player clicks directly on the Skeleton Guardian sprite
+        sx = int((q3.npc_skeleton_x - q3.camera_x) * 1.50) + 16
+        sy = int((q3.npc_skeleton_y - q3.camera_y) * 1.50) + 16
+        q3.trigger_click((sx, sy))
+
+        self.assertEqual(q3.guardian_skeleton_state, 2, "Clicking Skeleton Guardian must open dialogue modal (state 2)")
+        self.assertIsNotNone(q3.guardian_skeleton_btn_rect, "Trial button must exist")
+
+        # 2. Click trial button to begin Scales of Anubis mini-game
+        q3.trigger_click(q3.guardian_skeleton_btn_rect.center)
+        self.assertEqual(q3.guardian_skeleton_state, 3, "Clicking trial button must enter mini-game (state 3)")
+        self.assertTrue(q3.solar_array_puzzle_active, "Scales of Anubis puzzle must be active")
+
+        # 3. Test Escape key / Close button closes puzzle and returns to desert
+        escape_event = pygame.event.Event(pygame.KEYDOWN, key=pygame.K_ESCAPE)
+        q3.handle_event(escape_event)
+        self.assertFalse(q3.solar_array_puzzle_active, "Escape must close Scales of Anubis puzzle")
+
+        # 4. Move player close to Skeleton Guardian and press 'E' to talk
+        q3.player_x = q3.npc_skeleton_x
+        q3.player_y = q3.npc_skeleton_y
+        e_event = pygame.event.Event(pygame.KEYDOWN, key=pygame.K_e)
+        q3.handle_event(e_event)
+        self.assertEqual(q3.guardian_skeleton_state, 2, "Pressing E near Skeleton Guardian must open dialogue")
+
+        # 5. Press Return/Space in dialogue to enter mini-game
+        return_event = pygame.event.Event(pygame.KEYDOWN, key=pygame.K_RETURN)
+        q3.handle_event(return_event)
+        self.assertEqual(q3.guardian_skeleton_state, 3, "Pressing Return in dialogue must enter mini-game")
+        self.assertTrue(q3.solar_array_puzzle_active)
 
 
 if __name__ == "__main__":

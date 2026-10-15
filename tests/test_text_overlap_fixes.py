@@ -137,6 +137,79 @@ class TestTextOverlapFixes(unittest.TestCase):
         self.assertLess(test_font.size(q1_str)[0] + 30, 480)
         self.assertLess(test_font.size(q4_str)[0] + 30, 480)
 
+    def test_loading_screen_elements_no_overlap(self):
+        """Verify LOADING... text, subtitle banner, and Objectives HUD never overlap across all quarters."""
+        from screens.stageselect import StageSelect
+        menu = MainMenu(self.screen)
+        ss = StageSelect(self.screen, menu)
+
+        cy = ss.height // 2
+        base_y = cy - 85
+
+        for qid in ["quarter1", "quarter2", "quarter3", "quarter4"]:
+            ss._init_portal_transition_fx(qid)
+            dest_rect = ss._cached_dest_rect
+
+            # 1. Letters lowest bounce check
+            for i, data in enumerate(ss.loading_letters):
+                # Max oscillation offset is +8
+                letter_h = data["surf"].get_height() - data["pad"] * 2
+                max_letter_bottom = base_y + 8 + letter_h
+
+                self.assertLess(
+                    max_letter_bottom,
+                    dest_rect.top,
+                    f"[{qid}] LOADING... letter {i} bottom ({max_letter_bottom}) overlaps subtitle banner top ({dest_rect.top})!"
+                )
+
+            # 2. Subtitle banner must be strictly above bottom HUD
+            hud_pos = ss._cached_hud_pos
+            self.assertLess(
+                dest_rect.bottom,
+                hud_pos[1],
+                f"[{qid}] Subtitle banner bottom ({dest_rect.bottom}) overlaps HUD top ({hud_pos[1]})!"
+            )
+
+    def test_stageselect_top_hud_text_does_not_overlap_stars(self):
+        """Verify Quarters Mastered text does not collide with the first golden star medal."""
+        from screens.stageselect import StageSelect
+        menu = MainMenu(self.screen)
+        ss = StageSelect(self.screen, menu)
+
+        hud_w, hud_h = 370, 42
+        hud_x = (ss.width - hud_w) // 2
+        hud_y = 12
+
+        hud_font = get_font("Comic Sans MS", 16, bold=True)
+        text_w = hud_font.render("Quarters Mastered: 4/4", True, (241, 245, 249)).get_width()
+        text_right = hud_x + 16 + text_w
+
+        first_star_left = (hud_x + 258) - 8  # star radius = 8
+
+        self.assertLess(
+            text_right,
+            first_star_left,
+            f"Stage progress text right edge ({text_right}) collides with first star left edge ({first_star_left})!"
+        )
+
+    def test_tutorial_skip_button_text_does_not_overlap_esc_pill(self):
+        """Verify 'Skip Tutorial' text has clear separation from the ESC shortcut pill."""
+        from screens.tutorial import TutorialScreen
+        menu = MainMenu(self.screen)
+        tut = TutorialScreen(self.screen, menu)
+
+        skip_rect = pygame.Rect(tut.width - 325, 18, 180, 36)
+        skip_txt_w = tut.skip_font.render("Skip Tutorial", True, (255, 255, 255)).get_width()
+        text_right = skip_rect.x + 14 + skip_txt_w
+
+        pill_left = skip_rect.right - 52
+        self.assertLess(
+            text_right,
+            pill_left,
+            f"Tutorial skip text right edge ({text_right}) collides with pill left edge ({pill_left})!"
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
+

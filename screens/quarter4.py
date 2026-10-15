@@ -1429,6 +1429,7 @@ class Quarter4:
                 self.quiz_state = 1
                 self.selected_choice_index = -1
                 self.eliminated_choices.clear()
+                self.station_attempts[self.quiz_station_index] = 0
                 self.wrong_feedback_msg = ""
                 self.current_question_index = self.quiz_station_index - 1
                 if getattr(self, 'coin_clink', None):
@@ -1469,11 +1470,10 @@ class Quarter4:
                         self.eliminated_choices.add(i)
                         print(f"[FAIL] Incorrect answer selected! (Attempt 1 of 2)")
                     else:
-                        # 2nd wrong attempt: Out of tries! Recorded as wrong, but award emblem so game proceeds
+                        # 2nd wrong attempt: Out of tries!
                         self.eliminated_choices.clear()
                         self.quiz_state = 4
-                        self.answered_stations.add(self.quiz_station_index)
-                        print(f"[FAIL] Incorrect answer on 2nd try! Out of tries. Station {self.quiz_station_index} emblem awarded.")
+                        print(f"[FAIL] Incorrect answer on 2nd try! Out of tries. Station {self.quiz_station_index} must be retried.")
                 
                 save_student_progress(self.main_menu)
  
@@ -1517,7 +1517,7 @@ class Quarter4:
                     print(f"[OK] All Stations cleared!")
                 save_student_progress(self.main_menu)
 
-        # State 4: Out of tries reveal screen click (Player gets key and continues)
+        # State 4: Out of tries reveal screen click -> Closes window without advancing
         elif self.quiz_state == 4:
             hit = False
             if hasattr(self, 'reveal_btn_rect') and self.reveal_btn_rect and self.reveal_btn_rect.collidepoint(pos):
@@ -1526,20 +1526,16 @@ class Quarter4:
                 box_w, box_h = 760, 360
                 box_x = (self.width - box_w) // 2
                 box_y = (self.height - box_h) // 2
+                box_rect = pygame.Rect(box_x, box_y, box_w, box_h)
                 btn_rect = pygame.Rect(box_x + (box_w - 280) // 2, box_y + 285, 280, 50)
-                if btn_rect.collidepoint(pos):
+                if btn_rect.collidepoint(pos) or box_rect.collidepoint(pos):
                     hit = True
             if hit:
                 self.speed_boost_timer = 3.0
                 self.eliminated_choices.clear()
+                self.station_attempts[self.quiz_station_index] = 0
                 self.quiz_state = 0
-                self.trigger_award_animation(self.quiz_station_index)
-                if self.quiz_station_index < len(self.quiz_stations):
-                    self.quiz_station_index += 1
-                    print(f"[OK] Advanced to Station {self.quiz_station_index}")
-                else:
-                    self.quiz_station_index = len(self.quiz_stations) + 1
-                    print(f"[OK] All Stations cleared!")
+                self.show_bridge_warning(f"2 tries exhausted! Speak with Station {self.quiz_station_index} Guardian again to retry.")
                 save_student_progress(self.main_menu)
                 
         # State 5: Final speech click
@@ -2621,6 +2617,26 @@ class Quarter4:
         if getattr(self, 'instruction_modal', None):
             self.instruction_modal.draw(self.cursor_pos)
 
+        # Draw floating warning bubble if active
+        if getattr(self, 'water_warning_message', None) and pygame.time.get_ticks() - getattr(self, 'water_warning_timer', 0) < 3500:
+            bw_font = self.get_ui_font(18, bold=True)
+            txt_surf = bw_font.render(self.water_warning_message, True, (255, 255, 255))
+            pad_x, pad_y = 24, 12
+            bw = txt_surf.get_width() + pad_x * 2
+            bh = txt_surf.get_height() + pad_y * 2
+            bx = (self.width - bw) // 2
+            by = 70
+            bubble_rect = pygame.Rect(bx, by, bw, bh)
+            bg_s = pygame.Surface((bw, bh), pygame.SRCALPHA)
+            bg_s.fill((15, 23, 42, 230))
+            self.screen.blit(bg_s, (bx, by))
+            pygame.draw.rect(self.screen, (245, 158, 11), bubble_rect, 2, border_radius=12)
+            self.screen.blit(txt_surf, (bx + pad_x, by + pad_y))
+
+    def show_bridge_warning(self, msg):
+        self.water_warning_message = msg
+        self.water_warning_timer = pygame.time.get_ticks()
+
     # ============================================================
     # DRAW UI
     # ============================================================
@@ -2897,6 +2913,11 @@ class Quarter4:
                 return "shortcut_complete"
 
             if event.key == pygame.K_ESCAPE:
+                if self.quiz_state in [1, 2, 4]:
+                    self.quiz_state = 0
+                    self.eliminated_choices.clear()
+                    self.station_attempts[self.quiz_station_index] = 0
+                    return "handled"
                 if self.main_menu:
                     from db.save_system import show_saving_and_exit
                     show_saving_and_exit(self.main_menu)
@@ -2912,10 +2933,34 @@ class Quarter4:
                     self.quiz_state = 1
                     self.selected_choice_index = -1
                     self.eliminated_choices.clear()
+                    self.station_attempts[self.quiz_station_index] = 0
                     self.wrong_feedback_msg = ""
                     self.current_question_index = self.quiz_station_index - 1
                     if getattr(self, 'coin_clink', None):
                         self.coin_clink.play()
+                    return "handled"
+                elif self.quiz_state == 2:
+                    self.quiz_state = 1
+                    save_student_progress(self.main_menu)
+                    return "handled"
+                elif self.quiz_state == 3:
+                    self.speed_boost_timer = 3.0
+                    self.eliminated_choices.clear()
+                    self.quiz_state = 0
+                    self.trigger_award_animation(self.quiz_station_index)
+                    if self.quiz_station_index < len(self.quiz_stations):
+                        self.quiz_station_index += 1
+                    else:
+                        self.quiz_station_index = len(self.quiz_stations) + 1
+                    save_student_progress(self.main_menu)
+                    return "handled"
+                elif self.quiz_state == 4:
+                    self.speed_boost_timer = 3.0
+                    self.eliminated_choices.clear()
+                    self.station_attempts[self.quiz_station_index] = 0
+                    self.quiz_state = 0
+                    self.show_bridge_warning(f"2 tries exhausted! Speak with Station {self.quiz_station_index} Guardian again to retry.")
+                    save_student_progress(self.main_menu)
                     return "handled"
                 elif self.bromen_dialogue_state == 2:
                     self.bromen_dialogue_state = 0
@@ -3137,16 +3182,17 @@ class Quarter4:
         q_font = self.get_ui_font(19, bold=True)
         hint_font = self.get_ui_font(18, bold=True)
 
-        speaker_surf = header_font.render(f"{speaker_name} - Solution Revealed", True, (245, 158, 11))
+        speaker_surf = header_font.render(f"{speaker_name} — 2 Tries Exhausted", True, (245, 158, 11))
         self.screen.blit(speaker_surf, (box_x + 28, box_y + 20))
 
+        reveal_msg = "You have used both of your 2 attempts for this challenge."
         lines = self.wrap_text(reveal_msg, q_font, box_w - 56)
         y_off = box_y + 70
-        for l in lines[:3]:
+        for l in lines[:2]:
             self.screen.blit(q_font.render(l, True, (255, 255, 255)), (box_x + 28, y_off))
             y_off += 30
 
-        reward_surf = hint_font.render(f"Acquired: {item_name}! Your quest continues!", True, (254, 240, 138))
+        reward_surf = hint_font.render(f"Review the challenge and talk to {speaker_name} again to retry!", True, (254, 240, 138))
         self.screen.blit(reward_surf, (box_x + 28, y_off + 12))
 
         button_w, button_h = 280, 50
@@ -3162,9 +3208,10 @@ class Quarter4:
         pygame.draw.rect(self.screen, border_color, btn_rect, 2, border_radius=14)
 
         btn_font = self.get_ui_font(20, bold=True)
-        c_surf = btn_font.render("Continue Quest >>", True, (255, 255, 255))
+        c_surf = btn_font.render("Close Window [Esc]", True, (255, 255, 255))
         self.screen.blit(c_surf, c_surf.get_rect(center=btn_rect.center))
         self.reveal_btn_rect = btn_rect
+        self.out_of_tries_btn_rect = btn_rect
 
     def draw_correct_dialog(self):
         overlay = pygame.Surface((self.width, self.height))

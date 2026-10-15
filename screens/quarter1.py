@@ -82,6 +82,7 @@ class Quarter1:
         # Universal RPG Quest Question Dialog
         from core.quiz_dialog import RPGQuizDialog
         self.quiz_dialog = RPGQuizDialog(self.screen, self.width, self.height, getattr(self.main_menu, 'audio_manager', None))
+        self.eliminated_choices = set()
 
         # Master NPC Dialogue & Instruction Modal System
         from core.npc_dialog_system import InstructionModal, NPCGreetingDialog
@@ -2433,6 +2434,8 @@ class Quarter1:
                 self.current_question_index = self.quiz_station_index - 1
                 self.quiz_state = 1
                 self.selected_choice_index = -1
+                self.eliminated_choices.clear()
+                self.question_attempts[self.active_shape_id] = 0
                 return
 
         # Check clicking directly on the Old Man NPC
@@ -2455,13 +2458,14 @@ class Quarter1:
         if self.quiz_state == 1:
             q_idx = max(0, min(self.current_question_index, len(self.quiz_questions) - 1)) if self.quiz_questions else 0
             q_data = self.quiz_questions[q_idx] if self.quiz_questions else {"question": "", "choices": [], "correct": 0}
-            clicked_idx = self.quiz_dialog.get_clicked_choice(pos)
+            clicked_idx = self.quiz_dialog.get_clicked_choice(pos, self.eliminated_choices)
 
             if clicked_idx is not None and clicked_idx < len(q_data["choices"]):
                 if clicked_idx == q_data["correct"]:
                     script_data = get_station_script("quarter1", self.map_name, self.quiz_station_index, student_name)
                     self.current_correct_phrase = script_data["correct_praise"]
                     self.quiz_state = 3
+                    self.eliminated_choices.clear()
                     if hasattr(self.main_menu, 'audio_manager'):
                         self.main_menu.audio_manager.play_sfx("correct")
                         self.main_menu.audio_manager.play_sfx("star_chime")
@@ -2476,11 +2480,13 @@ class Quarter1:
                     if hasattr(self.main_menu, 'audio_manager'):
                         self.main_menu.audio_manager.play_sfx("wrong")
                     if self.question_attempts[self.active_shape_id] < 2:
+                        self.eliminated_choices.add(clicked_idx)
                         self.quiz_state = 2
                         print(f"[FAIL] Incorrect answer selected! (Attempt 1 of 2)")
                     else:
+                        self.eliminated_choices.clear()
                         self.quiz_state = 4
-                        print(f"[FAIL] Incorrect answer on 2nd try! Out of tries. Shape {self.active_shape_id} piece awarded for progression.")
+                        print(f"[FAIL] Incorrect answer on 2nd try! Out of tries. Station {self.active_shape_id} must be retried.")
                 
                 # Auto-save immediately upon answer selection
                 save_student_progress(self.main_menu)
@@ -2503,6 +2509,7 @@ class Quarter1:
             btn_rect = pygame.Rect(box_x + (box_w - 240) // 2, box_y + 215, 240, 50)
             if btn_rect.collidepoint(pos):
                 self.speed_boost_timer = 3.0
+                self.eliminated_choices.clear()
                 if self.is_quiz_map and self.active_shape_id in self.shape_npcs:
                     self.shape_npcs[self.active_shape_id]['answered'] = True
                     answered_count = sum(1 for s in self.shape_npcs.values() if s['answered'])
@@ -2535,44 +2542,19 @@ class Quarter1:
                 # Auto-save after completing question transitions
                 save_student_progress(self.main_menu)
 
-        # State 4: Out of tries reveal screen click (Player gets reward and continues)
+        # State 4: Out of tries reveal screen click (2 tries exhausted -> closes window without awarding piece)
         elif self.quiz_state == 4:
-            box_w, box_h = 740, 340
+            box_w, box_h = 760, 350
             box_x = (self.width - box_w) // 2
             box_y = (self.height - box_h) // 2
-            btn_rect = pygame.Rect(box_x + (box_w - 240) // 2, box_y + 260, 240, 50)
-            if btn_rect.collidepoint(pos):
+            box_rect = pygame.Rect(box_x, box_y, box_w, box_h)
+            btn_rect = pygame.Rect(box_x + (box_w - 240) // 2, box_y + 275, 240, 50)
+            if (hasattr(self, 'out_of_tries_btn_rect') and self.out_of_tries_btn_rect and self.out_of_tries_btn_rect.collidepoint(pos)) or btn_rect.collidepoint(pos) or box_rect.collidepoint(pos):
                 self.speed_boost_timer = 3.0
-                if self.is_quiz_map and self.active_shape_id in self.shape_npcs:
-                    self.shape_npcs[self.active_shape_id]['answered'] = True
-                    answered_count = sum(1 for s in self.shape_npcs.values() if s['answered'])
-                    
-                    if self.active_shape_id < 5:
-                        self.quiz_station_index = self.active_shape_id + 1
-                        print(f"[OK] Advanced to Shape Station {self.quiz_station_index}")
-                    else:
-                        self.quiz_station_index = 6
-                        print(f"[OK] All 5 Shape Stations restored!")
-
-                    # Trigger collect animations or bridge pan sequences
-                    if self.map_name.lower() == 'map1.txt':
-                        self.trigger_bridge_pan_sequence()
-                    elif self.map_name.lower() in ['map2.txt', 'map3.txt']:
-                        self.trigger_award_animation()
-                        
-                    if answered_count >= 5:
-                        self.spawn_portals()
-                        self.quiz_state = 0
-                    else:
-                        self.quiz_state = 0
-                else:
-                    self.current_question_index += 1
-                    if self.current_question_index < 5:
-                        self.quiz_state = 0
-                    else:
-                        self.quiz_state = 5
-                
-                # Auto-save after completing question transitions
+                self.eliminated_choices.clear()
+                self.question_attempts[self.active_shape_id] = 0
+                self.quiz_state = 0
+                self.show_bridge_warning(f"2 tries exhausted! Speak with Shape Guardian {self.active_shape_id} again to retry.")
                 save_student_progress(self.main_menu)
                 
         # State 5: Final speech click
@@ -3437,7 +3419,8 @@ class Quarter1:
             speaker_subtitle=speaker_subtitle,
             sprite_frame=sprite_frame,
             station_idx=self.quiz_station_index,
-            total_stations=5
+            total_stations=5,
+            eliminated_choices=self.eliminated_choices
         )
 
     def draw_wrong_dialog(self):
@@ -3539,33 +3522,31 @@ class Quarter1:
         pygame.draw.rect(self.screen, (251, 191, 36), dialog_rect.inflate(-6, -6), 1, border_radius=12)
 
         speaker_font = self.get_ui_font(24, bold=True)
-        speaker_surf = speaker_font.render(speaker_name, True, (245, 158, 11))
+        speaker_surf = speaker_font.render(f"{speaker_name} — 2 Tries Exhausted", True, (245, 158, 11))
         self.screen.blit(speaker_surf, (box_x + 28, box_y + 18))
 
-        q_data = self.quiz_questions[self.current_question_index] if self.current_question_index < len(self.quiz_questions) else {}
-        correct_choice_text = q_data.get("choices", [""])[q_data.get("correct", 0)] if q_data.get("choices") else ""
-
         q_font = self.get_ui_font(18, bold=True)
-        ans_msg = f"Out of tries! The correct answer was: {correct_choice_text}"
+        ans_msg = "Out of tries! You have used both of your 2 attempts for this challenge."
         ans_lines = self.wrap_text(ans_msg, q_font, box_w - 56)
         
-        y_cur = box_y + 58
+        y_cur = box_y + 60
         for al in ans_lines[:2]:
             self.screen.blit(q_font.render(al, True, (255, 255, 255)), (box_x + 28, y_cur))
             y_cur += 26
 
-        reward_text = script_data["out_of_tries"]
-        wrapped_reward = self.wrap_text(reward_text, q_font, box_w - 56)
-        y_cur += 6
-        for rw_line in wrapped_reward[:3]:
-            msg2 = q_font.render(rw_line, True, (255, 215, 0))
+        retry_msg = f"Review your shapes and talk to {speaker_name} again to retry the question!"
+        wrapped_retry = self.wrap_text(retry_msg, q_font, box_w - 56)
+        y_cur += 10
+        for rw_line in wrapped_retry[:2]:
+            msg2 = q_font.render(rw_line, True, (254, 240, 138))
             self.screen.blit(msg2, (box_x + 28, y_cur))
             y_cur += 26
 
-        button_w, button_h = 240, 50
+        button_w, button_h = 260, 50
         button_x = box_x + (box_w - button_w) // 2
         button_y = box_y + 275
         btn_rect = pygame.Rect(button_x, button_y, button_w, button_h)
+        self.out_of_tries_btn_rect = btn_rect
 
         is_hovered = btn_rect.collidepoint(self.cursor_pos)
         bg_color = (245, 158, 11) if is_hovered else (30, 41, 59)
@@ -3574,7 +3555,7 @@ class Quarter1:
         pygame.draw.rect(self.screen, bg_color, btn_rect, border_radius=12)
         pygame.draw.rect(self.screen, border_col, btn_rect, 2, border_radius=12)
 
-        c_surf = speaker_font.render("Continue", True, (255, 255, 255) if not is_hovered else (15, 23, 42))
+        c_surf = speaker_font.render("Close Window [Esc]", True, (255, 255, 255) if not is_hovered else (15, 23, 42))
         c_rect = c_surf.get_rect(center=btn_rect.center)
         self.screen.blit(c_surf, c_rect)
 
@@ -4432,6 +4413,12 @@ class Quarter1:
 
         if event.type == pygame.KEYDOWN:
             if event.key == pygame.K_ESCAPE:
+                if self.quiz_state in [1, 2, 4]:
+                    self.quiz_state = 0
+                    self.eliminated_choices.clear()
+                    if hasattr(self, 'active_shape_id'):
+                        self.question_attempts[self.active_shape_id] = 0
+                    return "handled"
                 if self.main_menu:
                     from db.save_system import show_saving_and_exit
                     show_saving_and_exit(self.main_menu)
@@ -4439,7 +4426,7 @@ class Quarter1:
             elif event.key == pygame.K_i:
                 self.show_info = not self.show_info
             elif event.key in [pygame.K_SPACE, pygame.K_RETURN]:
-                if self.quiz_state in [1, 2, 3, 5, 10, 11, 12, 13, 14, 20, 21, 22]:
+                if self.quiz_state in [1, 2, 3, 4, 5, 10, 11, 12, 13, 14, 20, 21, 22]:
                     self.trigger_click(self.cursor_pos)
                 elif self.quiz_state == 0:
                     if not self.check_portal_teleport_on_hold():

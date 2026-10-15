@@ -1683,16 +1683,21 @@ class StageSelect:
         }
         self.portal_transition_theme = palettes.get(qid, palettes["quarter1"])
 
-        # Pre-composite LOADING... letters into single baked surfaces (eliminates 80 blits and 30 surface copies per frame)
+        # Pre-composite LOADING... letters into single baked surfaces (sized properly for clean separation)
         theme_glow = self.portal_transition_theme.get("primary", (180, 180, 180))
         self.loading_text = "LOADING..."
-        self.loading_spacing = 10
+        self.loading_spacing = 8
         self.loading_letters = []
-        pad = 6
+        pad = 5
+        try:
+            loading_font = pygame.font.Font(self.pixel_font_path, 44)
+        except Exception:
+            loading_font = pygame.font.SysFont("Consolas", 44, bold=True)
+
         for ch in self.loading_text:
-            glow = self.title_font.render(ch, False, theme_glow)
-            outline = self.title_font.render(ch, False, (0, 0, 0))
-            main = self.title_font.render(ch, False, (255, 255, 255))
+            glow = loading_font.render(ch, False, theme_glow)
+            outline = loading_font.render(ch, False, (0, 0, 0))
+            main = loading_font.render(ch, False, (255, 255, 255))
             gw, gh = glow.get_width(), glow.get_height()
 
             comp_surf = pygame.Surface((gw + pad * 2, gh + pad * 2), pygame.SRCALPHA)
@@ -1709,14 +1714,22 @@ class StageSelect:
             })
         self.loading_total_width = sum(l["width"] for l in self.loading_letters) + self.loading_spacing * (len(self.loading_text) - 1)
 
-        # Destination Realm Subtitle Banner (Pre-rendered)
+        # Destination Realm Subtitle Banner (Pre-rendered inside non-overlapping glassmorphic pill badge)
         dest_name = self.portal_transition_theme.get("name", "STAGE")
         dest_title = self.portal_transition_theme.get("title", "")
         dest_str = f"WARPING TO {dest_name}: {dest_title}"
         sub_font = get_font("Comic Sans MS", 14, bold=True)
-        self._cached_dest_surf = sub_font.render(dest_str, True, self.portal_transition_theme.get("accent", (250, 204, 21)))
-        base_y = self.height // 2 - 60
-        self._cached_dest_rect = self._cached_dest_surf.get_rect(center=(self.width // 2, base_y + 70))
+        raw_text_surf = sub_font.render(dest_str, True, self.portal_transition_theme.get("accent", (250, 204, 21)))
+        tw, th = raw_text_surf.get_size()
+        pill_w, pill_h = tw + 36, th + 14
+        pill_surf = pygame.Surface((pill_w, pill_h), pygame.SRCALPHA)
+        pygame.draw.rect(pill_surf, (15, 23, 42, 220), (0, 0, pill_w, pill_h), border_radius=12)
+        border_col = self.portal_transition_theme.get("primary", (56, 189, 248))
+        pygame.draw.rect(pill_surf, (*border_col, 180), (0, 0, pill_w, pill_h), 2, border_radius=12)
+        pill_surf.blit(raw_text_surf, (18, 7))
+
+        self._cached_dest_surf = pill_surf
+        self._cached_dest_rect = self._cached_dest_surf.get_rect(center=(self.width // 2, self.height // 2 + 38))
 
         # Objectives HUD Dimensions
         box_w = min(480, self.width - 40)
@@ -3570,12 +3583,12 @@ class StageSelect:
             if 0 <= sx < self.width and 0 <= sy < self.height:
                 pygame.draw.circle(self.screen, s["color"], (sx, sy), s["radius"])
 
-        # 3. Pre-composited Animated "LOADING..." Title (Single blit per letter)
-        base_y = cy - 60
+        # 3. Pre-composited Animated "LOADING..." Title (Single blit per letter, zero overlap with subtitle)
+        base_y = cy - 85
         x = cx - self.loading_total_width // 2
         for i, data in enumerate(self.loading_letters):
             phase = timer * 7.0 - i * 0.45
-            offset = math.sin(phase) * 12
+            offset = math.sin(phase) * 8
             pad = data["pad"]
             self.screen.blit(data["surf"], (x - pad, int(base_y + offset) - pad))
             x += data["width"] + self.loading_spacing
@@ -3626,9 +3639,9 @@ class StageSelect:
             self._completed_quarters = completed
             self.completed_quarters = completed
 
-        # Draw Top HUD Stage Progress Tracker (Enlarged for Grade 2)
+        # Draw Top HUD Stage Progress Tracker (Enlarged for Grade 2 with generous breathing room)
         num_cleared = sum(1 for q in ['quarter1', 'quarter2', 'quarter3', 'quarter4'] if completed.get(q, {}).get("completed", False))
-        hud_w, hud_h = 350, 42
+        hud_w, hud_h = 370, 42
         hud_x = (self.width - hud_w) // 2
         hud_y = 12
         hud_rect = pygame.Rect(hud_x, hud_y, hud_w, hud_h)
@@ -3643,7 +3656,7 @@ class StageSelect:
 
         # 4 Golden Stars / Gem Medals (Native Vector Iconography Engine - Enlarged for Grade 2)
         from core.vector_icons import draw_vector_star
-        star_x = hud_x + 242
+        star_x = hud_x + 258
         for i in range(4):
             is_on = i < num_cleared
             cx = star_x + i * 24

@@ -96,10 +96,11 @@ class TutorialScreen:
         self._fist_click_triggered = False
 
         # Quiz Modal State for Phase 3
-        self.quiz_state = 0 # 0=closed, 1=question open, 2=wrong retry, 3=correct
+        self.quiz_state = 0 # 0=closed, 1=question open, 2=wrong retry, 3=correct, 4=out of tries
         self.eliminated_choice = None
         self.quiz_attempts = 0
         self.wrong_feedback_msg = ""
+        self.out_of_tries_btn_rect = None
         self.sample_question = {
             "title": "Tutorial Challenge",
             "question": "What is 2 + 2?",
@@ -417,6 +418,8 @@ class TutorialScreen:
         if self.phase in [1, 2] and npc_dist < 2.5 * TILE_SIZE:
             self.phase = 3
             self.quiz_state = 1
+            self.quiz_attempts = 0
+            self.eliminated_choice = None
             self.click_dest = None
             print("[TUTORIAL] Player approached Guide NPC: Automatically Triggered Question Dialogue!")
 
@@ -622,6 +625,8 @@ class TutorialScreen:
                             self.main_menu.audio_manager.play_sfx("dialogue_blip")
                         self.phase = 3
                         self.quiz_state = 1
+                        self.quiz_attempts = 0
+                        self.eliminated_choice = None
                         self.click_dest = None
                     elif portal_dist < 3.0 * TILE_SIZE and self.phase == 4:
                         self.finish_tutorial()
@@ -634,8 +639,16 @@ class TutorialScreen:
                 elif self.quiz_state == 3:
                     self.quiz_state = 0
                     self.phase = 4
+                elif self.quiz_state == 4:
+                    self.quiz_state = 0
+                    self.quiz_attempts = 0
+                    self.eliminated_choice = None
             elif event.key == pygame.K_ESCAPE:
-                if getattr(self, 'intro_dialog_open', False):
+                if self.quiz_state in [1, 2, 4]:
+                    self.quiz_state = 0
+                    self.quiz_attempts = 0
+                    self.eliminated_choice = None
+                elif getattr(self, 'intro_dialog_open', False):
                     self.intro_dialog_open = False
                 elif hasattr(self, 'pause_menu'):
                     self.pause_menu.toggle_pause()
@@ -665,11 +678,20 @@ class TutorialScreen:
         else:
             self.quiz_attempts += 1
             self.eliminated_choice = choice_idx
-            self.wrong_feedback_msg = "Almost! You have 1 try remaining. Pick again!"
-            self.quiz_state = 2 if self.quiz_attempts < 2 else 3
-            if hasattr(self.main_menu, 'audio_manager') and self.main_menu.audio_manager:
-                self.main_menu.audio_manager.play_sfx("wrong")
-            print("[FAIL] Wrong Answer in Tutorial Quiz -> Showing 2-Attempt Mechanics!")
+            if self.quiz_attempts < 2:
+                self.wrong_feedback_msg = "Almost! You have 1 try remaining. Pick again!"
+                self.quiz_state = 2
+                if hasattr(self.main_menu, 'audio_manager') and self.main_menu.audio_manager:
+                    self.main_menu.audio_manager.play_sfx("wrong")
+                print("[FAIL] Wrong Answer in Tutorial Quiz (Attempt 1/2) -> Showing 1-try remaining!")
+            else:
+                self.wrong_feedback_msg = "Out of tries! You have used both of your 2 attempts."
+                self.quiz_state = 4
+                self.quiz_attempts = 0
+                self.eliminated_choice = None
+                if hasattr(self.main_menu, 'audio_manager') and self.main_menu.audio_manager:
+                    self.main_menu.audio_manager.play_sfx("wrong")
+                print("[FAIL] 2 Tries Exhausted in Tutorial Quiz -> Window closing / must re-attempt with Guide Sage!")
 
     def handle_demo_video_click(self, pos):
         """Processes user clicks or fist-hold selections inside the Demonstration Video Player"""
@@ -798,6 +820,8 @@ class TutorialScreen:
             if npc_rect.collidepoint(pos):
                 self.phase = 3
                 self.quiz_state = 1
+                self.quiz_attempts = 0
+                self.eliminated_choice = None
                 self.click_dest = None
                 print("[TUTORIAL] Opening Sample Quiz Modal via click/interact!")
                 return
@@ -816,6 +840,8 @@ class TutorialScreen:
                     self.main_menu.audio_manager.play_sfx("dialogue_blip")
                 self.phase = 3
                 self.quiz_state = 1
+                self.quiz_attempts = 0
+                self.eliminated_choice = None
                 self.click_dest = None
                 print("[TUTORIAL] Opening Sample Quiz Modal via click/interact!")
                 return
@@ -885,6 +911,21 @@ class TutorialScreen:
                 self.quiz_state = 0
                 self.phase = 4
                 print("[TUTORIAL] Tutorial Phase 4: Portal Unlocked! Guide student to Exit Portal.")
+                return
+
+        # 7b. Out of Tries Dialog Clicks
+        elif self.quiz_state == 4:
+            box_w, box_h = 740, 340
+            box_x = (self.width - box_w) // 2
+            box_y = (self.height - box_h) // 2
+            btn_rect = pygame.Rect(box_x + (box_w - 260) // 2, box_y + 250, 260, 52)
+            card_rect = pygame.Rect(box_x, box_y, box_w, box_h)
+            if btn_rect.collidepoint(pos) or card_rect.collidepoint(pos):
+                if hasattr(self.main_menu, 'audio_manager') and self.main_menu.audio_manager:
+                    self.main_menu.audio_manager.play_sfx("click")
+                self.quiz_state = 0
+                self.quiz_attempts = 0
+                self.eliminated_choice = None
                 return
 
         # 8. Click-to-Move on walkable ground
@@ -1019,8 +1060,8 @@ class TutorialScreen:
         # 10. Top Visual Gameplay Banner
         self.draw_top_banner()
 
-        # 11. Prominent Glassmorphism Skip Button
-        skip_rect = pygame.Rect(self.width - 310, 18, 165, 36)
+        # 11. Prominent Glassmorphism Skip Button (Generous width to eliminate text-pill overlap)
+        skip_rect = pygame.Rect(self.width - 325, 18, 180, 36)
         skip_hov = skip_rect.collidepoint(self.cursor_pos)
 
         shadow_rect = skip_rect.copy()
@@ -1038,10 +1079,10 @@ class TutorialScreen:
         skip_txt = self.skip_font.render("Skip Tutorial", True, (255, 255, 255))
         self.screen.blit(skip_txt, (skip_rect.x + 14, skip_rect.y + 8))
 
-        pill_rect = pygame.Rect(skip_rect.right - 54, skip_rect.y + 6, 44, 24)
+        pill_rect = pygame.Rect(skip_rect.right - 52, skip_rect.y + 6, 42, 24)
         pygame.draw.rect(self.screen, (30, 41, 59), pill_rect, border_radius=6)
         pygame.draw.rect(self.screen, (251, 191, 36) if skip_hov else (100, 116, 139), pill_rect, 1, border_radius=6)
-        esc_txt = self.ui_font.render("SKIP", True, (251, 191, 36) if skip_hov else (203, 213, 225))
+        esc_txt = self.ui_font.render("ESC", True, (251, 191, 36) if skip_hov else (203, 213, 225))
         self.screen.blit(esc_txt, esc_txt.get_rect(center=pill_rect.center))
 
         # 11b. Real-Time Hand Gesture & Input Tracker Helper
@@ -1057,6 +1098,8 @@ class TutorialScreen:
             self.draw_sample_wrong_dialog()
         elif self.quiz_state == 3:
             self.draw_sample_correct_dialog()
+        elif self.quiz_state == 4:
+            self.draw_sample_out_of_tries_dialog()
 
         # 13. In-Game Universal Pause Button & Modal Overlay
         if hasattr(self, 'pause_menu'):
@@ -2511,4 +2554,60 @@ class TutorialScreen:
         pygame.draw.rect(self.screen, (255, 255, 255), btn_rect, 2, border_radius=14)
 
         c_surf = self.dialog_btn_font.render("Continue >> (Hold Fist ✊)", True, (255, 255, 255))
+        self.screen.blit(c_surf, c_surf.get_rect(center=btn_rect.center))
+
+    def draw_sample_out_of_tries_dialog(self):
+        box_w, box_h = 760, 350
+        box_x = (self.width - box_w) // 2
+        box_y = (self.height - box_h) // 2
+
+        if self._dim_overlay is None or self._dim_overlay.get_size() != (self.width, self.height):
+            self._dim_overlay = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
+            self._dim_overlay.fill((0, 0, 0, 160))
+        self.screen.blit(self._dim_overlay, (0, 0))
+
+        sh_rect = pygame.Rect(box_x, box_y + 4, box_w, box_h)
+        pygame.draw.rect(self.screen, (0, 0, 0, 180), sh_rect, border_radius=18)
+
+        dialog_rect = pygame.Rect(box_x, box_y, box_w, box_h)
+        pygame.draw.rect(self.screen, (15, 23, 42), dialog_rect, border_radius=18)
+        pygame.draw.rect(self.screen, (245, 158, 11), dialog_rect, 3, border_radius=18)
+
+        p_size = 76
+        p_x = box_x + 22
+        p_y = box_y + 20
+        p_rect = pygame.Rect(p_x, p_y, p_size, p_size)
+        pygame.draw.rect(self.screen, (30, 41, 59), p_rect, border_radius=12)
+        pygame.draw.rect(self.screen, (245, 158, 11), p_rect, 2, border_radius=12)
+
+        if self.npc_frames:
+            scaled_npc = pygame.transform.scale(self.npc_frames[self.npc_anim_frame], (p_size - 8, p_size - 8))
+            self.screen.blit(scaled_npc, (p_x + 4, p_y + 4))
+
+        speaker = self.dialog_header_font.render("Guide Sage — 2 Tries Exhausted", True, (245, 158, 11))
+        self.screen.blit(speaker, (p_x + p_size + 18, box_y + 20))
+
+        role = self.ui_font.render("Trial Challenge Reset", True, (148, 163, 184))
+        self.screen.blit(role, (p_x + p_size + 18, box_y + 48))
+
+        att_rect = pygame.Rect(box_x + box_w - 230, box_y + 18, 204, 32)
+        pygame.draw.rect(self.screen, (30, 41, 59), att_rect, border_radius=8)
+        pygame.draw.rect(self.screen, (239, 68, 68), att_rect, 1, border_radius=8)
+        att_txt = self.ui_font.render("2 TRIES EXHAUSTED", True, (248, 113, 113))
+        self.screen.blit(att_txt, att_txt.get_rect(center=att_rect.center))
+
+        m1 = self.dialog_q_font.render("Out of tries! You have used both of your 2 attempts.", True, (255, 255, 255))
+        m2 = self.dialog_choice_font.render("The challenge window will close without unlocking the portal.", True, (203, 213, 225))
+        m3 = self.ui_font.render("Approach Guide Sage again and hold your Fist ✊ to re-try!", True, (254, 240, 138))
+        self.screen.blit(m1, (box_x + 28, box_y + 114))
+        self.screen.blit(m2, (box_x + 28, box_y + 154))
+        self.screen.blit(m3, (box_x + 28, box_y + 194))
+
+        btn_rect = pygame.Rect(box_x + (box_w - 260) // 2, box_y + 270, 260, 52)
+        self.out_of_tries_btn_rect = btn_rect
+        is_hov = btn_rect.collidepoint(self.cursor_pos)
+        pygame.draw.rect(self.screen, (245, 158, 11) if is_hov else (180, 83, 9), btn_rect, border_radius=14)
+        pygame.draw.rect(self.screen, (255, 255, 255), btn_rect, 2, border_radius=14)
+
+        c_surf = self.dialog_btn_font.render("Close Window [Esc]", True, (255, 255, 255))
         self.screen.blit(c_surf, c_surf.get_rect(center=btn_rect.center))

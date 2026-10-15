@@ -321,7 +321,11 @@ class VictoryReportCard:
         else:
             tip_msg = "Review the concepts and replay the stage to hone your skills!"
 
+        avail_tip_w = stat_box.width - 24
         tip_surf = b_font.render(tip_msg, True, (203, 213, 225))
+        if tip_surf.get_width() > avail_tip_w:
+            small_tip_font = self.get_font(13)
+            tip_surf = small_tip_font.render(tip_msg, True, (203, 213, 225))
         self.screen.blit(tip_surf, tip_surf.get_rect(center=(stat_box.centerx, stat_box.y + 102)))
 
         # 1. Replay Button with Vector Replay Arc Icon
