@@ -40,13 +40,40 @@ except Exception:
 # On Windows startup/boot, Windows launches applications with cwd = C:\Windows\System32.
 if getattr(sys, "frozen", False):
     app_dir = os.path.dirname(os.path.abspath(sys.executable))
+    meipass_dir = getattr(sys, "_MEIPASS", os.path.join(app_dir, "_internal"))
 else:
     app_dir = os.path.dirname(os.path.abspath(__file__))
+    meipass_dir = app_dir
 
 try:
     os.chdir(app_dir)
 except Exception as e:
     print(f"[WARN] Failed to set working directory to {app_dir}: {e}")
+
+# In PyInstaller frozen builds, ensure runtime assets and data directories exist in working dir
+if getattr(sys, "frozen", False):
+    import shutil
+    for folder_name in ("assets", "datasets", "db"):
+        target_folder = os.path.join(app_dir, folder_name)
+        internal_folder = os.path.join(meipass_dir, folder_name)
+        if not os.path.exists(target_folder) and os.path.exists(internal_folder):
+            try:
+                shutil.copytree(internal_folder, target_folder, dirs_exist_ok=True)
+                print(f"[AUTO-RESTORE] Restored {folder_name} from _internal bundle.")
+            except Exception as e:
+                print(f"[WARN] Failed to auto-restore {folder_name}: {e}")
+
+    layout_file = os.path.join(app_dir, "layout_config.json")
+    internal_layout = os.path.join(meipass_dir, "layout_config.json")
+    if not os.path.exists(layout_file) and os.path.exists(internal_layout):
+        try:
+            shutil.copy2(internal_layout, layout_file)
+        except Exception:
+            pass
+
+    # Ensure writable user save and cache directories exist
+    os.makedirs(os.path.join(app_dir, "db", "saves"), exist_ok=True)
+    os.makedirs(os.path.join(app_dir, "db", "cache"), exist_ok=True)
 
 if app_dir not in sys.path:
     sys.path.insert(0, app_dir)
