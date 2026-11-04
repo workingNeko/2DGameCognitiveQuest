@@ -2797,18 +2797,15 @@ class Quarter1:
 
         # Update instructions modal & greeting dialog
         if hasattr(self, 'instruction_modal') and self.instruction_modal.is_active():
-            player_screen_x = (self.player_x - self.camera_x + TILE_SIZE / 2) * ZOOM
-            player_screen_y = (self.player_y - self.camera_y + TILE_SIZE / 2) * ZOOM
-            cx, cy = self.cursor_pos
-            if abs(cx - player_screen_x) > 45 or abs(cy - player_screen_y) > 45:
+            hold_time = time.time() - self.fist_start_time if getattr(self, 'fist_start_time', 0) > 0 else 0.0
+            is_fist = (getattr(self, 'current_gesture', '') == "FIST") or getattr(self, 'fist_closed', False)
+            fist_pct = min(1.0, hold_time / self.CLICK_HOLD_TIME) if is_fist and hold_time > 0 else 0.0
+            if is_fist and hold_time >= self.CLICK_HOLD_TIME:
                 self.instruction_modal.hide()
+                self.fist_start_time = 0
                 self.sync_ui_state()
-            else:
-                self.instruction_modal.update(dt)
-                hold_time = time.time() - self.fist_start_time if self.fist_start_time > 0 else 0.0
-                if self.instruction_modal.handle_fist_hold(self.current_gesture == "FIST", hold_time, self.CLICK_HOLD_TIME):
-                    self.fist_start_time = 0
-                return
+            self.instruction_modal.update(dt, cursor_pos=self.cursor_pos, fist_pct=fist_pct)
+            return
 
         if hasattr(self, 'greeting_dialog') and self.greeting_dialog.is_active():
             self.greeting_dialog.update(dt)

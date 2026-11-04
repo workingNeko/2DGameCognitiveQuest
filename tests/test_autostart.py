@@ -118,11 +118,11 @@ class TestMainMenuSettingsIntegration(unittest.TestCase):
         self.assertEqual(mm.popup_state, "audio_settings")
 
         # Calculate exact toggle position
-        box_w, box_h = 600, 440
+        box_w, box_h = 620, 500
         box_x = (mm.w - box_w) // 2
         box_y = (mm.h - box_h) // 2
         toggle_x = box_x + box_w - 180 + 20
-        toggle_y = box_y + 248 + 15
+        toggle_y = box_y + 222 + 15
 
         with patch("core.autostart_manager.toggle_autostart", return_value=(True, "Toggled!")) as mock_toggle:
             mm.handle_popup_click((toggle_x, toggle_y))

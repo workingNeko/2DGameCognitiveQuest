@@ -2921,21 +2921,17 @@ class Quarter2:
 
         # Update Instruction Modal & handle Fist Hold dismiss
         if getattr(self, 'instruction_modal', None) and self.instruction_modal.is_visible:
-            player_screen_x = (self.player_x - self.camera_x + TILE_SIZE / 2) * ZOOM
-            player_screen_y = (self.player_y - self.camera_y + TILE_SIZE / 2) * ZOOM
-            cx, cy = self.cursor_pos
-            if abs(cx - player_screen_x) > 45 or abs(cy - player_screen_y) > 45:
-                self.instruction_modal.hide()
-            else:
-                fist_pct = 0.0
-                if self.fist_closed and self.fist_start_time > 0:
-                    elapsed = time.time() - self.fist_start_time
-                    fist_pct = min(1.0, elapsed / self.CLICK_HOLD_TIME)
-                    if elapsed >= self.CLICK_HOLD_TIME:
-                        self.instruction_modal.hide()
-                        self.fist_start_time = 0
-                self.instruction_modal.update(dt, self.cursor_pos, fist_pct)
-                return
+            fist_pct = 0.0
+            is_fist = (getattr(self, 'current_gesture', '') == "FIST") or getattr(self, 'fist_closed', False)
+            if is_fist and getattr(self, 'fist_start_time', 0) > 0:
+                elapsed = time.time() - self.fist_start_time
+                fist_pct = min(1.0, elapsed / self.CLICK_HOLD_TIME)
+                if elapsed >= self.CLICK_HOLD_TIME:
+                    self.instruction_modal.hide()
+                    self.fist_start_time = 0
+                    self.sync_ui_state()
+            self.instruction_modal.update(dt, self.cursor_pos, fist_pct)
+            return
 
         # Update NPC Greeting Dialog & handle Fist Hold to start question
         if getattr(self, 'greeting_dialog', None) and self.greeting_dialog.is_visible:
