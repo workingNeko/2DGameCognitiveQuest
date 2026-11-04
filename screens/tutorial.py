@@ -164,9 +164,78 @@ class TutorialScreen:
         # Performance Caches
         self._scaled_tile_cache = {}
         self._scaled_sprite_cache = {}
+        self._halo_cache = {}
+        self._rect_surf_cache = {}
+        self._marker_ring_cache = {}
+        self._tut_cam_surf = None
+        self._tut_cam_frame_id = -1
         self._dim_overlay = None
+        self._prerendered_map_surf = self._build_prerendered_map()
 
         print("[TUTORIAL] Live Interactive Gameplay Tutorial Initialized with Gesture Demonstration Video!")
+
+    def _get_scaled_sprite(self, surf, w, h):
+        key = (surf, w, h)
+        cached = self._scaled_sprite_cache.get(key)
+        if cached is None:
+            cached = pygame.transform.scale(surf, (w, h))
+            if pygame.display.get_surface() is not None:
+                cached = cached.convert_alpha()
+            self._scaled_sprite_cache[key] = cached
+        return cached
+
+    def _get_rect_surf(self, w, h, rgba, radius=0):
+        key = (w, h, rgba, radius)
+        cached = self._rect_surf_cache.get(key)
+        if cached is None:
+            s = pygame.Surface((max(1, w), max(1, h)), pygame.SRCALPHA)
+            if radius > 0:
+                pygame.draw.rect(s, rgba, (0, 0, max(1, w), max(1, h)), border_radius=radius)
+            else:
+                s.fill(rgba)
+            if pygame.display.get_surface() is not None:
+                s = s.convert_alpha()
+            self._rect_surf_cache[key] = s
+            cached = s
+        return cached
+
+    def _get_dim_overlay(self):
+        if self._dim_overlay is None or self._dim_overlay.get_size() != (self.width, self.height):
+            s = pygame.Surface((self.width, self.height))
+            s.fill((0, 0, 0))
+            if pygame.display.get_surface() is not None:
+                s = s.convert()
+            s.set_alpha(160)
+            self._dim_overlay = s
+        return self._dim_overlay
+
+    def _build_prerendered_map(self):
+        if not self.map_grid:
+            return None
+        ts = int(TILE_SIZE * ZOOM)
+        cell_draw_sz = ts + 1
+        rows = len(self.map_grid)
+        cols = max((len(r) for r in self.map_grid), default=0)
+        if rows <= 0 or cols <= 0:
+            return None
+        has_disp = pygame.display.get_surface() is not None
+        surf = pygame.Surface((cols * ts + 2, rows * ts + 2))
+        surf.fill((15, 23, 42))
+        scaled_tiles = {}
+        for r, row_str in enumerate(self.map_grid):
+            dy = r * ts
+            for c, tile_type in enumerate(row_str):
+                t_img = scaled_tiles.get(tile_type)
+                if t_img is None:
+                    raw = self.tile_sprites.get(tile_type, self.tile_sprites.get('G'))
+                    if raw is not None:
+                        t_img = pygame.transform.scale(raw, (cell_draw_sz, cell_draw_sz))
+                        if has_disp:
+                            t_img = t_img.convert_alpha()
+                        scaled_tiles[tile_type] = t_img
+                if t_img is not None:
+                    surf.blit(t_img, (c * ts, dy))
+        return surf.convert() if has_disp else surf
 
     def restart_tutorial(self):
         """Restarts the tutorial screen."""
@@ -298,6 +367,9 @@ class TutorialScreen:
     # GESTURE & UPDATE
     # ============================================================
     def update_gesture(self, cursor_pos, fist_start_time, CLICK_HOLD_TIME, current_gesture):
+        if cursor_pos != getattr(self, 'cursor_pos', None) and current_gesture in ["NO HAND", "NO HAND (GRACE)"]:
+            if self.main_menu:
+                self.main_menu.mouse_active = True
         self.cursor_pos = cursor_pos
         self.fist_start_time = fist_start_time
         self.CLICK_HOLD_TIME = CLICK_HOLD_TIME
@@ -364,7 +436,7 @@ class TutorialScreen:
             map_width=self.MAP_WIDTH,
             map_height=self.MAP_HEIGHT,
             tile_size=TILE_SIZE,
-            enable_edge_scroll=(self.quiz_state == 0)
+            enable_edge_scroll=False
         )
         self.camera_x = self.lol_camera.camera_x
         self.camera_y = self.lol_camera.camera_y
@@ -452,51 +524,45 @@ class TutorialScreen:
                 vy = current_speed
                 self.player_dir = "down"
 
+        # Universal Hand Gesture / Active Cursor Steering
+        player_screen_x = (self.player_x - self.camera_x + TILE_SIZE / 2) * ZOOM
+        player_screen_y = (self.player_y - self.camera_y + TILE_SIZE / 2) * ZOOM
+        cursor_x, cursor_y = self.cursor_pos
+        dx = cursor_x - player_screen_x
+        dy = cursor_y - player_screen_y
+
+        deadzone = 45.0
+        has_cursor_steer = (abs(dx) > deadzone or abs(dy) > deadzone)
+
+        if has_cursor_steer and not has_key_input:
+            self.click_dest = None
+            if getattr(self, 'intro_dialog_open', False):
+                self.intro_dialog_open = False
+
+            if abs(dx) > deadzone:
+                vx = current_speed if dx > 0 else -current_speed
+            if abs(dy) > deadzone:
+                vy = current_speed if dy > 0 else -current_speed
+
+            if abs(dx) > abs(dy):
+                self.player_dir = "right" if dx > 0 else "left"
+            else:
+                self.player_dir = "down" if dy > 0 else "up"
+
         # Check Click-to-Move Destination
         elif getattr(self, 'click_dest', None) is not None:
-            player_screen_x = (self.player_x - self.camera_x + TILE_SIZE / 2) * ZOOM
-            player_screen_y = (self.player_y - self.camera_y + TILE_SIZE / 2) * ZOOM
-            cursor_x, cursor_y = self.cursor_pos
-            cd_dx = cursor_x - player_screen_x
-            cd_dy = cursor_y - player_screen_y
-            if abs(cd_dx) > 65 or abs(cd_dy) > 65:
-                self.click_dest = None
+            cdx = self.click_dest[0] - self.player_x
+            cdy = self.click_dest[1] - self.player_y
+            cd_dist = math.hypot(cdx, cdy)
+            if cd_dist > 6.0:
+                vx = (cdx / cd_dist) * current_speed
+                vy = (cdy / cd_dist) * current_speed
+                if abs(cdx) > abs(cdy):
+                    self.player_dir = "right" if cdx > 0 else "left"
+                else:
+                    self.player_dir = "down" if cdy > 0 else "up"
             else:
-                cdx = self.click_dest[0] - self.player_x
-                cdy = self.click_dest[1] - self.player_y
-                cd_dist = math.hypot(cdx, cdy)
-                if cd_dist > 6.0:
-                    vx = (cdx / cd_dist) * current_speed
-                    vy = (cdy / cd_dist) * current_speed
-                    if abs(cdx) > abs(cdy):
-                        self.player_dir = "right" if cdx > 0 else "left"
-                    else:
-                        self.player_dir = "down" if cdy > 0 else "up"
-                else:
-                    self.click_dest = None
-
-        # Universal Hand Gesture / Cursor Steering
-        if getattr(self, 'click_dest', None) is None and not has_key_input:
-            player_screen_x = (self.player_x - self.camera_x + TILE_SIZE / 2) * ZOOM
-            player_screen_y = (self.player_y - self.camera_y + TILE_SIZE / 2) * ZOOM
-            cursor_x, cursor_y = self.cursor_pos
-            dx = cursor_x - player_screen_x
-            dy = cursor_y - player_screen_y
-
-            deadzone = 45.0
-            if abs(dx) > deadzone or abs(dy) > deadzone:
-                if getattr(self, 'intro_dialog_open', False):
-                    self.intro_dialog_open = False
-
-                if abs(dx) > deadzone:
-                    vx = current_speed if dx > 0 else -current_speed
-                if abs(dy) > deadzone:
-                    vy = current_speed if dy > 0 else -current_speed
-
-                if abs(dx) > abs(dy):
-                    self.player_dir = "right" if dx > 0 else "left"
-                else:
-                    self.player_dir = "down" if dy > 0 else "up"
+                self.click_dest = None
 
         # Apply movement with collision
         moved_x, moved_y = False, False
@@ -583,7 +649,8 @@ class TutorialScreen:
             self.cursor_pos = event.pos
             self.trigger_click(event.pos)
         elif event.type == pygame.MOUSEMOTION:
-            self.cursor_pos = event.pos
+            if not getattr(self, 'hand_detected', False) or getattr(self, 'current_gesture', 'NO HAND') in ['NO HAND', 'NO HAND (GRACE)']:
+                self.cursor_pos = event.pos
         elif event.type == pygame.KEYDOWN:
             combined_mod = pygame.key.get_mods() if hasattr(pygame.key, 'get_mods') else 0
             ctrl_pressed = bool(combined_mod & pygame.KMOD_CTRL)
@@ -685,13 +752,13 @@ class TutorialScreen:
                     self.main_menu.audio_manager.play_sfx("wrong")
                 print("[FAIL] Wrong Answer in Tutorial Quiz (Attempt 1/2) -> Showing 1-try remaining!")
             else:
-                self.wrong_feedback_msg = "Out of tries! You have used both of your 2 attempts."
+                self.wrong_feedback_msg = "Out of tries! Recorded as incorrect. Portal unlocked!"
                 self.quiz_state = 4
                 self.quiz_attempts = 0
                 self.eliminated_choice = None
                 if hasattr(self.main_menu, 'audio_manager') and self.main_menu.audio_manager:
                     self.main_menu.audio_manager.play_sfx("wrong")
-                print("[FAIL] 2 Tries Exhausted in Tutorial Quiz -> Window closing / must re-attempt with Guide Sage!")
+                print("[FAIL] 2 Tries Exhausted in Tutorial Quiz -> Recorded as wrong / unlocking portal to continue!")
 
     def handle_demo_video_click(self, pos):
         """Processes user clicks or fist-hold selections inside the Demonstration Video Player"""
@@ -926,6 +993,8 @@ class TutorialScreen:
                 self.quiz_state = 0
                 self.quiz_attempts = 0
                 self.eliminated_choice = None
+                self.phase = 4
+                print("[TUTORIAL] Tutorial Phase 4: Portal Unlocked! Guide student to Exit Portal.")
                 return
 
         # 8. Click-to-Move on walkable ground
@@ -954,26 +1023,18 @@ class TutorialScreen:
     def draw(self):
         self.screen.fill((15, 23, 42))
 
-        # 1. Render Map Tiles
-        start_col = max(0, int(self.camera_x // TILE_SIZE))
-        end_col = min(len(self.map_grid[0]) if self.map_grid else 0, int((self.camera_x + self.width / ZOOM) // TILE_SIZE) + 2)
-        start_row = max(0, int(self.camera_y // TILE_SIZE))
-        end_row = min(len(self.map_grid), int((self.camera_y + self.height / ZOOM) // TILE_SIZE) + 2)
-
-        for r in range(start_row, end_row):
-            row_str = self.map_grid[r]
-            for c in range(start_col, min(len(row_str), end_col)):
-                tile_type = row_str[c]
-                tile_surf = self.tile_sprites.get(tile_type, self.tile_sprites.get('G'))
-                if tile_surf:
-                    screen_x = int((c * TILE_SIZE - self.camera_x) * ZOOM)
-                    screen_y = int((r * TILE_SIZE - self.camera_y) * ZOOM)
-                    scaled_size = int(TILE_SIZE * ZOOM) + 1
-                    if scaled_size not in self._scaled_tile_cache:
-                        self._scaled_tile_cache[scaled_size] = {}
-                    if tile_type not in self._scaled_tile_cache[scaled_size]:
-                        self._scaled_tile_cache[scaled_size][tile_type] = pygame.transform.scale(tile_surf, (scaled_size, scaled_size))
-                    self.screen.blit(self._scaled_tile_cache[scaled_size][tile_type], (screen_x, screen_y))
+        # 1. Render Pre-Baked Map Surface (1 C-level blit)
+        if self._prerendered_map_surf is not None:
+            cam_px = int(self.camera_x * ZOOM)
+            cam_py = int(self.camera_y * ZOOM)
+            dest_x = max(0, -cam_px)
+            dest_y = max(0, -cam_py)
+            src_x = max(0, cam_px)
+            src_y = max(0, cam_py)
+            src_w = max(0, self.width - dest_x)
+            src_h = max(0, self.height - dest_y)
+            if src_w > 0 and src_h > 0:
+                self.screen.blit(self._prerendered_map_surf, (dest_x, dest_y), (src_x, src_y, src_w, src_h))
 
         # 2. Render Practice Stars (Interactive Steering Objects)
         t_sec = pygame.time.get_ticks() * 0.001
@@ -984,9 +1045,15 @@ class TutorialScreen:
                 bob_y = st_y + math.sin(t_sec * 5.0 + star["tile_x"]) * 6 * ZOOM
                 pulse_r = int((14 + math.sin(t_sec * 6.0) * 3) * ZOOM)
 
-                # Outer soft aura
-                halo_surf = pygame.Surface((pulse_r * 4, pulse_r * 4), pygame.SRCALPHA)
-                pygame.draw.circle(halo_surf, (251, 191, 36, 120), (pulse_r * 2, pulse_r * 2), pulse_r * 2)
+                # Outer soft aura (cached)
+                h_key = ((251, 191, 36, 120), pulse_r)
+                halo_surf = self._halo_cache.get(h_key)
+                if halo_surf is None:
+                    halo_surf = pygame.Surface((pulse_r * 4, pulse_r * 4), pygame.SRCALPHA)
+                    pygame.draw.circle(halo_surf, (251, 191, 36, 120), (pulse_r * 2, pulse_r * 2), pulse_r * 2)
+                    if pygame.display.get_surface() is not None:
+                        halo_surf = halo_surf.convert_alpha()
+                    self._halo_cache[h_key] = halo_surf
                 self.screen.blit(halo_surf, (int(st_x - pulse_r * 2), int(bob_y - pulse_r * 2)))
 
                 # 5-pointed star polygon
@@ -999,17 +1066,19 @@ class TutorialScreen:
                 pygame.draw.polygon(self.screen, (245, 158, 11), star_pts, int(2 * ZOOM))
 
         # 3. Render Guide NPC (Oldman Sage)
+        ts_zoom = int(TILE_SIZE * ZOOM)
         if self.npc_frames:
             npc_screen_x = int((self.npc_tile_x * TILE_SIZE - self.camera_x) * ZOOM)
             npc_screen_y = int((self.npc_tile_y * TILE_SIZE - self.camera_y) * ZOOM)
-            npc_scaled = pygame.transform.scale(self.npc_frames[self.npc_anim_frame], (int(TILE_SIZE * ZOOM), int(TILE_SIZE * ZOOM)))
+            npc_scaled = self._get_scaled_sprite(self.npc_frames[self.npc_anim_frame], ts_zoom, ts_zoom)
             self.screen.blit(npc_scaled, (npc_screen_x, npc_screen_y))
 
         # 4. Render Exit Portal
         if self.portal_frames:
             portal_screen_x = int((self.portal_tile_x * TILE_SIZE - self.camera_x) * ZOOM)
             portal_screen_y = int((self.portal_tile_y * TILE_SIZE - self.camera_y) * ZOOM)
-            portal_scaled = pygame.transform.scale(self.portal_frames[self.portal_anim_frame], (int(TILE_SIZE * 3 * ZOOM), int(TILE_SIZE * 3 * ZOOM)))
+            p_zoom = int(TILE_SIZE * 3 * ZOOM)
+            portal_scaled = self._get_scaled_sprite(self.portal_frames[self.portal_anim_frame], p_zoom, p_zoom)
             self.screen.blit(portal_scaled, (portal_screen_x, portal_screen_y))
 
         # 5. Render Player Hero
@@ -1017,7 +1086,7 @@ class TutorialScreen:
         pl_sy = int((self.player_y - self.camera_y) * ZOOM)
         dir_sprites = self.player_sprites.get(self.player_dir, self.player_sprites["down"])
         player_frame = dir_sprites[self.anim_frame]
-        scaled_player = pygame.transform.scale(player_frame, (int(TILE_SIZE * ZOOM), int(TILE_SIZE * ZOOM)))
+        scaled_player = self._get_scaled_sprite(player_frame, ts_zoom, ts_zoom)
         self.screen.blit(scaled_player, (pl_sx, pl_sy))
 
         # 6. Floating Star Pickup Celebration Popup
@@ -1027,9 +1096,7 @@ class TutorialScreen:
             pop_w, pop_h = pop_surf.get_width() + 20, pop_surf.get_height() + 8
             pop_rect = pygame.Rect(pl_sx + (TILE_SIZE * ZOOM) / 2 - pop_w / 2, p_pop_y, pop_w, pop_h)
 
-            pop_bg = pygame.Surface((pop_w, pop_h), pygame.SRCALPHA)
-            pop_bg.fill((20, 83, 45, 220))
-            self.screen.blit(pop_bg, pop_rect)
+            self.screen.blit(self._get_rect_surf(pop_w, pop_h, (20, 83, 45, 220)), pop_rect)
             pygame.draw.rect(self.screen, (251, 191, 36), pop_rect, 2, border_radius=8)
             self.screen.blit(pop_surf, pop_surf.get_rect(center=pop_rect.center))
 
@@ -1068,10 +1135,8 @@ class TutorialScreen:
         shadow_rect.y += 2
         pygame.draw.rect(self.screen, (0, 0, 0, 140), shadow_rect, border_radius=10)
 
-        skip_surf = pygame.Surface((skip_rect.width, skip_rect.height), pygame.SRCALPHA)
         skip_bg = (220, 38, 38, 230) if skip_hov else (15, 23, 42, 235)
-        pygame.draw.rect(skip_surf, skip_bg, (0, 0, skip_rect.width, skip_rect.height), border_radius=10)
-        self.screen.blit(skip_surf, skip_rect.topleft)
+        self.screen.blit(self._get_rect_surf(skip_rect.width, skip_rect.height, skip_bg, radius=10), skip_rect.topleft)
 
         border_col = (251, 191, 36) if skip_hov else (148, 163, 184)
         pygame.draw.rect(self.screen, border_col, skip_rect, 2, border_radius=10)
@@ -1491,16 +1556,22 @@ class TutorialScreen:
             l_surf = self.ui_font.render(line, True, (203, 213, 225))
             self.screen.blit(l_surf, (ix, iy + 80 + idx * 28))
 
-        # Live Webcam Feed if available in main menu
+        # Live Webcam Feed if available in main menu (converted only when new frame arrives)
         if getattr(self.main_menu, 'camera_frame', None) is not None:
             try:
-                camera_frame_rgb = cv2.cvtColor(self.main_menu.camera_frame, cv2.COLOR_BGR2RGB)
-                camera_surface = pygame.surfarray.make_surface(np.swapaxes(camera_frame_rgb, 0, 1))
-                camera_surface = pygame.transform.scale(camera_surface, (140, 105))
+                fid = getattr(self.main_menu, 'latest_frame_id', -1)
+                if self._tut_cam_surf is None or fid != self._tut_cam_frame_id:
+                    camera_frame_rgb = cv2.cvtColor(self.main_menu.camera_frame, cv2.COLOR_BGR2RGB)
+                    cam_s = pygame.surfarray.make_surface(np.swapaxes(camera_frame_rgb, 0, 1))
+                    cam_s = pygame.transform.scale(cam_s, (140, 105))
+                    if pygame.display.get_surface() is not None:
+                        cam_s = cam_s.convert()
+                    self._tut_cam_surf = cam_s
+                    self._tut_cam_frame_id = fid
                 c_preview_x = info_rect.x + 20
                 c_preview_y = info_rect.bottom - 125
                 pygame.draw.rect(self.screen, (34, 197, 94), (c_preview_x - 2, c_preview_y - 2, 144, 109), 2, border_radius=8)
-                self.screen.blit(camera_surface, (c_preview_x, c_preview_y))
+                self.screen.blit(self._tut_cam_surf, (c_preview_x, c_preview_y))
 
                 prev_lbl = self.ui_font.render("🔴 Live Camera Feed", True, (74, 222, 128))
                 self.screen.blit(prev_lbl, (c_preview_x + 155, c_preview_y + 20))
@@ -1842,9 +1913,15 @@ class TutorialScreen:
         arrow_y = cy - 36 * ZOOM + bob
 
         pulse_r = int((16 + math.sin(t * 5.0) * 4) * ZOOM)
-        ring_surf = pygame.Surface((pulse_r * 4, pulse_r * 4), pygame.SRCALPHA)
-        pygame.draw.circle(ring_surf, (*color, 75), (pulse_r * 2, pulse_r * 2), pulse_r * 2)
-        pygame.draw.circle(ring_surf, (*glow_color, 180), (pulse_r * 2, pulse_r * 2), pulse_r, int(2 * ZOOM))
+        r_key = (color, glow_color, pulse_r)
+        ring_surf = self._marker_ring_cache.get(r_key)
+        if ring_surf is None:
+            ring_surf = pygame.Surface((pulse_r * 4, pulse_r * 4), pygame.SRCALPHA)
+            pygame.draw.circle(ring_surf, (*color, 75), (pulse_r * 2, pulse_r * 2), pulse_r * 2)
+            pygame.draw.circle(ring_surf, (*glow_color, 180), (pulse_r * 2, pulse_r * 2), pulse_r, int(2 * ZOOM))
+            if pygame.display.get_surface() is not None:
+                ring_surf = ring_surf.convert_alpha()
+            self._marker_ring_cache[r_key] = ring_surf
         self.screen.blit(ring_surf, (int(cx - pulse_r * 2), int(cy - pulse_r * 2)))
 
         aw = int(14 * ZOOM)
@@ -1868,9 +1945,7 @@ class TutorialScreen:
             tw, th = tag_surf.get_width() + 16, tag_surf.get_height() + 6
             tag_rect = pygame.Rect(cx - tw // 2, arrow_y - ah - th - 4, tw, th)
 
-            tag_bg = pygame.Surface((tw, th), pygame.SRCALPHA)
-            tag_bg.fill((15, 23, 42, 235))
-            self.screen.blit(tag_bg, tag_rect)
+            self.screen.blit(self._get_rect_surf(tw, th, (15, 23, 42, 235)), tag_rect)
             pygame.draw.rect(self.screen, color, tag_rect, 2, border_radius=8)
             self.screen.blit(tag_surf, tag_surf.get_rect(center=tag_rect.center))
 
@@ -1984,8 +2059,14 @@ class TutorialScreen:
                 cur_x = pl_sx + offset
                 while cur_x < target_sx - 20:
                     pulse_r = int((8 + math.sin(t * 5.0 + cur_x * 0.1) * 2.5) * ZOOM)
-                    halo_surf = pygame.Surface((pulse_r * 4, pulse_r * 4), pygame.SRCALPHA)
-                    pygame.draw.circle(halo_surf, (*trail_color, 80), (pulse_r * 2, pulse_r * 2), pulse_r * 2)
+                    th_key = ((*trail_color, 80), pulse_r)
+                    halo_surf = self._halo_cache.get(th_key)
+                    if halo_surf is None:
+                        halo_surf = pygame.Surface((pulse_r * 4, pulse_r * 4), pygame.SRCALPHA)
+                        pygame.draw.circle(halo_surf, (*trail_color, 80), (pulse_r * 2, pulse_r * 2), pulse_r * 2)
+                        if pygame.display.get_surface() is not None:
+                            halo_surf = halo_surf.convert_alpha()
+                        self._halo_cache[th_key] = halo_surf
                     self.screen.blit(halo_surf, (int(cur_x - pulse_r * 2), int(pl_sy - pulse_r * 2)))
 
                     d_size = int(8 * ZOOM)
@@ -2015,9 +2096,7 @@ class TutorialScreen:
             sh_rect = pygame.Rect(card_x, card_y + 3, card_w, card_h)
             pygame.draw.rect(self.screen, (0, 0, 0, 160), sh_rect, border_radius=16)
 
-            card_surf = pygame.Surface((card_w, card_h), pygame.SRCALPHA)
-            card_surf.fill((15, 23, 42, 240))
-            self.screen.blit(card_surf, (card_x, card_y))
+            self.screen.blit(self._get_rect_surf(card_w, card_h, (15, 23, 42, 240)), (card_x, card_y))
             border_col = (245, 158, 11) if self.phase == 1 else (34, 197, 94)
             pygame.draw.rect(self.screen, border_col, (card_x, card_y, card_w, card_h), 2, border_radius=16)
 
@@ -2101,9 +2180,7 @@ class TutorialScreen:
         demo_card_y = target_btn_y - 24
         if demo_card_x + 220 < self.width:
             d_rect = pygame.Rect(demo_card_x, demo_card_y, 220, 100)
-            d_surf = pygame.Surface((220, 100), pygame.SRCALPHA)
-            d_surf.fill((15, 23, 42, 245))
-            self.screen.blit(d_surf, d_rect)
+            self.screen.blit(self._get_rect_surf(220, 100, (15, 23, 42, 245)), d_rect)
             pygame.draw.rect(self.screen, (251, 191, 36), d_rect, 2, border_radius=12)
 
             t1 = self.ui_font.render("⭐ HOW TO ANSWER:", True, (255, 215, 0))
@@ -2135,9 +2212,7 @@ class TutorialScreen:
         sh_rect.y += 3
         pygame.draw.rect(self.screen, (0, 0, 0, 160), sh_rect, border_radius=16)
 
-        b_surf = pygame.Surface((bw, bh), pygame.SRCALPHA)
-        b_surf.fill((15, 23, 42, 238))
-        self.screen.blit(b_surf, banner_rect.topleft)
+        self.screen.blit(self._get_rect_surf(bw, bh, (15, 23, 42, 238)), banner_rect.topleft)
 
         pulse = 0.5 + 0.5 * math.sin(t * 3.0)
         uncollected = any(not s["collected"] for s in self.practice_stars)
@@ -2190,17 +2265,12 @@ class TutorialScreen:
         box_x = (self.width - box_w) // 2
         box_y = (self.height - box_h) // 2
 
-        if self._dim_overlay is None or self._dim_overlay.get_size() != (self.width, self.height):
-            self._dim_overlay = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
-            self._dim_overlay.fill((0, 0, 0, 160))
-        self.screen.blit(self._dim_overlay, (0, 0))
+        self.screen.blit(self._get_dim_overlay(), (0, 0))
 
         sh_rect = pygame.Rect(box_x, box_y + 4, box_w, box_h)
         pygame.draw.rect(self.screen, (0, 0, 0, 180), sh_rect, border_radius=20)
 
-        card_surf = pygame.Surface((box_w, box_h), pygame.SRCALPHA)
-        card_surf.fill((15, 23, 42, 248))
-        self.screen.blit(card_surf, (box_x, box_y))
+        self.screen.blit(self._get_rect_surf(box_w, box_h, (15, 23, 42, 248)), (box_x, box_y))
         pygame.draw.rect(self.screen, (245, 158, 11), (box_x, box_y, box_w, box_h), 3, border_radius=20)
         pygame.draw.rect(self.screen, (251, 191, 36), (box_x + 3, box_y + 3, box_w - 6, box_h - 6), 1, border_radius=17)
 
@@ -2214,7 +2284,7 @@ class TutorialScreen:
         pygame.draw.rect(self.screen, (251, 191, 36), p_rect, 2, border_radius=12)
 
         if self.npc_frames:
-            scaled_npc = pygame.transform.scale(self.npc_frames[self.npc_anim_frame], (p_size - 8, p_size - 8))
+            scaled_npc = self._get_scaled_sprite(self.npc_frames[self.npc_anim_frame], p_size - 8, p_size - 8)
             self.screen.blit(scaled_npc, (p_x + 4, p_y + 4))
 
         name_x = p_x + p_size + 16
@@ -2327,10 +2397,8 @@ class TutorialScreen:
 
         if fist_hold_pct > 0.0:
             fill_w = int(btn_w * fist_hold_pct)
-            fill_rect = pygame.Rect(btn_x, btn_y, fill_w, btn_h)
-            fill_surf = pygame.Surface((fill_w, btn_h), pygame.SRCALPHA)
-            fill_surf.fill((255, 255, 255, 80))
-            self.screen.blit(fill_surf, fill_rect)
+            if fill_w > 0:
+                self.screen.blit(self._get_rect_surf(btn_w, btn_h, (255, 255, 255, 80)), (btn_x, btn_y), (0, 0, fill_w, btn_h))
 
         btn_txt_str = "Start Adventure! 🚀 (Hold Fist ✊)" if fist_hold_pct == 0.0 else f"Starting: {int(fist_hold_pct * 100)}%"
         btn_txt = self.dialog_btn_font.render(btn_txt_str, True, (255, 255, 255))
@@ -2344,17 +2412,12 @@ class TutorialScreen:
         box_x = (self.width - box_w) // 2
         box_y = (self.height - box_h) // 2
 
-        if self._dim_overlay is None or self._dim_overlay.get_size() != (self.width, self.height):
-            self._dim_overlay = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
-            self._dim_overlay.fill((0, 0, 0, 160))
-        self.screen.blit(self._dim_overlay, (0, 0))
+        self.screen.blit(self._get_dim_overlay(), (0, 0))
 
         sh_rect = pygame.Rect(box_x, box_y + 4, box_w, box_h)
         pygame.draw.rect(self.screen, (0, 0, 0, 180), sh_rect, border_radius=18)
 
-        card_surf = pygame.Surface((box_w, box_h), pygame.SRCALPHA)
-        card_surf.fill((15, 23, 42, 245))
-        self.screen.blit(card_surf, (box_x, box_y))
+        self.screen.blit(self._get_rect_surf(box_w, box_h, (15, 23, 42, 245)), (box_x, box_y))
         pygame.draw.rect(self.screen, (245, 158, 11), (box_x, box_y, box_w, box_h), 2, border_radius=18)
 
         # Header Bar with Guide Sage portrait
@@ -2362,13 +2425,11 @@ class TutorialScreen:
         h_h = 48
         h_x = box_x + 16
         h_y = box_y + 14
-        h_surf = pygame.Surface((h_w, h_h), pygame.SRCALPHA)
-        h_surf.fill((30, 41, 59, 240))
-        self.screen.blit(h_surf, (h_x, h_y))
+        self.screen.blit(self._get_rect_surf(h_w, h_h, (30, 41, 59, 240)), (h_x, h_y))
         pygame.draw.rect(self.screen, (251, 191, 36), (h_x, h_y, h_w, h_h), 1, border_radius=10)
 
         if self.npc_frames:
-            s_port = pygame.transform.scale(self.npc_frames[self.npc_anim_frame], (34, 34))
+            s_port = self._get_scaled_sprite(self.npc_frames[self.npc_anim_frame], 34, 34)
             self.screen.blit(s_port, (h_x + 10, h_y + 7))
 
         title = self.dialog_header_font.render("Guide Sage — Trial of Wisdom (Demonstration)", True, (255, 215, 0))
@@ -2379,9 +2440,7 @@ class TutorialScreen:
         q_card_h = 68
         q_card_x = box_x + 16
         q_card_y = box_y + 72
-        q_bg = pygame.Surface((q_card_w, q_card_h), pygame.SRCALPHA)
-        q_bg.fill((20, 29, 47, 220))
-        self.screen.blit(q_bg, (q_card_x, q_card_y))
+        self.screen.blit(self._get_rect_surf(q_card_w, q_card_h, (20, 29, 47, 220)), (q_card_x, q_card_y))
         pygame.draw.rect(self.screen, (51, 65, 85), (q_card_x, q_card_y, q_card_w, q_card_h), 1, border_radius=8)
 
         q_txt = self.dialog_q_font.render(self.sample_question["question"], True, (255, 255, 255))
@@ -2450,10 +2509,7 @@ class TutorialScreen:
         box_x = (self.width - box_w) // 2
         box_y = (self.height - box_h) // 2
 
-        if self._dim_overlay is None or self._dim_overlay.get_size() != (self.width, self.height):
-            self._dim_overlay = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
-            self._dim_overlay.fill((0, 0, 0, 160))
-        self.screen.blit(self._dim_overlay, (0, 0))
+        self.screen.blit(self._get_dim_overlay(), (0, 0))
 
         sh_rect = pygame.Rect(box_x, box_y + 4, box_w, box_h)
         pygame.draw.rect(self.screen, (0, 0, 0, 180), sh_rect, border_radius=18)
@@ -2470,7 +2526,7 @@ class TutorialScreen:
         pygame.draw.rect(self.screen, (239, 68, 68), p_rect, 2, border_radius=12)
 
         if self.npc_frames:
-            scaled_npc = pygame.transform.scale(self.npc_frames[self.npc_anim_frame], (p_size - 8, p_size - 8))
+            scaled_npc = self._get_scaled_sprite(self.npc_frames[self.npc_anim_frame], p_size - 8, p_size - 8)
             self.screen.blit(scaled_npc, (p_x + 4, p_y + 4))
 
         speaker = self.dialog_header_font.render("Guide Sage — Second Chance Trial", True, (248, 113, 113))
@@ -2505,10 +2561,7 @@ class TutorialScreen:
         box_x = (self.width - box_w) // 2
         box_y = (self.height - box_h) // 2
 
-        if self._dim_overlay is None or self._dim_overlay.get_size() != (self.width, self.height):
-            self._dim_overlay = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
-            self._dim_overlay.fill((0, 0, 0, 160))
-        self.screen.blit(self._dim_overlay, (0, 0))
+        self.screen.blit(self._get_dim_overlay(), (0, 0))
 
         sh_rect = pygame.Rect(box_x, box_y + 4, box_w, box_h)
         pygame.draw.rect(self.screen, (0, 0, 0, 180), sh_rect, border_radius=18)
@@ -2525,7 +2578,7 @@ class TutorialScreen:
         pygame.draw.rect(self.screen, (34, 197, 94), p_rect, 2, border_radius=12)
 
         if self.npc_frames:
-            scaled_npc = pygame.transform.scale(self.npc_frames[self.npc_anim_frame], (p_size - 8, p_size - 8))
+            scaled_npc = self._get_scaled_sprite(self.npc_frames[self.npc_anim_frame], p_size - 8, p_size - 8)
             self.screen.blit(scaled_npc, (p_x + 4, p_y + 4))
 
         speaker = self.dialog_header_font.render("Guide Sage — Trial Mastered!", True, (74, 222, 128))
@@ -2561,10 +2614,7 @@ class TutorialScreen:
         box_x = (self.width - box_w) // 2
         box_y = (self.height - box_h) // 2
 
-        if self._dim_overlay is None or self._dim_overlay.get_size() != (self.width, self.height):
-            self._dim_overlay = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
-            self._dim_overlay.fill((0, 0, 0, 160))
-        self.screen.blit(self._dim_overlay, (0, 0))
+        self.screen.blit(self._get_dim_overlay(), (0, 0))
 
         sh_rect = pygame.Rect(box_x, box_y + 4, box_w, box_h)
         pygame.draw.rect(self.screen, (0, 0, 0, 180), sh_rect, border_radius=18)
@@ -2581,13 +2631,13 @@ class TutorialScreen:
         pygame.draw.rect(self.screen, (245, 158, 11), p_rect, 2, border_radius=12)
 
         if self.npc_frames:
-            scaled_npc = pygame.transform.scale(self.npc_frames[self.npc_anim_frame], (p_size - 8, p_size - 8))
+            scaled_npc = self._get_scaled_sprite(self.npc_frames[self.npc_anim_frame], p_size - 8, p_size - 8)
             self.screen.blit(scaled_npc, (p_x + 4, p_y + 4))
 
         speaker = self.dialog_header_font.render("Guide Sage — 2 Tries Exhausted", True, (245, 158, 11))
         self.screen.blit(speaker, (p_x + p_size + 18, box_y + 20))
 
-        role = self.ui_font.render("Trial Challenge Reset", True, (148, 163, 184))
+        role = self.ui_font.render("Trial Challenge Completed", True, (148, 163, 184))
         self.screen.blit(role, (p_x + p_size + 18, box_y + 48))
 
         att_rect = pygame.Rect(box_x + box_w - 230, box_y + 18, 204, 32)
@@ -2597,8 +2647,8 @@ class TutorialScreen:
         self.screen.blit(att_txt, att_txt.get_rect(center=att_rect.center))
 
         m1 = self.dialog_q_font.render("Out of tries! You have used both of your 2 attempts.", True, (255, 255, 255))
-        m2 = self.dialog_choice_font.render("The challenge window will close without unlocking the portal.", True, (203, 213, 225))
-        m3 = self.ui_font.render("Approach Guide Sage again and hold your Fist ✊ to re-try!", True, (254, 240, 138))
+        m2 = self.dialog_choice_font.render("The question has been recorded as incorrect.", True, (203, 213, 225))
+        m3 = self.ui_font.render("Good effort! The Exit Portal is now unlocked for you to continue!", True, (254, 240, 138))
         self.screen.blit(m1, (box_x + 28, box_y + 114))
         self.screen.blit(m2, (box_x + 28, box_y + 154))
         self.screen.blit(m3, (box_x + 28, box_y + 194))
@@ -2609,5 +2659,5 @@ class TutorialScreen:
         pygame.draw.rect(self.screen, (245, 158, 11) if is_hov else (180, 83, 9), btn_rect, border_radius=14)
         pygame.draw.rect(self.screen, (255, 255, 255), btn_rect, 2, border_radius=14)
 
-        c_surf = self.dialog_btn_font.render("Close Window [Esc]", True, (255, 255, 255))
+        c_surf = self.dialog_btn_font.render("Continue >> (Hold Fist ✊)", True, (255, 255, 255))
         self.screen.blit(c_surf, c_surf.get_rect(center=btn_rect.center))

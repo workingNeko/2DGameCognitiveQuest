@@ -17,11 +17,32 @@ from screens.main_menu import MainMenu
 from screens.quarter4 import Quarter4
 from core.npc_scripts import get_map_instructions, get_station_script, get_mentor_script
 
+from unittest.mock import patch
+from db.connect_db import Database
+
+MOCK_Q4_QUESTIONS = [
+    {
+        "prompt": f"Quarter 4 Question {i}",
+        "optionA": "Choice A",
+        "optionB": "Choice B",
+        "optionC": "Choice C",
+        "optionD": "Choice D",
+        "correctAnswer": "A",
+        "hint": "Hint"
+    }
+    for i in range(1, 7)
+]
+
 class TestQuarter4Fixes(unittest.TestCase):
     def setUp(self):
+        self.q_patch = patch.object(Database, "get_questions", return_value=MOCK_Q4_QUESTIONS)
+        self.q_patch.start()
         self.screen = screen
         self.mm = MainMenu(self.screen)
         self.mm.selected_student = {"id": 1, "student_id": "1001", "first_name": "HeroTester"}
+
+    def tearDown(self):
+        self.q_patch.stop()
 
     def test_default_map_is_map10(self):
         """Verify Quarter 4 defaults to map10.txt (Stage 1 of Quarter 4) when no map is passed."""

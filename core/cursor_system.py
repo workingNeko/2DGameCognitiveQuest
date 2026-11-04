@@ -24,7 +24,7 @@ class OneEuroFilter:
     - At low speed (aiming / steady hand): cutoff frequency is low (~min_cutoff), completely eliminating jitter.
     - At high speed (swiping / flicking): cutoff frequency dynamically rises, providing instant 0-lag tracking.
     """
-    def __init__(self, t0=0.0, x0=0.0, dx0=0.0, min_cutoff=0.85, beta=0.015, d_cutoff=1.0):
+    def __init__(self, t0=0.0, x0=0.0, dx0=0.0, min_cutoff=0.18, beta=0.03, d_cutoff=1.0):
         self.min_cutoff = float(min_cutoff)
         self.beta = float(beta)
         self.d_cutoff = float(d_cutoff)
@@ -40,7 +40,7 @@ class OneEuroFilter:
     def filter(self, t, x):
         t_e = t - self.t_prev
         if t_e <= 0.0:
-            return self.x_prev
+            t_e = 0.001
 
         rate = max(10.0, min(240.0, 1.0 / t_e))
         dx = (x - self.x_prev) * rate
@@ -126,13 +126,15 @@ class GameCursor:
         self._pointer_surfs = {}
         self._init_pointer_surfaces()
 
-        # Low-spec optimization: Reusable surfaces
+        # Low-spec optimization: Reusable surfaces to prevent per-frame heap churn on dual-core CPUs
         self._meter_surf = pygame.Surface((72, 72), pygame.SRCALPHA)
+        self._scratch_sparkle_surf = pygame.Surface((24, 24), pygame.SRCALPHA)
+        self._scratch_ripple_surf = pygame.Surface((80, 80), pygame.SRCALPHA)
         self._trail_cache = {}
-        self._init_trail_cache()
 
     def _init_trail_cache(self):
-        """Pre-renders rainbow particle stamps for zero-heap motion trails."""
+        """Pre-renders rainbow particle stamps lazily when GameCursor.draw() is actually used."""
+        has_disp = pygame.display.get_surface() is not None
         for c_idx, col in enumerate(RAINBOW_COLORS):
             for s in range(1, 6):
                 for a_idx in range(1, 16):
@@ -141,6 +143,11 @@ class GameCursor:
                     pygame.draw.circle(tsurf, (*col, a_val), (s + 1, s + 1), s)
                     if s >= 3:
                         pygame.draw.circle(tsurf, (255, 255, 255, min(255, a_val + 40)), (s + 1, s + 1), max(1, s // 2))
+                    if has_disp:
+                        try:
+                            tsurf = tsurf.convert_alpha()
+                        except Exception:
+                            pass
                     self._trail_cache[(c_idx, s, a_idx)] = tsurf
 
     def _init_pointer_surfaces(self):
@@ -353,6 +360,8 @@ class GameCursor:
 
         # 1. DRAW ENCHANTING RAINBOW STARDUST MOTION TRAIL
         if len(self.trail) > 1:
+            if not self._trail_cache:
+                self._init_trail_cache()
             trail_list = list(self.trail)
             for i in range(len(trail_list) - 1):
                 p1 = trail_list[i]
@@ -366,17 +375,19 @@ class GameCursor:
                     if cached_dot:
                         surface.blit(cached_dot, (p1[0] - size - 1, p1[1] - size - 1))
 
-        # 2. DRAW CELEBRATORY CLICK SPARKLES
+        # 2. DRAW CELEBRATORY CLICK SPARKLES (Zero-heap reuse of _scratch_sparkle_surf)
         for s in self.click_sparkles:
             prog = max(0.0, s["life"] / s["max_life"])
             alpha = int(255 * prog)
-            r = max(1, int(s["size"] * prog))
-            sp_surf = pygame.Surface((r * 2 + 2, r * 2 + 2), pygame.SRCALPHA)
-            pygame.draw.circle(sp_surf, (*s["color"], alpha), (r + 1, r + 1), r)
-            pygame.draw.circle(sp_surf, (255, 255, 255, alpha), (r + 1, r + 1), max(1, r // 2))
-            surface.blit(sp_surf, (int(s["x"]) - r - 1, int(s["y"]) - r - 1))
+            r = max(1, min(10, int(s["size"] * prog)))
+            sp_surf = self._scratch_sparkle_surf
+            sp_surf.fill((0, 0, 0, 0))
+            center = 12
+            pygame.draw.circle(sp_surf, (*s["color"], alpha), (center, center), r)
+            pygame.draw.circle(sp_surf, (255, 255, 255, alpha), (center, center), max(1, r // 2))
+            surface.blit(sp_surf, (int(s["x"]) - center, int(s["y"]) - center))
 
-        # 3. DRAW EXPANDING BUBBLE CLICK RIPPLES
+        # 3. DRAW EXPANDING BUBBLE CLICK RIPPLES (Zero-heap reuse of _scratch_ripple_surf)
         for r in self.ripples:
             elapsed = now - r["start_time"]
             progress = min(1.0, elapsed / r["duration"])
@@ -386,8 +397,9 @@ class GameCursor:
 
             max_radius = 28
             cur_radius = int(8 + (max_radius - 8) * progress)
-            r_surf = pygame.Surface((cur_radius * 2 + 20, cur_radius * 2 + 20), pygame.SRCALPHA)
-            rx, ry = cur_radius + 10, cur_radius + 10
+            r_surf = self._scratch_ripple_surf
+            r_surf.fill((0, 0, 0, 0))
+            rx, ry = 40, 40
             col = r["color"]
             col_rgba = (*col, alpha)
 

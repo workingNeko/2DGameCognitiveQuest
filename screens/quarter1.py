@@ -10,7 +10,15 @@ import math
 import random
 from .map_loader import MapLoader
 from core.camera_system import LoLCamera
-from core.visual_effects import DustParticleSystem, draw_beacon_marker, draw_aura_glow
+from core.font_manager import get_font
+from core.visual_effects import (
+    DustParticleSystem,
+    draw_beacon_marker,
+    draw_aura_glow,
+    build_composite_title_letters,
+    draw_composite_title_wave,
+)
+from core.state_machine import State, UIStateMachine
 
 
 # Import db - safe import in case db modules are missing
@@ -18,6 +26,8 @@ try:
     from db import db
 except ImportError:
     db = None
+
+from db.save_system import save_student_progress
 
 # ============================================================
 # SETTINGS
@@ -67,9 +77,15 @@ class Quarter1:
         self.time_up_dialog_active = False
         self.timer_warning_played = False
 
+        # Strict UI & Input Layering Pushdown Automata (PDA)
+        self.state_machine = UIStateMachine(initial_state=State.Exploration, host=self)
+
         # Universal In-Stage Pause Menu
         from core.pause_menu import InGamePauseMenu
-        self.pause_menu = InGamePauseMenu(self.screen, self.width, self.height, self.main_menu, self.return_to_stage_select, restart_callback=self.restart_level)
+        self.pause_menu = InGamePauseMenu(self.screen, self.width, self.height, self.main_menu, self.return_to_stage_select, restart_callback=self.restart_level, state_machine=self.state_machine)
+
+        # Cognitive Jigsaw Puzzle Subsystem (Normal In-Engine Puzzle)
+        self.jigsaw_puzzle = None
 
         # 3-Star Victory Report Card & Celebration Particles
         from core.report_card import VictoryReportCard, CelebrationParticleSystem
@@ -483,18 +499,14 @@ class Quarter1:
         self.title_outline_color = (0, 0, 0) # Black outline
         self.title_glow_color = (180, 180, 180) # Grey glow
 
-        # Pre-render letters
-        self.title_letters = []
-        for ch in self.title_text:
-            glow = self.title_font.render(ch, False, self.title_glow_color)
-            outline = self.title_font.render(ch, False, self.title_outline_color)
-            main = self.title_font.render(ch, False, self.title_text_color)
-            self.title_letters.append({
-                "glow": glow,
-                "outline": outline,
-                "main": main,
-                "width": main.get_width()
-            })
+        # Pre-render composite letters (1 surface per letter, zero per-frame copies)
+        self.title_letters = build_composite_title_letters(
+            self.title_text,
+            self.title_font,
+            self.title_text_color,
+            self.title_outline_color,
+            self.title_glow_color,
+        )
         self.title_total_width = sum(l["width"] for l in self.title_letters) + self.title_spacing * (len(self.title_text) - 1)
 
         # Correct answer random responses
@@ -511,40 +523,13 @@ class Quarter1:
         self.player_block_timer = 0
         self.npc_oldman_path = []
 
-        # Questions List
-        self.quiz_questions = [
-            {
-                "question": "Which shape is half of a circle?",
-                "choices": ["A. Triangle", "B. Half circle", "C. Rectangle", "D. Square"],
-                "correct": 1  # B
-            },
-            {
-                "question": "A whole circle is cut into four equal parts. What is one part called?",
-                "choices": ["A. Half circle", "B. Quarter circle", "C. Triangle", "D. Rectangle"],
-                "correct": 1  # B
-            },
-            {
-                "question": "Which group of shapes can be combined to make a house?",
-                "choices": ["A. One square and one triangle", "B. Two circles", "C. Three rectangles only", "D. One quarter circle only"],
-                "correct": 0  # A
-            },
-            {
-                "question": "A shape is moved one step to the right without turning or flipping it. What is this movement called?",
-                "choices": ["A. Rotation", "B. Reflection", "C. Slide (Translation)", "D. Fold"],
-                "correct": 2  # C
-            },
-            {
-                "question": "Which figure is a composite figure?",
-                "choices": ["A. A single square", "B. A single circle", "C. A shape made by joining a rectangle and a triangle", "D. A single triangle"],
-                "correct": 2  # C
-            }
-        ]
+        # Cloud-authoritative Questions List (0..N active cloud questions)
+        self.quiz_questions = []
+        self.active_station_count = 0
+        self.first_attempt_correct = {}
+        self.question_attempts = {}
 
-        # Initialize tracking for questions answered correctly on the first attempt
-        self.first_attempt_correct = {1: True, 2: True, 3: True, 4: True, 5: True}
-        self.question_attempts = {1: 0, 2: 0, 3: 0, 4: 0, 5: 0}
-        
-        # Load questions from the database if available
+        # Sync questions strictly from the cloud / cloud cache
         self.load_database_questions()
 
         # ============================================================
@@ -553,6 +538,8 @@ class Quarter1:
         self.portals = []
         self.portal_frames_cache = self.load_portal_frames()
         self.load_static_portals()
+        if self.is_quiz_map and self.active_station_count == 0:
+            self.spawn_portals()
 
         # Teleport cooldown
         self.teleport_cooldown = 0
@@ -565,9 +552,9 @@ class Quarter1:
         # ============================================================
         # UI
         # ============================================================
-        self.show_info = True
-        self.font = pygame.font.SysFont("Comic Sans MS", 16)
-        self.small_font = pygame.font.SysFont("Comic Sans MS", 12)
+        self.show_info = False
+        self.font = get_font("Comic Sans MS", 16)
+        self.small_font = get_font("Comic Sans MS", 12)
 
         # Clock for delta time
         self.clock = pygame.time.Clock()
@@ -605,6 +592,9 @@ class Quarter1:
         
         # Initialize bridge tiles on startup for map1.txt
         self.update_bridge_tiles()
+        self.build_prerendered_map()
+        if self.is_quiz_map and self.active_station_count == 0:
+            self.show_bridge_warning("No Cloud Questions Set — Speak with the Old Man to unlock the Exit Portal!")
         
         # Load custom synthesized puzzle sound effects
         self.load_puzzle_sounds()
@@ -814,61 +804,38 @@ class Quarter1:
     def load_database_questions(self):
         self.database_unit_id = None
         if not self.is_quiz_map:
+            self.active_station_count = 0
             return
 
+        from db.connect_db import map_cloud_questions
+        mapped_questions = []
         try:
-            if not db:
-                return
-            
-            questions_result = db.get_questions(quarter=1)
-            if not questions_result or len(questions_result) < 5:
-                print(f"[WARN] Found {len(questions_result) if questions_result else 0} active questions from Vercel API, but need at least 5. Using local questions.")
-                return
-            
-            # Map questions to Pygame format
-            mapped_questions = []
-            for row in questions_result:
-                # camelCase keys from Vercel API
-                prompt = row.get("prompt")
-                opt_a = row.get("optionA") or row.get("option_a")
-                opt_b = row.get("optionB") or row.get("option_b")
-                opt_c = row.get("optionC") or row.get("option_c")
-                opt_d = row.get("optionD") or row.get("option_d")
-                correct_answer = row.get("correctAnswer") or row.get("correct_answer")
-                
-                options = [opt_a, opt_b, opt_c, opt_d]
-                ans = str(correct_answer).upper().strip()
-                if ans == "A" or ans == "OPTION_A" or ans.endswith("A"):
-                    correct_idx = 0
-                elif ans == "B" or ans == "OPTION_B" or ans.endswith("B"):
-                    correct_idx = 1
-                elif ans == "C" or ans == "OPTION_C" or ans.endswith("C"):
-                    correct_idx = 2
-                elif ans == "D" or ans == "OPTION_D" or ans.endswith("D"):
-                    correct_idx = 3
-                else:
-                    correct_idx = 0
-                    for idx, opt in enumerate(options):
-                        if opt and opt.lower() == ans.lower():
-                            correct_idx = idx
-                            break
-                
-                mapped_questions.append({
-                    "question": prompt,
-                    "choices": [
-                        f"A. {opt_a}",
-                        f"B. {opt_b}",
-                        f"C. {opt_c}",
-                        f"D. {opt_d}"
-                    ],
-                    "correct": correct_idx
-                })
-            
-            self.quiz_questions = mapped_questions
-            print(f"[OK] Successfully loaded 5 questions from Vercel API for Quarter 1!")
-            
+            if db:
+                questions_result = db.get_questions(quarter=1)
+                mapped_questions = map_cloud_questions(
+                    questions_result,
+                    default_hint="Examine the geometric shapes and properties carefully!"
+                )
         except Exception as e:
-            print(f"[WARN] Exception loading database questions from Vercel: {e}. Using local questions.")
+            print(f"[WARN] Exception loading cloud questions for Quarter 1: {e}")
+
+        sorted_ids = sorted(self.quiz_stations.keys())
+        active_count = min(len(sorted_ids), len(mapped_questions))
+        active_ids = sorted_ids[:active_count]
+
+        self.quiz_questions = mapped_questions[:active_count]
+        self.active_station_count = active_count
+        self.quiz_stations = {k: self.quiz_stations[k] for k in active_ids}
+        self.shape_npcs = {k: self.shape_npcs[k] for k in active_ids if k in self.shape_npcs}
+        self.first_attempt_correct = {k: True for k in active_ids}
+        self.question_attempts = {k: 0 for k in active_ids}
+
+        if active_count == 0:
+            self.quiz_station_index = 6
+            print("[CLOUD SYNC] Quarter 1 synced 0 active cloud questions — station quizzes skipped, Old Man puzzle active.")
+        else:
+            self.quiz_station_index = active_ids[0]
+            print(f"[CLOUD SYNC] Quarter 1 synced {active_count} cloud question(s) across {active_count} station(s).")
 
     def save_results_to_database(self):
         import threading
@@ -882,6 +849,11 @@ class Quarter1:
             if not db:
                 return
 
+            total_questions = getattr(self, 'active_station_count', len(self.quiz_questions))
+            if total_questions <= 0:
+                print("[CLOUD SYNC] Quarter 1 completed with 0 cloud questions — skipping academic quiz score upload.")
+                return
+
             student_db_id = getattr(self.main_menu, 'student_db_id', None)
             if not student_db_id and getattr(self.main_menu, 'selected_student', None):
                 student_db_id = self.main_menu.selected_student.get('id')
@@ -889,10 +861,9 @@ class Quarter1:
                 print("[WARN] No student_db_id available in main_menu. Skipping database record.")
                 return
 
-            total_questions = 5
-            correct_answers = sum(1 for v in self.first_attempt_correct.values() if v)
+            correct_answers = sum(1 for k, v in self.first_attempt_correct.items() if k <= total_questions and v)
             percentage = (correct_answers / float(total_questions)) * 100.0
-            score = int(correct_answers * 20)  # 20 points per question -> 100 max points
+            score = int(round(percentage))
 
             # Try to fetch assessment_id for Quarter 1 Quiz from Vercel
             assessment_id = db.get_assessment_id(quarter=1)
@@ -1184,6 +1155,7 @@ class Quarter1:
             self.height_tiles = height_tiles
             self.width = TILE_SIZE * width_tiles
             self.height = TILE_SIZE * height_tiles
+            self._scaled_cache = {}
 
         def update(self):
             if self.frames:
@@ -1207,7 +1179,16 @@ class Quarter1:
                 if portal_img:
                     scaled_width = int(self.width * zoom)
                     scaled_height = int(self.height * zoom)
-                    scaled_img = pygame.transform.scale(portal_img, (scaled_width, scaled_height))
+                    key = (portal_img, scaled_width, scaled_height)
+                    scaled_img = self._scaled_cache.get(key)
+                    if scaled_img is None:
+                        scaled_img = pygame.transform.scale(portal_img, (scaled_width, scaled_height))
+                        if pygame.display.get_surface() is not None:
+                            try:
+                                scaled_img = scaled_img.convert_alpha()
+                            except Exception:
+                                pass
+                        self._scaled_cache[key] = scaled_img
                     screen.blit(scaled_img, (screen_x, screen_y))
 
     # ============================================================
@@ -1464,10 +1445,11 @@ class Quarter1:
     def update_bridge_tiles(self):
         if self.map_name.lower() != 'map1.txt':
             return
+        tot = getattr(self, 'active_station_count', len(self.shape_npcs))
         q_count = sum(1 for s in self.shape_npcs.values() if s['answered'])
         
         # Modify both self.game_map and self.render_map
-        # Columns 37 to 46 in Row 3 and Row 4
+        # Columns 37 to 46 in Row 3 and Row 4 (5 segments scaled proportionally to 0..N cloud questions)
         for r in [3, 4]:
             if r >= len(self.game_map):
                 continue
@@ -1478,7 +1460,7 @@ class Quarter1:
                 if col >= len(game_row):
                     continue
                 segment = (col - 37) // 2 + 1  # 1 to 5
-                if q_count >= segment:
+                if tot <= 0 or q_count * 5 >= segment * tot:
                     game_row[col] = 'B'
                     render_row[col] = 'B'
                 else:
@@ -1487,6 +1469,8 @@ class Quarter1:
                     
             self.game_map[r] = ''.join(game_row)
             self.render_map[r] = ''.join(render_row)
+        if hasattr(self, '_bg_map_surface'):
+            self.build_prerendered_map()
 
     def trigger_bridge_pan_sequence(self):
         self.camera_pan_active = True
@@ -1653,10 +1637,10 @@ class Quarter1:
         if completed:
             self.save_results_to_database()
             try:
-                total_questions = 5
-                correct_answers = sum(1 for v in self.first_attempt_correct.values() if v)
+                total_questions = getattr(self, 'active_station_count', len(self.quiz_questions))
+                correct_answers = sum(1 for k, v in self.first_attempt_correct.items() if k <= total_questions and v)
                 percentage = (correct_answers / float(total_questions)) * 100.0 if total_questions > 0 else 100.0
-                score = int(correct_answers * 20)
+                score = int(round(percentage)) if total_questions > 0 else 100
                 from db.save_system import mark_quarter_completed
                 mark_quarter_completed(self.main_menu, "quarter1", score=score, percentage=percentage, total_questions=total_questions)
                 if hasattr(self.main_menu, 'audio_manager'):
@@ -2009,28 +1993,30 @@ class Quarter1:
         if not self.puzzle_active:
             return
             
+        if not hasattr(self, '_puzzle_dim_overlay') or self._puzzle_dim_overlay.get_size() != (self.width, self.height):
+            self._puzzle_dim_overlay = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
+            self._puzzle_dim_overlay.fill((0, 0, 0, 180))
+
         if self.map_name.lower() == 'map2.txt':
             # Custom Match the Shapes Drawing
-            # Background overlay
-            overlay = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
-            overlay.fill((0, 0, 0, 180))
-            self.screen.blit(overlay, (0, 0))
+            self.screen.blit(self._puzzle_dim_overlay, (0, 0))
             
             box_w, box_h = 800, 520
             box_x = (self.width - box_w) // 2
             box_y = (self.height - box_h) // 2
             
-            bg_surf = pygame.Surface((box_w, box_h), pygame.SRCALPHA)
-            bg_surf.fill((15, 23, 42, 230))
-            self.screen.blit(bg_surf, (box_x, box_y))
+            if not hasattr(self, '_puzzle_bg_map2'):
+                self._puzzle_bg_map2 = pygame.Surface((box_w, box_h), pygame.SRCALPHA)
+                self._puzzle_bg_map2.fill((15, 23, 42, 230))
+            self.screen.blit(self._puzzle_bg_map2, (box_x, box_y))
             pygame.draw.rect(self.screen, (218, 165, 32), (box_x, box_y, box_w, box_h), 3, border_radius=12)
             
             # Title Headers
-            title_font = pygame.font.SysFont("Comic Sans MS", 22, bold=True)
+            title_font = get_font("Comic Sans MS", 22, bold=True)
             title_surf = title_font.render("Match the Shapes!", True, (255, 215, 0))
             self.screen.blit(title_surf, (box_x + (box_w - title_surf.get_width()) // 2, box_y + 15))
             
-            desc_font = pygame.font.SysFont("Comic Sans MS", 13)
+            desc_font = get_font("Comic Sans MS", 13)
             desc_surf = desc_font.render("Drag each shape from the deck to its correct slot on the target board.", True, (200, 200, 200))
             self.screen.blit(desc_surf, (box_x + (box_w - desc_surf.get_width()) // 2, box_y + 45))
             
@@ -2054,7 +2040,7 @@ class Quarter1:
             pygame.draw.rect(self.screen, (100, 116, 139), (deck_x, deck_y, deck_w, deck_h), 2, border_radius=12)
             
             # Section labels
-            label_font = pygame.font.SysFont("Comic Sans MS", 14, bold=True)
+            label_font = get_font("Comic Sans MS", 14, bold=True)
             board_lbl = label_font.render("TARGET BOARD", True, (218, 165, 32))
             self.screen.blit(board_lbl, (board_x + (board_w - board_lbl.get_width()) // 2, board_y + 10))
             
@@ -2062,7 +2048,7 @@ class Quarter1:
             self.screen.blit(deck_lbl, (deck_x + (deck_w - deck_lbl.get_width()) // 2, deck_y + 10))
             
             # Slot labels
-            small_font = pygame.font.SysFont("Comic Sans MS", 10, bold=True)
+            small_font = get_font("Comic Sans MS", 10, bold=True)
             labels = ["SQUARE", "DIAMOND", "HEART", "CIRCLE", "STAR"]
             
             # Target Centers
@@ -2074,14 +2060,20 @@ class Quarter1:
                 (165, 310)  # star
             ]
             
+            if not hasattr(self, '_puzzle_ghost_cache'):
+                self._puzzle_ghost_cache = {}
             # Draw 5 empty slots on board
             for i, (tx, ty) in enumerate(targets):
                 slot_rect = pygame.Rect(board_x + tx - 45, board_y + ty - 45, 90, 90)
                 pygame.draw.rect(self.screen, (71, 85, 105), slot_rect, 2, border_radius=8)
                 
-                # Draw translucent shape ghost
-                ghost_surf = self.puzzle_pieces[i]["surface"].copy()
-                ghost_surf.set_alpha(60)
+                # Draw cached translucent shape ghost
+                src_s = self.puzzle_pieces[i]["surface"]
+                ghost_surf = self._puzzle_ghost_cache.get(src_s)
+                if ghost_surf is None:
+                    ghost_surf = src_s.copy()
+                    ghost_surf.set_alpha(60)
+                    self._puzzle_ghost_cache[src_s] = ghost_surf
                 self.screen.blit(ghost_surf, (board_x + tx - 35, board_y + ty - 35))
                 
                 # Draw label
@@ -2115,24 +2107,25 @@ class Quarter1:
             close_btn_rect = pygame.Rect(box_x + box_w // 2 - 120, box_y + box_h - 55, 110, 36)
             reset_btn_rect = pygame.Rect(box_x + box_w // 2 + 10, box_y + box_h - 55, 110, 36)
             
-            mouse_pos = pygame.mouse.get_pos()
-            close_color = (220, 38, 38) if close_btn_rect.collidepoint(mouse_pos) else (185, 28, 28)
+            hover_pos = self.cursor_pos
+            close_color = (220, 38, 38) if close_btn_rect.collidepoint(hover_pos) else (185, 28, 28)
             pygame.draw.rect(self.screen, close_color, close_btn_rect, border_radius=6)
             close_label = desc_font.render("Close", True, (255, 255, 255))
             self.screen.blit(close_label, (close_btn_rect.x + (110 - close_label.get_width()) // 2, close_btn_rect.y + (36 - close_label.get_height()) // 2))
             
-            reset_color = (79, 70, 229) if reset_btn_rect.collidepoint(mouse_pos) else (67, 56, 202)
+            reset_color = (79, 70, 229) if reset_btn_rect.collidepoint(hover_pos) else (67, 56, 202)
             pygame.draw.rect(self.screen, reset_color, reset_btn_rect, border_radius=6)
             reset_label = desc_font.render("Reset", True, (255, 255, 255))
             self.screen.blit(reset_label, (reset_btn_rect.x + (110 - reset_label.get_width()) // 2, reset_btn_rect.y + (36 - reset_label.get_height()) // 2))
             
             # Success banner
             if all(p["is_placed"] for p in self.puzzle_pieces):
-                success_overlay = pygame.Surface((box_w - 20, box_h - 150), pygame.SRCALPHA)
-                success_overlay.fill((15, 23, 42, 220))
-                self.screen.blit(success_overlay, (box_x + 10, box_y + 80))
+                if not hasattr(self, '_puzzle_success_map2'):
+                    self._puzzle_success_map2 = pygame.Surface((box_w - 20, box_h - 150), pygame.SRCALPHA)
+                    self._puzzle_success_map2.fill((15, 23, 42, 220))
+                self.screen.blit(self._puzzle_success_map2, (box_x + 10, box_y + 80))
                 
-                success_font = pygame.font.SysFont("Comic Sans MS", 26, bold=True)
+                success_font = get_font("Comic Sans MS", 26, bold=True)
                 success_surf = success_font.render("PUZZLE SOLVED!", True, (34, 197, 94))
                 unlock_surf = desc_font.render("The portal is now active. Exiting area...", True, (248, 250, 252))
                 
@@ -2143,23 +2136,22 @@ class Quarter1:
 
             
         # Background overlay
-        overlay = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
-        overlay.fill((0, 0, 0, 180))
-        self.screen.blit(overlay, (0, 0))
+        self.screen.blit(self._puzzle_dim_overlay, (0, 0))
         
         # Dialogue box layout
         box_w, box_h = 760, 480
         box_x = (self.width - box_w) // 2
         box_y = (self.height - box_h) // 2
         
-        bg_surf = pygame.Surface((box_w, box_h), pygame.SRCALPHA)
-        bg_surf.fill((15, 23, 42, 230))
-        self.screen.blit(bg_surf, (box_x, box_y))
+        if not hasattr(self, '_puzzle_bg_std'):
+            self._puzzle_bg_std = pygame.Surface((box_w, box_h), pygame.SRCALPHA)
+            self._puzzle_bg_std.fill((15, 23, 42, 230))
+        self.screen.blit(self._puzzle_bg_std, (box_x, box_y))
         
         pygame.draw.rect(self.screen, (218, 165, 32), (box_x, box_y, box_w, box_h), 3, border_radius=12)
         
         # Text Header
-        title_font = pygame.font.SysFont("Comic Sans MS", 22, bold=True)
+        title_font = get_font("Comic Sans MS", 22, bold=True)
         if self.map_name.lower() == 'map1.txt':
             title_text = "Forest Keystone Jigsaw Puzzle"
         elif self.map_name.lower() == 'map3.txt':
@@ -2169,11 +2161,11 @@ class Quarter1:
         title_surf = title_font.render(title_text, True, (255, 215, 0))
         self.screen.blit(title_surf, (box_x + (box_w - title_surf.get_width()) // 2, box_y + 20))
         
-        desc_font = pygame.font.SysFont("Comic Sans MS", 13)
+        desc_font = get_font("Comic Sans MS", 13)
         desc_surf = desc_font.render("Drag and drop the pieces into their matching slots to activate the portal.", True, (200, 200, 200))
         self.screen.blit(desc_surf, (box_x + (box_w - desc_surf.get_width()) // 2, box_y + 55))
         
-        label_font = pygame.font.SysFont("Comic Sans MS", 14, bold=True)
+        label_font = get_font("Comic Sans MS", 14, bold=True)
         board_label = label_font.render("TARGET BOARD", True, (255, 255, 255))
         self.screen.blit(board_label, (box_x + 50 + (300 - board_label.get_width()) // 2, box_y + 85))
         
@@ -2213,24 +2205,25 @@ class Quarter1:
         close_btn_rect = pygame.Rect(box_x + box_w // 2 - 120, box_y + box_h - 55, 110, 36)
         reset_btn_rect = pygame.Rect(box_x + box_w // 2 + 10, box_y + box_h - 55, 110, 36)
         
-        mouse_pos = pygame.mouse.get_pos()
-        close_color = (220, 38, 38) if close_btn_rect.collidepoint(mouse_pos) else (185, 28, 28)
+        hover_pos = self.cursor_pos
+        close_color = (220, 38, 38) if close_btn_rect.collidepoint(hover_pos) else (185, 28, 28)
         pygame.draw.rect(self.screen, close_color, close_btn_rect, border_radius=6)
         close_label = desc_font.render("Close", True, (255, 255, 255))
         self.screen.blit(close_label, (close_btn_rect.x + (110 - close_label.get_width()) // 2, close_btn_rect.y + (36 - close_label.get_height()) // 2))
         
-        reset_color = (79, 70, 229) if reset_btn_rect.collidepoint(mouse_pos) else (67, 56, 202)
+        reset_color = (79, 70, 229) if reset_btn_rect.collidepoint(hover_pos) else (67, 56, 202)
         pygame.draw.rect(self.screen, reset_color, reset_btn_rect, border_radius=6)
         reset_label = desc_font.render("Reset", True, (255, 255, 255))
         self.screen.blit(reset_label, (reset_btn_rect.x + (110 - reset_label.get_width()) // 2, reset_btn_rect.y + (36 - reset_label.get_height()) // 2))
         
         # Success overlay arpeggio triggers success board banner
         if all(p["is_placed"] for p in self.puzzle_pieces):
-            success_overlay = pygame.Surface((box_w - 20, box_h - 100), pygame.SRCALPHA)
-            success_overlay.fill((15, 23, 42, 220))
-            self.screen.blit(success_overlay, (box_x + 10, box_y + 80))
+            if not hasattr(self, '_puzzle_success_std'):
+                self._puzzle_success_std = pygame.Surface((box_w - 20, box_h - 100), pygame.SRCALPHA)
+                self._puzzle_success_std.fill((15, 23, 42, 220))
+            self.screen.blit(self._puzzle_success_std, (box_x + 10, box_y + 80))
             
-            success_font = pygame.font.SysFont("Comic Sans MS", 26, bold=True)
+            success_font = get_font("Comic Sans MS", 26, bold=True)
             success_surf = success_font.render("PUZZLE SOLVED!", True, (34, 197, 94))
             unlock_surf = desc_font.render("The portal is now active. Exiting area...", True, (248, 250, 252))
             
@@ -2257,12 +2250,13 @@ class Quarter1:
         if current_portal and self.teleport_cooldown <= 0:
             # Check if this is the goal portal
             if current_portal.direction == self.goal_portal_direction or current_portal.is_static:
-                answered_count = sum(1 for s in self.shape_npcs.values() if s['answered']) if self.is_quiz_map else 5
-                if answered_count < 5:
+                req_count = getattr(self, 'active_station_count', len(self.shape_npcs)) if self.is_quiz_map else 0
+                answered_count = sum(1 for s in self.shape_npcs.values() if s['answered']) if self.is_quiz_map else req_count
+                if answered_count < req_count:
                     if self.map_name.lower() == 'map1.txt':
-                        self.show_bridge_warning("I should answer all 5 questions to build the bridge!")
+                        self.show_bridge_warning(f"I should answer all {req_count} question(s) to build the bridge!")
                     else:
-                        self.show_bridge_warning("I should gather all 5 shape pieces first!")
+                        self.show_bridge_warning(f"I should gather all {req_count} shape piece(s) first!")
                     return False
 
                 # Require solving the Old Man's puzzle near/across the portal first
@@ -2354,7 +2348,7 @@ class Quarter1:
             map_width=self.MAP_WIDTH,
             map_height=self.MAP_HEIGHT,
             tile_size=TILE_SIZE,
-            enable_edge_scroll=True
+            enable_edge_scroll=False
         )
         self.camera_x = self.lol_camera.camera_x
         self.camera_y = self.lol_camera.camera_y
@@ -2371,15 +2365,65 @@ class Quarter1:
         self.fist_closed = fist_start_time > 0
 
     # ============================================================
+    # UI STATE MACHINE HELPERS
+    # ============================================================
+    def is_dialogue_active(self):
+        """Returns True if any modal instruction, greeting, or quiz dialogue is active."""
+        return (
+            self.quiz_state in [1, 2, 3, 4, 5, 10, 11, 12, 13, 14, 20, 21, 22]
+            or (hasattr(self, 'instruction_modal') and self.instruction_modal.is_active())
+            or (hasattr(self, 'greeting_dialog') and self.greeting_dialog.is_active())
+        )
+
+    def is_cognitive_puzzle_active(self):
+        """Returns True if the Forest Keystone jigsaw puzzle is active."""
+        return getattr(self, 'puzzle_active', False)
+
+    def sync_ui_state(self):
+        """Maintains strict synchronization between gameplay flags and the Pushdown Automata."""
+        if self.is_cognitive_puzzle_active():
+            if not self.state_machine.is_cognitive_puzzle():
+                self.state_machine.push(State.CognitivePuzzle, {"puzzle": "jigsaw"})
+        elif self.is_dialogue_active():
+            if not self.state_machine.is_dialogue():
+                self.state_machine.push(State.Dialogue)
+        else:
+            if not self.state_machine.is_exploration():
+                self.state_machine.reset(State.Exploration)
+
+    # ============================================================
     # TRIGGER CLICK
     # ============================================================
     def trigger_click(self, pos):
+        self.sync_ui_state()
+
         if hasattr(self, 'victory_card') and self.victory_card.active:
             res = self.victory_card.handle_click(pos)
             if res:
                 return
 
         if self.pause_menu.handle_click(pos):
+            return
+
+        if self.state_machine.is_cognitive_puzzle() or getattr(self, 'puzzle_active', False):
+            box_w, box_h = 760, 480
+            if self.map_name.lower() == 'map2.txt':
+                box_w, box_h = 800, 520
+            box_x = (self.width - box_w) // 2
+            box_y = (self.height - box_h) // 2
+            close_btn_rect = pygame.Rect(box_x + box_w // 2 - 120, box_y + box_h - 55, 110, 36)
+            reset_btn_rect = pygame.Rect(box_x + box_w // 2 + 10, box_y + box_h - 55, 110, 36)
+            if close_btn_rect.collidepoint(pos):
+                self.puzzle_active = False
+                self.dragged_piece = None
+                if self.state_machine.is_cognitive_puzzle():
+                    self.state_machine.pop()
+                print("[PUZZLE] Puzzle closed by player")
+                return
+            elif reset_btn_rect.collidepoint(pos):
+                self.reset_puzzle()
+                print("[PUZZLE] Puzzle reset")
+                return
             return
 
         if getattr(self, 'time_up_dialog_active', False):
@@ -2420,12 +2464,14 @@ class Quarter1:
                 return
             return
 
-        # Check HUD Guide Button click
-        guide_btn_rect = pygame.Rect(self.width - 256, 18, 110, 36)
-        if guide_btn_rect.collidepoint(pos):
-            inst_data = get_map_instructions("quarter1", self.map_name, student_name)
-            self.instruction_modal.show(inst_data)
-            return
+        # Check HUD Guide Button click (strictly gated to exploration)
+        if self.state_machine.allows_menus():
+            guide_btn_rect = pygame.Rect(self.width - 256, 18, 110, 36)
+            if guide_btn_rect.collidepoint(pos):
+                inst_data = get_map_instructions("quarter1", self.map_name, student_name)
+                self.instruction_modal.show(inst_data)
+                self.sync_ui_state()
+                return
 
         # Check Proximity Greeting Dialog click -> pops up Dynamic Question
         if hasattr(self, 'greeting_dialog') and self.greeting_dialog.is_active():
@@ -2444,8 +2490,9 @@ class Quarter1:
             oy_screen = (self.npc_oldman_y - self.camera_y) * ZOOM
             o_rect = pygame.Rect(ox_screen, oy_screen, TILE_SIZE * ZOOM, TILE_SIZE * ZOOM).inflate(32, 32)
             if o_rect.collidepoint(pos):
-                answered_count = sum(1 for s in self.shape_npcs.values() if s['answered']) if self.is_quiz_map else 5
-                if answered_count < 5:
+                req_count = getattr(self, 'active_station_count', len(self.shape_npcs)) if self.is_quiz_map else 0
+                answered_count = sum(1 for s in self.shape_npcs.values() if s['answered']) if self.is_quiz_map else req_count
+                if answered_count < req_count:
                     self.quiz_state = 20  # Warning dialog
                 elif not self.puzzle_solved:
                     self.quiz_state = 22  # Jigsaw intro
@@ -2493,33 +2540,34 @@ class Quarter1:
                     
         # State 2: Wrong answer retry screen click (1 try remaining)
         elif self.quiz_state == 2:
-            box_w, box_h = 740, 350
+            box_w, box_h = 760, 360
             box_x = (self.width - box_w) // 2
             box_y = (self.height - box_h) // 2
-            btn_rect = pygame.Rect(box_x + (box_w - 240) // 2, box_y + 275, 240, 50)
+            btn_rect = pygame.Rect(box_x + (box_w - 240) // 2, box_y + 285, 240, 50)
             if btn_rect.collidepoint(pos):
                 self.quiz_state = 1
                 save_student_progress(self.main_menu)
             
         # State 3: Correct answer transition screen click
         elif self.quiz_state == 3:
-            box_w, box_h = 720, 300
+            box_w, box_h = 740, 320
             box_x = (self.width - box_w) // 2
             box_y = (self.height - box_h) // 2
-            btn_rect = pygame.Rect(box_x + (box_w - 240) // 2, box_y + 215, 240, 50)
+            btn_rect = pygame.Rect(box_x + (box_w - 240) // 2, box_y + 235, 240, 50)
             if btn_rect.collidepoint(pos):
                 self.speed_boost_timer = 3.0
                 self.eliminated_choices.clear()
                 if self.is_quiz_map and self.active_shape_id in self.shape_npcs:
+                    tot_st = getattr(self, 'active_station_count', len(self.shape_npcs))
                     self.shape_npcs[self.active_shape_id]['answered'] = True
                     answered_count = sum(1 for s in self.shape_npcs.values() if s['answered'])
                     
-                    if self.active_shape_id < 5:
+                    if self.active_shape_id < tot_st:
                         self.quiz_station_index = self.active_shape_id + 1
                         print(f"[OK] Advanced to Shape Station {self.quiz_station_index}")
                     else:
                         self.quiz_station_index = 6
-                        print(f"[OK] All 5 Shape Stations restored!")
+                        print(f"[OK] All {tot_st} Shape Station(s) restored!")
 
                     # Trigger collect animations or bridge pan sequences
                     if self.map_name.lower() == 'map1.txt':
@@ -2527,14 +2575,15 @@ class Quarter1:
                     elif self.map_name.lower() in ['map2.txt', 'map3.txt']:
                         self.trigger_award_animation()
                         
-                    if answered_count >= 5:
+                    if answered_count >= tot_st:
                         self.spawn_portals()
                         self.quiz_state = 0
                     else:
                         self.quiz_state = 0
                 else:
+                    tot_st = getattr(self, 'active_station_count', len(self.quiz_questions))
                     self.current_question_index += 1
-                    if self.current_question_index < 5:
+                    if self.current_question_index < tot_st:
                         self.quiz_state = 0
                     else:
                         self.quiz_state = 5
@@ -2542,19 +2591,49 @@ class Quarter1:
                 # Auto-save after completing question transitions
                 save_student_progress(self.main_menu)
 
-        # State 4: Out of tries reveal screen click (2 tries exhausted -> closes window without awarding piece)
+        # State 4: Out of tries reveal screen click (Recorded as wrong; player gets progression piece and continues without retrying)
         elif self.quiz_state == 4:
             box_w, box_h = 760, 350
             box_x = (self.width - box_w) // 2
             box_y = (self.height - box_h) // 2
             box_rect = pygame.Rect(box_x, box_y, box_w, box_h)
-            btn_rect = pygame.Rect(box_x + (box_w - 240) // 2, box_y + 275, 240, 50)
+            btn_rect = pygame.Rect(box_x + (box_w - 260) // 2, box_y + 275, 260, 50)
             if (hasattr(self, 'out_of_tries_btn_rect') and self.out_of_tries_btn_rect and self.out_of_tries_btn_rect.collidepoint(pos)) or btn_rect.collidepoint(pos) or box_rect.collidepoint(pos):
                 self.speed_boost_timer = 3.0
                 self.eliminated_choices.clear()
                 self.question_attempts[self.active_shape_id] = 0
-                self.quiz_state = 0
-                self.show_bridge_warning(f"2 tries exhausted! Speak with Shape Guardian {self.active_shape_id} again to retry.")
+                if self.is_quiz_map and self.active_shape_id in self.shape_npcs:
+                    tot_st = getattr(self, 'active_station_count', len(self.shape_npcs))
+                    self.shape_npcs[self.active_shape_id]['answered'] = True
+                    answered_count = sum(1 for s in self.shape_npcs.values() if s['answered'])
+                    
+                    if self.active_shape_id < tot_st:
+                        self.quiz_station_index = self.active_shape_id + 1
+                        print(f"[OK] Advanced to Shape Station {self.quiz_station_index}")
+                    else:
+                        self.quiz_station_index = 6
+                        print(f"[OK] All {tot_st} Shape Station(s) restored!")
+
+                    # Trigger collect animations or bridge pan sequences
+                    if self.map_name.lower() == 'map1.txt':
+                        self.trigger_bridge_pan_sequence()
+                    elif self.map_name.lower() in ['map2.txt', 'map3.txt']:
+                        self.trigger_award_animation()
+                        
+                    if answered_count >= tot_st:
+                        self.spawn_portals()
+                        self.quiz_state = 0
+                    else:
+                        self.quiz_state = 0
+                else:
+                    tot_st = getattr(self, 'active_station_count', len(self.quiz_questions))
+                    self.current_question_index += 1
+                    if self.current_question_index < tot_st:
+                        self.quiz_state = 0
+                    else:
+                        self.quiz_state = 5
+                
+                # Auto-save after completing question transitions
                 save_student_progress(self.main_menu)
                 
         # State 5: Final speech click
@@ -2672,14 +2751,35 @@ class Quarter1:
             if btn_rect.collidepoint(pos):
                 self.quiz_state = 0
                 self.puzzle_active = True
+                self.state_machine.push(State.CognitivePuzzle, {"puzzle": "jigsaw"})
                 if not self.puzzle_pieces:
                     self.init_puzzle()
                 self.player_block_timer = 0.5  # brief cooldown
+
+        # Check Portal click or Click-to-Move when exploring the stage (State.Exploration only)
+        if self.state_machine.allows_movement() and self.quiz_state in [0, 6] and not getattr(self, 'puzzle_active', False):
+            for portal in self.portals:
+                screen_px = (portal.get_world_x() - self.camera_x) * ZOOM
+                screen_py = (portal.get_world_y() - self.camera_y) * ZOOM
+                pw = (portal.get_width_pixels() if hasattr(portal, 'get_width_pixels') else getattr(portal, 'width', TILE_SIZE)) * ZOOM
+                ph = (portal.get_height_pixels() if hasattr(portal, 'get_height_pixels') else getattr(portal, 'height', TILE_SIZE)) * ZOOM
+                portal_rect = pygame.Rect(screen_px, screen_py, pw, ph).inflate(24, 24)
+                if portal_rect.collidepoint(pos):
+                    self.click_dest = (portal.get_center_x() - TILE_SIZE // 2, portal.get_center_y() - TILE_SIZE // 2)
+                    self.check_portal_teleport_on_hold()
+                    return
+
+            world_x = pos[0] / ZOOM + self.camera_x
+            world_y = pos[1] / ZOOM + self.camera_y
+            if self.can_move(world_x, world_y):
+                self.click_dest = (world_x, world_y)
+                return
 
     # ============================================================
     # UPDATE
     # ============================================================
     def update(self):
+        self.sync_ui_state()
         dt = min(0.05, max(0.001, self.clock.tick() / 1000.0))
         self.frame_counter += 1
 
@@ -2702,6 +2802,7 @@ class Quarter1:
             cx, cy = self.cursor_pos
             if abs(cx - player_screen_x) > 45 or abs(cy - player_screen_y) > 45:
                 self.instruction_modal.hide()
+                self.sync_ui_state()
             else:
                 self.instruction_modal.update(dt)
                 hold_time = time.time() - self.fist_start_time if self.fist_start_time > 0 else 0.0
@@ -2718,6 +2819,7 @@ class Quarter1:
                 self.current_question_index = self.quiz_station_index - 1
                 self.quiz_state = 1
                 self.selected_choice_index = -1
+                self.sync_ui_state()
 
         # Handle smooth warp-out transition to stage select
         if self.warp_out_active:
@@ -2725,17 +2827,17 @@ class Quarter1:
             if self.warp_out_timer <= 0:
                 self.warp_out_active = False
                 self.save_results_to_database()
-                total_questions = 5
-                correct_answers = sum(1 for v in self.first_attempt_correct.values() if v)
+                total_questions = getattr(self, 'active_station_count', len(self.quiz_questions))
+                correct_answers = sum(1 for k, v in self.first_attempt_correct.items() if k <= total_questions and v)
                 percentage = (correct_answers / float(total_questions)) * 100.0 if total_questions > 0 else 100.0
-                score = int(correct_answers * 20)
+                score = int(round(percentage)) if total_questions > 0 else 100
                 from db.save_system import mark_quarter_completed
                 mark_quarter_completed(self.main_menu, "quarter1", score=score, percentage=percentage, total_questions=total_questions)
                 self.victory_card.show(total_questions=total_questions, correct_first_try=correct_answers, score=score)
             return
 
-        # 10-Minute Stage Timer
-        if not getattr(self, 'completed', False) and not self.time_up_dialog_active:
+        # 10-Minute Stage Timer (frozen during Cognitive Puzzles or Pause)
+        if not getattr(self, 'completed', False) and not self.time_up_dialog_active and not self.state_machine.is_cognitive_puzzle():
             self.stage_time_remaining = max(0.0, self.stage_time_remaining - dt)
             if self.stage_time_remaining <= 60.0 and not getattr(self, 'timer_warning_played', False):
                 self.timer_warning_played = True
@@ -2749,7 +2851,8 @@ class Quarter1:
         if self.time_up_dialog_active:
             return
 
-        if self.puzzle_active:
+        # When in State.CognitivePuzzle, world logic is paused and only puzzle updates
+        if self.state_machine.is_cognitive_puzzle() or getattr(self, 'puzzle_active', False):
             self.update_puzzle()
             return
 
@@ -2837,8 +2940,9 @@ class Quarter1:
             oldman_center_x = self.npc_oldman_x + TILE_SIZE // 2
             oldman_center_y = self.npc_oldman_y + TILE_SIZE // 2
             dist = math.hypot(player_center_x - oldman_center_x, player_center_y - oldman_center_y)
-            answered_count = sum(1 for s in self.shape_npcs.values() if s['answered']) if self.is_quiz_map else 5
-            trigger_dist = TILE_SIZE * 3.5 if answered_count >= 5 else TILE_SIZE * 1.5
+            req_count = getattr(self, 'active_station_count', len(self.shape_npcs)) if self.is_quiz_map else 0
+            answered_count = sum(1 for s in self.shape_npcs.values() if s['answered']) if self.is_quiz_map else req_count
+            trigger_dist = TILE_SIZE * 3.5 if answered_count >= req_count else TILE_SIZE * 1.5
             if dist < trigger_dist:
                 # Face player towards Old Man
                 p_dx = self.npc_oldman_x - self.player_x
@@ -2848,8 +2952,8 @@ class Quarter1:
                 else:
                     self.player_dir = "down" if p_dy > 0 else "up"
 
-                # Check if all 5 shape questions are answered (bridge built in map1, tokens collected in map2/map3)
-                if answered_count < 5:
+                # Check if all active cloud shape questions are answered
+                if answered_count < req_count:
                     self.quiz_state = 20  # Warning dialog state
                 else:
                     # Let player solve the puzzle! Go to introduction dialog first
@@ -2868,35 +2972,75 @@ class Quarter1:
     # UPDATE PLAYER MOVEMENT
     # ============================================================
     def update_player_movement(self):
-        if self.quiz_state in [1, 2, 3, 4, 5, 10, 11, 12, 13, 14, 20, 21, 22] or self.player_block_timer > 0 or self.puzzle_active or self.camera_pan_active or (hasattr(self, 'instruction_modal') and self.instruction_modal.is_active()) or (hasattr(self, 'greeting_dialog') and self.greeting_dialog.is_active()):
+        if not self.state_machine.allows_movement() or self.player_block_timer > 0 or self.camera_pan_active:
             self.anim_frame = 0
+            self.click_dest = None
             return
 
         vx, vy = 0, 0
         current_speed = (SPEED * 1.5) if getattr(self, 'speed_boost_timer', 0) > 0 else SPEED
 
-        # Hand Gesture / Cursor Directional Controls (Pure Gesture Navigation)
-        player_screen_x = (self.player_x - self.camera_x + TILE_SIZE / 2) * ZOOM
-        player_screen_y = (self.player_y - self.camera_y + TILE_SIZE / 2) * ZOOM
-        cursor_x, cursor_y = self.cursor_pos
-        dx = cursor_x - player_screen_x
-        dy = cursor_y - player_screen_y
+        # 1. Keyboard Controls Fallback
+        keys = pygame.key.get_pressed()
+        has_key_input = (keys[pygame.K_LEFT] or keys[pygame.K_a] or keys[pygame.K_RIGHT] or keys[pygame.K_d] or
+                         keys[pygame.K_UP] or keys[pygame.K_w] or keys[pygame.K_DOWN] or keys[pygame.K_s])
+        if has_key_input:
+            self.click_dest = None
+            if keys[pygame.K_LEFT] or keys[pygame.K_a]:
+                vx = -current_speed
+                self.player_dir = "left"
+            elif keys[pygame.K_RIGHT] or keys[pygame.K_d]:
+                vx = current_speed
+                self.player_dir = "right"
+            if keys[pygame.K_UP] or keys[pygame.K_w]:
+                vy = -current_speed
+                self.player_dir = "up"
+            elif keys[pygame.K_DOWN] or keys[pygame.K_s]:
+                vy = current_speed
+                self.player_dir = "down"
 
-        # Dynamic speed scaling: faster when hand is stretched further out
-        dist_factor = 1.3 if (abs(dx) > 160 or abs(dy) > 160) else 1.0
-        g_speed = current_speed * dist_factor
-
-        deadzone = 45.0
-        if abs(dx) > deadzone or abs(dy) > deadzone:
-            if abs(dx) > deadzone:
-                vx = g_speed if dx > 0 else -g_speed
-            if abs(dy) > deadzone:
-                vy = g_speed if dy > 0 else -g_speed
-
-            if abs(dx) > abs(dy):
-                self.player_dir = "right" if dx > 0 else "left"
+        # 2. Click-to-Move Destination
+        elif getattr(self, 'click_dest', None) is not None:
+            cdx = self.click_dest[0] - self.player_x
+            cdy = self.click_dest[1] - self.player_y
+            cd_dist = math.hypot(cdx, cdy)
+            if cd_dist > 6.0:
+                vx = (cdx / cd_dist) * current_speed
+                vy = (cdy / cd_dist) * current_speed
+                if abs(cdx) > abs(cdy):
+                    self.player_dir = "right" if cdx > 0 else "left"
+                else:
+                    self.player_dir = "down" if cdy > 0 else "up"
             else:
-                self.player_dir = "down" if dy > 0 else "up"
+                self.click_dest = None
+
+        # 3. Universal Hand Gesture / Active Cursor Steering
+        if getattr(self, 'click_dest', None) is None and not has_key_input:
+            is_hand_active = getattr(self, 'hand_detected', False) and getattr(self, 'current_gesture', 'NO HAND') not in ['NO HAND', 'NO HAND (GRACE)']
+            is_mouse_active = getattr(self.main_menu, 'mouse_active', False) if self.main_menu else False
+
+            if is_hand_active or is_mouse_active:
+                player_screen_x = (self.player_x - self.camera_x + TILE_SIZE / 2) * ZOOM
+                player_screen_y = (self.player_y - self.camera_y + TILE_SIZE / 2) * ZOOM
+                cursor_x, cursor_y = self.cursor_pos
+                dx = cursor_x - player_screen_x
+                dy = cursor_y - player_screen_y
+
+                # Dynamic speed scaling: faster when hand is stretched further out
+                dist_factor = 1.3 if (abs(dx) > 160 or abs(dy) > 160) else 1.0
+                g_speed = current_speed * dist_factor
+
+                deadzone = 45.0
+                if abs(dx) > deadzone or abs(dy) > deadzone:
+                    if abs(dx) > deadzone:
+                        vx = g_speed if dx > 0 else -g_speed
+                    if abs(dy) > deadzone:
+                        vy = g_speed if dy > 0 else -g_speed
+
+                    if abs(dx) > abs(dy):
+                        self.player_dir = "right" if dx > 0 else "left"
+                    else:
+                        self.player_dir = "down" if dy > 0 else "up"
 
         new_x = self.player_x + vx
         new_y = self.player_y + vy
@@ -2915,10 +3059,17 @@ class Quarter1:
                         if tile_r3 == 'w' or tile_r4 == 'w':
                             self.show_bridge_warning("I should answer the questions to build the bridge!")
 
+        moved_x, moved_y = False, False
         if self.can_move(new_x, self.player_y):
             self.player_x = new_x
+            moved_x = True
         if self.can_move(self.player_x, new_y):
             self.player_y = new_y
+            moved_y = True
+
+        if getattr(self, 'click_dest', None) is not None and (vx != 0 or vy != 0):
+            if not moved_x and not moved_y:
+                self.click_dest = None
 
         if vx != 0 or vy != 0:
             self.anim_timer += 1
@@ -2974,7 +3125,7 @@ class Quarter1:
                     k = (image, w, h)
                     scaled_image = self._scaled_tile_cache.get(k)
                     if scaled_image is None:
-                        scaled_image = pygame.transform.scale(image, (w, h))
+                        scaled_image = pygame.transform.scale(image, (w, h)).convert_alpha()
                         self._scaled_tile_cache[k] = scaled_image
                     screen_y_shifted = screen_y - int(64 * ZOOM)
                     self.screen.blit(scaled_image, (screen_x, screen_y_shifted))
@@ -2982,9 +3133,76 @@ class Quarter1:
                     scaled_size = int(TILE_SIZE * ZOOM)
                     scaled_image = self._scaled_tile_cache.get(image)
                     if scaled_image is None:
-                        scaled_image = pygame.transform.scale(image, (scaled_size, scaled_size))
+                        scaled_image = pygame.transform.scale(image, (scaled_size, scaled_size)).convert_alpha()
                         self._scaled_tile_cache[image] = scaled_image
                     self.screen.blit(scaled_image, (screen_x, screen_y))
+
+    def build_prerendered_map(self):
+        """Pre-renders Quarter 1 ground and obstacle layers for 60 FPS on AMD A4-6300."""
+        scaled_size = int(TILE_SIZE * ZOOM)
+        map_w = max(1, self.COLS * scaled_size)
+        map_h = max(1, self.ROWS * scaled_size)
+        self._bg_map_surface = pygame.Surface((map_w, map_h))
+        self._fg_obstacles_surface = pygame.Surface((map_w, map_h), pygame.SRCALPHA)
+        has_disp = pygame.display.get_surface() is not None
+
+        def get_scaled_sq(c):
+            raw = self.tile_images.get(c, self.fallback_tile)
+            s = self._scaled_tile_cache.get(raw)
+            if s is None:
+                s = pygame.transform.scale(raw, (scaled_size, scaled_size))
+                if has_disp:
+                    try:
+                        s = s.convert_alpha()
+                    except Exception:
+                        pass
+                self._scaled_tile_cache[raw] = s
+            return s
+
+        def get_scaled_tall(c):
+            raw = self.tile_images.get(c, self.fallback_tile)
+            w = int(64 * ZOOM)
+            h = int(96 * ZOOM)
+            k = (raw, w, h)
+            s = self._scaled_tile_cache.get(k)
+            if s is None:
+                s = pygame.transform.scale(raw, (w, h))
+                if has_disp:
+                    try:
+                        s = s.convert_alpha()
+                    except Exception:
+                        pass
+                self._scaled_tile_cache[k] = s
+            return s
+
+        grass_img = get_scaled_sq('G')
+        for row in range(self.ROWS):
+            r_str = self.render_map[row] if row < len(self.render_map) else ""
+            py = row * scaled_size
+            for col in range(self.COLS):
+                px = col * scaled_size
+                self._bg_map_surface.blit(grass_img, (px, py))
+                if col < len(r_str):
+                    tile_char = r_str[col]
+                    if tile_char not in ('T', 'X', 'Y', 'Z', 'G'):
+                        self._bg_map_surface.blit(get_scaled_sq(tile_char), (px, py))
+                    elif tile_char == 'T':
+                        self._fg_obstacles_surface.blit(get_scaled_sq('T'), (px, py))
+
+        for row in range(self.ROWS):
+            r_str = self.render_map[row] if row < len(self.render_map) else ""
+            py = row * scaled_size - int(64 * ZOOM)
+            for col in range(len(r_str)):
+                tile_char = r_str[col]
+                if tile_char in ('X', 'Y', 'Z'):
+                    self._fg_obstacles_surface.blit(get_scaled_tall(tile_char), (col * scaled_size, py))
+
+        if has_disp:
+            try:
+                self._bg_map_surface = self._bg_map_surface.convert()
+                self._fg_obstacles_surface = self._fg_obstacles_surface.convert_alpha()
+            except Exception:
+                pass
 
     # ============================================================
     # DRAW NPC
@@ -3004,6 +3222,11 @@ class Quarter1:
             scaled_sprite = self._scaled_sprite_cache.get(sprite)
             if scaled_sprite is None:
                 scaled_sprite = pygame.transform.scale(sprite, (scaled_size, scaled_size))
+                if pygame.display.get_surface() is not None:
+                    try:
+                        scaled_sprite = scaled_sprite.convert_alpha()
+                    except Exception:
+                        pass
                 self._scaled_sprite_cache[sprite] = scaled_sprite
             self.screen.blit(scaled_sprite, (screen_x, screen_y))
 
@@ -3020,6 +3243,11 @@ class Quarter1:
             scaled_sprite = self._scaled_sprite_cache.get(sprite)
             if scaled_sprite is None:
                 scaled_sprite = pygame.transform.scale(sprite, (scaled_size, scaled_size))
+                if pygame.display.get_surface() is not None:
+                    try:
+                        scaled_sprite = scaled_sprite.convert_alpha()
+                    except Exception:
+                        pass
                 self._scaled_sprite_cache[sprite] = scaled_sprite
             self.screen.blit(scaled_sprite, (screen_x, screen_y))
 
@@ -3053,6 +3281,11 @@ class Quarter1:
             scaled_sprite = self._scaled_sprite_cache.get(sprite)
             if scaled_sprite is None:
                 scaled_sprite = pygame.transform.scale(sprite, (scaled_size, scaled_size))
+                if pygame.display.get_surface() is not None:
+                    try:
+                        scaled_sprite = scaled_sprite.convert_alpha()
+                    except Exception:
+                        pass
                 self._scaled_sprite_cache[sprite] = scaled_sprite
             self.screen.blit(scaled_sprite, (screen_x, screen_y))
 
@@ -3063,22 +3296,24 @@ class Quarter1:
     def draw(self):
         self.screen.fill((0, 0, 0))
 
-        start_col = max(0, int(self.camera_x / TILE_SIZE) - 2)
-        end_col = min(self.COLS, int((self.camera_x + self.width / ZOOM) / TILE_SIZE) + 3)
-        start_row = max(0, int(self.camera_y / TILE_SIZE) - 2)
-        end_row = min(self.ROWS, int((self.camera_y + self.height / ZOOM) / TILE_SIZE) + 3)
+        cam_px = int(self.camera_x * ZOOM)
+        cam_py = int(self.camera_y * ZOOM)
 
-        # Pass 1: Base Grass/Ground Layer (Grass first everywhere, then paths/non-obstacles)
-        for row in range(start_row, end_row):
-            for col in range(start_col, end_col):
-                if row < len(self.render_map) and col < len(self.render_map[row]):
-                    # Always draw grass first as base
-                    self.draw_tile('G', col * TILE_SIZE, row * TILE_SIZE)
-                    
-                    # Draw path / floor / interactive tiles on top of grass (skip T and XYZ obstacles)
-                    tile_char = self.render_map[row][col]
-                    if tile_char not in ['T', 'X', 'Y', 'Z', 'G']:
-                        self.draw_tile(tile_char, col * TILE_SIZE, row * TILE_SIZE)
+        # Pass 1: Pre-rendered ground & path layer (single C-level blit)
+        if getattr(self, '_bg_map_surface', None) is not None:
+            self.screen.blit(self._bg_map_surface, (-cam_px, -cam_py))
+        else:
+            start_col = max(0, int(self.camera_x / TILE_SIZE) - 2)
+            end_col = min(self.COLS, int((self.camera_x + self.width / ZOOM) / TILE_SIZE) + 3)
+            start_row = max(0, int(self.camera_y / TILE_SIZE) - 2)
+            end_row = min(self.ROWS, int((self.camera_y + self.height / ZOOM) / TILE_SIZE) + 3)
+            for row in range(start_row, end_row):
+                for col in range(start_col, end_col):
+                    if row < len(self.render_map) and col < len(self.render_map[row]):
+                        self.draw_tile('G', col * TILE_SIZE, row * TILE_SIZE)
+                        tile_char = self.render_map[row][col]
+                        if tile_char not in ['T', 'X', 'Y', 'Z', 'G']:
+                            self.draw_tile(tile_char, col * TILE_SIZE, row * TILE_SIZE)
 
         if not self.is_quiz_map or self.quiz_state == 6 or self.map_name.lower() in ['map1.txt', 'map2.txt', 'map3.txt']:
             for portal in self.portals:
@@ -3088,17 +3323,35 @@ class Quarter1:
         if hasattr(self, 'path_guide'):
             self.path_guide.draw()
 
+        # Draw Click-to-Move Target Beacon
+        if getattr(self, 'click_dest', None) is not None:
+            cd_screen_x = int((self.click_dest[0] - self.camera_x + TILE_SIZE // 2) * ZOOM)
+            cd_screen_y = int((self.click_dest[1] - self.camera_y + TILE_SIZE // 2) * ZOOM)
+            pulse = math.sin(self.frame_counter * 0.2) * 3 + 8
+            pygame.draw.circle(self.screen, (56, 189, 248), (cd_screen_x, cd_screen_y), int(pulse), 2)
+            pygame.draw.circle(self.screen, (255, 255, 255), (cd_screen_x, cd_screen_y), 3)
+
         # Draw Shape NPCs (1 to 5 hierarchy with glowing active station ring)
         if self.is_quiz_map:
+            if not hasattr(self, '_station_aura_cache'):
+                self._station_aura_cache = {}
             for num, npc in self.shape_npcs.items():
                 # Shimmering green interaction aura ring and animated question beacon above active station
                 if num == self.quiz_station_index and not npc["answered"] and self.quiz_state == 0:
                     cx = (npc["x"] + TILE_SIZE // 2 - self.camera_x) * ZOOM
                     cy = (npc["y"] + TILE_SIZE - self.camera_y) * ZOOM
-                    pulse = math.sin(self.frame_counter * 0.15) * 3 * ZOOM + 16 * ZOOM
-                    aura_surf = pygame.Surface((int(pulse * 2), int(pulse)), pygame.SRCALPHA)
-                    pygame.draw.ellipse(aura_surf, (34, 197, 94, 90), aura_surf.get_rect())
-                    pygame.draw.ellipse(aura_surf, (250, 204, 21, 140), aura_surf.get_rect(), 2)
+                    pulse_h = max(8, int((math.sin(self.frame_counter * 0.15) * 3 * ZOOM + 16 * ZOOM) // 2) * 2)
+                    aura_surf = self._station_aura_cache.get(pulse_h)
+                    if aura_surf is None:
+                        aura_surf = pygame.Surface((pulse_h * 2, pulse_h), pygame.SRCALPHA)
+                        pygame.draw.ellipse(aura_surf, (34, 197, 94, 90), aura_surf.get_rect())
+                        pygame.draw.ellipse(aura_surf, (250, 204, 21, 140), aura_surf.get_rect(), 2)
+                        if pygame.display.get_surface() is not None:
+                            try:
+                                aura_surf = aura_surf.convert_alpha()
+                            except Exception:
+                                pass
+                        self._station_aura_cache[pulse_h] = aura_surf
                     self.screen.blit(aura_surf, (cx - aura_surf.get_width() // 2, cy - aura_surf.get_height() // 2))
                     draw_beacon_marker(self.screen, cx, (npc["y"] - self.camera_y) * ZOOM, color=(250, 204, 21), beacon_type="question", offset_y=int(-30 * ZOOM))
 
@@ -3139,23 +3392,28 @@ class Quarter1:
                 self.draw_npc_static(self.npc_knight_x, self.npc_knight_y,
                                      self.npc_knight_sprite)
 
+        # Pass 3 & 4: Pre-rendered T and XYZ Obstacles (single C-level blit)
+        if getattr(self, '_fg_obstacles_surface', None) is not None:
+            self.screen.blit(self._fg_obstacles_surface, (-cam_px, -cam_py))
+        else:
+            start_col = max(0, int(self.camera_x / TILE_SIZE) - 2)
+            end_col = min(self.COLS, int((self.camera_x + self.width / ZOOM) / TILE_SIZE) + 3)
+            start_row = max(0, int(self.camera_y / TILE_SIZE) - 2)
+            end_row = min(self.ROWS, int((self.camera_y + self.height / ZOOM) / TILE_SIZE) + 3)
+            for row in range(start_row, end_row):
+                for col in range(start_col, end_col):
+                    if row < len(self.render_map) and col < len(self.render_map[row]):
+                        tile_char = self.render_map[row][col]
+                        if tile_char == 'T':
+                            self.draw_tile(tile_char, col * TILE_SIZE, row * TILE_SIZE)
+            for row in range(start_row, end_row):
+                for col in range(start_col, end_col):
+                    if row < len(self.render_map) and col < len(self.render_map[row]):
+                        tile_char = self.render_map[row][col]
+                        if tile_char in ['X', 'Y', 'Z']:
+                            self.draw_tile(tile_char, col * TILE_SIZE, row * TILE_SIZE)
+
         self.draw_player()
-
-        # Pass 3: T Obstacles
-        for row in range(start_row, end_row):
-            for col in range(start_col, end_col):
-                if row < len(self.render_map) and col < len(self.render_map[row]):
-                    tile_char = self.render_map[row][col]
-                    if tile_char == 'T':
-                        self.draw_tile(tile_char, col * TILE_SIZE, row * TILE_SIZE)
-
-        # Pass 4: XYZ Obstacles
-        for row in range(start_row, end_row):
-            for col in range(start_col, end_col):
-                if row < len(self.render_map) and col < len(self.render_map[row]):
-                    tile_char = self.render_map[row][col]
-                    if tile_char in ['X', 'Y', 'Z']:
-                        self.draw_tile(tile_char, col * TILE_SIZE, row * TILE_SIZE)
         self.draw_ui()
 
         # Draw speed boost sprint sparkles
@@ -3289,63 +3547,19 @@ class Quarter1:
 
         # Draw Area Title Animation
         if self.title_active:
-            timer = self.title_elapsed
-            
-            # Alpha fading
-            alpha = 255
-            FADE_START = 4.0
-            FADE_DURATION = 1.0
-            if timer >= FADE_START:
-                fade = (timer - FADE_START) / FADE_DURATION
-                fade = max(0, min(fade, 1))
-                alpha = int(255 * (1 - fade))
-                
-            # Slide animation
-            BASE_Y = self.height // 2 - self.pixel_font_size // 2
-            SLIDE_TIME = 0.35
-            if timer < SLIDE_TIME:
-                t = timer / SLIDE_TIME
-                ease = 1 - (1 - t) ** 3
-                y = BASE_Y - (1 - ease) * 40
-            else:
-                y = BASE_Y
-                
-            # Draw letters centered
-            x = self.width // 2 - self.title_total_width // 2
-            
-            for i, data in enumerate(self.title_letters):
-                phase = timer * 8 - i * 0.55
-                offset = 0
-                
-                # Single traveling wave
-                if -math.pi <= phase <= math.pi:
-                    offset = math.sin(phase) * 12
-                    
-                glow = data["glow"].copy()
-                outline = data["outline"].copy()
-                main = data["main"].copy()
-                
-                glow.set_alpha(alpha // 5)
-                outline.set_alpha(alpha)
-                main.set_alpha(alpha)
-                
-                # Glow
-                for gx in (-5, 0, 5):
-                    for gy in (-5, 0, 5):
-                        self.screen.blit(glow, (x + gx, y + gy + offset))
-                        
-                # Outline
-                for ox in (-2, -1, 1, 2):
-                    for oy in (-2, -1, 1, 2):
-                        self.screen.blit(outline, (x + ox, y + oy + offset))
-                        
-                # Main text
-                self.screen.blit(main, (x, y + offset))
-                
-                x += data["width"] + self.title_spacing
+            draw_composite_title_wave(
+                self.screen,
+                self.title_letters,
+                self.title_total_width,
+                self.title_spacing,
+                self.pixel_font_size,
+                self.title_elapsed,
+            )
 
-        # Draw jigsaw puzzle overlay if active
-        if self.puzzle_active:
+        # Draw jigsaw puzzle overlay if active (world dimmed behind)
+        if self.state_machine.is_cognitive_puzzle() or getattr(self, 'puzzle_active', False):
+            if self.state_machine.should_dim_world():
+                self.state_machine.render_dim_overlay(self.screen, alpha=160)
             self.draw_puzzle()
 
         # Draw 10-Minute Stage Timer HUD
@@ -3401,8 +3615,9 @@ class Quarter1:
         q_idx = max(0, min(self.current_question_index, len(self.quiz_questions) - 1)) if self.quiz_questions else 0
         q_data = self.quiz_questions[q_idx] if self.quiz_questions else {"question": "", "choices": [], "correct": 0}
         script_data = get_station_script("quarter1", self.map_name, self.quiz_station_index, student_name)
+        tot_st = max(1, getattr(self, 'active_station_count', len(self.quiz_questions)))
         speaker_name = script_data["name"]
-        speaker_subtitle = f"{script_data['role']} - Station {self.quiz_station_index} of 5"
+        speaker_subtitle = f"{script_data['role']} - Station {self.quiz_station_index} of {tot_st}"
         sprite_frame = None
 
         if self.is_quiz_map and self.active_shape_id is not None:
@@ -3419,7 +3634,7 @@ class Quarter1:
             speaker_subtitle=speaker_subtitle,
             sprite_frame=sprite_frame,
             station_idx=self.quiz_station_index,
-            total_stations=5,
+            total_stations=tot_st,
             eliminated_choices=self.eliminated_choices
         )
 
@@ -3432,10 +3647,7 @@ class Quarter1:
         script_data = get_station_script("quarter1", self.map_name, self.quiz_station_index, student_name)
         speaker_name = script_data["name"]
 
-        overlay = pygame.Surface((self.width, self.height))
-        overlay.fill((0, 0, 0))
-        overlay.set_alpha(150)
-        self.screen.blit(overlay, (0, 0))
+        self._draw_dialog_dim_overlay(150)
 
         box_w, box_h = 760, 360
         box_x = (self.width - box_w) // 2
@@ -3507,10 +3719,11 @@ class Quarter1:
         script_data = get_station_script("quarter1", self.map_name, self.quiz_station_index, student_name)
         speaker_name = script_data["name"]
 
-        overlay = pygame.Surface((self.width, self.height))
-        overlay.fill((0, 0, 0))
-        overlay.set_alpha(160)
-        self.screen.blit(overlay, (0, 0))
+        if not getattr(self, '_out_of_tries_dim_overlay', None):
+            self._out_of_tries_dim_overlay = pygame.Surface((self.width, self.height))
+            self._out_of_tries_dim_overlay.fill((0, 0, 0))
+            self._out_of_tries_dim_overlay.set_alpha(160)
+        self.screen.blit(self._out_of_tries_dim_overlay, (0, 0))
 
         box_w, box_h = 760, 350
         box_x = (self.width - box_w) // 2
@@ -3526,7 +3739,17 @@ class Quarter1:
         self.screen.blit(speaker_surf, (box_x + 28, box_y + 18))
 
         q_font = self.get_ui_font(18, bold=True)
-        ans_msg = "Out of tries! You have used both of your 2 attempts for this challenge."
+        q_data = self.quiz_questions[self.current_question_index] if self.quiz_questions and self.current_question_index < len(self.quiz_questions) else {}
+        choices = q_data.get("choices", []) if isinstance(q_data, dict) else []
+        c_idx = q_data.get("correct", 0) if isinstance(q_data, dict) else 0
+        if isinstance(c_idx, str) and c_idx.isdigit():
+            c_idx = int(c_idx)
+        correct_choice_text = choices[c_idx] if isinstance(c_idx, int) and 0 <= c_idx < len(choices) else ""
+
+        if correct_choice_text:
+            ans_msg = f"Out of tries! The correct answer was: {correct_choice_text}"
+        else:
+            ans_msg = "Out of tries! You have used both of your 2 attempts for this challenge."
         ans_lines = self.wrap_text(ans_msg, q_font, box_w - 56)
         
         y_cur = box_y + 60
@@ -3534,10 +3757,10 @@ class Quarter1:
             self.screen.blit(q_font.render(al, True, (255, 255, 255)), (box_x + 28, y_cur))
             y_cur += 26
 
-        retry_msg = f"Review your shapes and talk to {speaker_name} again to retry the question!"
-        wrapped_retry = self.wrap_text(retry_msg, q_font, box_w - 56)
+        reward_text = script_data.get("out_of_tries", "The question has been recorded as incorrect. Take this quest piece and keep moving forward!")
+        wrapped_reward = self.wrap_text(reward_text, q_font, box_w - 56)
         y_cur += 10
-        for rw_line in wrapped_retry[:2]:
+        for rw_line in wrapped_reward[:2]:
             msg2 = q_font.render(rw_line, True, (254, 240, 138))
             self.screen.blit(msg2, (box_x + 28, y_cur))
             y_cur += 26
@@ -3555,7 +3778,7 @@ class Quarter1:
         pygame.draw.rect(self.screen, bg_color, btn_rect, border_radius=12)
         pygame.draw.rect(self.screen, border_col, btn_rect, 2, border_radius=12)
 
-        c_surf = speaker_font.render("Close Window [Esc]", True, (255, 255, 255) if not is_hovered else (15, 23, 42))
+        c_surf = speaker_font.render("Continue Quest >>", True, (255, 255, 255) if not is_hovered else (15, 23, 42))
         c_rect = c_surf.get_rect(center=btn_rect.center)
         self.screen.blit(c_surf, c_rect)
 
@@ -3568,10 +3791,7 @@ class Quarter1:
         script_data = get_station_script("quarter1", self.map_name, self.quiz_station_index, student_name)
         speaker_name = script_data["name"]
 
-        overlay = pygame.Surface((self.width, self.height))
-        overlay.fill((0, 0, 0))
-        overlay.set_alpha(150)
-        self.screen.blit(overlay, (0, 0))
+        self._draw_dialog_dim_overlay(150)
 
         box_w, box_h = 740, 320
         box_x = (self.width - box_w) // 2
@@ -3611,10 +3831,7 @@ class Quarter1:
         self.screen.blit(c_surf, c_rect)
 
     def draw_final_dialog(self):
-        overlay = pygame.Surface((self.width, self.height))
-        overlay.fill((0, 0, 0))
-        overlay.set_alpha(150)
-        self.screen.blit(overlay, (0, 0))
+        self._draw_dialog_dim_overlay(150)
 
         box_w, box_h = 760, 360
         box_x = (self.width - box_w) // 2
@@ -3665,10 +3882,7 @@ class Quarter1:
         self.screen.blit(c_surf, c_rect)
 
     def draw_oldman_warning_dialog(self):
-        overlay = pygame.Surface((self.width, self.height))
-        overlay.fill((0, 0, 0))
-        overlay.set_alpha(150)
-        self.screen.blit(overlay, (0, 0))
+        self._draw_dialog_dim_overlay(150)
 
         box_w, box_h = 740, 320
         box_x = (self.width - box_w) // 2
@@ -3720,10 +3934,7 @@ class Quarter1:
         self.screen.blit(c_surf, c_rect)
 
     def draw_oldman_riddle_dialog(self):
-        overlay = pygame.Surface((self.width, self.height))
-        overlay.fill((0, 0, 0))
-        overlay.set_alpha(150)
-        self.screen.blit(overlay, (0, 0))
+        self._draw_dialog_dim_overlay(150)
 
         box_w, box_h = 780, 480
         box_x = (self.width - box_w) // 2
@@ -3780,10 +3991,7 @@ class Quarter1:
             self.screen.blit(c_surf, c_rect)
 
     def draw_oldman_wrong_dialog(self):
-        overlay = pygame.Surface((self.width, self.height))
-        overlay.fill((0, 0, 0))
-        overlay.set_alpha(150)
-        self.screen.blit(overlay, (0, 0))
+        self._draw_dialog_dim_overlay(150)
 
         box_w, box_h = 720, 300
         box_x = (self.width - box_w) // 2
@@ -3833,10 +4041,7 @@ class Quarter1:
         self.screen.blit(c_surf, c_rect)
 
     def draw_oldman_correct_dialog(self):
-        overlay = pygame.Surface((self.width, self.height))
-        overlay.fill((0, 0, 0))
-        overlay.set_alpha(150)
-        self.screen.blit(overlay, (0, 0))
+        self._draw_dialog_dim_overlay(150)
 
         box_w, box_h = 720, 300
         box_x = (self.width - box_w) // 2
@@ -3888,10 +4093,7 @@ class Quarter1:
         self.screen.blit(c_surf, c_rect)
 
     def draw_oldman_final_dialog(self):
-        overlay = pygame.Surface((self.width, self.height))
-        overlay.fill((0, 0, 0))
-        overlay.set_alpha(150)
-        self.screen.blit(overlay, (0, 0))
+        self._draw_dialog_dim_overlay(150)
 
         box_w, box_h = 760, 320
         box_x = (self.width - box_w) // 2
@@ -3941,10 +4143,7 @@ class Quarter1:
         self.screen.blit(c_surf, c_rect)
 
     def draw_oldman_map3_warning_dialog(self):
-        overlay = pygame.Surface((self.width, self.height))
-        overlay.fill((0, 0, 0))
-        overlay.set_alpha(150)
-        self.screen.blit(overlay, (0, 0))
+        self._draw_dialog_dim_overlay(150)
 
         box_w, box_h = 740, 320
         box_x = (self.width - box_w) // 2
@@ -3996,10 +4195,7 @@ class Quarter1:
         self.screen.blit(c_surf, c_rect)
 
     def draw_oldman_map3_solved_dialog(self):
-        overlay = pygame.Surface((self.width, self.height))
-        overlay.fill((0, 0, 0))
-        overlay.set_alpha(150)
-        self.screen.blit(overlay, (0, 0))
+        self._draw_dialog_dim_overlay(150)
 
         box_w, box_h = 740, 320
         box_x = (self.width - box_w) // 2
@@ -4052,10 +4248,7 @@ class Quarter1:
         self.screen.blit(c_surf, c_rect)
 
     def draw_oldman_map3_intro_dialog(self):
-        overlay = pygame.Surface((self.width, self.height))
-        overlay.fill((0, 0, 0))
-        overlay.set_alpha(150)
-        self.screen.blit(overlay, (0, 0))
+        self._draw_dialog_dim_overlay(150)
 
         box_w, box_h = 740, 320
         box_x = (self.width - box_w) // 2
@@ -4139,47 +4332,54 @@ class Quarter1:
             pygame.draw.rect(self.screen, border_color, (box_x, box_y, box_w, box_h), 2, border_radius=8)
             
             # Header title in Gold
-            title_font = pygame.font.SysFont("Comic Sans MS", 12, bold=True)
+            title_font = get_font("Comic Sans MS", 12, bold=True)
             title_surf = title_font.render("CURRENT OBJECTIVES", True, (255, 215, 0))
             self.screen.blit(title_surf, (box_x + 15, box_y + 8))
             
             # Details font
-            item_font = pygame.font.SysFont("Comic Sans MS", 12)
+            item_font = get_font("Comic Sans MS", 12)
             
-            # Progress counts
+            tot_st = getattr(self, 'active_station_count', len(self.shape_npcs))
             if self.is_quiz_map:
                 q_count = sum(1 for s in self.shape_npcs.values() if s['answered'])
             else:
-                q_count = min(self.current_question_index, 5)
-                
-            # Render Jigsaw or Quiz progress
-            if self.map_name.lower() in ['map1.txt', 'map2.txt', 'map3.txt']:
+                q_count = min(self.current_question_index, tot_st)
+
+            if tot_st <= 0:
+                obj1 = "- Cloud Questions: None Assigned (0 in Cloud)"
+                obj1_surf = item_font.render(obj1, True, (56, 189, 248))
+                self.screen.blit(obj1_surf, (box_x + 15, box_y + 28))
+            elif self.map_name.lower() in ['map1.txt', 'map2.txt', 'map3.txt']:
                 if self.map_name.lower() == 'map2.txt':
-                    obj1 = f"- Shape Pieces: {q_count}/5 collected"
+                    obj1 = f"- Shape Pieces: {q_count}/{tot_st} collected"
                 else:
-                    obj1 = f"- Jigsaw Pieces: {q_count}/5 collected"
-                obj1_color = (255, 255, 255) if q_count < 5 else (34, 197, 94)
+                    obj1 = f"- Jigsaw Pieces: {q_count}/{tot_st} collected"
+                obj1_color = (255, 255, 255) if q_count < tot_st else (34, 197, 94)
                 obj1_surf = item_font.render(obj1, True, obj1_color)
                 self.screen.blit(obj1_surf, (box_x + 15, box_y + 28))
                 
-                # Draw the 5 Jigsaw piece collection indicator checkboxes inside the Objectives panel
-                for i in range(5):
+                for i in range(tot_st):
                     indicator_color = (34, 197, 94) if i < q_count else (71, 85, 105)
                     pygame.draw.rect(self.screen, indicator_color, (box_x + 220 + i * 14, box_y + 31, 10, 10), border_radius=2)
             else:
-                obj1 = f"- Quiz Progress: {q_count}/5 questions answered"
-                obj1_color = (255, 255, 255) if q_count < 5 else (34, 197, 94)
+                obj1 = f"- Quiz Progress: {q_count}/{tot_st} questions answered"
+                obj1_color = (255, 255, 255) if q_count < tot_st else (34, 197, 94)
                 obj1_surf = item_font.render(obj1, True, obj1_color)
                 self.screen.blit(obj1_surf, (box_x + 15, box_y + 28))
             
-            # Goal portal state item
-            answered_count = sum(1 for s in self.shape_npcs.values() if s['answered']) if self.is_quiz_map else 5
-            if answered_count < 5 or len(self.portals) == 0:
+            answered_count = sum(1 for s in self.shape_npcs.values() if s['answered']) if self.is_quiz_map else tot_st
+            if answered_count < tot_st:
                 obj2 = "- Portal Status: LOCKED"
-                obj2_color = (244, 63, 94)  # Rose
+                obj2_color = (244, 63, 94)
+            elif not self.puzzle_solved:
+                obj2 = "- Speak to the Old Man to unlock Exit Portal!"
+                obj2_color = (250, 204, 21)
+            elif len(self.portals) == 0:
+                obj2 = "- Portal Status: LOCKED"
+                obj2_color = (244, 63, 94)
             else:
                 obj2 = "- Portal Status: OPEN (Enter the portal to exit!)"
-                obj2_color = (34, 197, 94)  # Green
+                obj2_color = (34, 197, 94)
             obj2_surf = item_font.render(obj2, True, obj2_color)
             self.screen.blit(obj2_surf, (box_x + 15, box_y + 48))
 
@@ -4229,6 +4429,8 @@ class Quarter1:
                 p["x"] = p.get("target_x", p.get("x", 0))
                 p["y"] = p.get("target_y", p.get("y", 0))
             self.update_bridge_tiles()
+            if not self.portals:
+                self.spawn_portals()
             self.camera_pan_active = False
             self.player_block_timer = 0
             self.quiz_state = 0
@@ -4288,8 +4490,8 @@ class Quarter1:
                 self.camera_x = self.player_x - (self.width / (2 * ZOOM)) + TILE_SIZE / 2
                 self.camera_y = self.player_y - (self.height / (2 * ZOOM)) + TILE_SIZE / 2
                 if hasattr(self, 'lol_camera'):
-                    self.lol_camera.cam_x = self.camera_x
-                    self.lol_camera.cam_y = self.camera_y
+                    self.lol_camera.camera_x = self.camera_x
+                    self.lol_camera.camera_y = self.camera_y
 
             # Immediately trigger Old Man Guardian Dialog (state 22)
             self.quiz_state = 22
@@ -4306,8 +4508,7 @@ class Quarter1:
     # HANDLE EVENT
     # ============================================================
     def handle_event(self, event):
-        # Allow LoL camera to process middle mouse drag or Spacebar recentering
-        self.lol_camera.handle_event(event)
+        self.sync_ui_state()
 
         if hasattr(self, 'victory_card') and self.victory_card.active:
             if self.victory_card.handle_event(event):
@@ -4317,7 +4518,79 @@ class Quarter1:
                 if res:
                     return "blocked"
 
+        # LoL camera ONLY enabled in State.Exploration
+        if self.state_machine.allows_camera_pan():
+            self.lol_camera.handle_event(event)
+
+        # In-game pause menu (universal across all states)
         if self.pause_menu.handle_event(event):
+            return "blocked"
+
+        if self.pause_menu.is_paused:
+            if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                self.cursor_pos = event.pos
+                self.pause_menu.handle_click(event.pos)
+                return "blocked"
+            elif event.type == pygame.MOUSEMOTION:
+                self.cursor_pos = event.pos
+                return "blocked"
+            return "blocked"
+
+        if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+            if self.pause_menu.pause_btn_rect.collidepoint(event.pos):
+                self.cursor_pos = event.pos
+                self.pause_menu.toggle_pause()
+                return "blocked"
+        if self.state_machine.is_cognitive_puzzle() or getattr(self, 'puzzle_active', False):
+            if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_ESCAPE:
+                    self.puzzle_active = False
+                    self.dragged_piece = None
+                    if self.state_machine.is_cognitive_puzzle():
+                        self.state_machine.pop()
+                    print("[PUZZLE] Puzzle closed by player via ESC")
+                    return "handled"
+            elif event.type == pygame.MOUSEBUTTONDOWN:
+                if event.button == 1:  # Left click
+                    box_w, box_h = 760, 480
+                    if self.map_name.lower() == 'map2.txt':
+                        box_w, box_h = 800, 520
+                    box_x = (self.width - box_w) // 2
+                    box_y = (self.height - box_h) // 2
+                    close_btn_rect = pygame.Rect(box_x + box_w // 2 - 120, box_y + box_h - 55, 110, 36)
+                    reset_btn_rect = pygame.Rect(box_x + box_w // 2 + 10, box_y + box_h - 55, 110, 36)
+
+                    if close_btn_rect.collidepoint(event.pos):
+                        self.puzzle_active = False
+                        self.dragged_piece = None
+                        if self.state_machine.is_cognitive_puzzle():
+                            self.state_machine.pop()
+                        print("[PUZZLE] Puzzle closed by player")
+                        return "handled"
+                    elif reset_btn_rect.collidepoint(event.pos):
+                        self.reset_puzzle()
+                        print("[PUZZLE] Puzzle reset")
+                        return "handled"
+
+                    # Check if picking up a jigsaw piece
+                    for piece in self.puzzle_pieces:
+                        if not piece["is_placed"]:
+                            if self.map_name.lower() == 'map2.txt':
+                                piece_rect = pygame.Rect(piece["x"], piece["y"], 70, 70)
+                            else:
+                                piece_rect = pygame.Rect(piece["x"], piece["y"], 60, 300)
+                            if piece_rect.collidepoint(event.pos):
+                                self.dragged_piece = piece
+                                self.drag_offset_x = piece["x"] - event.pos[0]
+                                self.drag_offset_y = piece["y"] - event.pos[1]
+                                break
+            elif event.type == pygame.MOUSEBUTTONUP:
+                if event.button == 1 and self.dragged_piece:
+                    self.release_dragged_piece()
+            elif event.type == pygame.MOUSEMOTION:
+                if self.dragged_piece:
+                    self.dragged_piece["x"] = event.pos[0] + self.drag_offset_x
+                    self.dragged_piece["y"] = event.pos[1] + self.drag_offset_y
             return "blocked"
 
         if event.type == pygame.KEYDOWN:
@@ -4344,6 +4617,7 @@ class Quarter1:
             if event.key in (pygame.K_SPACE, pygame.K_RETURN, pygame.K_e):
                 if hasattr(self, 'instruction_modal') and self.instruction_modal.is_active():
                     self.instruction_modal.hide()
+                    self.sync_ui_state()
                     return "blocked"
                 if hasattr(self, 'greeting_dialog') and self.greeting_dialog.is_active():
                     self.greeting_dialog.hide()
@@ -4351,73 +4625,32 @@ class Quarter1:
                     self.current_question_index = self.quiz_station_index - 1
                     self.quiz_state = 1
                     self.selected_choice_index = -1
+                    self.sync_ui_state()
                     return "blocked"
                 elif self.quiz_state == 22:
                     self.quiz_state = 0
                     self.puzzle_active = True
+                    self.state_machine.push(State.CognitivePuzzle, {"puzzle": "jigsaw"})
                     if not self.puzzle_pieces:
                         self.init_puzzle()
                     self.player_block_timer = 0.5
                     return "blocked"
                 elif self.quiz_state == 20:
                     self.quiz_state = 0
+                    self.sync_ui_state()
                     return "blocked"
-
-        if self.puzzle_active:
-            if event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_ESCAPE:
-                    if self.main_menu:
-                        self.main_menu.current_screen = "menu"
-                        self.main_menu.quarter1 = None
-                    return "back"
-            elif event.type == pygame.MOUSEBUTTONDOWN:
-                if event.button == 1:  # Left click
-                    box_w, box_h = 760, 480
-                    if self.map_name.lower() == 'map2.txt':
-                        box_w, box_h = 800, 640
-                    box_x = (self.width - box_w) // 2
-                    box_y = (self.height - box_h) // 2
-                    close_btn_rect = pygame.Rect(box_x + box_w // 2 - 120, box_y + box_h - 55, 110, 36)
-                    reset_btn_rect = pygame.Rect(box_x + box_w // 2 + 10, box_y + box_h - 55, 110, 36)
-                    
-                    if close_btn_rect.collidepoint(event.pos):
-                        self.puzzle_active = False
-                        self.dragged_piece = None
-                        print("[PUZZLE] Puzzle closed by player")
-                        return None
-                    elif reset_btn_rect.collidepoint(event.pos):
-                        self.reset_puzzle()
-                        print("[PUZZLE] Puzzle reset")
-                        return None
-                        
-                    # Check if picking up a jigsaw piece
-                    for piece in self.puzzle_pieces:
-                        if not piece["is_placed"]:
-                            if self.map_name.lower() == 'map2.txt':
-                                piece_rect = pygame.Rect(piece["x"], piece["y"], 70, 70)
-                            else:
-                                piece_rect = pygame.Rect(piece["x"], piece["y"], 60, 300)
-                            if piece_rect.collidepoint(event.pos):
-                                self.dragged_piece = piece
-                                self.drag_offset_x = piece["x"] - event.pos[0]
-                                self.drag_offset_y = piece["y"] - event.pos[1]
-                                break
-            elif event.type == pygame.MOUSEBUTTONUP:
-                if event.button == 1 and self.dragged_piece:
-                    self.release_dragged_piece()
-            elif event.type == pygame.MOUSEMOTION:
-                if self.dragged_piece:
-                    self.dragged_piece["x"] = event.pos[0] + self.drag_offset_x
-                    self.dragged_piece["y"] = event.pos[1] + self.drag_offset_y
-            return "blocked"
 
         if event.type == pygame.KEYDOWN:
             if event.key == pygame.K_ESCAPE:
-                if self.quiz_state in [1, 2, 4]:
+                if self.quiz_state in [1, 2]:
                     self.quiz_state = 0
                     self.eliminated_choices.clear()
                     if hasattr(self, 'active_shape_id'):
                         self.question_attempts[self.active_shape_id] = 0
+                    return "handled"
+                elif self.quiz_state == 4:
+                    click_pos = self.out_of_tries_btn_rect.center if hasattr(self, 'out_of_tries_btn_rect') and self.out_of_tries_btn_rect else (self.width // 2, self.height // 2)
+                    self.trigger_click(click_pos)
                     return "handled"
                 if self.main_menu:
                     from db.save_system import show_saving_and_exit
@@ -4426,7 +4659,10 @@ class Quarter1:
             elif event.key == pygame.K_i:
                 self.show_info = not self.show_info
             elif event.key in [pygame.K_SPACE, pygame.K_RETURN]:
-                if self.quiz_state in [1, 2, 3, 4, 5, 10, 11, 12, 13, 14, 20, 21, 22]:
+                if self.quiz_state in [3, 4]:
+                    click_pos = self.out_of_tries_btn_rect.center if hasattr(self, 'out_of_tries_btn_rect') and self.out_of_tries_btn_rect else (self.width // 2, self.height // 2)
+                    self.trigger_click(click_pos)
+                elif self.quiz_state in [1, 2, 5, 10, 11, 12, 13, 14, 20, 21, 22]:
                     self.trigger_click(self.cursor_pos)
                 elif self.quiz_state == 0:
                     if not self.check_portal_teleport_on_hold():
@@ -4436,8 +4672,27 @@ class Quarter1:
                 self.cursor_pos = event.pos
                 self.trigger_click(event.pos)
         elif event.type == pygame.MOUSEMOTION:
-            self.cursor_pos = event.pos
+            if not getattr(self, 'hand_detected', False) or getattr(self, 'current_gesture', 'NO HAND') in ['NO HAND', 'NO HAND (GRACE)']:
+                self.cursor_pos = event.pos
         return None
+
+    def _draw_dialog_dim_overlay(self, alpha=150):
+        """Blits a cached full-screen dim overlay instead of allocating 920KB per frame."""
+        if not hasattr(self, '_dialog_dim_cache'):
+            self._dialog_dim_cache = {}
+        key = (self.width, self.height, alpha)
+        surf = self._dialog_dim_cache.get(key)
+        if surf is None:
+            surf = pygame.Surface((self.width, self.height))
+            surf.fill((0, 0, 0))
+            surf.set_alpha(alpha)
+            if pygame.display.get_surface() is not None:
+                try:
+                    surf = surf.convert()
+                except Exception:
+                    pass
+            self._dialog_dim_cache[key] = surf
+        self.screen.blit(surf, (0, 0))
 
     def get_ui_font(self, size, bold=False):
         """Returns a high-legibility system font for UI elements"""
@@ -4486,8 +4741,13 @@ class Quarter1:
             tag_x = screen_npc_x + (TILE_SIZE * ZOOM) / 2 - tag_w / 2
             tag_y = badge_y - tag_h - 2
 
-            tag_bg = pygame.Surface((tag_w, tag_h), pygame.SRCALPHA)
-            tag_bg.fill((15, 23, 42, 210))
+            if not hasattr(self, '_compass_tag_cache'):
+                self._compass_tag_cache = {}
+            tag_bg = self._compass_tag_cache.get((tag_w, tag_h))
+            if tag_bg is None:
+                tag_bg = pygame.Surface((tag_w, tag_h), pygame.SRCALPHA)
+                tag_bg.fill((15, 23, 42, 210))
+                self._compass_tag_cache[(tag_w, tag_h)] = tag_bg
             self.screen.blit(tag_bg, (tag_x, tag_y))
             pygame.draw.rect(self.screen, (255, 215, 0), (tag_x, tag_y, tag_w, tag_h), 1, border_radius=4)
             self.screen.blit(name_surf, (tag_x + 5, tag_y + 2))
@@ -4576,10 +4836,11 @@ class Quarter1:
             txt_col = (254, 202, 202)
             border_w = 3
 
-        # Translucent Background
-        hud_surf = pygame.Surface((hud_w, hud_h), pygame.SRCALPHA)
-        hud_surf.fill((15, 23, 42, 220))
-        self.screen.blit(hud_surf, (hud_x, hud_y))
+        # Translucent Background (cached)
+        if not hasattr(self, '_hud_timer_surf'):
+            self._hud_timer_surf = pygame.Surface((hud_w, hud_h), pygame.SRCALPHA)
+            self._hud_timer_surf.fill((15, 23, 42, 220))
+        self.screen.blit(self._hud_timer_surf, (hud_x, hud_y))
         pygame.draw.rect(self.screen, border_col, (hud_x, hud_y, hud_w, hud_h), border_w, border_radius=10)
 
         # Draw mini analog clock icon

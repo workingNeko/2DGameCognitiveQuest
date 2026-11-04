@@ -1,9 +1,40 @@
 # main.py
 import os
 import sys
+import types
+
+# Lightweight matplotlib stub so mediapipe.tasks.python.vision.drawing_utils
+# never drags ~40 MB of matplotlib.pyplot into RAM or frozen builds on AMD A4-6300.
+if "matplotlib" not in sys.modules:
+    _mpl_stub = types.ModuleType("matplotlib")
+    _mpl_stub.__path__ = []
+    _plt_stub = types.ModuleType("matplotlib.pyplot")
+    _mpl_stub.pyplot = _plt_stub
+    sys.modules["matplotlib"] = _mpl_stub
+    sys.modules["matplotlib.pyplot"] = _plt_stub
 
 # Ensure matplotlib uses headless Agg backend to prevent Tk/GUI backend dependencies
 os.environ["MPLBACKEND"] = "Agg"
+
+# Low-overhead CPU thread scheduling optimized for AMD A4-6300 (Dual Core / Dual Thread):
+# Prevents libraries (OpenMP, BLAS, NumPy, OpenCV, XNNPACK) from spawning competing thread pools
+# that starve the Pygame main game loop and cause micro-stutters.
+os.environ["OMP_NUM_THREADS"] = "1"
+os.environ["OPENBLAS_NUM_THREADS"] = "1"
+os.environ["MKL_NUM_THREADS"] = "1"
+os.environ["VECLIB_MAXIMUM_THREADS"] = "1"
+os.environ["NUMEXPR_NUM_THREADS"] = "1"
+os.environ["TF_NUM_INTEROP_THREADS"] = "1"
+os.environ["TF_NUM_INTRAOP_THREADS"] = "1"
+os.environ["SDL_RENDER_SCALE_QUALITY"] = "0"
+
+try:
+    import cv2
+    cv2.setNumThreads(1)
+    if hasattr(cv2, 'ocl') and hasattr(cv2.ocl, 'setUseOpenCL'):
+        cv2.ocl.setUseOpenCL(False)
+except Exception:
+    pass
 
 # Ensure current working directory is always the application's root directory.
 # On Windows startup/boot, Windows launches applications with cwd = C:\Windows\System32.
@@ -71,6 +102,10 @@ if len(sys.argv) > 1:
 
 # Initialize Pygame and font system before importing any game screens
 import pygame
+try:
+    pygame.mixer.pre_init(frequency=44100, size=-16, channels=2, buffer=512)
+except Exception:
+    pass
 pygame.init()
 pygame.font.init()
 
@@ -86,8 +121,8 @@ def main():
     screen_width = display_info.current_w
     screen_height = display_info.current_h
 
-    # Set up fullscreen display
-    screen = pygame.display.set_mode((screen_width, screen_height), pygame.FULLSCREEN)
+    # Set up fullscreen display with hardware double-buffering
+    screen = pygame.display.set_mode((screen_width, screen_height), pygame.FULLSCREEN | pygame.DOUBLEBUF)
     pygame.display.set_caption("Cognitive Maze - Educational Games")
 
     # Set up clock for FPS

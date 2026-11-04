@@ -6,6 +6,7 @@ queries and font glyph rasterization on every frame.
 Safely sanitizes unsupported unicode glyphs to eliminate missing-character boxes ('tofu').
 """
 
+from collections import OrderedDict
 import pygame
 
 _FONT_CACHE = {}
@@ -210,6 +211,12 @@ GLYPH_REPLACEMENTS = {
 }
 
 
+_SANITIZE_CACHE = OrderedDict()
+_MAX_SANITIZE_CACHE = 2048
+_WRAP_CACHE = OrderedDict()
+_MAX_WRAP_CACHE = 1024
+
+
 def sanitize_text(text):
     """
     Strips unrenderable emojis, symbols, control chars, and non-ASCII characters that cause
@@ -219,6 +226,13 @@ def sanitize_text(text):
         return ""
     if not isinstance(text, str):
         text = str(text)
+
+    cached = _SANITIZE_CACHE.get(text)
+    if cached is not None:
+        _SANITIZE_CACHE.move_to_end(text)
+        return cached
+
+    raw_key = text
 
     # 1. Apply explicit replacements
     for char, rep in GLYPH_REPLACEMENTS.items():
@@ -241,7 +255,11 @@ def sanitize_text(text):
             # Fallback: drop any unsupported Unicode dingbats / surrogate pairs
             continue
 
-    return "".join(clean_chars)
+    result = "".join(clean_chars)
+    _SANITIZE_CACHE[raw_key] = result
+    while len(_SANITIZE_CACHE) > _MAX_SANITIZE_CACHE:
+        _SANITIZE_CACHE.popitem(last=False)
+    return result
 
 
 def wrap_multiline_text(text, font, max_width):
@@ -252,9 +270,16 @@ def wrap_multiline_text(text, font, max_width):
     """
     if text is None:
         return []
-    text = str(text)
+    if not isinstance(text, str):
+        text = str(text)
     if not text.strip():
         return []
+
+    cache_key = (text, id(font), int(max_width))
+    cached_entry = _WRAP_CACHE.get(cache_key)
+    if cached_entry is not None and cached_entry[0] is font:
+        _WRAP_CACHE.move_to_end(cache_key)
+        return list(cached_entry[1])
 
     # Split into paragraphs by explicit linebreaks
     raw_paragraphs = text.replace('\r\n', '\n').replace('\r', '\n').split('\n')
@@ -306,6 +331,9 @@ def wrap_multiline_text(text, font, max_width):
         if current_line:
             lines.append(" ".join(current_line))
 
+    _WRAP_CACHE[cache_key] = (font, tuple(lines))
+    while len(_WRAP_CACHE) > _MAX_WRAP_CACHE:
+        _WRAP_CACHE.popitem(last=False)
     return lines
 
 
@@ -320,12 +348,17 @@ if not pygame.font.get_init():
         pass
 
 _ORIG_FONT = pygame.font.Font
+_TEXT_SURF_CACHE = OrderedDict()
+_TEXT_SIZE_CACHE = OrderedDict()
+_MAX_TEXT_CACHE = 3000
 
 
 class SafeFont(_ORIG_FONT):
     """
     Drop-in subclass of pygame.font.Font that sanitizes unrenderable glyphs
     before rendering or size calculation, preventing missing character tofu boxes.
+    Features high-performance text surface and metric caching to eliminate repeated TrueType
+    vector glyph rasterization at 60 FPS on dual-core CPUs (AMD A4-6300).
     """
     def __init__(self, filename_or_fileobj=None, size=16, bold=False, italic=False):
         super().__init__(filename_or_fileobj, size)
@@ -342,13 +375,48 @@ class SafeFont(_ORIG_FONT):
 
     def render(self, text, antialias, color, background=None):
         clean = sanitize_text(text)
+        c_key = tuple(color) if hasattr(color, '__iter__') else color
+        bg_key = tuple(background) if hasattr(background, '__iter__') and background is not None else background
+        has_display = pygame.display.get_surface() is not None
+        cache_key = (id(self), clean, bool(antialias), c_key, bg_key, has_display)
+        cached = _TEXT_SURF_CACHE.get(cache_key)
+        if cached is not None:
+            _TEXT_SURF_CACHE.move_to_end(cache_key)
+            return cached
+
         if background is not None:
-            return super().render(clean, antialias, color, background)
-        return super().render(clean, antialias, color)
+            surf = super().render(clean, antialias, color, background)
+            if has_display:
+                try:
+                    surf = surf.convert()
+                except Exception:
+                    pass
+        else:
+            surf = super().render(clean, antialias, color)
+            if has_display:
+                try:
+                    surf = surf.convert_alpha()
+                except Exception:
+                    pass
+
+        _TEXT_SURF_CACHE[cache_key] = surf
+        while len(_TEXT_SURF_CACHE) > _MAX_TEXT_CACHE:
+            _TEXT_SURF_CACHE.popitem(last=False)
+        return surf
 
     def size(self, text):
         clean = sanitize_text(text)
-        return super().size(clean)
+        cache_key = (id(self), clean)
+        cached = _TEXT_SIZE_CACHE.get(cache_key)
+        if cached is not None:
+            _TEXT_SIZE_CACHE.move_to_end(cache_key)
+            return cached
+
+        s = super().size(clean)
+        _TEXT_SIZE_CACHE[cache_key] = s
+        while len(_TEXT_SIZE_CACHE) > _MAX_TEXT_CACHE:
+            _TEXT_SIZE_CACHE.popitem(last=False)
+        return s
 
 
 def _normalize_name(name):
@@ -364,6 +432,10 @@ def get_font(name="Comic Sans MS", size=16, bold=False, italic=False):
     Retrieves a cached Pygame SafeFont instance.
     If not cached, constructs it safely and caches it.
     """
+    if isinstance(name, (int, float)) and not isinstance(name, bool):
+        size = int(name)
+        name = "Comic Sans MS"
+
     if not pygame.font.get_init():
         try:
             pygame.font.init()
@@ -436,10 +508,13 @@ def install_font_cache():
 
 
 def clear_font_cache():
-    """Clears all cached font instances."""
+    """Clears all cached font instances and memoized text caches."""
     _FONT_CACHE.clear()
+    _TEXT_SURF_CACHE.clear()
+    _TEXT_SIZE_CACHE.clear()
+    _SANITIZE_CACHE.clear()
+    _WRAP_CACHE.clear()
 
 
 # Automatically initialize on module import
 install_font_cache()
-

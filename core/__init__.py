@@ -20,7 +20,18 @@ from .visual_effects import (
     draw_beacon_marker
 )
 
+from .state_machine import State, UIStateMachine
+from .version import APP_VERSION, APP_NAME, compare_versions
+from .update_manager import UpdateManager, UpdateState
+
 __all__ = [
+    "APP_VERSION",
+    "APP_NAME",
+    "compare_versions",
+    "UpdateManager",
+    "UpdateState",
+    "State",
+    "UIStateMachine",
     "AudioManager",
     "audio_manager",
     "InGamePauseMenu",

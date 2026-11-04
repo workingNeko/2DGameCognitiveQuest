@@ -4,6 +4,9 @@ import math
 import random
 from .vector_icons import draw_vector_star, draw_vector_replay, draw_vector_arrow
 
+_CELEB_PARTICLE_CACHE = {}
+
+
 class CelebrationParticleSystem:
     """Lightweight particle system for star sparkles and celebration bursts."""
     def __init__(self):
@@ -47,27 +50,42 @@ class CelebrationParticleSystem:
         self.particles = alive
 
     def draw(self, screen):
+        has_disp = pygame.display.get_surface() is not None
         for p in self.particles:
             alpha = max(0, min(255, int(p["life"] * 255)))
+            if alpha <= 4:
+                continue
             size = max(1, int(p["size"] * p["life"]))
             px, py = int(p["x"]), int(p["y"])
-
-            if p["shape"] == "circle":
-                s = pygame.Surface((size * 2, size * 2), pygame.SRCALPHA)
-                pygame.draw.circle(s, (*p["color"][:3], alpha), (size, size), size)
-                screen.blit(s, (px - size, py - size))
-            elif p["shape"] == "star":
-                # 4-pointed sparkle
-                s = pygame.Surface((size * 4, size * 4), pygame.SRCALPHA)
-                c = size * 2
-                col = (*p["color"][:3], alpha)
-                pygame.draw.line(s, col, (c - size * 2, c), (c + size * 2, c), max(1, size // 2))
-                pygame.draw.line(s, col, (c, c - size * 2), (c, c + size * 2), max(1, size // 2))
-                screen.blit(s, (px - c, py - c))
-            else:
-                s = pygame.Surface((size * 2, size * 2), pygame.SRCALPHA)
-                s.fill((*p["color"][:3], alpha))
-                screen.blit(s, (px - size, py - size))
+            alpha_q = max(1, min(16, (alpha + 8) // 16))
+            a_val = min(255, alpha_q * 16)
+            c_rgb = tuple(p["color"][:3])
+            shape = p["shape"]
+            key = (shape, c_rgb, size, alpha_q, has_disp)
+            s = _CELEB_PARTICLE_CACHE.get(key)
+            if s is None:
+                if shape == "circle":
+                    s = pygame.Surface((size * 2, size * 2), pygame.SRCALPHA)
+                    pygame.draw.circle(s, (*c_rgb, a_val), (size, size), size)
+                elif shape == "star":
+                    s = pygame.Surface((size * 4, size * 4), pygame.SRCALPHA)
+                    c = size * 2
+                    col = (*c_rgb, a_val)
+                    pygame.draw.line(s, col, (c - size * 2, c), (c + size * 2, c), max(1, size // 2))
+                    pygame.draw.line(s, col, (c, c - size * 2), (c, c + size * 2), max(1, size // 2))
+                else:
+                    s = pygame.Surface((size * 2, size * 2), pygame.SRCALPHA)
+                    s.fill((*c_rgb, a_val))
+                if has_disp:
+                    try:
+                        s = s.convert_alpha()
+                    except Exception:
+                        pass
+                if len(_CELEB_PARTICLE_CACHE) > 512:
+                    _CELEB_PARTICLE_CACHE.pop(next(iter(_CELEB_PARTICLE_CACHE)))
+                _CELEB_PARTICLE_CACHE[key] = s
+            half = s.get_width() // 2
+            screen.blit(s, (px - half, py - half))
 
 
 class VictoryReportCard:
@@ -144,25 +162,33 @@ class VictoryReportCard:
         btn_y = self.card_y + self.card_h - 75
         self.replay_rect = pygame.Rect(self.card_x + 55, btn_y, btn_w, btn_h)
         self.continue_rect = pygame.Rect(self.card_x + self.card_w - btn_w - 55, btn_y, btn_w, btn_h)
-        self.total_questions = max(1, total_questions)
-        self.correct_first_try = max(0, min(correct_first_try, self.total_questions))
-        self.percentage = (self.correct_first_try / float(self.total_questions)) * 100.0
-        
-        if score is not None:
-            self.score = score
-        else:
-            self.score = int(self.correct_first_try * 20)
-
-        # Star calculation:
-        # 3 Stars: >= 80% (4/5 or 5/5)
-        # 2 Stars: >= 60% (3/5)
-        # 1 Star:  < 60%  (Effort reward)
-        if self.percentage >= 80.0:
+        self.no_cloud_questions = (total_questions <= 0)
+        if self.no_cloud_questions:
+            self.total_questions = 0
+            self.correct_first_try = 0
+            self.percentage = 100.0
+            self.score = 100 if score is None else score
             self.stars_earned = 3
-        elif self.percentage >= 60.0:
-            self.stars_earned = 2
         else:
-            self.stars_earned = 1
+            self.total_questions = total_questions
+            self.correct_first_try = max(0, min(correct_first_try, self.total_questions))
+            self.percentage = (self.correct_first_try / float(self.total_questions)) * 100.0
+
+            if score is not None:
+                self.score = score
+            else:
+                self.score = int(round(self.percentage))
+
+            # Star calculation:
+            # 3 Stars: >= 80%
+            # 2 Stars: >= 60%
+            # 1 Star:  < 60%  (Effort reward)
+            if self.percentage >= 80.0:
+                self.stars_earned = 3
+            elif self.percentage >= 60.0:
+                self.stars_earned = 2
+            else:
+                self.stars_earned = 1
 
         if stage_title:
             self.stage_title = stage_title
@@ -307,14 +333,20 @@ class VictoryReportCard:
         self.screen.blit(score_lbl, (stat_box.x + 25, stat_box.y + 22))
         self.screen.blit(score_val, (stat_box.x + stat_box.width - score_val.get_width() - 25, stat_box.y + 20))
 
-        # Stat 2: First-Try Accuracy
-        acc_lbl = b_font.render("First-Try Accuracy:", True, (148, 163, 184))
-        acc_val = h_font.render(f"{self.correct_first_try} / {self.total_questions} ({int(self.percentage)}%)", True, (34, 197, 94))
+        # Stat 2: First-Try Accuracy (or Cloud Quiz Status when 0 cloud questions exist)
+        if getattr(self, 'no_cloud_questions', False):
+            acc_lbl = b_font.render("Cloud Quiz:", True, (148, 163, 184))
+            acc_val = h_font.render("No Cloud Questions Assigned", True, (56, 189, 248))
+        else:
+            acc_lbl = b_font.render("First-Try Accuracy:", True, (148, 163, 184))
+            acc_val = h_font.render(f"{self.correct_first_try} / {self.total_questions} ({int(round(self.percentage))}%)", True, (34, 197, 94))
         self.screen.blit(acc_lbl, (stat_box.x + 25, stat_box.y + 56))
         self.screen.blit(acc_val, (stat_box.x + stat_box.width - acc_val.get_width() - 25, stat_box.y + 54))
 
         # Stat 3: Pedagogical Encouragement Tip
-        if self.percentage >= 80.0:
+        if getattr(self, 'no_cloud_questions', False):
+            tip_msg = "No cloud quiz questions were set — stage trial completed!"
+        elif self.percentage >= 80.0:
             tip_msg = "Outstanding mastery! You have unlocked the next challenges."
         elif self.percentage >= 60.0:
             tip_msg = "Good understanding! Try replaying to earn a perfect 3-star rating!"

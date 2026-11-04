@@ -15,6 +15,21 @@ import time
 import pygame
 
 
+_DUST_CACHE = {}
+_SPARKLE_CACHE = {}
+_AURA_CACHE = {}
+_BEACON_CACHE = {}
+
+
+def _maybe_convert_alpha(surf):
+    if pygame.display.get_surface() is not None:
+        try:
+            return surf.convert_alpha()
+        except Exception:
+            pass
+    return surf
+
+
 class DustParticle:
     """A single dust puff particle that expands and fades out."""
     __slots__ = ('x', 'y', 'vx', 'vy', 'radius', 'max_radius', 'color', 'alpha', 'life', 'max_life')
@@ -54,9 +69,18 @@ class DustParticle:
         if draw_x + r < 0 or draw_x - r > sw or draw_y + r < 0 or draw_y - r > sh:
             return
 
-        dust_surf = pygame.Surface((r * 2 + 2, r * 2 + 2), pygame.SRCALPHA)
-        col = (*self.color, int(self.alpha))
-        pygame.draw.circle(dust_surf, col, (r + 1, r + 1), r)
+        has_disp = pygame.display.get_surface() is not None
+        alpha_q = max(1, min(15, int(self.alpha) // 12))
+        c_q = (self.color[0] & 0xF8, self.color[1] & 0xF8, self.color[2] & 0xF8)
+        key = (r, c_q, alpha_q, has_disp)
+        dust_surf = _DUST_CACHE.get(key)
+        if dust_surf is None:
+            dust_surf = pygame.Surface((r * 2 + 2, r * 2 + 2), pygame.SRCALPHA)
+            pygame.draw.circle(dust_surf, (*c_q, min(255, alpha_q * 12)), (r + 1, r + 1), r)
+            dust_surf = _maybe_convert_alpha(dust_surf)
+            if len(_DUST_CACHE) > 512:
+                _DUST_CACHE.pop(next(iter(_DUST_CACHE)))
+            _DUST_CACHE[key] = dust_surf
         surface.blit(dust_surf, (draw_x - r - 1, draw_y - r - 1))
 
 
@@ -153,24 +177,32 @@ class SparkleParticle:
         if alpha <= 5:
             return
 
-        sz = int(current_size * 2) + 4
-        sparkle_surf = pygame.Surface((sz, sz), pygame.SRCALPHA)
-        cx = sz // 2
-        cy = sz // 2
-        col = (*self.color, alpha)
-
-        if self.sparkle_type == "cross":
-            # 4-pointed star cross
-            arm = int(current_size)
-            pygame.draw.line(sparkle_surf, col, (cx - arm, cy), (cx + arm, cy), 1)
-            pygame.draw.line(sparkle_surf, col, (cx, cy - arm), (cx, cy + arm), 1)
-            pygame.draw.circle(sparkle_surf, (255, 255, 255, alpha), (cx, cy), max(1, arm // 2))
-        else:
-            # Soft glowing diamond / circle
-            pygame.draw.circle(sparkle_surf, col, (cx, cy), max(1, int(current_size)))
-            pygame.draw.circle(sparkle_surf, (255, 255, 255, alpha), (cx, cy), max(1, int(current_size * 0.4)))
-
-        surface.blit(sparkle_surf, (draw_x - cx, draw_y - cy))
+        has_disp = pygame.display.get_surface() is not None
+        sz_int = max(1, int(current_size))
+        alpha_q = max(1, min(16, (alpha + 8) // 16))
+        a_val = min(255, alpha_q * 16)
+        c_rgb = (self.color[0], self.color[1], self.color[2])
+        key = (self.sparkle_type, c_rgb, sz_int, alpha_q, has_disp)
+        sparkle_surf = _SPARKLE_CACHE.get(key)
+        if sparkle_surf is None:
+            sz = sz_int * 2 + 4
+            sparkle_surf = pygame.Surface((sz, sz), pygame.SRCALPHA)
+            cx = sz // 2
+            cy = sz // 2
+            col = (*c_rgb, a_val)
+            if self.sparkle_type == "cross":
+                pygame.draw.line(sparkle_surf, col, (cx - sz_int, cy), (cx + sz_int, cy), 1)
+                pygame.draw.line(sparkle_surf, col, (cx, cy - sz_int), (cx, cy + sz_int), 1)
+                pygame.draw.circle(sparkle_surf, (255, 255, 255, a_val), (cx, cy), max(1, sz_int // 2))
+            else:
+                pygame.draw.circle(sparkle_surf, col, (cx, cy), sz_int)
+                pygame.draw.circle(sparkle_surf, (255, 255, 255, a_val), (cx, cy), max(1, int(sz_int * 0.4)))
+            sparkle_surf = _maybe_convert_alpha(sparkle_surf)
+            if len(_SPARKLE_CACHE) > 512:
+                _SPARKLE_CACHE.pop(next(iter(_SPARKLE_CACHE)))
+            _SPARKLE_CACHE[key] = sparkle_surf
+        cx = sparkle_surf.get_width() // 2
+        surface.blit(sparkle_surf, (draw_x - cx, draw_y - cx))
 
 
 class SparkleParticleSystem:
@@ -360,13 +392,20 @@ def draw_aura_glow(surface, center, radius=24, color=(255, 215, 0), pulse=True, 
     if cx + r < 0 or cx - r > sw or cy + r < 0 or cy - r > sh:
         return
 
-    glow_surf = pygame.Surface((r * 2 + 4, r * 2 + 4), pygame.SRCALPHA)
-    center_surf = (r + 2, r + 2)
-
-    # 3-layer gradient falloff
-    pygame.draw.circle(glow_surf, (*color, 35), center_surf, r)
-    pygame.draw.circle(glow_surf, (*color, 70), center_surf, int(r * 0.65))
-    pygame.draw.circle(glow_surf, (*color, 120), center_surf, int(r * 0.35))
+    has_disp = pygame.display.get_surface() is not None
+    c_rgb = (color[0], color[1], color[2])
+    key = (r, c_rgb, has_disp)
+    glow_surf = _AURA_CACHE.get(key)
+    if glow_surf is None:
+        glow_surf = pygame.Surface((r * 2 + 4, r * 2 + 4), pygame.SRCALPHA)
+        center_surf = (r + 2, r + 2)
+        pygame.draw.circle(glow_surf, (*c_rgb, 35), center_surf, r)
+        pygame.draw.circle(glow_surf, (*c_rgb, 70), center_surf, int(r * 0.65))
+        pygame.draw.circle(glow_surf, (*c_rgb, 120), center_surf, int(r * 0.35))
+        glow_surf = _maybe_convert_alpha(glow_surf)
+        if len(_AURA_CACHE) > 256:
+            _AURA_CACHE.pop(next(iter(_AURA_CACHE)))
+        _AURA_CACHE[key] = glow_surf
 
     surface.blit(glow_surf, (cx - r - 2, cy - r - 2))
 
@@ -378,28 +417,94 @@ def draw_beacon_marker(surface, cx, cy, color=(255, 215, 0), beacon_type="exclam
     float_y = cy + offset_y + int(math.sin(time.time() * 3.5) * 4)
     draw_aura_glow(surface, (cx, float_y), radius=14, color=color, pulse=True, pulse_speed=3.0)
 
-    # Draw marker diamond badge
+    # Draw marker diamond badge (cached)
     sz = 16
-    badge_surf = pygame.Surface((sz * 2, sz * 2), pygame.SRCALPHA)
     bcx, bcy = sz, sz
-    
-    diamond_pts = [
-        (bcx, bcy - sz + 2),
-        (bcx + sz - 2, bcy),
-        (bcx, bcy + sz - 2),
-        (bcx - sz + 2, bcy)
-    ]
-    pygame.draw.polygon(badge_surf, (*color, 230), diamond_pts)
-    pygame.draw.polygon(badge_surf, (255, 255, 255, 255), diamond_pts, 2)
+    has_disp = pygame.display.get_surface() is not None
+    c_rgb = (color[0], color[1], color[2])
+    key = (c_rgb, beacon_type, has_disp)
+    badge_surf = _BEACON_CACHE.get(key)
+    if badge_surf is None:
+        badge_surf = pygame.Surface((sz * 2, sz * 2), pygame.SRCALPHA)
+        diamond_pts = [
+            (bcx, bcy - sz + 2),
+            (bcx + sz - 2, bcy),
+            (bcx, bcy + sz - 2),
+            (bcx - sz + 2, bcy)
+        ]
+        pygame.draw.polygon(badge_surf, (*c_rgb, 230), diamond_pts)
+        pygame.draw.polygon(badge_surf, (255, 255, 255, 255), diamond_pts, 2)
 
-    # Inner symbol
-    if beacon_type == "exclamation":
-        pygame.draw.line(badge_surf, (20, 20, 25), (bcx, bcy - 6), (bcx, bcy + 1), 2)
-        pygame.draw.circle(badge_surf, (20, 20, 25), (bcx, bcy + 5), 1)
-    elif beacon_type == "question":
-        # Question mark dot
-        pygame.draw.circle(badge_surf, (20, 20, 25), (bcx, bcy + 5), 1)
-        pygame.draw.arc(badge_surf, (20, 20, 25), pygame.Rect(bcx - 4, bcy - 7, 8, 8), 0, math.pi, 2)
-        pygame.draw.line(badge_surf, (20, 20, 25), (bcx, bcy - 3), (bcx, bcy + 2), 2)
+        if beacon_type == "exclamation":
+            pygame.draw.line(badge_surf, (20, 20, 25), (bcx, bcy - 6), (bcx, bcy + 1), 2)
+            pygame.draw.circle(badge_surf, (20, 20, 25), (bcx, bcy + 5), 1)
+        elif beacon_type == "question":
+            pygame.draw.circle(badge_surf, (20, 20, 25), (bcx, bcy + 5), 1)
+            pygame.draw.arc(badge_surf, (20, 20, 25), pygame.Rect(bcx - 4, bcy - 7, 8, 8), 0, math.pi, 2)
+            pygame.draw.line(badge_surf, (20, 20, 25), (bcx, bcy - 3), (bcx, bcy + 2), 2)
+        badge_surf = _maybe_convert_alpha(badge_surf)
+        _BEACON_CACHE[key] = badge_surf
 
     surface.blit(badge_surf, (cx - bcx, float_y - bcy))
+
+
+def build_composite_title_letters(title_text, title_font, main_color, outline_color, glow_color, pad=6):
+    """
+    Pre-bakes each letter's glow + outline + main glyph onto a single padded SRCALPHA surface once at load time.
+    Eliminates 3 .copy() heap allocations and 9-26 blits per letter per frame on AMD A4-6300.
+    """
+    letters = []
+    for ch in title_text:
+        glow = title_font.render(ch, False, glow_color)
+        outline = title_font.render(ch, False, outline_color)
+        main = title_font.render(ch, False, main_color)
+        w, h = main.get_size()
+        comp = pygame.Surface((w + pad * 2, h + pad * 2), pygame.SRCALPHA)
+        glow_copy = glow.copy()
+        glow_copy.set_alpha(51)
+        for gx, gy in ((-4, 0), (4, 0), (0, -4), (0, 4), (-3, -3), (3, -3), (-3, 3), (3, 3)):
+            comp.blit(glow_copy, (pad + gx, pad + gy))
+        for ox, oy in ((-2, 0), (2, 0), (0, -2), (0, 2), (-2, -2), (2, -2), (-2, 2), (2, 2), (-1, 0), (1, 0), (0, -1), (0, 1)):
+            comp.blit(outline, (pad + ox, pad + oy))
+        comp.blit(main, (pad, pad))
+        comp = _maybe_convert_alpha(comp)
+        letters.append({
+            "comp": comp,
+            "main": main,
+            "pad": pad,
+            "width": w,
+            "last_alpha": 255,
+        })
+    return letters
+
+
+def draw_composite_title_wave(surface, title_letters, title_total_width, title_spacing, pixel_font_size, timer):
+    """Draws the animated area title wave using 1 blit per letter and zero heap allocations."""
+    sw, sh = surface.get_size()
+    alpha = 255
+    if timer >= 4.0:
+        fade = max(0.0, min(1.0, (timer - 4.0) / 1.0))
+        alpha = int(255 * (1.0 - fade))
+    if alpha <= 0:
+        return
+
+    base_y = sh // 2 - pixel_font_size // 2
+    if timer < 0.35:
+        t = timer / 0.35
+        ease = 1.0 - (1.0 - t) ** 3
+        y = base_y - (1.0 - ease) * 40
+    else:
+        y = base_y
+
+    x = sw // 2 - title_total_width // 2
+    for i, data in enumerate(title_letters):
+        phase = timer * 8.0 - i * 0.55
+        offset = math.sin(phase) * 12.0 if -math.pi <= phase <= math.pi else 0.0
+        comp = data["comp"]
+        if data.get("last_alpha", 255) != alpha:
+            comp.set_alpha(alpha)
+            data["last_alpha"] = alpha
+        pad = data["pad"]
+        surface.blit(comp, (int(x - pad), int(y + offset - pad)))
+        x += data["width"] + title_spacing
+

@@ -1,0 +1,18 @@
+{
+  "id": "q2_currency_matching",
+  "type": "currency",
+  "title": "Quarter 2: Philippine Peso Cashier Challenge",
+  "quarter": 2,
+  "cognitive_domain": "Numerical Reasoning & Financial Literacy",
+  "target_value": 175,
+  "denominations": [
+    "bill_100",
+    "bill_50",
+    "bill_20",
+    "coin_20",
+    "coin_10",
+    "coin_5",
+    "coin_1"
+  ],
+  "time_limit": 120.0
+}

@@ -28,6 +28,9 @@ def draw_vector_star(surface, cx, cy, radius=8, color=(255, 215, 0), outline_col
         pygame.draw.polygon(surface, outline_color, points, 1)
 
 
+_LIGHTBULB_GLOW_CACHE = {}
+
+
 def draw_vector_lightbulb(surface, cx, cy, size=7, glow=True):
     """
     Renders an amber radiant incandescent lightbulb with a glowing halo and screw base.
@@ -35,11 +38,21 @@ def draw_vector_lightbulb(surface, cx, cy, size=7, glow=True):
     cx, cy = int(cx), int(cy)
     size = max(4, int(size))
 
-    # Optional soft ambient glow
+    # Optional soft ambient glow (memoized)
     if glow:
         glow_r = int(size * 1.5)
-        glow_surf = pygame.Surface((glow_r * 2, glow_r * 2), pygame.SRCALPHA)
-        pygame.draw.circle(glow_surf, (251, 191, 36, 45), (glow_r, glow_r), glow_r)
+        has_disp = pygame.display.get_surface() is not None
+        g_key = (glow_r, has_disp)
+        glow_surf = _LIGHTBULB_GLOW_CACHE.get(g_key)
+        if glow_surf is None:
+            glow_surf = pygame.Surface((glow_r * 2, glow_r * 2), pygame.SRCALPHA)
+            pygame.draw.circle(glow_surf, (251, 191, 36, 45), (glow_r, glow_r), glow_r)
+            if has_disp:
+                try:
+                    glow_surf = glow_surf.convert_alpha()
+                except Exception:
+                    pass
+            _LIGHTBULB_GLOW_CACHE[g_key] = glow_surf
         surface.blit(glow_surf, (cx - glow_r, cy - 2 - glow_r))
 
     # Main rounded bulb head (Amber/Gold)

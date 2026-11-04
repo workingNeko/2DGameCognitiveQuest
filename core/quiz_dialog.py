@@ -170,13 +170,26 @@ class RPGQuizDialog:
             pygame.draw.circle(self.screen, (245, 158, 11), (avatar_center_x, avatar_center_y), avatar_radius + 2, 2)
             pygame.draw.circle(self.screen, (253, 224, 71), (avatar_center_x, avatar_center_y), avatar_radius, 1)
 
-            # Blit Live Animated Sprite
+            # Blit Live Animated Sprite (memoized per frame surface)
             try:
                 orig_w, orig_h = sprite_frame.get_size()
                 scale_factor = min(58.0 / max(1, orig_w), 58.0 / max(1, orig_h))
                 target_w = max(1, int(orig_w * scale_factor))
                 target_h = max(1, int(orig_h * scale_factor))
-                scaled_avatar = pygame.transform.scale(sprite_frame, (target_w, target_h))
+                if not hasattr(self, '_avatar_cache'):
+                    self._avatar_cache = {}
+                av_key = (id(sprite_frame), target_w, target_h)
+                scaled_avatar = self._avatar_cache.get(av_key)
+                if scaled_avatar is None:
+                    scaled_avatar = pygame.transform.scale(sprite_frame, (target_w, target_h))
+                    if pygame.display.get_surface() is not None:
+                        try:
+                            scaled_avatar = scaled_avatar.convert_alpha()
+                        except Exception:
+                            pass
+                    if len(self._avatar_cache) > 48:
+                        self._avatar_cache.clear()
+                    self._avatar_cache[av_key] = scaled_avatar
                 dest_x = avatar_center_x - target_w // 2
                 dest_y = avatar_center_y - target_h // 2
                 self.screen.blit(scaled_avatar, (dest_x, dest_y))

@@ -1,0 +1,12 @@
+{
+  "id": "q3_solar_arrays",
+  "type": "array_matrix",
+  "title": "Quarter 3: Solar Array Multiplication Matrix",
+  "quarter": 3,
+  "cognitive_domain": "Multiplicative Reasoning & Partitioning",
+  "rows": 4,
+  "cols": 6,
+  "target_count": 12,
+  "target_expression": "Activate a 3 x 4 Array (12 Panels)",
+  "time_limit": 90.0
+}

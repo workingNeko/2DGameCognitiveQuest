@@ -80,6 +80,13 @@ class InstructionModal:
             self.height = kwargs.get("height", 720)
             self.audio_manager = kwargs.get("audio_manager")
 
+        if self.audio_manager is None:
+            try:
+                from .audio_manager import audio_manager as _default_am
+                self.audio_manager = _default_am
+            except Exception:
+                pass
+
         self.active = False
         self.data = None
         self.theme_key = "forest"
@@ -97,6 +104,17 @@ class InstructionModal:
 
         self.dim_overlay = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
         self.dim_overlay.fill((6, 10, 18, 200))
+        self._shadow_surf = pygame.Surface((self.box_w, self.box_h), pygame.SRCALPHA)
+        self._shadow_surf.fill((0, 0, 0, 160))
+        self._fill_bar_surf = pygame.Surface((self.btn_w, self.btn_h), pygame.SRCALPHA)
+        self._fill_bar_surf.fill((255, 255, 255, 70))
+        if pygame.display.get_surface() is not None:
+            try:
+                self.dim_overlay = self.dim_overlay.convert_alpha()
+                self._shadow_surf = self._shadow_surf.convert_alpha()
+                self._fill_bar_surf = self._fill_bar_surf.convert_alpha()
+            except Exception:
+                pass
 
         self.pulse = 0.0
         self.shown_count = 0
@@ -244,10 +262,8 @@ class InstructionModal:
         theme = THEME_PALETTES.get(self.theme_key, THEME_PALETTES["forest"])
         self.screen.blit(self.dim_overlay, (0, 0))
 
-        # Outer drop shadow
-        shadow = pygame.Surface((self.box_w, self.box_h), pygame.SRCALPHA)
-        shadow.fill((0, 0, 0, 160))
-        self.screen.blit(shadow, (self.box_x + 6, self.box_y + 8))
+        # Outer drop shadow (cached)
+        self.screen.blit(self._shadow_surf, (self.box_x + 6, self.box_y + 8))
 
         # Main parchment / card surface
         card_rect = pygame.Rect(self.box_x, self.box_y, self.box_w, self.box_h)
@@ -453,11 +469,8 @@ class InstructionModal:
 
         # Fist hold progress fill
         if fist_hold_pct > 0.0:
-            fill_w = int(self.btn_w * min(1.0, fist_hold_pct))
-            fill_rect = pygame.Rect(self.btn_x, self.btn_y, fill_w, self.btn_h)
-            fill_surf = pygame.Surface((fill_w, self.btn_h), pygame.SRCALPHA)
-            fill_surf.fill((255, 255, 255, 70))
-            self.screen.blit(fill_surf, fill_rect)
+            fill_w = max(1, int(self.btn_w * min(1.0, fist_hold_pct)))
+            self.screen.blit(self._fill_bar_surf, (self.btn_x, self.btn_y), pygame.Rect(0, 0, fill_w, self.btn_h))
 
         btn_font = get_font("Comic Sans MS", 16, bold=True)
         btn_text = "Let's Begin Quest! >>" if not is_hovered else "Click or Hold Fist to Begin!"
@@ -493,6 +506,13 @@ class NPCGreetingDialog:
             self.height = kwargs.get("height", 720)
             self.audio_manager = kwargs.get("audio_manager")
 
+        if self.audio_manager is None:
+            try:
+                from .audio_manager import audio_manager as _default_am
+                self.audio_manager = _default_am
+            except Exception:
+                pass
+
         self.active = False
         self.script_data = None
         self.sprite_frame = None
@@ -512,6 +532,14 @@ class NPCGreetingDialog:
 
         self.dim_overlay = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
         self.dim_overlay.fill((6, 10, 18, 140))
+        self._fill_bar_surf = pygame.Surface((self.btn_w, self.btn_h), pygame.SRCALPHA)
+        self._fill_bar_surf.fill((255, 255, 255, 90))
+        if pygame.display.get_surface() is not None:
+            try:
+                self.dim_overlay = self.dim_overlay.convert_alpha()
+                self._fill_bar_surf = self._fill_bar_surf.convert_alpha()
+            except Exception:
+                pass
 
         self.pulse = 0.0
         self.open_time = 0.0
@@ -737,11 +765,8 @@ class NPCGreetingDialog:
 
         # Fist hold progress fill
         if fist_hold_pct > 0.0:
-            fill_w = int(self.btn_w * min(1.0, fist_hold_pct))
-            fill_rect = pygame.Rect(self.btn_x, self.btn_y, fill_w, self.btn_h)
-            fill_surf = pygame.Surface((fill_w, self.btn_h), pygame.SRCALPHA)
-            fill_surf.fill((255, 255, 255, 90))
-            self.screen.blit(fill_surf, fill_rect)
+            fill_w = max(1, int(self.btn_w * min(1.0, fist_hold_pct)))
+            self.screen.blit(self._fill_bar_surf, (self.btn_x, self.btn_y), pygame.Rect(0, 0, fill_w, self.btn_h))
 
         btn_font = get_font("Comic Sans MS", 16, bold=True)
         if fist_hold_pct > 0.0:

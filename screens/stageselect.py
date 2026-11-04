@@ -16,7 +16,13 @@ from screens.quarter4 import Quarter4
 from core.camera_system import LoLCamera
 from core.pathfinder_guide import QuestPathfinderGuide
 from core.font_manager import get_font
-from core.visual_effects import DustParticleSystem, draw_beacon_marker, draw_aura_glow
+from core.visual_effects import (
+    DustParticleSystem,
+    draw_beacon_marker,
+    draw_aura_glow,
+    build_composite_title_letters,
+    draw_composite_title_wave,
+)
 
 # ============================================================
 # SETTINGS
@@ -50,9 +56,10 @@ class StageSelect:
         self.current_gesture = "NO HAND"
         self.fist_start_time = 0
         self.CLICK_HOLD_TIME = 0.9
-        self.click_ready = False
         self.hand_detected = False
         self.fist_closed = False
+        self.back_button = pygame.Rect(self.width - 200, self.height - 56, 184, 42)
+        self.peace_start_time = 0
 
         # For tracking clicks to prevent multiple triggers
         self.last_click_time = 0
@@ -439,7 +446,7 @@ class StageSelect:
         # ============================================================
         # UI
         # ============================================================
-        self.show_info = True
+        self.show_info = False
         self.font = pygame.font.SysFont("Comic Sans MS", 16)
         self.small_font = pygame.font.SysFont("Comic Sans MS", 12)
 
@@ -477,18 +484,14 @@ class StageSelect:
         self.title_outline_color = (0, 0, 0) # Black outline
         self.title_glow_color = (180, 180, 180) # Grey glow
 
-        # Pre-render letters
-        self.title_letters = []
-        for ch in self.title_text:
-            glow = self.title_font.render(ch, False, self.title_glow_color)
-            outline = self.title_font.render(ch, False, self.title_outline_color)
-            main = self.title_font.render(ch, False, self.title_text_color)
-            self.title_letters.append({
-                "glow": glow,
-                "outline": outline,
-                "main": main,
-                "width": main.get_width()
-            })
+        # Pre-render composite letters (1 surface per letter, zero per-frame copies)
+        self.title_letters = build_composite_title_letters(
+            self.title_text,
+            self.title_font,
+            self.title_text_color,
+            self.title_outline_color,
+            self.title_glow_color,
+        )
         self.title_total_width = sum(l["width"] for l in self.title_letters) + self.title_spacing * (len(self.title_text) - 1)
 
         # ============================================================
@@ -508,13 +511,18 @@ class StageSelect:
         map_w = self.COLS * scaled_size
         map_h = self.ROWS * scaled_size
         self._bg_map_surface = pygame.Surface((map_w, map_h))
-        self._fg_trees_surface = pygame.Surface((map_w, map_h), pygame.SRCALPHA)
-        self._fg_trees_surface.fill((0, 0, 0, 0))
+        has_disp = pygame.display.get_surface() is not None
 
         def get_scaled(c):
             raw = self.tile_images.get(c, self.fallback_tile)
             if raw not in self._scaled_tile_cache:
-                self._scaled_tile_cache[raw] = pygame.transform.scale(raw, (scaled_size, scaled_size))
+                s = pygame.transform.scale(raw, (scaled_size, scaled_size))
+                if has_disp:
+                    try:
+                        s = s.convert_alpha()
+                    except Exception:
+                        pass
+                self._scaled_tile_cache[raw] = s
             return self._scaled_tile_cache[raw]
 
         grass_img = get_scaled('G')
@@ -530,7 +538,7 @@ class StageSelect:
                         if grass_img:
                             self._bg_map_surface.blit(grass_img, (px, py))
                         if tree_img:
-                            self._fg_trees_surface.blit(tree_img, (px, py))
+                            self._bg_map_surface.blit(tree_img, (px, py))
                     else:
                         img = get_scaled(tile_char)
                         if img:
@@ -1415,57 +1423,64 @@ class StageSelect:
     # COLLISION - MODIFIED to use npc_positions_data & Sequential Path Gating
     # ============================================================
     def can_move(self, nx, ny):
-        col = int(nx // TILE_SIZE)
-        row = int(ny // TILE_SIZE)
-        if row < 0 or row >= self.ROWS or col < 0 or col >= self.COLS:
-            return False
-        if row >= len(self.game_map) or col >= len(self.game_map[row]):
-            return False
-        tile = self.game_map[row][col]
+        padding = 4
+        corners = [
+            (nx + padding, ny + padding),
+            (nx + TILE_SIZE - padding - 1, ny + padding),
+            (nx + padding, ny + TILE_SIZE - padding - 1),
+            (nx + TILE_SIZE - padding - 1, ny + TILE_SIZE - padding - 1)
+        ]
 
-        # Check if tile is walkable
-        if tile not in self.WALKABLE_TILES:
-            return False
-
-        # Sequential Corridor Barriers:
-        # 1. South Corridor to Quarter 2 (Row >= 16 in cols 25-27)
-        if col in (25, 26, 27) and row >= 16:
-            if not self.is_quarter_unlocked("quarter2"):
-                if self.locked_portal_banner_timer <= 0:
-                    self.locked_portal_banner_msg = "Complete Quarter 1 to unlock the path to Quarter 2!"
-                    self.locked_portal_banner_timer = 2.5
-                return False
-
-        # 2. East Corridor to Quarter 3 (Col >= 28 in rows 12-14)
-        if row in (12, 13, 14) and col >= 28:
-            if not self.is_quarter_unlocked("quarter3"):
-                if self.locked_portal_banner_timer <= 0:
-                    self.locked_portal_banner_msg = "Complete Quarter 2 to unlock the path to Quarter 3!"
-                    self.locked_portal_banner_timer = 2.5
-                return False
-
-        # 3. North Corridor to Quarter 4 (Row <= 11 in cols 25-27)
-        if col in (25, 26, 27) and row <= 11:
-            if not self.is_quarter_unlocked("quarter4"):
-                if self.locked_portal_banner_timer <= 0:
-                    self.locked_portal_banner_msg = "Complete Quarter 3 to unlock the path to Quarter 4!"
-                    self.locked_portal_banner_timer = 2.5
-                return False
-
-        # Check if any NPC is at this position (obstacle)
         npc_positions = []
         for marker, positions in self.npc_positions_data.items():
             npc_positions.extend(positions)
 
-        player_col = int(self.player_x // TILE_SIZE)
-        player_row = int(self.player_y // TILE_SIZE)
+        for cx, cy in corners:
+            col = int(cx // TILE_SIZE)
+            row = int(cy // TILE_SIZE)
+            if row < 0 or row >= self.ROWS or col < 0 or col >= self.COLS:
+                return False
+            if row >= len(self.game_map) or col >= len(self.game_map[row]):
+                return False
+            tile = self.game_map[row][col]
 
-        for npc_col, npc_row in npc_positions:
-            if col == npc_col and row == npc_row:
-                # Allow if player is already on this NPC tile (teleport case)
-                if player_col == npc_col and player_row == npc_row:
-                    return True
-                return False  # Block movement into NPC
+            # Check if tile is walkable
+            if tile not in self.WALKABLE_TILES:
+                return False
+
+            # Sequential Corridor Barriers:
+            # 1. South Corridor to Quarter 2 (Row >= 16 in cols 25-27)
+            if col in (25, 26, 27) and row >= 16:
+                if not self.is_quarter_unlocked("quarter2"):
+                    if self.locked_portal_banner_timer <= 0:
+                        self.locked_portal_banner_msg = "Complete Quarter 1 to unlock the path to Quarter 2!"
+                        self.locked_portal_banner_timer = 2.5
+                    return False
+
+            # 2. East Corridor to Quarter 3 (Col >= 28 in rows 12-14)
+            if row in (12, 13, 14) and col >= 28:
+                if not self.is_quarter_unlocked("quarter3"):
+                    if self.locked_portal_banner_timer <= 0:
+                        self.locked_portal_banner_msg = "Complete Quarter 2 to unlock the path to Quarter 3!"
+                        self.locked_portal_banner_timer = 2.5
+                    return False
+
+            # 3. North Corridor to Quarter 4 (Row <= 11 in cols 25-27)
+            if col in (25, 26, 27) and row <= 11:
+                if not self.is_quarter_unlocked("quarter4"):
+                    if self.locked_portal_banner_timer <= 0:
+                        self.locked_portal_banner_msg = "Complete Quarter 3 to unlock the path to Quarter 4!"
+                        self.locked_portal_banner_timer = 2.5
+                    return False
+
+            for npc_col, npc_row in npc_positions:
+                if col == npc_col and row == npc_row:
+                    player_col = int(self.player_x // TILE_SIZE)
+                    player_row = int(self.player_y // TILE_SIZE)
+                    # Allow if player is already on this NPC tile (teleport case)
+                    if player_col == npc_col and player_row == npc_row:
+                        continue
+                    return False  # Block movement into NPC
 
         return True
 
@@ -1484,34 +1499,20 @@ class StageSelect:
             }
 
     def _preload_quarter_worker(self, qid):
-        """Threaded worker that pre-loads the target Quarter during the 3-second black LOADING screen."""
+        """
+        Pre-warms database questions & assessment IDs off-thread during the 3s portal transition.
+        Avoids thread-unsafe SDL2 surface/font creation and dual-core CPU starvation on AMD A4-6300;
+        the Quarter screen itself is constructed cleanly once on the main thread in _finish_portal_transition().
+        """
         try:
-            if qid == "quarter1":
-                map_name = random.choice(["map1.txt", "map2.txt", "map3.txt"])
-                print(f"[STAGE] Background pre-loading Quarter 1 - {map_name}")
-                from screens.quarter1 import Quarter1
-                loaded = Quarter1(self.screen, self.main_menu, map_name)
-            elif qid == "quarter2":
-                map_name = random.choice(["map4.txt", "map5.txt", "map6.txt"])
-                print(f"[STAGE] Background pre-loading Quarter 2 - {map_name}")
-                from screens.quarter2 import Quarter2
-                loaded = Quarter2(self.screen, self.main_menu, map_name)
-            elif qid == "quarter3":
-                map_name = random.choice(["map7.txt", "map8.txt", "map9.txt"])
-                print(f"[STAGE] Background pre-loading Quarter 3 - {map_name}")
-                from screens.quarter3 import Quarter3
-                loaded = Quarter3(self.screen, self.main_menu, map_name)
-            elif qid == "quarter4":
-                map_name = random.choice(["map10.txt", "map11.txt", "map12.txt"])
-                print(f"[STAGE] Background pre-loading Quarter 4 - {map_name}")
-                from screens.quarter4 import Quarter4
-                loaded = Quarter4(self.screen, self.main_menu, map_name)
-            else:
-                loaded = None
-            self.portal_loaded_screen = loaded
+            q_map = {"quarter1": 1, "quarter2": 2, "quarter3": 3, "quarter4": 4}
+            q_num = q_map.get(qid)
+            if q_num is not None:
+                from db import connect_db
+                connect_db.get_questions(q_num)
+                connect_db.get_assessment_id(q_num)
         except Exception as e:
-            print(f"[STAGE WARN] Preload exception for {qid}: {e}")
-            self.portal_loaded_screen = None
+            print(f"[STAGE WARN] DB pre-warm exception for {qid}: {e}")
         finally:
             self.portal_loading_done = True
 
@@ -1977,18 +1978,32 @@ class StageSelect:
             map_width=self.MAP_WIDTH,
             map_height=self.MAP_HEIGHT,
             tile_size=TILE_SIZE,
-            enable_edge_scroll=True
+            enable_edge_scroll=False
         )
         self.camera_x = self.lol_camera.camera_x
         self.camera_y = self.lol_camera.camera_y
 
+    def return_to_main_menu(self):
+        """Saves student progress and returns to the Main Menu."""
+        if hasattr(self.main_menu, 'audio_manager') and self.main_menu.audio_manager:
+            self.main_menu.audio_manager.play_sfx("click")
+        if self.main_menu:
+            from db.save_system import save_student_progress
+            self.main_menu.current_screen = "menu"
+            save_student_progress(self.main_menu)
+            self.main_menu.stage_select = None
+            if hasattr(self.main_menu, 'setup_buttons'):
+                self.main_menu.setup_buttons()
+        return "back"
+
     # ============================================================
     # UPDATE GESTURE (called from main_menu)
     # ============================================================
-    def update_gesture(self, cursor_pos, fist_start_time, CLICK_HOLD_TIME, current_gesture):
+    def update_gesture(self, cursor_pos, fist_start_time, CLICK_HOLD_TIME, current_gesture, peace_start_time=0):
         """Update gesture data from main menu"""
         self.cursor_pos = cursor_pos
         self.fist_start_time = fist_start_time
+        self.peace_start_time = peace_start_time
         self.CLICK_HOLD_TIME = CLICK_HOLD_TIME
         self.current_gesture = current_gesture
 
@@ -1997,6 +2012,11 @@ class StageSelect:
 
         # Check if fist is closed (fist_start_time > 0 means fist is being held)
         self.fist_closed = fist_start_time > 0
+
+        # Standalone or direct gesture trigger for peace sign return to menu
+        if current_gesture == "PEACE" and peace_start_time > 0:
+            if (time.time() - peace_start_time) >= CLICK_HOLD_TIME:
+                return self.return_to_main_menu()
 
     # ============================================================
     # ADVANCE DIALOGUE / SKIP CUTSCENE
@@ -2127,9 +2147,15 @@ class StageSelect:
     # ============================================================
     # TRIGGER CLICK (called from main_menu)
     # ============================================================
-    def trigger_click(self, pos):
+    def trigger_click(self, pos=None):
+        if pos is None:
+            pos = self.cursor_pos
         if getattr(self, 'portal_transition_active', False):
             return
+
+        # 0. Back button to Menu
+        if hasattr(self, 'back_button') and self.back_button.collidepoint(pos):
+            return self.return_to_main_menu()
 
         # Check Grand Finale modal interaction
         if self.grand_finale_active:
@@ -2166,24 +2192,105 @@ class StageSelect:
                 self.trigger_interactable(obj)
                 return
 
-        # Trigger teleport on click/hold when standing on a portal (Only if NPC has been spoken to)
-        current_portal = None
+        # 1. Click interaction for Sanctuary NPCs
+        # Old Man NPC
+        if self.npc_oldman_found and self.oldman_dialogue_state in (0, 4):
+            om_sx = (self.npc_oldman_x - self.camera_x + TILE_SIZE // 2) * ZOOM
+            om_sy = (self.npc_oldman_y - self.camera_y + TILE_SIZE // 2) * ZOOM
+            if math.hypot(pos[0] - om_sx, pos[1] - om_sy) < 50 * ZOOM:
+                dist = math.hypot(self.player_x - self.npc_oldman_x, self.player_y - self.npc_oldman_y)
+                if dist < TILE_SIZE * 3.5:
+                    self.oldman_dialogue_state = 1
+                    self.oldman_dialogue_index = 0
+                    if hasattr(self.main_menu, 'audio_manager') and self.main_menu.audio_manager:
+                        self.main_menu.audio_manager.play_sfx("dialogue_blip")
+                else:
+                    self.click_dest = (self.npc_oldman_x + TILE_SIZE, self.npc_oldman_y)
+                return
+
+        # Bromen NPC
+        if self.npc_bromen_found and self.bromen_dialogue_state in (0, 4):
+            bro_sx = (self.npc_bromen_x - self.camera_x + TILE_SIZE // 2) * ZOOM
+            bro_sy = (self.npc_bromen_y - self.camera_y + TILE_SIZE // 2) * ZOOM
+            if math.hypot(pos[0] - bro_sx, pos[1] - bro_sy) < 50 * ZOOM:
+                dist = math.hypot(self.player_x - self.npc_bromen_x, self.player_y - self.npc_bromen_y)
+                if dist < TILE_SIZE * 3.5:
+                    if not self.is_quarter_unlocked('quarter4'):
+                        self.locked_portal_banner_msg = "Complete Quarter 3 to unlock Quarter 4!"
+                        self.locked_portal_banner_timer = 2.0
+                    else:
+                        self.bromen_dialogue_state = 1
+                        self.bromen_dialogue_index = 0
+                        if hasattr(self.main_menu, 'audio_manager') and self.main_menu.audio_manager:
+                            self.main_menu.audio_manager.play_sfx("dialogue_blip")
+                else:
+                    self.click_dest = (self.npc_bromen_x, self.npc_bromen_y + TILE_SIZE)
+                return
+
+        # Skeleton NPC
+        if self.npc_skeleton_found and self.skeleton_dialogue_state in (0, 4):
+            sk_sx = (self.npc_skeleton_x - self.camera_x + TILE_SIZE // 2) * ZOOM
+            sk_sy = (self.npc_skeleton_y - self.camera_y + TILE_SIZE // 2) * ZOOM
+            if math.hypot(pos[0] - sk_sx, pos[1] - sk_sy) < 50 * ZOOM:
+                dist = math.hypot(self.player_x - self.npc_skeleton_x, self.player_y - self.npc_skeleton_y)
+                if dist < TILE_SIZE * 3.5:
+                    if not self.is_quarter_unlocked('quarter3'):
+                        self.locked_portal_banner_msg = "Complete Quarter 2 to unlock Quarter 3!"
+                        self.locked_portal_banner_timer = 2.0
+                    else:
+                        self.skeleton_dialogue_state = 1
+                        self.skeleton_dialogue_index = 0
+                        if hasattr(self.main_menu, 'audio_manager') and self.main_menu.audio_manager:
+                            self.main_menu.audio_manager.play_sfx("dialogue_blip")
+                else:
+                    self.click_dest = (self.npc_skeleton_x - TILE_SIZE, self.npc_skeleton_y)
+                return
+
+        # Knight NPC
+        if self.npc_knight_found and self.knight_dialogue_state in (0, 4):
+            kn_sx = (self.npc_knight_x - self.camera_x + TILE_SIZE // 2) * ZOOM
+            kn_sy = (self.npc_knight_y - self.camera_y + TILE_SIZE // 2) * ZOOM
+            if math.hypot(pos[0] - kn_sx, pos[1] - kn_sy) < 50 * ZOOM:
+                dist = math.hypot(self.player_x - self.npc_knight_x, self.player_y - self.npc_knight_y)
+                if dist < TILE_SIZE * 3.5:
+                    if not self.is_quarter_unlocked('quarter2'):
+                        self.locked_portal_banner_msg = "Complete Quarter 1 to unlock Quarter 2!"
+                        self.locked_portal_banner_timer = 2.0
+                    else:
+                        self.knight_dialogue_state = 1
+                        self.knight_dialogue_index = 0
+                        if hasattr(self.main_menu, 'audio_manager') and self.main_menu.audio_manager:
+                            self.main_menu.audio_manager.play_sfx("dialogue_blip")
+                else:
+                    self.click_dest = (self.npc_knight_x, self.npc_knight_y - TILE_SIZE)
+                return
+
+        # 2. Check clicking on or standing on Portals
+        clicked_portal = None
         for portal in self.portals:
-            if portal.contains_position(self.player_x, self.player_y):
-                current_portal = portal
+            p_sx = (portal.get_world_x() - self.camera_x) * ZOOM
+            p_sy = (portal.get_world_y() - self.camera_y) * ZOOM
+            p_sw = int(portal.get_width_pixels() * ZOOM)
+            p_sh = int(portal.get_height_pixels() * ZOOM)
+            p_rect = pygame.Rect(p_sx - 20, p_sy - 20, p_sw + 40, p_sh + 40)
+            if p_rect.collidepoint(pos) or portal.contains_position(self.player_x, self.player_y):
+                clicked_portal = portal
                 break
         
-        if current_portal and self.teleport_cooldown <= 0:
-            if current_portal.direction == 'left':
+        if clicked_portal and self.teleport_cooldown <= 0:
+            if clicked_portal.direction == 'left':
                 if self.is_quarter_completed('quarter1'):
                     self.locked_portal_banner_msg = "Quarter 1 is already completed!"
                     self.locked_portal_banner_timer = 2.0
-                elif self.oldman_dialogue_state == 0:
+                elif self.oldman_dialogue_state == 0 and not getattr(self, 'barriers_lifted', False):
                     self.locked_portal_banner_msg = "Talk to the Old Man first to unlock Quarter 1!"
-                    self.locked_portal_banner_timer = 1.0
+                    self.locked_portal_banner_timer = 2.0
+                    if self.npc_oldman_found:
+                        self.click_dest = (self.npc_oldman_x + TILE_SIZE, self.npc_oldman_y)
                 else:
                     self.enter_quarter("quarter1")
-            elif current_portal.direction == 'up':
+                return
+            elif clicked_portal.direction == 'up':
                 if self.is_quarter_completed('quarter2'):
                     self.locked_portal_banner_msg = "Quarter 2 is already completed!"
                     self.locked_portal_banner_timer = 2.0
@@ -2192,10 +2299,13 @@ class StageSelect:
                     self.locked_portal_banner_timer = 2.0
                 elif self.knight_dialogue_state == 0 and not getattr(self, 'barriers_lifted', False):
                     self.locked_portal_banner_msg = "Talk to the Knight first to unlock Quarter 2!"
-                    self.locked_portal_banner_timer = 1.5
+                    self.locked_portal_banner_timer = 2.0
+                    if self.npc_knight_found:
+                        self.click_dest = (self.npc_knight_x, self.npc_knight_y - TILE_SIZE)
                 else:
                     self.enter_quarter("quarter2")
-            elif current_portal.direction == 'right':
+                return
+            elif clicked_portal.direction == 'right':
                 if self.is_quarter_completed('quarter3'):
                     self.locked_portal_banner_msg = "Quarter 3 is already completed!"
                     self.locked_portal_banner_timer = 2.0
@@ -2204,10 +2314,13 @@ class StageSelect:
                     self.locked_portal_banner_timer = 2.0
                 elif self.skeleton_dialogue_state == 0 and not getattr(self, 'barriers_lifted', False):
                     self.locked_portal_banner_msg = "Talk to the Skeleton first to unlock Quarter 3!"
-                    self.locked_portal_banner_timer = 1.5
+                    self.locked_portal_banner_timer = 2.0
+                    if self.npc_skeleton_found:
+                        self.click_dest = (self.npc_skeleton_x - TILE_SIZE, self.npc_skeleton_y)
                 else:
                     self.enter_quarter("quarter3")
-            elif current_portal.direction == 'down':
+                return
+            elif clicked_portal.direction == 'down':
                 if self.is_quarter_completed('quarter4'):
                     self.locked_portal_banner_msg = "Quarter 4 is already completed!"
                     self.locked_portal_banner_timer = 2.0
@@ -2216,9 +2329,20 @@ class StageSelect:
                     self.locked_portal_banner_timer = 2.0
                 elif self.bromen_dialogue_state == 0 and not getattr(self, 'barriers_lifted', False):
                     self.locked_portal_banner_msg = "Talk to Bromen first to unlock Quarter 4!"
-                    self.locked_portal_banner_timer = 1.5
+                    self.locked_portal_banner_timer = 2.0
+                    if self.npc_bromen_found:
+                        self.click_dest = (self.npc_bromen_x, self.npc_bromen_y + TILE_SIZE)
                 else:
                     self.enter_quarter("quarter4")
+                return
+
+        # 3. Click-to-Move navigation on map ground
+        world_x = pos[0] / ZOOM + self.camera_x
+        world_y = pos[1] / ZOOM + self.camera_y
+        col = int(world_x // TILE_SIZE)
+        row = int(world_y // TILE_SIZE)
+        if 0 <= row < self.ROWS and 0 <= col < self.COLS:
+            self.click_dest = (world_x, world_y)
 
     # ============================================================
     # UPDATE
@@ -2923,42 +3047,83 @@ class StageSelect:
         vx, vy = 0, 0
         current_speed = SPEED
 
-        # Hand Gesture / Cursor Directional Controls (Pure Gesture Navigation)
-        player_screen_x = (self.player_x - self.camera_x + TILE_SIZE / 2) * ZOOM
-        player_screen_y = (self.player_y - self.camera_y + TILE_SIZE / 2) * ZOOM
-        cursor_x, cursor_y = self.cursor_pos
-        dx = cursor_x - player_screen_x
-        dy = cursor_y - player_screen_y
-
-        # Dynamic speed scaling: faster when hand is stretched further out
-        dist_factor = 1.3 if (abs(dx) > 160 or abs(dy) > 160) else 1.0
-        g_speed = current_speed * dist_factor
-
-        if abs(dx) > 32:
-            vx = g_speed if dx > 0 else -g_speed
-            if dx > 0:
-                self.player_dir = "right"
-            elif dx < 0:
+        # 1. Keyboard Controls (Development & Accessibility Fallback)
+        keys = pygame.key.get_pressed() if hasattr(pygame.key, 'get_pressed') else None
+        has_key_input = False
+        if keys is not None:
+            has_key_input = bool(
+                keys[pygame.K_LEFT] or keys[pygame.K_a] or keys[pygame.K_RIGHT] or keys[pygame.K_d] or
+                keys[pygame.K_UP] or keys[pygame.K_w] or keys[pygame.K_DOWN] or keys[pygame.K_s]
+            )
+        if has_key_input:
+            self.click_dest = None
+            if keys[pygame.K_LEFT] or keys[pygame.K_a]:
+                vx = -current_speed
                 self.player_dir = "left"
-
-        if abs(dy) > 32:
-            vy = g_speed if dy > 0 else -g_speed
-            if dy > 0:
-                self.player_dir = "down"
-            elif dy < 0:
+            elif keys[pygame.K_RIGHT] or keys[pygame.K_d]:
+                vx = current_speed
+                self.player_dir = "right"
+            if keys[pygame.K_UP] or keys[pygame.K_w]:
+                vy = -current_speed
                 self.player_dir = "up"
+            elif keys[pygame.K_DOWN] or keys[pygame.K_s]:
+                vy = current_speed
+                self.player_dir = "down"
 
-        # Collision move
-        new_x = self.player_x + vx
-        new_y = self.player_y + vy
+        # 2. Click-to-Move Destination Tracking
+        elif getattr(self, 'click_dest', None) is not None:
+            cdx = self.click_dest[0] - (self.player_x + TILE_SIZE // 2)
+            cdy = self.click_dest[1] - (self.player_y + TILE_SIZE // 2)
+            cd_dist = math.hypot(cdx, cdy)
+            if cd_dist > 6.0:
+                vx = (cdx / cd_dist) * current_speed
+                vy = (cdy / cd_dist) * current_speed
+                if abs(cdx) > abs(cdy):
+                    self.player_dir = "right" if cdx > 0 else "left"
+                else:
+                    self.player_dir = "down" if cdy > 0 else "up"
+            else:
+                self.click_dest = None
 
-        if self.can_move(new_x, self.player_y):
-            self.player_x = new_x
-        if self.can_move(self.player_x, new_y):
-            self.player_y = new_y
+        # 3. Universal Hand Gesture / Cursor Steering
+        if getattr(self, 'click_dest', None) is None and not has_key_input:
+            is_active_input = (self.hand_detected and self.current_gesture != "NO HAND") or getattr(self.main_menu, 'mouse_active', False)
+            if is_active_input:
+                player_screen_x = (self.player_x - self.camera_x + TILE_SIZE / 2) * ZOOM
+                player_screen_y = (self.player_y - self.camera_y + TILE_SIZE / 2) * ZOOM
+                cursor_x, cursor_y = self.cursor_pos
+                dx = cursor_x - player_screen_x
+                dy = cursor_y - player_screen_y
+
+                deadzone = 45.0
+                if abs(dx) > deadzone or abs(dy) > deadzone:
+                    dist_factor = 1.3 if (abs(dx) > 160 or abs(dy) > 160) else 1.0
+                    g_speed = current_speed * dist_factor
+                    if abs(dx) > deadzone:
+                        vx = g_speed if dx > 0 else -g_speed
+                    if abs(dy) > deadzone:
+                        vy = g_speed if dy > 0 else -g_speed
+
+                    if abs(dx) > abs(dy):
+                        self.player_dir = "right" if dx > 0 else "left"
+                    else:
+                        self.player_dir = "down" if dy > 0 else "up"
+
+        # Apply movement with collision
+        moved_x, moved_y = False, False
+        if vx != 0 and self.can_move(self.player_x + vx, self.player_y):
+            self.player_x += vx
+            moved_x = True
+        if vy != 0 and self.can_move(self.player_x, self.player_y + vy):
+            self.player_y += vy
+            moved_y = True
+
+        if getattr(self, 'click_dest', None) is not None and (vx != 0 or vy != 0):
+            if not moved_x and not moved_y:
+                self.click_dest = None
 
         # Animation & Dust Footstep Emission
-        if vx != 0 or vy != 0:
+        if moved_x or moved_y:
             self.anim_timer += 1
             if hasattr(self, 'dust_particles') and self.anim_timer % 8 == 0:
                 self.dust_particles.emit_footstep(
@@ -3209,10 +3374,7 @@ class StageSelect:
                 for col in range(start_col, end_col):
                     if row < len(self.render_map) and col < len(self.render_map[row]):
                         tile_char = self.render_map[row][col]
-                        if tile_char == 'T':
-                            self.draw_tile('G', col * TILE_SIZE, row * TILE_SIZE)
-                        else:
-                            self.draw_tile(tile_char, col * TILE_SIZE, row * TILE_SIZE)
+                        self.draw_tile(tile_char, col * TILE_SIZE, row * TILE_SIZE)
 
         DIR_MAP = {
             'left': 'quarter1',
@@ -3385,33 +3547,23 @@ class StageSelect:
             if self.npc_bromen_found:
                 draw_beacon_marker(self.screen, (self.npc_bromen_x - self.camera_x + TILE_SIZE // 2) * ZOOM, (self.npc_bromen_y - self.camera_y) * ZOOM, color=(20, 184, 166), beacon_type="exclamation", offset_y=int(-30 * ZOOM))
 
-        # 6. Draw player
-        self.draw_player()
-
-        # 7. Draw visible tree tiles on top of characters only (Pre-rendered canopy)
-        if getattr(self, '_fg_trees_surface', None):
-            self.screen.blit(self._fg_trees_surface, (-cam_pixel_x, -cam_pixel_y))
-        else:
-            start_col = max(0, int(self.camera_x / TILE_SIZE) - 2)
-            end_col = min(self.COLS, int((self.camera_x + self.width / ZOOM) / TILE_SIZE) + 3)
-            start_row = max(0, int(self.camera_y / TILE_SIZE) - 2)
-            end_row = min(self.ROWS, int((self.camera_y + self.height / ZOOM) / TILE_SIZE) + 3)
-            for row in range(start_row, end_row):
-                for col in range(start_col, end_col):
-                    if row < len(self.render_map) and col < len(self.render_map[row]):
-                        tile_char = self.render_map[row][col]
-                        if tile_char == 'T':
-                            self.draw_tile(tile_char, col * TILE_SIZE, row * TILE_SIZE)
-
-        # ============================================================
-        # 8. WORLD UI & GUIDES (Rendered AFTER trees so tree leaves NEVER overlap text/boxes)
-        # ============================================================
-        # Draw Corridor Energy Forcefields for Locked Quarters
+        # 6. Draw Corridor Energy Forcefields for Locked Quarters
         self.draw_corridor_barriers()
 
-        # Draw Hierarchy Pathfinder Visual Guide Trail
+        # 7. Draw Hierarchy Pathfinder Visual Guide Trail
         if hasattr(self, 'path_guide') and not self.is_dialogue_active():
             self.path_guide.draw()
+
+        # 8. Draw player (on top of map, trees, and ground guides)
+        self.draw_player()
+
+        # Draw Click-to-Move Destination Starlight Beacon
+        if getattr(self, 'click_dest', None) is not None and not self.is_dialogue_active():
+            cd_sx = int((self.click_dest[0] - self.camera_x) * ZOOM)
+            cd_sy = int((self.click_dest[1] - self.camera_y) * ZOOM)
+            pulse_rad = int(8 + 3 * math.sin(self.frame_counter * 0.15))
+            pygame.draw.circle(self.screen, (56, 189, 248), (cd_sx, cd_sy), pulse_rad + 2, 2)
+            pygame.draw.circle(self.screen, (255, 255, 255), (cd_sx, cd_sy), 3)
 
         # Draw Minimal Proximity Inspection Prompt Badge above active nearby interactable
         if self.nearby_interactable and self.interactable_dialogue_state == 0 and not self.is_dialogue_active() and (getattr(self, 'interactable_standoff', None) != self.nearby_interactable.get("id")):
@@ -3501,58 +3653,14 @@ class StageSelect:
 
         # Draw Area Title Animation
         if self.title_active:
-            timer = self.title_elapsed
-            
-            # Alpha fading
-            alpha = 255
-            FADE_START = 4.0
-            FADE_DURATION = 1.0
-            if timer >= FADE_START:
-                fade = (timer - FADE_START) / FADE_DURATION
-                fade = max(0, min(fade, 1))
-                alpha = int(255 * (1 - fade))
-                
-            # Slide animation
-            BASE_Y = self.height // 2 - self.pixel_font_size // 2
-            SLIDE_TIME = 0.35
-            if timer < SLIDE_TIME:
-                t = timer / SLIDE_TIME
-                ease = 1 - (1 - t) ** 3
-                y = BASE_Y - (1 - ease) * 40
-            else:
-                y = BASE_Y
-                
-            # Draw letters centered
-            x = self.width // 2 - self.title_total_width // 2
-            
-            for i, data in enumerate(self.title_letters):
-                phase = timer * 8 - i * 0.55
-                offset = 0
-                
-                # Single traveling wave
-                if -math.pi <= phase <= math.pi:
-                    offset = math.sin(phase) * 12
-                    
-                glow = data["glow"].copy()
-                outline = data["outline"].copy()
-                main = data["main"].copy()
-                
-                glow.set_alpha(alpha // 5)
-                outline.set_alpha(alpha)
-                main.set_alpha(alpha)
-                
-                # Fast 4-way glow
-                for gx, gy in ((-4, 0), (4, 0), (0, -4), (0, 4)):
-                    self.screen.blit(glow, (x + gx, y + gy + offset))
-                        
-                # Fast 4-way outline
-                for ox, oy in ((-2, 0), (2, 0), (0, -2), (0, 2)):
-                    self.screen.blit(outline, (x + ox, y + oy + offset))
-                        
-                # Main text
-                self.screen.blit(main, (x, y + offset))
-                
-                x += data["width"] + self.title_spacing
+            draw_composite_title_wave(
+                self.screen,
+                self.title_letters,
+                self.title_total_width,
+                self.title_spacing,
+                self.pixel_font_size,
+                self.title_elapsed,
+            )
 
         # Draw UI
         self.draw_ui()
@@ -3708,7 +3816,36 @@ class StageSelect:
         if self.grand_finale_active:
             self.draw_grand_finale_popup()
 
-        # Info panel
+        # Draw Back to Menu Action Button (Bottom Right)
+        if hasattr(self, 'back_button') and not self.is_dialogue_active():
+            hov = self.back_button.collidepoint(self.cursor_pos)
+            is_peace = (getattr(self, 'current_gesture', '') == "PEACE")
+            bg = (30, 41, 59) if not (hov or is_peace) else (51, 65, 85)
+            border_col = (148, 163, 184) if not (hov or is_peace) else ((34, 197, 94) if is_peace else (255, 215, 0))
+            pygame.draw.rect(self.screen, bg, self.back_button, border_radius=10)
+            pygame.draw.rect(self.screen, border_col, self.back_button, 2, border_radius=10)
+
+            # Hold progress filling when peace sign is being held
+            if is_peace:
+                peace_start = getattr(self.main_menu, 'peace_start_time', 0) if self.main_menu else getattr(self, 'peace_start_time', 0)
+                if peace_start > 0:
+                    hold_time = time.time() - peace_start
+                    pct = min(1.0, max(0.0, hold_time / getattr(self, 'CLICK_HOLD_TIME', 0.9)))
+                    fill_w = int(self.back_button.width * pct)
+                    if fill_w > 0:
+                        fill_surf = pygame.Surface((fill_w, self.back_button.height), pygame.SRCALPHA)
+                        fill_surf.fill((34, 197, 94, 120))
+                        self.screen.blit(fill_surf, (self.back_button.x, self.back_button.y))
+
+            btn_font = get_font("Comic Sans MS", 13, bold=True)
+            txt = btn_font.render("✌️ MENU [Peace]", True, (255, 255, 255) if not (hov or is_peace) else (255, 215, 0))
+            self.screen.blit(txt, txt.get_rect(center=self.back_button.center))
+
+            hint_font = get_font("Comic Sans MS", 11)
+            hint_txt = hint_font.render("✌️ Peace: Main Menu", True, (148, 163, 184))
+            self.screen.blit(hint_txt, (self.back_button.x + 8, self.back_button.y - 18))
+
+        # Info panel (toggled with 'I')
         if self.show_info:
             npc_status = []
             if self.npc_bromen_found:
@@ -3730,11 +3867,10 @@ class StageSelect:
                 f"Hand: {'YES' if self.hand_detected else 'NO'}",
                 f"Gesture: {self.current_gesture}",
                 f"Left Portal >> Quarter 1 | Up Portal >> Quarter 4",
-                f"Right Portal >> Quarter 3 | Down Portal >> Quarter 2",
-                f"Pause: Top-Right / Hold Fist"
+                f"Right Portal >> Quarter 3 | Down Portal >> Quarter 2"
             ]
 
-            y_offset = 10
+            y_offset = 95
             for line in info_lines:
                 text = self.small_font.render(line, True, (255, 255, 255))
                 text_bg = pygame.Surface((text.get_width() + 4, text.get_height() + 4))
@@ -3799,11 +3935,17 @@ class StageSelect:
                 return "handled"
 
         if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
-            self.cursor_pos = event.pos
-            self.trigger_click(event.pos)
+            if hasattr(self, 'back_button') and self.back_button.collidepoint(event.pos):
+                return self.return_to_main_menu()
+            if not self.hand_detected or self.current_gesture == "NO HAND":
+                self.cursor_pos = event.pos
+            res = self.trigger_click(event.pos)
+            if res == "back":
+                return "back"
             return "handled"
         elif event.type == pygame.MOUSEMOTION:
-            self.cursor_pos = event.pos
+            if not self.hand_detected or self.current_gesture == "NO HAND":
+                self.cursor_pos = event.pos
 
         if event.type == pygame.KEYDOWN:
             # Shortcut: Unlock All Stages & Portals (U, Ctrl+U, Ctrl+Shift+U, F8, F9, Ctrl+Shift+B, Ctrl+B)
@@ -3887,16 +4029,7 @@ class StageSelect:
                             return "quarter_entered"
 
             if event.key == pygame.K_ESCAPE:
-                if hasattr(self.main_menu, 'audio_manager') and self.main_menu.audio_manager:
-                    self.main_menu.audio_manager.play_sfx("click")
-                if self.main_menu:
-                    from db.save_system import save_student_progress
-                    self.main_menu.current_screen = "menu"
-                    save_student_progress(self.main_menu)
-                    self.main_menu.stage_select = None
-                    if hasattr(self.main_menu, 'setup_buttons'):
-                        self.main_menu.setup_buttons()
-                return "back"
+                return self.return_to_main_menu()
             elif event.key == pygame.K_i:
                 self.show_info = not self.show_info
         return None
@@ -3982,3 +4115,6 @@ class StageSelect:
     # ============================================================
     def cleanup(self):
         cv2.destroyAllWindows()
+
+
+StageSelectScreen = StageSelect

@@ -361,6 +361,54 @@ def test_peace_sign_in_game_pause():
     assert menu.tutorial.pause_menu.is_paused is True, "Peace sign gesture did not trigger in-game pause menu!"
     print("PASS: Peace sign gesture successfully pops up in-game pause menu.")
 
+def test_peace_sign_in_stage_select_return_to_menu():
+    from screens.main_menu import MainMenu
+    from screens.stageselect import StageSelectScreen
+    menu = MainMenu(screen)
+    stage_select = StageSelectScreen(screen, menu)
+    menu.stage_select = stage_select
+    menu.current_screen = "stage_select"
+    
+    # Mock hand coords for peace sign (wrist=0, knuckles=[6,10,14,18], tips=[8,12,16,20])
+    peace_coords = [(0.5, 0.8)] * 21
+    peace_coords[6] = (0.5, 0.6)
+    peace_coords[8] = (0.5, 0.2)
+    peace_coords[10] = (0.5, 0.6)
+    peace_coords[12] = (0.5, 0.2)
+    peace_coords[14] = (0.5, 0.6)
+    peace_coords[16] = (0.5, 0.62)
+    peace_coords[18] = (0.5, 0.6)
+    peace_coords[20] = (0.5, 0.62)
+    
+    assert menu.is_peace_sign(peace_coords) is True
+    
+    import time
+    class MockCap:
+        def isOpened(self):
+            return True
+            
+    menu.cap = MockCap()
+    with menu.camera_lock:
+        menu.latest_hand_coords = peace_coords
+        menu.latest_hand_detected = True
+        
+    menu.peace_start_time = time.time() - (menu.CLICK_HOLD_TIME + 0.1)
+    
+    # Trigger update_gesture in main_menu
+    menu.update_gesture()
+    
+    assert menu.current_screen == "menu", f"Peace sign in stage select did not return to menu, current_screen={menu.current_screen}"
+    assert menu.stage_select is None, "stage_select was not cleared upon returning to menu"
+    print("PASS: Peace sign gesture in Stage Select successfully returns to Main Menu.")
+
+    # Also test UI rendering of the Peace Sign Menu action button and progress fill
+    stage_ui = StageSelectScreen(screen, menu)
+    stage_ui.current_gesture = "PEACE"
+    stage_ui.peace_start_time = time.time() - 0.45
+    stage_ui.draw_ui()
+    assert stage_ui.back_button.width >= 160, "Back button width is insufficient for peace label"
+    print("PASS: Stage Select Peace Sign button and progress bar render cleanly.")
+
 def test_mouse_clicks_quarter2_to_quarter4():
     from screens.main_menu import MainMenu
     from screens.quarter2 import Quarter2
@@ -644,6 +692,7 @@ if __name__ == "__main__":
     test_pedagogical_hints()
     test_pause_menu_features()
     test_peace_sign_in_game_pause()
+    test_peace_sign_in_stage_select_return_to_menu()
     test_mouse_clicks_student_selection()
     test_mouse_clicks_quarter2_to_quarter4()
     test_victory_report_card()

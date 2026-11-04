@@ -17,10 +17,27 @@ from screens.quarter2 import Quarter2
 from screens.quarter3 import Quarter3
 from screens.quarter4 import Quarter4
 from screens.tutorial import TutorialScreen
+from unittest.mock import patch
+from db.connect_db import Database
+
+MOCK_TEST_QUESTIONS = [
+    {
+        "prompt": f"Mock Test Question {i}",
+        "optionA": "Choice A",
+        "optionB": "Choice B",
+        "optionC": "Choice C",
+        "optionD": "Choice D",
+        "correctAnswer": "A",
+        "hint": "Hint"
+    }
+    for i in range(1, 7)
+]
 
 
 class TestTwoTriesQuizLimit(unittest.TestCase):
     def setUp(self):
+        self.q_patch = patch.object(Database, "get_questions", return_value=MOCK_TEST_QUESTIONS)
+        self.q_patch.start()
         self.mm = MainMenu(screen)
         self.mm.selected_student = {
             "id": 1,
@@ -32,6 +49,9 @@ class TestTwoTriesQuizLimit(unittest.TestCase):
             "level": "Grade 2",
             "gender": "female"
         }
+
+    def tearDown(self):
+        self.q_patch.stop()
 
     def test_quarter1_two_tries_limit(self):
         q1 = Quarter1(screen, self.mm, "map1.txt")
@@ -73,37 +93,15 @@ class TestTwoTriesQuizLimit(unittest.TestCase):
         q1.trigger_click(btn_rect2.center)
 
         self.assertEqual(q1.quiz_state, 4, "2nd wrong answer should set quiz_state to 4 (Out of tries)")
-        self.assertFalse(q1.shape_npcs[1]['answered'], "Shape station must NOT be marked answered on failure")
-        self.assertEqual(q1.quiz_station_index, 1, "quiz_station_index must NOT advance on failure")
+        self.assertFalse(q1.first_attempt_correct[1], "Station 1 must be recorded as wrong")
 
-        # Dismiss out-of-tries dialog
+        # Dismiss out-of-tries dialog -> marks answered and advances without requiring retry!
         q1.draw_out_of_tries_dialog()
         self.assertIsNotNone(q1.out_of_tries_btn_rect)
         q1.trigger_click(q1.out_of_tries_btn_rect.center)
         self.assertEqual(q1.quiz_state, 0, "Closing out of tries dialog should return to exploration (quiz_state = 0)")
-        self.assertEqual(q1.question_attempts[1], 0, "Attempts should reset to 0 so the student can retry")
-        self.assertFalse(q1.shape_npcs[1]['answered'], "Shape station must remain unanswered")
-        self.assertEqual(q1.quiz_station_index, 1, "quiz_station_index must still be 1")
-
-        # Re-attempt: student talks to Shape Guardian 1 again
-        q1.active_shape_id = 1
-        q1.quiz_state = 1
-        q1.eliminated_choices.clear()
-
-        # Answer correctly
-        correct_rect = q1.quiz_dialog.get_button_rect(correct_idx)
-        q1.trigger_click(correct_rect.center)
-        self.assertEqual(q1.quiz_state, 3, "Correct answer should set quiz_state to 3")
-
-        # Continue
-        q1.draw_correct_dialog()
-        cont_w, cont_h = 720, 300
-        cont_x = (q1.width - cont_w) // 2
-        cont_y = (q1.height - cont_h) // 2
-        cont_btn = pygame.Rect(cont_x + (cont_w - 240) // 2, cont_y + 215, 240, 50)
-        q1.trigger_click(cont_btn.center)
-        self.assertTrue(q1.shape_npcs[1]['answered'], "Shape station should now be answered")
-        self.assertEqual(q1.quiz_station_index, 2, "quiz_station_index should advance to 2")
+        self.assertTrue(q1.shape_npcs[1]['answered'], "Shape station must be marked answered on 2 wrong answers")
+        self.assertEqual(q1.quiz_station_index, 2, "quiz_station_index must advance to 2 without requiring retry")
 
     def test_quarter2_two_tries_limit(self):
         q2 = Quarter2(screen, self.mm, "map5.txt")
@@ -138,25 +136,13 @@ class TestTwoTriesQuizLimit(unittest.TestCase):
         q2.trigger_click(btn_rect2.center)
 
         self.assertEqual(q2.quiz_state, 4, "Q2 2nd wrong answer sets quiz_state to 4")
-        self.assertEqual(q2.quiz_station_index, 1, "quiz_station_index must NOT advance on failure")
+        self.assertFalse(q2.first_attempt_correct[1], "Station 1 must be recorded as wrong")
 
-        # Dismiss out-of-tries dialog
+        # Dismiss out-of-tries dialog -> advances to station 2 without requiring retry!
         q2.draw_out_of_tries_dialog()
         q2.trigger_click(q2.out_of_tries_btn_rect.center)
         self.assertEqual(q2.quiz_state, 0)
-        self.assertEqual(q2.quiz_station_index, 1)
-        self.assertEqual(q2.station_attempts[1], 0, "Attempts should reset to 0")
-
-        # Re-attempt correctly
-        q2.quiz_state = 1
-        q2.eliminated_choices.clear()
-        correct_rect = q2.quiz_dialog.get_button_rect(correct_idx)
-        q2.trigger_click(correct_rect.center)
-        self.assertEqual(q2.quiz_state, 3)
-
-        q2.draw_correct_dialog()
-        q2.trigger_click(q2.correct_btn_rect.center)
-        self.assertEqual(q2.quiz_station_index, 2, "quiz_station_index advances to 2 after correct answer")
+        self.assertEqual(q2.quiz_station_index, 2, "quiz_station_index must advance to 2 without requiring retry")
 
     def test_quarter3_two_tries_limit(self):
         q3 = Quarter3(screen, self.mm, "map9.txt")
@@ -190,28 +176,13 @@ class TestTwoTriesQuizLimit(unittest.TestCase):
         q3.trigger_click(btn_rect2.center)
 
         self.assertEqual(q3.quiz_state, 4, "Q3 2nd wrong answer sets quiz_state to 4")
-        self.assertEqual(q3.quiz_station_index, 1)
+        self.assertFalse(q3.first_attempt_correct[1], "Station 1 must be recorded as wrong")
 
-        # Dismiss out-of-tries dialog
+        # Dismiss out-of-tries dialog -> advances to station 2 without requiring retry!
         q3.draw_out_of_tries_dialog()
         q3.trigger_click(q3.out_of_tries_btn_rect.center)
         self.assertEqual(q3.quiz_state, 0)
-        self.assertEqual(q3.quiz_station_index, 1)
-        self.assertEqual(q3.station_attempts[1], 0)
-
-        # Re-attempt correctly
-        q3.quiz_state = 1
-        q3.eliminated_choices.clear()
-        correct_rect = q3.quiz_dialog.get_button_rect(correct_idx)
-        q3.trigger_click(correct_rect.center)
-        self.assertEqual(q3.quiz_state, 3)
-
-        box_w, box_h = 740, 330
-        box_x = (q3.width - box_w) // 2
-        box_y = (q3.height - box_h) // 2
-        btn_rect = pygame.Rect(box_x + (box_w - 260) // 2, box_y + 245, 260, 50)
-        q3.trigger_click(btn_rect.center)
-        self.assertEqual(q3.quiz_station_index, 2, "quiz_station_index advances to 2 after correct answer")
+        self.assertEqual(q3.quiz_station_index, 2, "quiz_station_index must advance to 2 without requiring retry")
 
     def test_quarter4_two_tries_limit(self):
         q4 = Quarter4(screen, self.mm, "map12.txt")
@@ -245,28 +216,14 @@ class TestTwoTriesQuizLimit(unittest.TestCase):
         q4.trigger_click(btn_rect2.center)
 
         self.assertEqual(q4.quiz_state, 4, "Q4 2nd wrong answer sets quiz_state to 4")
-        self.assertEqual(q4.quiz_station_index, 1)
-        self.assertNotIn(1, q4.answered_stations)
+        self.assertFalse(q4.first_attempt_correct[1], "Station 1 must be recorded as wrong")
 
-        # Dismiss out-of-tries dialog
+        # Dismiss out-of-tries dialog -> advances to station 2 and marks answered without requiring retry!
         q4.draw_out_of_tries_dialog()
         q4.trigger_click(q4.out_of_tries_btn_rect.center)
         self.assertEqual(q4.quiz_state, 0)
-        self.assertEqual(q4.quiz_station_index, 1)
-        self.assertEqual(q4.station_attempts[1], 0)
-        self.assertNotIn(1, q4.answered_stations)
-
-        # Re-attempt correctly
-        q4.quiz_state = 1
-        q4.eliminated_choices.clear()
-        correct_rect = q4.quiz_dialog.get_button_rect(correct_idx)
-        q4.trigger_click(correct_rect.center)
-        self.assertEqual(q4.quiz_state, 3)
-
-        q4.draw_correct_dialog()
-        q4.trigger_click(q4.correct_btn_rect.center)
-        self.assertEqual(q4.quiz_station_index, 2, "quiz_station_index advances to 2 after correct answer")
-        self.assertIn(1, q4.answered_stations)
+        self.assertEqual(q4.quiz_station_index, 2, "quiz_station_index must advance to 2 without requiring retry")
+        self.assertIn(1, q4.answered_stations, "Station 1 must be marked answered without requiring retry")
 
     def test_tutorial_two_tries_limit(self):
         tut = TutorialScreen(screen, self.mm)
@@ -297,26 +254,13 @@ class TestTwoTriesQuizLimit(unittest.TestCase):
         # 2nd wrong attempt (Option C, index 2)
         tut.submit_quiz_answer(2)
         self.assertEqual(tut.quiz_state, 4, "Tutorial 2nd wrong answer sets quiz_state to 4")
-        self.assertEqual(tut.phase, 3, "Phase must NOT advance to 4 on failure")
 
-        # Dismiss out-of-tries dialog
+        # Dismiss out-of-tries dialog -> unlocks portal (phase 4) without requiring retry!
         tut.draw_sample_out_of_tries_dialog()
         self.assertIsNotNone(tut.out_of_tries_btn_rect)
         tut.trigger_click(tut.out_of_tries_btn_rect.center)
         self.assertEqual(tut.quiz_state, 0, "Closing out of tries dialog sets quiz_state to 0")
-        self.assertEqual(tut.phase, 3, "Phase remains 3 (portal not unlocked)")
-        self.assertEqual(tut.quiz_attempts, 0, "Attempts reset to 0")
-        self.assertIsNone(tut.eliminated_choice, "Eliminated choice resets to None")
-
-        # Re-attempt: talk to Sage again, open quiz
-        tut.quiz_state = 1
-        tut.submit_quiz_answer(1) # Correct
-        self.assertEqual(tut.quiz_state, 3, "Correct answer sets quiz_state to 3")
-
-        # Continue -> unlocks portal (phase 4)
-        tut.trigger_click(btn_rect.center)
-        self.assertEqual(tut.quiz_state, 0)
-        self.assertEqual(tut.phase, 4, "Phase advances to 4 after correct answer")
+        self.assertEqual(tut.phase, 4, "Phase must advance to 4 (portal unlocked) without requiring retry")
 
 
 if __name__ == "__main__":

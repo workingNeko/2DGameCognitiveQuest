@@ -204,12 +204,12 @@ class QuestPathfinderGuide:
         quiz_stations = getattr(self.q, 'quiz_stations', {})
         map_name = getattr(self.q, 'map_name', getattr(self.q, 'current_map_name', '')).lower()
 
-        max_stations = 6 if self.quarter_id == "quarter4" and 6 in quiz_stations else 5
+        max_stations = getattr(self.q, 'active_station_count', len(quiz_stations))
 
         # ----------------------------------------------------
-        # 1. QUIZ STATIONS (Hierarchy 1 to 5 or 6)
+        # 1. QUIZ STATIONS (Dynamic 0..N Cloud Station Hierarchy)
         # ----------------------------------------------------
-        if st_idx <= max_stations:
+        if max_stations > 0 and st_idx <= max_stations:
             # Check if current station has valid tile coords
             if st_idx in quiz_stations:
                 tx, ty = quiz_stations[st_idx]
@@ -318,13 +318,18 @@ class QuestPathfinderGuide:
                     if coords:
                         return (coords[0], coords[1], "Sun Oasis Portal", True)
 
-        # Quarter 4: Temple Elder / Guardian Bromen
+        # Quarter 4: Temple Elder / Guardian Bromen & Lotus Raft
         elif self.quarter_id == "quarter4":
-            if getattr(self.q, 'bromen_dialogue_state', 0) not in [0, 3] and hasattr(self.q, 'bromen_npc_x'):
-                bx = int(round(self.q.bromen_npc_x / 32))
-                by = int(round(self.q.bromen_npc_y / 32))
+            if not getattr(self.q, 'key_puzzle_solved', False) and getattr(self.q, 'npc_bromen_found', False):
+                bx = getattr(self.q, 'npc_bromen_tile_x', 0)
+                by = getattr(self.q, 'npc_bromen_tile_y', 0)
                 if bx > 0 and by > 0:
                     return (bx, by, "Guardian Bromen", False)
+            if getattr(self.q, 'is_map12', False) and getattr(self.q, 'raft_state', '') in ('docked_west', 'ready_to_sail'):
+                rx = int(round(getattr(self.q, 'raft_x', 0) / 32))
+                ry = int(round(getattr(self.q, 'raft_y', 0) / 32))
+                if rx > 0 and ry > 0:
+                    return (rx, ry, "Lotus Raft", False)
 
         # ----------------------------------------------------
         # 3. GOAL PORTAL FALLBACK

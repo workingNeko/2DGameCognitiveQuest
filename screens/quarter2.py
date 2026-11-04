@@ -10,7 +10,14 @@ import math
 import random
 from .map_loader import MapLoader
 from core.camera_system import LoLCamera
-from core.visual_effects import DustParticleSystem, draw_beacon_marker, draw_aura_glow
+from core.visual_effects import (
+    DustParticleSystem,
+    draw_beacon_marker,
+    draw_aura_glow,
+    build_composite_title_letters,
+    draw_composite_title_wave,
+)
+from core.state_machine import State, UIStateMachine
 from core.npc_scripts import get_map_instructions, get_station_script, get_mentor_script
 from core.npc_dialog_system import InstructionModal, NPCGreetingDialog
 from core.philippine_currency import (
@@ -79,9 +86,15 @@ class Quarter2:
         self.time_up_dialog_active = False
         self.timer_warning_played = False
 
+        # Strict UI & Input Layering Pushdown Automata (PDA)
+        self.state_machine = UIStateMachine(initial_state=State.Exploration, host=self)
+
         # Universal In-Stage Pause Menu
         from core.pause_menu import InGamePauseMenu
-        self.pause_menu = InGamePauseMenu(self.screen, self.width, self.height, self.main_menu, self.return_to_stage_select, restart_callback=self.restart_level)
+        self.pause_menu = InGamePauseMenu(self.screen, self.width, self.height, self.main_menu, self.return_to_stage_select, restart_callback=self.restart_level, state_machine=self.state_machine)
+
+        # Philippine Currency Puzzle Subsystem (Normal In-Engine Puzzle)
+        self.currency_puzzle = None
 
         # 3-Star Victory Report Card & Celebration Particles
         from core.report_card import VictoryReportCard, CelebrationParticleSystem
@@ -487,7 +500,7 @@ class Quarter2:
         # UI & TYPOGRAPHY TOKENS (Complete Philippine Peso P Support)
         # ============================================================
         self.font_family = ["Segoe UI", "Tahoma", "Verdana", "Calibri", "Arial"]
-        self.show_info = True
+        self.show_info = False
         self.font = self.get_ui_font(16)
         self.small_font = self.get_ui_font(12)
 
@@ -640,125 +653,23 @@ class Quarter2:
         self.title_outline_color = (0, 0, 0) # Black outline
         self.title_glow_color = (180, 180, 180) # Grey glow
 
-        # Pre-render letters
-        self.title_letters = []
-        for ch in self.title_text:
-            glow = self.title_font.render(ch, False, self.title_glow_color)
-            outline = self.title_font.render(ch, False, self.title_outline_color)
-            main = self.title_font.render(ch, False, self.title_text_color)
-            self.title_letters.append({
-                "glow": glow,
-                "outline": outline,
-                "main": main,
-                "width": main.get_width()
-            })
+        # Pre-render composite letters (1 surface per letter, zero per-frame copies)
+        self.title_letters = build_composite_title_letters(
+            self.title_text,
+            self.title_font,
+            self.title_text_color,
+            self.title_outline_color,
+            self.title_glow_color,
+        )
         self.title_total_width = sum(l["width"] for l in self.title_letters) + self.title_spacing * (len(self.title_text) - 1)
 
-        # Questions List (DepEd Grade 2 Curriculum: Customized per Map - No NPC Names)
-        if self.map_name == "map5.txt":
-            self.quiz_questions = [
-                {
-                    "station": 1,
-                    "title": "STATION 1 - BIBINGKA FRACTIONS (1/4)",
-                    "question": "A fresh circular Bibingka was sliced into 4 equal parts. Juan ate 1 slice. What fraction part of the Bibingka did Juan eat?",
-                    "choices": ["A. 1/2 (One-half)", "B. 1/4 (One-fourth)", "C. 1/3 (One-third)", "D. 3/4 (Three-fourths)"],
-                    "correct": 1,
-                    "visual_type": "bibingka_fraction",
-                    "hint": "Count the equal slices: 1 slice eaten out of 4 equal slices = 1/4 (One-fourth / Sangkapat)!"
-                },
-                {
-                    "station": 2,
-                    "title": "STATION 2 - EQUAL SHARING DIVISION (20 / 4)",
-                    "question": "There are 20 ripe Carabao mangoes divided equally into 4 woven bayong baskets. How many mangoes are in each basket? (20 / 4)",
-                    "choices": ["A. 4 mangoes", "B. 5 mangoes", "C. 6 mangoes", "D. 8 mangoes"],
-                    "correct": 1,
-                    "visual_type": "mango_division",
-                    "hint": "Divide 20 mangoes into 4 equal groups: 20 / 4 = 5 mangoes per basket (5 + 5 + 5 + 5 = 20)!"
-                },
-                {
-                    "station": 3,
-                    "title": "STATION 3 - 3D GEOMETRIC SOLIDS (CONE)",
-                    "question": "A traditional farmer's Salakot hat is being crafted. Which 3D geometric solid has 1 flat circular base and 1 pointed top vertex?",
-                    "choices": ["A. Cube", "B. Cylinder", "C. Cone", "D. Sphere"],
-                    "correct": 2,
-                    "visual_type": "salakot_cone",
-                    "hint": "A Cone (like a traditional Salakot hat or ice cream cone) has 1 flat circular base and 1 pointed top vertex!"
-                },
-                {
-                    "station": 4,
-                    "title": "STATION 4 - ANALOG CLOCK TIME (8:30 AM)",
-                    "question": "The Grand Fiesta Parade starts at 8:30 AM. How should the hands be positioned on the analog clock at 8:30?",
-                    "choices": [
-                        "A. Short hand between 8 and 9, Long hand pointing at 6",
-                        "B. Short hand at 12, Long hand at 8",
-                        "C. Short hand at 8, Long hand at 12",
-                        "D. Short hand at 6, Long hand at 8"
-                    ],
-                    "correct": 0,
-                    "visual_type": "analog_clock",
-                    "hint": "At 8:30, the short hour hand is halfway between 8 and 9, and the long minute hand points directly at 6 (30 minutes)!"
-                },
-                {
-                    "station": 5,
-                    "title": "STATION 5 - GARDEN PERIMETER (5m + 3m + 5m + 3m)",
-                    "question": "A rectangular bamboo vegetable garden has a length of 5 meters and width of 3 meters. What is the total perimeter around the garden?",
-                    "choices": ["A. 8 meters", "B. 15 meters", "C. 16 meters", "D. 20 meters"],
-                    "correct": 2,
-                    "visual_type": "garden_perimeter",
-                    "hint": "Add all 4 outer sides of the rectangle: 5m + 3m + 5m + 3m = 16 meters total perimeter!"
-                }
-            ]
-        else:
-            self.quiz_questions = [
-                {
-                    "station": 1,
-                    "title": "STATION 1 - SARI-SARI STORE SUKLI",
-                    "question": "A customer bought items worth P35 and paid with a P50 bill. How much change (Sukli) should be given back? (P50 - P35)",
-                    "choices": ["A. P10", "B. P15", "C. P20", "D. P25"],
-                    "correct": 1,
-                    "visual_type": "sari_sukli",
-                    "hint": "Subtract the cost from the bill: P50 - P35 = P15 (One P10 coin + One P5 coin)!"
-                },
-                {
-                    "station": 2,
-                    "title": "STATION 2 - P25 COIN COMBINATIONS",
-                    "question": "A Double Ube-Cheese Sorbetes cone costs P25. Which combination of Philippine coins equals exactly P25?",
-                    "choices": ["A. One P20 coin + One P5 coin", "B. Two P10 coins + One P1 coin", "C. Three P5 coins", "D. One P10 coin + One P5 coin"],
-                    "correct": 0,
-                    "visual_type": "sorbetes_coins",
-                    "hint": "Count the values: P20 + P5 = P25 exact payment!"
-                },
-                {
-                    "station": 3,
-                    "title": "STATION 3 - JEEPNEY FARE MULTIPLICATION",
-                    "question": "3 students rode the Jeepney. The fare is P12 per student. How much is the total fare payment? (3 x P12 or P12 + P12 + P12)",
-                    "choices": ["A. P24", "B. P30", "C. P36", "D. P40"],
-                    "correct": 2,
-                    "visual_type": "jeepney_fare",
-                    "hint": "Multiply 3 passengers by P12: 3 x 12 = P36 total fare!"
-                },
-                {
-                    "station": 4,
-                    "title": "STATION 4 - PALENGKE FRUIT SCALE (MASS)",
-                    "question": "One Carabao mango weighs 500 grams (g). How many mangoes are needed to weigh exactly 2 Kilograms (2,000 g)? (500g x 4 = 2,000g = 2kg)",
-                    "choices": ["A. 2 mangoes", "B. 3 mangoes", "C. 4 mangoes", "D. 5 mangoes"],
-                    "correct": 2,
-                    "visual_type": "market_scale",
-                    "hint": "Remember that 1 Kilogram = 1,000g, so 2 Kilograms = 2,000g (500g + 500g + 500g + 500g = 2,000g = 4 mangoes)!"
-                },
-                {
-                    "station": 5,
-                    "title": "STATION 5 - FIESTA PAROL BUDGET (> < =)",
-                    "question": "A budget for fiesta parol making is P350. The bamboo sticks cost P120 and the papel de hapon costs P180 (Total = P300). Is the budget enough? (P350 > P300)",
-                    "choices": ["A. Yes, P350 is greater than P300 (P350 > P300)", "B. No, P350 is less than P300 (P350 < P300)", "C. No, the budget is exactly equal (P350 = P300)", "D. No, she needs P100 more"],
-                    "correct": 0,
-                    "visual_type": "fiesta_budget",
-                    "hint": "Add the materials: P120 + P180 = P300. Since P350 is greater than P300 (P350 > P300), the budget is enough!"
-                }
-            ]
+        # Cloud-authoritative Questions List (0..N active cloud questions)
+        self.quiz_questions = []
+        self.active_station_count = 0
 
-        # Load dynamic questions from Database / Vercel API
+        # Sync questions strictly from the cloud / cloud cache
         self.load_database_questions()
+        self.build_prerendered_map()
 
         print(f"[OK] Quarter2 initialized with map: {self.map_name}")
         print(f"   Goal portal: {self.goal_portal_direction}")
@@ -770,72 +681,51 @@ class Quarter2:
     # ============================================================
     def load_database_questions(self):
         if not self.is_quiz_map:
+            self.active_station_count = 0
             return
+
+        from db.connect_db import map_cloud_questions
+        mapped_questions = []
         try:
-            if not db:
-                return
-            questions_result = db.get_questions(quarter=2)
-            if not questions_result or len(questions_result) == 0:
-                print("[INFO] No custom database questions found for Quarter 2. Using default curriculum questions.")
-                return
-
-            mapped_questions = []
-            for row in questions_result:
-                prompt = row.get("prompt") or row.get("question") or ""
-                opt_a = row.get("optionA") or row.get("option_a")
-                opt_b = row.get("optionB") or row.get("option_b")
-                opt_c = row.get("optionC") or row.get("option_c")
-                opt_d = row.get("optionD") or row.get("option_d")
-                correct_answer = row.get("correctAnswer") or row.get("correct_answer")
-
-                raw_options = [opt for opt in [opt_a, opt_b, opt_c, opt_d] if opt is not None and str(opt).strip() != ""]
-                if not raw_options:
-                    continue
-
-                choices = []
-                choice_letters = ["A", "B", "C", "D"]
-                for idx, opt in enumerate(raw_options):
-                    prefix = f"{choice_letters[idx]}. " if idx < len(choice_letters) else f"{idx+1}. "
-                    choices.append(f"{prefix}{opt}")
-
-                ans = str(correct_answer).upper().strip()
-                if ans == "A" or ans == "OPTION_A" or ans.endswith("A") or ans == "0":
-                    correct_idx = 0
-                elif ans == "B" or ans == "OPTION_B" or ans.endswith("B") or ans == "1":
-                    correct_idx = 1
-                elif ans == "C" or ans == "OPTION_C" or ans.endswith("C") or ans == "2":
-                    correct_idx = 2
-                elif ans == "D" or ans == "OPTION_D" or ans.endswith("D") or ans == "3":
-                    correct_idx = 3
-                else:
-                    correct_idx = 0
-                    for idx, opt in enumerate(raw_options):
-                        if opt and str(opt).strip().lower() == ans.lower():
-                            correct_idx = idx
-                            break
-
-                mapped_questions.append({
-                    "question": prompt,
-                    "choices": choices,
-                    "correct": correct_idx
-                })
-
-            if mapped_questions:
-                # Blend with default questions if fewer than 5
-                for i in range(min(5, len(mapped_questions))):
-                    if i < len(self.quiz_questions):
-                        orig = self.quiz_questions[i]
-                        # Preserve original game-specific visual metadata and hint fallback
-                        for key in ["visual_type", "station", "title", "hint"]:
-                            if key in orig and not mapped_questions[i].get(key):
-                                mapped_questions[i][key] = orig[key]
-                        self.quiz_questions[i] = mapped_questions[i]
-                    else:
-                        self.quiz_questions.append(mapped_questions[i])
-
-                print(f"[OK] Successfully loaded {len(mapped_questions)} dynamic question(s) from Database for Quarter 2!")
+            if db:
+                questions_result = db.get_questions(quarter=2)
+                mapped_questions = map_cloud_questions(
+                    questions_result,
+                    default_hint="Count and compare the barrio quantities carefully!"
+                )
         except Exception as e:
-            print(f"[WARN] Exception loading database questions for Quarter 2: {e}")
+            print(f"[WARN] Exception loading cloud questions for Quarter 2: {e}")
+
+        sorted_ids = sorted(self.quiz_stations.keys())
+        active_count = min(len(sorted_ids), len(mapped_questions))
+        active_ids = sorted_ids[:active_count]
+
+        for idx, q_item in enumerate(mapped_questions[:active_count], start=1):
+            q_item.setdefault("station", idx)
+            q_item.setdefault("title", f"STATION {idx}")
+
+        self.quiz_questions = mapped_questions[:active_count]
+        self.active_station_count = active_count
+        self.quiz_stations = {k: self.quiz_stations[k] for k in active_ids}
+        self.station_npc_info = {k: self.station_npc_info[k] for k in active_ids if k in self.station_npc_info}
+        self.first_attempt_correct = {k: True for k in active_ids}
+        self.station_attempts = {k: 0 for k in active_ids}
+
+        if active_count == 0:
+            self.quiz_station_index = 6
+            self.current_question_index = 0
+            self.guardian_knight_state = 1
+            if self.map_name == "map5.txt":
+                self.kubo_pieces_collected = 5
+                self.kubo_built = True
+            self.banner_text = "NO CLOUD QUESTIONS SET"
+            self.banner_sub = "Proceed to the Knight Guardian for the Currency Trial!"
+            self.banner_timer = 6.0
+            print("[CLOUD SYNC] Quarter 2 synced 0 active cloud questions — stalls skipped, Knight Guardian unlocked.")
+        else:
+            self.quiz_station_index = active_ids[0]
+            self.current_question_index = 0
+            print(f"[CLOUD SYNC] Quarter 2 synced {active_count} cloud question(s) across {active_count} stall(s).")
 
     def show_instructions(self):
         """Displays the map instructions modal with student context."""
@@ -853,16 +743,19 @@ class Quarter2:
         try:
             if not db:
                 return
+            total_questions = getattr(self, 'active_station_count', len(self.quiz_questions))
+            if total_questions <= 0:
+                print("[CLOUD SYNC] Quarter 2 completed with 0 cloud questions — skipping academic quiz score upload.")
+                return
             student_db_id = getattr(self.main_menu, 'student_db_id', None)
             if not student_db_id and getattr(self.main_menu, 'selected_student', None):
                 student_db_id = self.main_menu.selected_student.get('id')
             if not student_db_id:
                 print("[WARN] No student_db_id available in main_menu. Skipping database record.")
                 return
-            total_questions = min(5, len(self.quiz_questions))
             correct_answers = sum(1 for k, v in self.first_attempt_correct.items() if k <= total_questions and v)
-            percentage = (correct_answers / float(total_questions)) * 100.0 if total_questions > 0 else 0.0
-            score = int(correct_answers * 20)  # 20 points per question -> 100 max points
+            percentage = (correct_answers / float(total_questions)) * 100.0
+            score = int(round(percentage))
 
             assessment_id = db.get_assessment_id(quarter=2)
             if assessment_id:
@@ -913,7 +806,7 @@ class Quarter2:
                 return
 
             if not pygame.mixer.get_init():
-                pygame.mixer.init(frequency=44100, size=-16, channels=2)
+                pygame.mixer.init(frequency=44100, size=-16, channels=2, buffer=512)
             sr = 44100
 
             # 1. Manong Sorbetero Bronze Bell ("Kling-kling!")
@@ -2100,6 +1993,7 @@ class Quarter2:
             self.height_tiles = height_tiles
             self.width = TILE_SIZE * width_tiles
             self.height = TILE_SIZE * height_tiles
+            self._scaled_cache = {}
 
         def update(self):
             if self.frames:
@@ -2123,7 +2017,16 @@ class Quarter2:
                 if portal_img:
                     scaled_width = int(self.width * zoom)
                     scaled_height = int(self.height * zoom)
-                    scaled_img = pygame.transform.scale(portal_img, (scaled_width, scaled_height))
+                    key = (portal_img, scaled_width, scaled_height)
+                    scaled_img = self._scaled_cache.get(key)
+                    if scaled_img is None:
+                        scaled_img = pygame.transform.scale(portal_img, (scaled_width, scaled_height))
+                        if pygame.display.get_surface() is not None:
+                            try:
+                                scaled_img = scaled_img.convert_alpha()
+                            except Exception:
+                                pass
+                        self._scaled_cache[key] = scaled_img
                     screen.blit(scaled_img, (screen_x, screen_y))
 
     # ============================================================
@@ -2425,10 +2328,10 @@ class Quarter2:
             if completed:
                 self.save_results_to_database()
                 try:
-                    total_questions = min(5, len(self.quiz_questions)) if hasattr(self, 'quiz_questions') and self.quiz_questions else 5
+                    total_questions = getattr(self, 'active_station_count', len(self.quiz_questions))
                     correct_answers = sum(1 for k, v in self.first_attempt_correct.items() if k <= total_questions and v)
                     percentage = (correct_answers / float(total_questions)) * 100.0 if total_questions > 0 else 100.0
-                    score = int(correct_answers * 20)
+                    score = int(round(percentage)) if total_questions > 0 else 100
                     from db.save_system import mark_quarter_completed
                     mark_quarter_completed(self.main_menu, "quarter2", score=score, percentage=percentage, total_questions=total_questions)
                     if hasattr(self.main_menu, 'audio_manager'):
@@ -2547,7 +2450,7 @@ class Quarter2:
                 map_width=self.MAP_WIDTH,
                 map_height=self.MAP_HEIGHT,
                 tile_size=TILE_SIZE,
-                enable_edge_scroll=True
+                enable_edge_scroll=False
             )
             self.camera_x = self.lol_camera.camera_x
             self.camera_y = self.lol_camera.camera_y
@@ -2564,9 +2467,39 @@ class Quarter2:
         self.fist_closed = fist_start_time > 0
 
     # ============================================================
+    # UI STATE MACHINE HELPERS
+    # ============================================================
+    def is_dialogue_active(self):
+        """Returns True if any modal instruction, greeting, or quiz dialogue is active."""
+        return (
+            self.quiz_state in [1, 2, 3, 4, 5]
+            or getattr(self, 'guardian_knight_state', 0) in [2, 4]
+            or (getattr(self, 'instruction_modal', None) and self.instruction_modal.is_visible)
+            or (getattr(self, 'greeting_dialog', None) and self.greeting_dialog.is_visible)
+        )
+
+    def is_cognitive_puzzle_active(self):
+        """Returns True if the Philippine currency matching trial is active."""
+        return getattr(self, 'currency_puzzle_active', False)
+
+    def sync_ui_state(self):
+        """Maintains strict synchronization between gameplay flags and the Pushdown Automata."""
+        if self.is_cognitive_puzzle_active():
+            if not self.state_machine.is_cognitive_puzzle():
+                self.state_machine.push(State.CognitivePuzzle, {"puzzle": "currency"})
+        elif self.is_dialogue_active():
+            if not self.state_machine.is_dialogue():
+                self.state_machine.push(State.Dialogue)
+        else:
+            if not self.state_machine.is_exploration():
+                self.state_machine.reset(State.Exploration)
+
+    # ============================================================
     # TRIGGER CLICK (2x2 Elemental Cards with 50:50 Wizard Hint)
     # ============================================================
     def trigger_click(self, pos):
+        self.sync_ui_state()
+
         if hasattr(self, 'victory_card') and self.victory_card.active:
             res = self.victory_card.handle_click(pos)
             if res:
@@ -2602,10 +2535,11 @@ class Quarter2:
                 return
             return
 
-        # Check HUD Guide Button click to re-open instructions
-        if getattr(self, 'guide_btn_rect', None) and self.guide_btn_rect.collidepoint(pos):
+        # Check HUD Guide Button click to re-open instructions (strictly exploration)
+        if self.state_machine.allows_menus() and getattr(self, 'guide_btn_rect', None) and self.guide_btn_rect.collidepoint(pos):
             map_instr = get_map_instructions(self.map_name, self.player_name)
             self.instruction_modal.show(map_instr)
+            self.sync_ui_state()
             return
 
         # Check NPC Greeting Dialog interaction
@@ -2632,6 +2566,8 @@ class Quarter2:
                 if self.currency_puzzle_continue_btn_rect.collidepoint(pos):
                     self.currency_puzzle_active = False
                     self.currency_puzzle_solved = True
+                    if self.state_machine.is_cognitive_puzzle():
+                        self.state_machine.pop()
                     self.guardian_knight_state = 4
                     self.quiz_state = 5
                     box_w, box_h = 780, 420
@@ -2668,6 +2604,7 @@ class Quarter2:
                 self.guardian_knight_state = 3
                 self.init_currency_matching_puzzle()
                 self.currency_puzzle_active = True
+                self.state_machine.push(State.CognitivePuzzle, {"puzzle": "currency"})
                 if getattr(self, 'coin_clink', None):
                     self.coin_clink.play()
                 return
@@ -2689,8 +2626,9 @@ class Quarter2:
                         self.coin_clink.play()
                     return
                 elif self.quiz_station_index <= 5:
+                    tot_st = getattr(self, 'active_station_count', len(self.quiz_questions))
                     self.banner_text = "KNIGHT GUARDIAN"
-                    self.banner_sub = "Solve all 5 barrio math stalls first before taking my Currency Trial!"
+                    self.banner_sub = f"Solve all {tot_st} barrio math stall(s) first before taking my Currency Trial!"
                     self.banner_timer = 4.0
                     if getattr(self, 'coin_clink', None):
                         self.coin_clink.play()
@@ -2788,28 +2726,30 @@ class Quarter2:
                 self.banner_sub = "Festive Sprint active! Proceed to the next barrio stall!"
                 self.banner_timer = 3.0
 
+                tot_st = getattr(self, 'active_station_count', len(self.quiz_questions))
                 current_st = self.quiz_station_index
-                if self.map_name == "map5.txt":
-                    self.kubo_pieces_collected = current_st
-                    self.trigger_kubo_pan_sequence(current_st)
+                if self.map_name == "map5.txt" and tot_st > 0:
+                    target_kubo = max(1, min(5, int(round(current_st * 5.0 / float(tot_st)))))
+                    self.kubo_pieces_collected = target_kubo
+                    self.trigger_kubo_pan_sequence(target_kubo)
 
-                if self.quiz_station_index < 5:
+                if self.quiz_station_index < tot_st:
                     self.quiz_station_index += 1
                     self.current_question_index = self.quiz_station_index - 1
                     self.quiz_state = 0  # Immediate return to exploration!
                     print(f"[TARGET] Proceeding to Station {self.quiz_station_index}")
                 else:
                     self.quiz_station_index = 6
-                    self.current_question_index = 5
+                    self.current_question_index = tot_st
                     self.quiz_state = 0
                     self.guardian_knight_state = 1
-                    self.banner_text = "ALL 5 BARRIO STALLS CLEARED!"
+                    self.banner_text = f"ALL {tot_st} BARRIO STALL(S) CLEARED!"
                     self.banner_sub = "Find the Knight Guardian at the portal to take the Currency Matching Trial!"
                     self.banner_timer = 5.0
                 
                 save_student_progress(self.main_menu)
 
-        # State 4: Out of tries reveal screen click -> Closes window without advancing
+        # State 4: Out of tries reveal screen click -> Recorded as wrong; guaranteed progression without retrying!
         elif self.quiz_state == 4:
             box_w, box_h = 740, 340
             box_x = (self.width - box_w) // 2
@@ -2821,12 +2761,33 @@ class Quarter2:
                 self.wrong_feedback_msg = ""
                 self.speed_boost_timer = 3.0
                 self.station_attempts[self.quiz_station_index] = 0
-                self.quiz_state = 0
-                st_info = self.station_npc_info.get(self.quiz_station_index, {})
-                st_name = st_info.get("name", f"Station {self.quiz_station_index}")
-                self.banner_text = "2 TRIES EXHAUSTED!"
-                self.banner_sub = f"Speak with {st_name} again to retry the question!"
+                cleared_info = self.station_npc_info.get(self.quiz_station_index, {})
+                cleared_name = cleared_info.get("name", f"Station {self.quiz_station_index}")
+                self.banner_text = f"STALL CLEARED: {cleared_name.upper()}!"
+                self.banner_sub = "Recorded as incorrect. Festive Sprint active! Proceed forward!"
                 self.banner_timer = 3.0
+
+                tot_st = getattr(self, 'active_station_count', len(self.quiz_questions))
+                current_st = self.quiz_station_index
+                if self.map_name == "map5.txt" and tot_st > 0:
+                    target_kubo = max(1, min(5, int(round(current_st * 5.0 / float(tot_st)))))
+                    self.kubo_pieces_collected = target_kubo
+                    self.trigger_kubo_pan_sequence(target_kubo)
+
+                if self.quiz_station_index < tot_st:
+                    self.quiz_station_index += 1
+                    self.current_question_index = self.quiz_station_index - 1
+                    self.quiz_state = 0
+                    print(f"[TARGET] Proceeding to Station {self.quiz_station_index}")
+                else:
+                    self.quiz_station_index = 6
+                    self.current_question_index = tot_st
+                    self.quiz_state = 0
+                    self.guardian_knight_state = 1
+                    self.banner_text = f"ALL {tot_st} BARRIO STALL(S) CLEARED!"
+                    self.banner_sub = "Find the Knight Guardian at the portal to take the Currency Matching Trial!"
+                    self.banner_timer = 5.0
+
                 save_student_progress(self.main_menu)
                 
         # State 5: Final speech click -> Unlock Grand Fiesta Portal & Warp Transition!
@@ -2848,18 +2809,38 @@ class Quarter2:
                     self.success_sound.play()
                 print("* Grand Fiesta Exit Portal unlocked!")
 
+        # Check Portal click or Click-to-Move when exploring the stage (State.Exploration only)
+        if self.state_machine.allows_movement() and self.quiz_state in [0, 6] and not getattr(self, 'currency_puzzle_active', False):
+            for portal in self.portals:
+                screen_px = (portal.get_world_x() - self.camera_x) * ZOOM
+                screen_py = (portal.get_world_y() - self.camera_y) * ZOOM
+                pw = (portal.get_width_pixels() if hasattr(portal, 'get_width_pixels') else getattr(portal, 'width', TILE_SIZE)) * ZOOM
+                ph = (portal.get_height_pixels() if hasattr(portal, 'get_height_pixels') else getattr(portal, 'height', TILE_SIZE)) * ZOOM
+                portal_rect = pygame.Rect(screen_px, screen_py, pw, ph).inflate(24, 24)
+                if portal_rect.collidepoint(pos):
+                    self.click_dest = (portal.get_center_x() - TILE_SIZE // 2, portal.get_center_y() - TILE_SIZE // 2)
+                    self.check_portal_teleport_on_hold()
+                    return
+
+            world_x = pos[0] / ZOOM + self.camera_x
+            world_y = pos[1] / ZOOM + self.camera_y
+            if self.can_move(world_x, world_y):
+                self.click_dest = (world_x, world_y)
+                return
+
     # ============================================================
     # UPDATE
     # ============================================================
     def update(self):
+        self.sync_ui_state()
         dt = min(0.05, max(0.001, self.clock.tick() / 1000.0))
         self.frame_counter += 1
 
         if self.pause_menu.is_paused:
             return
 
-        # 10-Minute Stage Timer
-        if not getattr(self, 'completed', False) and not self.time_up_dialog_active:
+        # 10-Minute Stage Timer (frozen during Cognitive Puzzles or Pause)
+        if not getattr(self, 'completed', False) and not self.time_up_dialog_active and not self.state_machine.is_cognitive_puzzle():
             self.stage_time_remaining = max(0.0, self.stage_time_remaining - dt)
             if self.stage_time_remaining <= 60.0 and not getattr(self, 'timer_warning_played', False):
                 self.timer_warning_played = True
@@ -2888,10 +2869,10 @@ class Quarter2:
             if self.warp_out_timer <= 0:
                 self.warp_out_active = False
                 self.save_results_to_database()
-                total_questions = min(5, len(self.quiz_questions)) if hasattr(self, 'quiz_questions') and self.quiz_questions else 5
+                total_questions = getattr(self, 'active_station_count', len(self.quiz_questions))
                 correct_answers = sum(1 for k, v in self.first_attempt_correct.items() if k <= total_questions and v)
                 percentage = (correct_answers / float(total_questions)) * 100.0 if total_questions > 0 else 100.0
-                score = int(correct_answers * 20)
+                score = int(round(percentage)) if total_questions > 0 else 100
                 from db.save_system import mark_quarter_completed
                 mark_quarter_completed(self.main_menu, "quarter2", score=score, percentage=percentage, total_questions=total_questions)
                 self.victory_card.show(total_questions=total_questions, correct_first_try=correct_answers, score=score)
@@ -3034,9 +3015,10 @@ class Quarter2:
                     if self.guardian_knight_state == 2:
                         self.guardian_knight_state = 1
 
-        # Update Currency Matching Puzzle if active
-        if getattr(self, 'currency_puzzle_active', False):
+        # Update Currency Matching Puzzle if active (world logic paused)
+        if self.state_machine.is_cognitive_puzzle() or getattr(self, 'currency_puzzle_active', False):
             self.update_currency_matching_puzzle(dt)
+            return
 
         # Update Knight Guardian animation frame
         self.npc_knight_anim_timer += 1
@@ -3072,6 +3054,7 @@ class Quarter2:
         q_idx = max(0, min(self.current_question_index, len(self.quiz_questions) - 1)) if self.quiz_questions else 0
         q_data = self.quiz_questions[q_idx] if self.quiz_questions else {"question": "", "choices": [], "correct": 0}
 
+        tot_st = max(1, getattr(self, 'active_station_count', len(self.quiz_questions)))
         self.quiz_dialog.update(0.016)
         self.quiz_dialog.draw(
             cursor_pos=self.cursor_pos,
@@ -3080,15 +3063,24 @@ class Quarter2:
             speaker_subtitle=speaker_subtitle,
             sprite_frame=sprite_frame,
             station_idx=self.quiz_station_index,
-            total_stations=5,
+            total_stations=tot_st,
             eliminated_choices=self.eliminated_choices,
             hint_msg=self.wrong_feedback_msg
         )
 
+    def _blit_cached_overlay(self, rgba):
+        if not hasattr(self, '_rgba_overlay_cache'):
+            self._rgba_overlay_cache = {}
+        key = (self.width, self.height, rgba)
+        surf = self._rgba_overlay_cache.get(key)
+        if surf is None:
+            surf = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
+            surf.fill(rgba)
+            self._rgba_overlay_cache[key] = surf
+        self.screen.blit(surf, (0, 0))
+
     def draw_wrong_dialog(self):
-        overlay = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
-        overlay.fill((10, 15, 29, 170))
-        self.screen.blit(overlay, (0, 0))
+        self._blit_cached_overlay((10, 15, 29, 170))
 
         box_w, box_h = 760, 360
         box_x = (self.width - box_w) // 2
@@ -3157,9 +3149,7 @@ class Quarter2:
         self.screen.blit(c_surf, c_surf.get_rect(center=btn_rect.center))
 
     def draw_out_of_tries_dialog(self):
-        overlay = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
-        overlay.fill((10, 15, 29, 175))
-        self.screen.blit(overlay, (0, 0))
+        self._blit_cached_overlay((10, 15, 29, 175))
 
         box_w, box_h = 740, 340
         box_x = (self.width - box_w) // 2
@@ -3181,14 +3171,24 @@ class Quarter2:
         speaker_surf = self.dialog_header_font.render(f"{speaker_name} — 2 Tries Exhausted", True, (245, 158, 11))
         self.screen.blit(speaker_surf, (box_x + 28, box_y + 18))
 
-        reveal_msg = "You have used both of your 2 attempts for this challenge."
-        lines = self.wrap_text(reveal_msg, self.dialog_q_font, box_w - 56)
+        q_data = self.quiz_questions[self.current_question_index] if self.quiz_questions and self.current_question_index < len(self.quiz_questions) else {}
+        choices = q_data.get("choices", []) if isinstance(q_data, dict) else []
+        c_idx = q_data.get("correct", 0) if isinstance(q_data, dict) else 0
+        if isinstance(c_idx, str) and c_idx.isdigit():
+            c_idx = int(c_idx)
+        correct_choice_text = choices[c_idx] if isinstance(c_idx, int) and 0 <= c_idx < len(choices) else ""
+
+        if correct_choice_text:
+            ans_msg = f"Out of tries! The correct answer was: {correct_choice_text}"
+        else:
+            ans_msg = "You have used both of your 2 attempts for this challenge."
+        lines = self.wrap_text(ans_msg, self.dialog_q_font, box_w - 56)
         y_off = box_y + 65
         for l in lines[:2]:
             self.screen.blit(self.dialog_q_font.render(l, True, (255, 255, 255)), (box_x + 28, y_off))
             y_off += 28
 
-        reward_surf = self.dialog_hint_font.render(f"Review the stall items and talk to {speaker_name} again to retry!", True, (254, 240, 138))
+        reward_surf = self.dialog_hint_font.render(f"Acquired: {item_name}! Recorded as incorrect, but your quest continues!", True, (254, 240, 138))
         self.screen.blit(reward_surf, (box_x + 28, y_off + 10))
 
         button_w, button_h = 260, 50
@@ -3204,13 +3204,11 @@ class Quarter2:
         pygame.draw.rect(self.screen, bg_color, btn_rect, border_radius=12)
         pygame.draw.rect(self.screen, border_color, btn_rect, 2, border_radius=12)
 
-        c_surf = self.dialog_header_font.render("Close Window [Esc]", True, (255, 255, 255) if not is_hovered else (15, 23, 42))
+        c_surf = self.dialog_header_font.render("Continue Quest >>", True, (255, 255, 255) if not is_hovered else (15, 23, 42))
         self.screen.blit(c_surf, c_surf.get_rect(center=btn_rect.center))
 
     def draw_correct_dialog(self):
-        overlay = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
-        overlay.fill((10, 15, 29, 170))
-        self.screen.blit(overlay, (0, 0))
+        self._blit_cached_overlay((10, 15, 29, 170))
 
         box_w, box_h = 740, 330
         box_x = (self.width - box_w) // 2
@@ -3259,9 +3257,7 @@ class Quarter2:
 
     def draw_victory_speech(self):
         """Victory speech on clearing all 5 Barrio Challenges"""
-        overlay = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
-        overlay.fill((10, 15, 29, 175))
-        self.screen.blit(overlay, (0, 0))
+        self._blit_cached_overlay((10, 15, 29, 175))
 
         box_w, box_h = 780, 420
         box_x = (self.width - box_w) // 2
@@ -3495,9 +3491,7 @@ class Quarter2:
 
     def draw_currency_matching_puzzle(self):
         """Renders the Philippine Currency Matching Puzzle modal dialog"""
-        overlay = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
-        overlay.fill((10, 15, 29, 230))
-        self.screen.blit(overlay, (0, 0))
+        self._blit_cached_overlay((10, 15, 29, 230))
 
         panel_w = min(1140, self.width - 60)
         panel_h = min(620, self.height - 50)
@@ -3652,14 +3646,27 @@ class Quarter2:
 
         if knight_sprite:
             scaled_size = int(TILE_SIZE * ZOOM)
-            scaled_sprite = pygame.transform.scale(knight_sprite, (scaled_size, scaled_size))
+            scaled_sprite = self._scaled_sprite_cache.get(knight_sprite)
+            if scaled_sprite is None:
+                scaled_sprite = pygame.transform.scale(knight_sprite, (scaled_size, scaled_size))
+                if pygame.display.get_surface() is not None:
+                    try:
+                        scaled_sprite = scaled_sprite.convert_alpha()
+                    except Exception:
+                        pass
+                self._scaled_sprite_cache[knight_sprite] = scaled_sprite
             self.screen.blit(scaled_sprite, (screen_x, screen_y))
 
         # Golden Floor Aura when awaiting challenge
         if self.guardian_knight_state == 1:
-            pulse = (math.sin(self.frame_counter * 0.12) + 1) * 0.5
-            aura_surf = pygame.Surface((int(36 * ZOOM), int(16 * ZOOM)), pygame.SRCALPHA)
-            pygame.draw.ellipse(aura_surf, (255, 215, 0, int(90 + 70 * pulse)), (0, 0, int(36 * ZOOM), int(16 * ZOOM)))
+            pulse_step = int(((math.sin(self.frame_counter * 0.12) + 1) * 0.5) * 8)
+            if not hasattr(self, '_knight_aura_cache'):
+                self._knight_aura_cache = {}
+            aura_surf = self._knight_aura_cache.get(pulse_step)
+            if aura_surf is None:
+                aura_surf = pygame.Surface((int(36 * ZOOM), int(16 * ZOOM)), pygame.SRCALPHA)
+                pygame.draw.ellipse(aura_surf, (255, 215, 0, int(90 + 70 * (pulse_step / 8.0))), (0, 0, int(36 * ZOOM), int(16 * ZOOM)))
+                self._knight_aura_cache[pulse_step] = aura_surf
             self.screen.blit(aura_surf, (screen_x - int(2 * ZOOM), screen_y + int(22 * ZOOM)))
 
             # Floating Quest Indicator above Knight
@@ -3682,17 +3689,20 @@ class Quarter2:
             tag_x = screen_x + (TILE_SIZE * ZOOM) / 2 - tag_w / 2
             tag_y = badge_y - tag_h - 2
 
-            tag_bg = pygame.Surface((tag_w, tag_h), pygame.SRCALPHA)
-            tag_bg.fill((15, 23, 42, 210))
+            if not hasattr(self, '_tag_bg_cache'):
+                self._tag_bg_cache = {}
+            tag_bg = self._tag_bg_cache.get((tag_w, tag_h))
+            if tag_bg is None:
+                tag_bg = pygame.Surface((tag_w, tag_h), pygame.SRCALPHA)
+                tag_bg.fill((15, 23, 42, 210))
+                self._tag_bg_cache[(tag_w, tag_h)] = tag_bg
             self.screen.blit(tag_bg, (tag_x, tag_y))
             pygame.draw.rect(self.screen, (255, 215, 0), (tag_x, tag_y, tag_w, tag_h), 1, border_radius=4)
             self.screen.blit(name_surf, (tag_x + 5, tag_y + 2))
 
     def draw_knight_guardian_prompt(self):
         """Draws the modal dialog when approaching the Knight Guardian at the portal"""
-        overlay = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
-        overlay.fill((10, 15, 29, 180))
-        self.screen.blit(overlay, (0, 0))
+        self._blit_cached_overlay((10, 15, 29, 180))
 
         box_w, box_h = 780, 380
         box_x = (self.width - box_w) // 2
@@ -3925,8 +3935,13 @@ class Quarter2:
         badge_w, badge_h = b_surf.get_width() + 14, 24
         badge_rect = pygame.Rect(sx + int(50 * ZOOM - badge_w // 2), sy - int(34 * ZOOM), badge_w, badge_h)
         
-        bg_card = pygame.Surface((badge_w, badge_h), pygame.SRCALPHA)
-        bg_card.fill((15, 23, 42, 220))
+        if not hasattr(self, '_kubo_badge_cache'):
+            self._kubo_badge_cache = {}
+        bg_card = self._kubo_badge_cache.get((badge_w, badge_h))
+        if bg_card is None:
+            bg_card = pygame.Surface((badge_w, badge_h), pygame.SRCALPHA)
+            bg_card.fill((15, 23, 42, 220))
+            self._kubo_badge_cache[(badge_w, badge_h)] = bg_card
         self.screen.blit(bg_card, (badge_rect.x, badge_rect.y))
         pygame.draw.rect(self.screen, (218, 165, 32) if self.kubo_pieces_collected < 5 else (34, 197, 94), badge_rect, 1, border_radius=6)
         self.screen.blit(b_surf, (badge_rect.x + 7, badge_rect.y + 3))
@@ -3957,9 +3972,10 @@ class Quarter2:
         card_x = (self.width - card_w) // 2
         card_y = 65
 
-        c_surf = pygame.Surface((card_w, card_h), pygame.SRCALPHA)
-        c_surf.fill((15, 23, 42, 235))
-        self.screen.blit(c_surf, (card_x, card_y))
+        if not hasattr(self, '_kubo_award_card_surf'):
+            self._kubo_award_card_surf = pygame.Surface((card_w, card_h), pygame.SRCALPHA)
+            self._kubo_award_card_surf.fill((15, 23, 42, 235))
+        self.screen.blit(self._kubo_award_card_surf, (card_x, card_y))
 
         pygame.draw.rect(self.screen, (34, 197, 94), (card_x, card_y, card_w, card_h), 2, border_radius=12)
         pygame.draw.rect(self.screen, (255, 215, 0), (card_x + 3, card_y + 3, card_w - 6, card_h - 6), 1, border_radius=10)
@@ -3984,43 +4000,90 @@ class Quarter2:
     # UPDATE PLAYER MOVEMENT (Sprint Boost & Particle Trails)
     # ============================================================
     def update_player_movement(self):
-        if (hasattr(self, 'camera_pan_active') and self.camera_pan_active) or self.quiz_state in [1, 2, 3, 4, 5] or getattr(self, 'currency_puzzle_active', False) or getattr(self, 'guardian_knight_state', 0) == 2 or (hasattr(self, 'player_block_timer') and self.player_block_timer > 0) or (getattr(self, 'instruction_modal', None) and self.instruction_modal.is_visible) or (getattr(self, 'greeting_dialog', None) and self.greeting_dialog.is_visible):
+        if not self.state_machine.allows_movement() or (hasattr(self, 'camera_pan_active') and self.camera_pan_active) or (hasattr(self, 'player_block_timer') and self.player_block_timer > 0):
             self.anim_frame = 0
+            self.click_dest = None
             return
 
         current_speed = (SPEED * 1.5) if self.speed_boost_timer > 0 else SPEED
         vx, vy = 0, 0
 
-        # Hand Gesture / Cursor Directional Controls (Pure Gesture Navigation)
-        player_screen_x = (self.player_x - self.camera_x + TILE_SIZE / 2) * ZOOM
-        player_screen_y = (self.player_y - self.camera_y + TILE_SIZE / 2) * ZOOM
-        cursor_x, cursor_y = self.cursor_pos
-        dx = cursor_x - player_screen_x
-        dy = cursor_y - player_screen_y
+        # 1. Keyboard Controls Fallback
+        keys = pygame.key.get_pressed()
+        has_key_input = (keys[pygame.K_LEFT] or keys[pygame.K_a] or keys[pygame.K_RIGHT] or keys[pygame.K_d] or
+                         keys[pygame.K_UP] or keys[pygame.K_w] or keys[pygame.K_DOWN] or keys[pygame.K_s])
+        if has_key_input:
+            self.click_dest = None
+            if keys[pygame.K_LEFT] or keys[pygame.K_a]:
+                vx = -current_speed
+                self.player_dir = "left"
+            elif keys[pygame.K_RIGHT] or keys[pygame.K_d]:
+                vx = current_speed
+                self.player_dir = "right"
+            if keys[pygame.K_UP] or keys[pygame.K_w]:
+                vy = -current_speed
+                self.player_dir = "up"
+            elif keys[pygame.K_DOWN] or keys[pygame.K_s]:
+                vy = current_speed
+                self.player_dir = "down"
 
-        # Dynamic speed scaling: faster when hand is stretched further out
-        dist_factor = 1.3 if (abs(dx) > 160 or abs(dy) > 160) else 1.0
-        g_speed = current_speed * dist_factor
-
-        deadzone = 45.0
-        if abs(dx) > deadzone or abs(dy) > deadzone:
-            if abs(dx) > deadzone:
-                vx = g_speed if dx > 0 else -g_speed
-            if abs(dy) > deadzone:
-                vy = g_speed if dy > 0 else -g_speed
-
-            if abs(dx) > abs(dy):
-                self.player_dir = "right" if dx > 0 else "left"
+        # 2. Click-to-Move Destination
+        elif getattr(self, 'click_dest', None) is not None:
+            cdx = self.click_dest[0] - self.player_x
+            cdy = self.click_dest[1] - self.player_y
+            cd_dist = math.hypot(cdx, cdy)
+            if cd_dist > 6.0:
+                vx = (cdx / cd_dist) * current_speed
+                vy = (cdy / cd_dist) * current_speed
+                if abs(cdx) > abs(cdy):
+                    self.player_dir = "right" if cdx > 0 else "left"
+                else:
+                    self.player_dir = "down" if cdy > 0 else "up"
             else:
-                self.player_dir = "down" if dy > 0 else "up"
+                self.click_dest = None
+
+        # 3. Universal Hand Gesture / Active Cursor Steering
+        if getattr(self, 'click_dest', None) is None and not has_key_input:
+            is_hand_active = getattr(self, 'hand_detected', False) and getattr(self, 'current_gesture', 'NO HAND') not in ['NO HAND', 'NO HAND (GRACE)']
+            is_mouse_active = getattr(self.main_menu, 'mouse_active', False) if self.main_menu else False
+
+            if is_hand_active or is_mouse_active:
+                player_screen_x = (self.player_x - self.camera_x + TILE_SIZE / 2) * ZOOM
+                player_screen_y = (self.player_y - self.camera_y + TILE_SIZE / 2) * ZOOM
+                cursor_x, cursor_y = self.cursor_pos
+                dx = cursor_x - player_screen_x
+                dy = cursor_y - player_screen_y
+
+                # Dynamic speed scaling: faster when hand is stretched further out
+                dist_factor = 1.3 if (abs(dx) > 160 or abs(dy) > 160) else 1.0
+                g_speed = current_speed * dist_factor
+
+                deadzone = 45.0
+                if abs(dx) > deadzone or abs(dy) > deadzone:
+                    if abs(dx) > deadzone:
+                        vx = g_speed if dx > 0 else -g_speed
+                    if abs(dy) > deadzone:
+                        vy = g_speed if dy > 0 else -g_speed
+
+                    if abs(dx) > abs(dy):
+                        self.player_dir = "right" if dx > 0 else "left"
+                    else:
+                        self.player_dir = "down" if dy > 0 else "up"
 
         new_x = self.player_x + vx
         new_y = self.player_y + vy
 
+        moved_x, moved_y = False, False
         if self.can_move(new_x, self.player_y):
             self.player_x = new_x
+            moved_x = True
         if self.can_move(self.player_x, new_y):
             self.player_y = new_y
+            moved_y = True
+
+        if getattr(self, 'click_dest', None) is not None and (vx != 0 or vy != 0):
+            if not moved_x and not moved_y:
+                self.click_dest = None
 
         # Spawn festive sparkle particles during speed boost sprint
         if (vx != 0 or vy != 0) and self.speed_boost_timer > 0 and random.random() < 0.4:
@@ -4093,7 +4156,7 @@ class Quarter2:
             paver_size = int(TILE_SIZE * ZOOM)
             scaled_paver = self._scaled_tile_cache.get((base_paver, paver_size, paver_size))
             if scaled_paver is None:
-                scaled_paver = pygame.transform.scale(base_paver, (paver_size, paver_size))
+                scaled_paver = pygame.transform.scale(base_paver, (paver_size, paver_size)).convert_alpha()
                 self._scaled_tile_cache[(base_paver, paver_size, paver_size)] = scaled_paver
             self.screen.blit(scaled_paver, (screen_x, screen_y))
             
@@ -4124,7 +4187,7 @@ class Quarter2:
             k = (image, scaled_w, scaled_h)
             scaled_image = self._scaled_tile_cache.get(k)
             if scaled_image is None:
-                scaled_image = pygame.transform.scale(image, (scaled_w, scaled_h))
+                scaled_image = pygame.transform.scale(image, (scaled_w, scaled_h)).convert_alpha()
                 self._scaled_tile_cache[k] = scaled_image
             self.screen.blit(scaled_image, (screen_x, screen_y))
 
@@ -4145,9 +4208,114 @@ class Quarter2:
             scaled_size = int(TILE_SIZE * ZOOM)
             scaled_sprite = self._scaled_sprite_cache.get(sprite)
             if scaled_sprite is None:
-                scaled_sprite = pygame.transform.scale(sprite, (scaled_size, scaled_size))
+                scaled_sprite = pygame.transform.scale(sprite, (scaled_size, scaled_size)).convert_alpha()
                 self._scaled_sprite_cache[sprite] = scaled_sprite
             self.screen.blit(scaled_sprite, (screen_x, screen_y))
+
+    def build_prerendered_map(self):
+        """Pre-renders Quarter 2 static street & wall layers for 60 FPS on AMD A4-6300."""
+        scaled_size = int(TILE_SIZE * ZOOM)
+        map_w = max(1, self.COLS * scaled_size)
+        map_h = max(1, self.ROWS * scaled_size)
+        self._bg_map_surface = pygame.Surface((map_w, map_h))
+        self._fg_walls_surface = pygame.Surface((map_w, map_h), pygame.SRCALPHA)
+        self._anim_bg_tiles = []
+        self._anim_fg_tiles = []
+        has_disp = pygame.display.get_surface() is not None
+
+        def blit_tile_to(target_surf, c, col, row):
+            paver_var = (col * 7 + row * 13) % 4
+            base_paver = self.tile_images.get(f"street_asphalt_{paver_var}", self.fallback_tile)
+            is_border = (col == 0 or col == self.COLS - 1 or row == 0 or row == self.ROWS - 1)
+            px = col * scaled_size
+            py = row * scaled_size
+
+            if is_border and c in {'Z', 'M', 'n', 's', 't', 'J', 'Q', 'V', 'X', 'Y', '#'}:
+                image = self.tile_images.get("street_wall_fence", self.fallback_tile)
+            elif c == 'G' or c in {'P', '1', '2', '3', '4', '5'}:
+                image = base_paver
+            elif c in {'Z', 'M', 'n', 's', 't', 'J', 'Q', 'V', 'X', 'Y', '#'}:
+                var = ((col // 5) * 3 + (row // 4) * 2) % 4
+                image = self.tile_images.get(f"street_wall_{var}", self.fallback_tile)
+            elif c in {'a', 'b', 'c', 'g', 'h', 'i', 'F'}:
+                pk = (base_paver, scaled_size, scaled_size)
+                sp = self._scaled_tile_cache.get(pk)
+                if sp is None:
+                    sp = pygame.transform.scale(base_paver, (scaled_size, scaled_size))
+                    if has_disp:
+                        try:
+                            sp = sp.convert_alpha()
+                        except Exception:
+                            pass
+                    self._scaled_tile_cache[pk] = sp
+                target_surf.blit(sp, (px, py))
+                image = self.tile_images.get(c, self.fallback_tile)
+            else:
+                image = self.tile_images.get(c, self.fallback_tile)
+
+            w_img, h_img = image.get_size()
+            scaled_w = int(w_img * ZOOM)
+            scaled_h = int(h_img * ZOOM)
+            dx = int(px + scaled_size / 2.0 - scaled_w / 2.0)
+            dy = int(py + scaled_size - scaled_h)
+            k = (image, scaled_w, scaled_h)
+            si = self._scaled_tile_cache.get(k)
+            if si is None:
+                si = pygame.transform.scale(image, (scaled_w, scaled_h))
+                if has_disp:
+                    try:
+                        si = si.convert_alpha()
+                    except Exception:
+                        pass
+                self._scaled_tile_cache[k] = si
+            target_surf.blit(si, (dx, dy))
+
+        tall_set = {'T', 'o', 'p', 'k', 'Z', 'M', 'n', 's', 't', 'J', 'Q', 'V', 'X', 'Y'}
+        for row in range(self.ROWS):
+            r_str = self.render_map[row] if row < len(self.render_map) else ""
+            for col in range(len(r_str)):
+                tile_char = r_str[col]
+                if tile_char not in self.WALKABLE_TILES and tile_char not in ('r', 'l', 'u', 'd'):
+                    blit_tile_to(self._bg_map_surface, 'G', col, row)
+                    if tile_char not in tall_set:
+                        if tile_char == 'f':
+                            self._anim_bg_tiles.append((tile_char, col * TILE_SIZE, row * TILE_SIZE))
+                        else:
+                            blit_tile_to(self._bg_map_surface, tile_char, col, row)
+                else:
+                    if tile_char in {'L', 'H', 'I', 'r', 'l', 'u', 'd', '1', '2', '3', '4', '5'}:
+                        blit_tile_to(self._bg_map_surface, 'G', col, row)
+                    if tile_char not in {'1', '2', '3', '4', '5'}:
+                        if tile_char == 'f':
+                            self._anim_bg_tiles.append((tile_char, col * TILE_SIZE, row * TILE_SIZE))
+                        else:
+                            blit_tile_to(self._bg_map_surface, tile_char, col, row)
+
+                if tile_char in tall_set:
+                    if tile_char == 'k':
+                        self._anim_fg_tiles.append((tile_char, col * TILE_SIZE, row * TILE_SIZE))
+                    else:
+                        blit_tile_to(self._fg_walls_surface, tile_char, col, row)
+
+        if has_disp:
+            try:
+                self._bg_map_surface = self._bg_map_surface.convert()
+                self._fg_walls_surface = self._fg_walls_surface.convert_alpha()
+            except Exception:
+                pass
+
+    def _get_scaled_prop(self, img, w, h):
+        key = (img, w, h)
+        s = self._scaled_tile_cache.get(key)
+        if s is None:
+            s = pygame.transform.scale(img, (w, h))
+            if pygame.display.get_surface() is not None:
+                try:
+                    s = s.convert_alpha()
+                except Exception:
+                    pass
+            self._scaled_tile_cache[key] = s
+        return s
 
     def draw_npc_static(self, x, y, sprite):
         if sprite is None:
@@ -4162,6 +4330,11 @@ class Quarter2:
             scaled_sprite = self._scaled_sprite_cache.get(sprite)
             if scaled_sprite is None:
                 scaled_sprite = pygame.transform.scale(sprite, (scaled_size, scaled_size))
+                if pygame.display.get_surface() is not None:
+                    try:
+                        scaled_sprite = scaled_sprite.convert_alpha()
+                    except Exception:
+                        pass
                 self._scaled_sprite_cache[sprite] = scaled_sprite
             self.screen.blit(scaled_sprite, (screen_x, screen_y))
 
@@ -4183,6 +4356,11 @@ class Quarter2:
             scaled_sprite = self._scaled_sprite_cache.get(sprite)
             if scaled_sprite is None:
                 scaled_sprite = pygame.transform.scale(sprite, (scaled_size, scaled_size))
+                if pygame.display.get_surface() is not None:
+                    try:
+                        scaled_sprite = scaled_sprite.convert_alpha()
+                    except Exception:
+                        pass
                 self._scaled_sprite_cache[sprite] = scaled_sprite
             self.screen.blit(scaled_sprite, (screen_x, screen_y))
 
@@ -4197,23 +4375,28 @@ class Quarter2:
         end_col = min(self.COLS, int((self.camera_x + self.width / ZOOM) / TILE_SIZE) + 3)
         start_row = max(0, int(self.camera_y / TILE_SIZE) - 2)
         end_row = min(self.ROWS, int((self.camera_y + self.height / ZOOM) / TILE_SIZE) + 3)
+        cam_px = int(self.camera_x * ZOOM)
+        cam_py = int(self.camera_y * ZOOM)
 
-        # Draw visible tiles using render_map (First pass: Ground tiles and low obstacles)
-        for row in range(start_row, end_row):
-            for col in range(start_col, end_col):
-                if row < len(self.render_map) and col < len(self.render_map[row]):
-                    tile_char = self.render_map[row][col]
-                    if tile_char not in self.WALKABLE_TILES and tile_char not in ['r', 'l', 'u', 'd']:
-                        # First draw concrete street under obstacles
-                        self.draw_tile('G', col * TILE_SIZE, row * TILE_SIZE)
-                        if tile_char not in {'T', 'o', 'p', 'k', 'Z', 'M', 'n', 's', 't', 'J', 'Q', 'V', 'X', 'Y'}:
-                            self.draw_tile(tile_char, col * TILE_SIZE, row * TILE_SIZE)
-                    else:
-                        # Draw concrete street under ladders, portals, and stations 1-5
-                        if tile_char in {'L', 'H', 'I', 'r', 'l', 'u', 'd', '1', '2', '3', '4', '5'}:
+        # First pass: Pre-rendered ground & low obstacles + animated chests
+        if getattr(self, '_bg_map_surface', None) is not None:
+            self.screen.blit(self._bg_map_surface, (-cam_px, -cam_py))
+            for tc, wx, wy in getattr(self, '_anim_bg_tiles', ()):
+                self.draw_tile(tc, wx, wy)
+        else:
+            for row in range(start_row, end_row):
+                for col in range(start_col, end_col):
+                    if row < len(self.render_map) and col < len(self.render_map[row]):
+                        tile_char = self.render_map[row][col]
+                        if tile_char not in self.WALKABLE_TILES and tile_char not in ['r', 'l', 'u', 'd']:
                             self.draw_tile('G', col * TILE_SIZE, row * TILE_SIZE)
-                        if tile_char not in {'1', '2', '3', '4', '5'}:
-                            self.draw_tile(tile_char, col * TILE_SIZE, row * TILE_SIZE)
+                            if tile_char not in {'T', 'o', 'p', 'k', 'Z', 'M', 'n', 's', 't', 'J', 'Q', 'V', 'X', 'Y'}:
+                                self.draw_tile(tile_char, col * TILE_SIZE, row * TILE_SIZE)
+                        else:
+                            if tile_char in {'L', 'H', 'I', 'r', 'l', 'u', 'd', '1', '2', '3', '4', '5'}:
+                                self.draw_tile('G', col * TILE_SIZE, row * TILE_SIZE)
+                            if tile_char not in {'1', '2', '3', '4', '5'}:
+                                self.draw_tile(tile_char, col * TILE_SIZE, row * TILE_SIZE)
 
         # Draw Piko (Hopscotch) Chalk Court on pavement near Station 4 (Ate Maya) if not cleared
         if 4 in self.quiz_stations and self.quiz_station_index <= 4 and self.quiz_state < 6:
@@ -4222,7 +4405,6 @@ class Quarter2:
             py_start = int((my * TILE_SIZE - self.camera_y) * ZOOM)
             pw = int(24 * ZOOM)
             ph = int(14 * ZOOM)
-            # Clean chalk blue hopscotch squares
             chalk_col = (160, 195, 230)
             pygame.draw.rect(self.screen, chalk_col, (px_start, py_start, pw, ph), 1)
             pygame.draw.rect(self.screen, chalk_col, (px_start, py_start + ph, pw, ph), 1)
@@ -4237,8 +4419,8 @@ class Quarter2:
             self.path_guide.draw()
 
         # Draw Active Filipino Street Character NPCs and their Landmark Props (Disappear when answered!)
+        sq_prop_sz = int(TILE_SIZE * ZOOM)
         for num, (st_x, st_y) in self.quiz_stations.items():
-            # Disappear NPC and props once their question is answered correctly!
             if num < self.quiz_station_index or self.quiz_state >= 6:
                 continue
 
@@ -4248,30 +4430,31 @@ class Quarter2:
             world_x = st_x * TILE_SIZE
             world_y = st_y * TILE_SIZE
 
-            # Station 2 Prop: Pinoy Sorbetes Cart next to Manong Sorbetero
             if num == 2 and "prop_sorbetes_cart" in self.tile_images:
                 cart_img = self.tile_images["prop_sorbetes_cart"]
                 cx = (st_x + 1) * TILE_SIZE
                 cy = st_y * TILE_SIZE
-                scaled_cart = pygame.transform.scale(cart_img, (int(TILE_SIZE * ZOOM), int(TILE_SIZE * ZOOM)))
+                scaled_cart = self._get_scaled_prop(cart_img, sq_prop_sz, sq_prop_sz)
                 self.screen.blit(scaled_cart, ((cx - self.camera_x) * ZOOM, (cy - self.camera_y) * ZOOM))
 
-            # Station 3 Prop: Jeepney Route Sign next to Kuya Drayber
             if num == 3 and "prop_jeep_sign" in self.tile_images:
                 sign_img = self.tile_images["prop_jeep_sign"]
                 sx = (st_x + 1) * TILE_SIZE
                 sy = st_y * TILE_SIZE
-                scaled_sign = pygame.transform.scale(sign_img, (int(TILE_SIZE * ZOOM), int(TILE_SIZE * ZOOM)))
+                scaled_sign = self._get_scaled_prop(sign_img, sq_prop_sz, sq_prop_sz)
                 self.screen.blit(scaled_sign, ((sx - self.camera_x) * ZOOM, (sy - self.camera_y) * ZOOM))
 
-            # Active Target NPC Floor Aura & Question Beacon
             if num == self.quiz_station_index and self.quiz_state == 0:
                 sx = (world_x - self.camera_x) * ZOOM
                 sy = (world_y - self.camera_y) * ZOOM
-                aura_surf = pygame.Surface((int(36 * ZOOM), int(16 * ZOOM)), pygame.SRCALPHA)
-                pulse = (math.sin(self.frame_counter * 0.12) + 1) * 0.5
-                aura_alpha = int(80 + 80 * pulse)
-                pygame.draw.ellipse(aura_surf, (255, 215, 0, aura_alpha), (0, 0, int(36 * ZOOM), int(16 * ZOOM)))
+                pulse_step = int(((math.sin(self.frame_counter * 0.12) + 1) * 0.5) * 8)
+                if not hasattr(self, '_station_aura_cache'):
+                    self._station_aura_cache = {}
+                aura_surf = self._station_aura_cache.get(pulse_step)
+                if aura_surf is None:
+                    aura_surf = pygame.Surface((int(36 * ZOOM), int(16 * ZOOM)), pygame.SRCALPHA)
+                    pygame.draw.ellipse(aura_surf, (255, 215, 0, int(80 + 80 * (pulse_step / 8.0))), (0, 0, int(36 * ZOOM), int(16 * ZOOM)))
+                    self._station_aura_cache[pulse_step] = aura_surf
                 self.screen.blit(aura_surf, (sx - int(2 * ZOOM), sy + int(22 * ZOOM)))
                 draw_beacon_marker(self.screen, sx + int(TILE_SIZE // 2 * ZOOM), sy, color=(251, 191, 36), beacon_type="question", offset_y=int(-30 * ZOOM))
 
@@ -4283,15 +4466,26 @@ class Quarter2:
         if self.quiz_state == 6 and getattr(self, 'knight_guardian_active', True) and getattr(self, 'npc_knight_found', False):
             draw_beacon_marker(self.screen, (self.npc_knight_x + TILE_SIZE // 2 - self.camera_x) * ZOOM, (self.npc_knight_y - self.camera_y) * ZOOM, color=(59, 130, 246), beacon_type="exclamation", offset_y=int(-35 * ZOOM))
 
-        self.draw_player()
+        # Draw Click-to-Move Target Beacon
+        if getattr(self, 'click_dest', None) is not None:
+            cd_screen_x = int((self.click_dest[0] - self.camera_x + TILE_SIZE // 2) * ZOOM)
+            cd_screen_y = int((self.click_dest[1] - self.camera_y + TILE_SIZE // 2) * ZOOM)
+            pulse = math.sin(self.frame_counter * 0.2) * 3 + 8
+            pygame.draw.circle(self.screen, (56, 189, 248), (cd_screen_x, cd_screen_y), int(pulse), 2)
+            pygame.draw.circle(self.screen, (255, 255, 255), (cd_screen_x, cd_screen_y), 3)
 
-        # Draw visible tall tiles / painted cinder block walls (Second pass)
-        for row in range(start_row, end_row):
-            for col in range(start_col, end_col):
-                if row < len(self.render_map) and col < len(self.render_map[row]):
-                    tile_char = self.render_map[row][col]
-                    if tile_char in {'T', 'o', 'p', 'k', 'Z', 'M', 'n', 's', 't', 'J', 'Q', 'V', 'X', 'Y'}:
-                        self.draw_tile(tile_char, col * TILE_SIZE, row * TILE_SIZE)
+        # Second pass: Pre-rendered tall walls + animated hanging flags
+        if getattr(self, '_fg_walls_surface', None) is not None:
+            self.screen.blit(self._fg_walls_surface, (-cam_px, -cam_py))
+            for tc, wx, wy in getattr(self, '_anim_fg_tiles', ()):
+                self.draw_tile(tc, wx, wy)
+        else:
+            for row in range(start_row, end_row):
+                for col in range(start_col, end_col):
+                    if row < len(self.render_map) and col < len(self.render_map[row]):
+                        tile_char = self.render_map[row][col]
+                        if tile_char in {'T', 'o', 'p', 'k', 'Z', 'M', 'n', 's', 't', 'J', 'Q', 'V', 'X', 'Y'}:
+                            self.draw_tile(tile_char, col * TILE_SIZE, row * TILE_SIZE)
 
         # Draw Progressive Traditional Bahay Kubo on Barrio Plaza in Map 5
         self.draw_bahay_kubo()
@@ -4300,14 +4494,14 @@ class Quarter2:
         if 1 in self.quiz_stations and self.quiz_station_index <= 1 and self.quiz_state < 6 and "prop_sari_awning" in self.tile_images:
             tx, ty = self.quiz_stations[1]
             awn_img = self.tile_images["prop_sari_awning"]
-            scaled_awn = pygame.transform.scale(awn_img, (int(TILE_SIZE * ZOOM), int(14 * ZOOM)))
+            scaled_awn = self._get_scaled_prop(awn_img, sq_prop_sz, int(14 * ZOOM))
             self.screen.blit(scaled_awn, ((tx * TILE_SIZE - self.camera_x) * ZOOM, ((ty - 0.4) * TILE_SIZE - self.camera_y) * ZOOM))
 
         # Station 5 Prop: Glowing Christmas Parol Star on wall above Lola Rosa (if not cleared)
         if 5 in self.quiz_stations and self.quiz_station_index <= 5 and self.quiz_state < 6 and "prop_parol" in self.tile_images:
             lx, ly = self.quiz_stations[5]
             parol_img = self.tile_images["prop_parol"]
-            scaled_parol = pygame.transform.scale(parol_img, (int(TILE_SIZE * ZOOM), int(TILE_SIZE * ZOOM)))
+            scaled_parol = self._get_scaled_prop(parol_img, sq_prop_sz, sq_prop_sz)
             self.screen.blit(scaled_parol, ((lx * TILE_SIZE - self.camera_x) * ZOOM, ((ly - 1) * TILE_SIZE - self.camera_y) * ZOOM))
 
         # Tasteful Entrance Banderitas across starting arch (Row 1 only)
@@ -4322,6 +4516,8 @@ class Quarter2:
                 fcol = b_colors[(fx // step) % len(b_colors)]
                 pts = [(fx, y_px), (fx + step - 2, y_px), (fx + step // 2, y_px + int(8 * ZOOM))]
                 pygame.draw.polygon(self.screen, fcol, pts)
+
+        self.draw_player()
 
         # Draw Active Objective NPC Indicator and Off-Screen Compass Pointer
         if self.quiz_state == 0 and self.quiz_station_index in self.quiz_stations:
@@ -4356,8 +4552,13 @@ class Quarter2:
             tag_x = screen_npc_x + (TILE_SIZE * ZOOM) / 2 - tag_w / 2
             tag_y = badge_y - tag_h - 2
             
-            tag_bg = pygame.Surface((tag_w, tag_h), pygame.SRCALPHA)
-            tag_bg.fill((15, 23, 42, 210))
+            if not hasattr(self, '_tag_bg_cache'):
+                self._tag_bg_cache = {}
+            tag_bg = self._tag_bg_cache.get((tag_w, tag_h))
+            if tag_bg is None:
+                tag_bg = pygame.Surface((tag_w, tag_h), pygame.SRCALPHA)
+                tag_bg.fill((15, 23, 42, 210))
+                self._tag_bg_cache[(tag_w, tag_h)] = tag_bg
             self.screen.blit(tag_bg, (tag_x, tag_y))
             pygame.draw.rect(self.screen, (255, 215, 0), (tag_x, tag_y, tag_w, tag_h), 1, border_radius=4)
             self.screen.blit(name_surf, (tag_x + 5, tag_y + 2))
@@ -4466,9 +4667,10 @@ class Quarter2:
             b_x = (self.width - b_w) // 2
             b_y = 70
             
-            b_surf = pygame.Surface((b_w, b_h), pygame.SRCALPHA)
-            b_surf.fill((15, 23, 42, 230))
-            self.screen.blit(b_surf, (b_x, b_y))
+            if not hasattr(self, '_banner_bg_surf'):
+                self._banner_bg_surf = pygame.Surface((b_w, b_h), pygame.SRCALPHA)
+                self._banner_bg_surf.fill((15, 23, 42, 230))
+            self.screen.blit(self._banner_bg_surf, (b_x, b_y))
             pygame.draw.rect(self.screen, (245, 158, 11), (b_x, b_y, b_w, b_h), 2, border_radius=10)
             
             t_surf = self.dialog_header_font.render(self.banner_text, True, (255, 215, 0))
@@ -4492,65 +4694,21 @@ class Quarter2:
         # Draw Knight Guardian Trial Prompt & Currency Matching Trial UI
         if getattr(self, 'guardian_knight_state', 0) == 2:
             self.draw_knight_guardian_prompt()
-        elif getattr(self, 'currency_puzzle_active', False):
+        elif self.state_machine.is_cognitive_puzzle() or getattr(self, 'currency_puzzle_active', False):
+            if self.state_machine.should_dim_world():
+                self.state_machine.render_dim_overlay(self.screen, alpha=160)
             self.draw_currency_matching_puzzle()
 
         # Draw Area Title Animation
         if self.title_active:
-            timer = self.title_elapsed
-            
-            # Alpha fading
-            alpha = 255
-            FADE_START = 4.0
-            FADE_DURATION = 1.0
-            if timer >= FADE_START:
-                fade = (timer - FADE_START) / FADE_DURATION
-                fade = max(0, min(fade, 1))
-                alpha = int(255 * (1 - fade))
-                
-            # Slide animation
-            BASE_Y = self.height // 2 - self.pixel_font_size // 2
-            SLIDE_TIME = 0.35
-            if timer < SLIDE_TIME:
-                t = timer / SLIDE_TIME
-                ease = 1 - (1 - t) ** 3
-                y = BASE_Y - (1 - ease) * 40
-            else:
-                y = BASE_Y
-                
-            # Draw letters centered
-            x = self.width // 2 - self.title_total_width // 2
-            
-            for i, data in enumerate(self.title_letters):
-                phase = timer * 8 - i * 0.55
-                offset = 0
-                
-                # Single traveling wave
-                if -math.pi <= phase <= math.pi:
-                    offset = math.sin(phase) * 12
-                    
-                glow = data["glow"].copy()
-                outline = data["outline"].copy()
-                main = data["main"].copy()
-                
-                glow.set_alpha(alpha // 5)
-                outline.set_alpha(alpha)
-                main.set_alpha(alpha)
-                
-                # Glow
-                for gx in (-5, 0, 5):
-                    for gy in (-5, 0, 5):
-                        self.screen.blit(glow, (x + gx, y + gy + offset))
-                        
-                # Outline
-                for ox in (-2, -1, 1, 2):
-                    for oy in (-2, -1, 1, 2):
-                        self.screen.blit(outline, (x + ox, y + oy + offset))
-                        
-                # Main text
-                self.screen.blit(main, (x, y + offset))
-                
-                x += data["width"] + self.title_spacing
+            draw_composite_title_wave(
+                self.screen,
+                self.title_letters,
+                self.title_total_width,
+                self.title_spacing,
+                self.pixel_font_size,
+                self.title_elapsed,
+            )
 
         # Draw Cinematic Bahay Kubo Award Card Overlay in Map 5
         self.draw_kubo_award_animation()
@@ -4619,10 +4777,11 @@ class Quarter2:
             box_x = (self.width - box_w) // 2
             box_y = self.height - box_h - 18
 
-            # Translucent dark slate background
-            hud_bg = pygame.Surface((box_w, box_h), pygame.SRCALPHA)
-            hud_bg.fill((15, 23, 42, 220))
-            self.screen.blit(hud_bg, (box_x, box_y))
+            # Translucent dark slate background (cached)
+            if not hasattr(self, '_hud_obj_bg_surf'):
+                self._hud_obj_bg_surf = pygame.Surface((box_w, box_h), pygame.SRCALPHA)
+                self._hud_obj_bg_surf.fill((15, 23, 42, 220))
+            self.screen.blit(self._hud_obj_bg_surf, (box_x, box_y))
 
             # Border: Gold when in progress, Emerald Green when complete
             border_color = (218, 165, 32) if self.quiz_state < 6 else (34, 197, 94)
@@ -4637,8 +4796,9 @@ class Quarter2:
             # Details font
             item_font = self.get_ui_font(12, bold=True)
 
+            tot_st = getattr(self, 'active_station_count', len(self.quiz_questions))
             if self.quiz_state < 6:
-                if self.quiz_station_index <= 5:
+                if tot_st > 0 and self.quiz_station_index <= tot_st:
                     cur_target_str = self.station_npc_info.get(self.quiz_station_index, {}).get("title", f"Station {self.quiz_station_index}")
                     obj1 = f"Target: {cur_target_str}"
                     obj1_surf = item_font.render(obj1, True, (255, 220, 80))
@@ -4649,12 +4809,16 @@ class Quarter2:
                         obj2_surf = item_font.render(obj2, True, (254, 240, 138) if self.kubo_pieces_collected > 0 else (148, 163, 184))
                     else:
                         cleared_count = max(0, self.quiz_station_index - 1)
-                        obj2 = f"Progress: {cleared_count}/5 Stalls Cleared (Portal Locked)"
+                        obj2 = f"Progress: {cleared_count}/{tot_st} Stalls Cleared (Portal Locked)"
                         obj2_surf = item_font.render(obj2, True, (148, 163, 184) if cleared_count == 0 else (74, 222, 128))
                     self.screen.blit(obj2_surf, (box_x + 16, box_y + 54))
                 else:
-                    obj1 = "PORTAL TRIAL: Knight Guardian (Philippine Currency)"
-                    obj1_surf = item_font.render(obj1, True, (255, 215, 0))
+                    if tot_st == 0:
+                        obj1 = "Cloud Questions: None Set — Visit Knight Guardian!"
+                        obj1_surf = item_font.render(obj1, True, (56, 189, 248))
+                    else:
+                        obj1 = "PORTAL TRIAL: Knight Guardian (Philippine Currency)"
+                        obj1_surf = item_font.render(obj1, True, (255, 215, 0))
                     self.screen.blit(obj1_surf, (box_x + 16, box_y + 32))
 
                     obj2 = "Match Philippine Banknotes & Coins to Unlock Portal!"
@@ -4671,7 +4835,7 @@ class Quarter2:
 
 
         if self.show_info:
-            npc_status = [self.station_npc_info.get(i, {}).get("name", f"Station {i}") for i in range(1, 6)]
+            npc_status = [self.station_npc_info.get(i, {}).get("name", f"Station {i}") for i in sorted(self.station_npc_info.keys())]
 
             npc_text = ", ".join(npc_status) if npc_status else "None"
 
@@ -4723,8 +4887,10 @@ class Quarter2:
                     
             if self.map_name == "map5.txt":
                 self.kubo_built = True
+                self.kubo_pieces_collected = 5
                 self.kubo_stage = 5
                 self.kubo_placed_pieces = 5
+                self.award_anim_active = False
                 self.kubo_award_anim_active = False
                 self.camera_pan_active = False
                 
@@ -4771,8 +4937,8 @@ class Quarter2:
                 self.camera_x = self.player_x - (self.width / (2 * ZOOM)) + TILE_SIZE / 2
                 self.camera_y = self.player_y - (self.height / (2 * ZOOM)) + TILE_SIZE / 2
                 if hasattr(self, 'lol_camera'):
-                    self.lol_camera.cam_x = self.camera_x
-                    self.lol_camera.cam_y = self.camera_y
+                    self.lol_camera.camera_x = self.camera_x
+                    self.lol_camera.camera_y = self.camera_y
 
             # Immediately open the Knight Guardian Dialogue & Trial Prompt modal
             self.guardian_knight_state = 2
@@ -4796,10 +4962,8 @@ class Quarter2:
 
     # ============================================================
     # HANDLE EVENT
-    # ============================================================
     def handle_event(self, event):
-        # Allow LoL camera to process middle mouse drag or Spacebar recentering
-        self.lol_camera.handle_event(event)
+        self.sync_ui_state()
 
         if hasattr(self, 'victory_card') and self.victory_card.active:
             if self.victory_card.handle_event(event):
@@ -4809,7 +4973,65 @@ class Quarter2:
                 if res:
                     return "blocked"
 
+        # LoL camera ONLY enabled in State.Exploration
+        if self.state_machine.allows_camera_pan():
+            self.lol_camera.handle_event(event)
+
+        # In-game pause menu (universal across all states)
         if self.pause_menu.handle_event(event):
+            return "blocked"
+
+        if self.pause_menu.is_paused:
+            if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                self.cursor_pos = event.pos
+                self.pause_menu.handle_click(event.pos)
+                return "blocked"
+            elif event.type == pygame.MOUSEMOTION:
+                self.cursor_pos = event.pos
+                return "blocked"
+            return "blocked"
+
+        if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+            if self.pause_menu.pause_btn_rect.collidepoint(event.pos):
+                self.cursor_pos = event.pos
+                self.pause_menu.toggle_pause()
+                return "blocked"
+        if self.state_machine.is_cognitive_puzzle() or getattr(self, 'currency_puzzle_active', False):
+            if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_r:
+                    self.reset_currency_matching_puzzle()
+                    return "handled"
+                elif event.key == pygame.K_ESCAPE:
+                    self.currency_puzzle_active = False
+                    if self.state_machine.is_cognitive_puzzle():
+                        self.state_machine.pop()
+                    return "handled"
+                elif event.key in [pygame.K_SPACE, pygame.K_RETURN]:
+                    if getattr(self, 'currency_puzzle_all_placed', False):
+                        self.currency_puzzle_active = False
+                        self.currency_puzzle_solved = True
+                        if self.state_machine.is_cognitive_puzzle():
+                            self.state_machine.pop()
+                        self.guardian_knight_state = 4
+                        self.quiz_state = 5
+                        self.banner_text = "CURRENCY TRIAL COMPLETED!"
+                        self.banner_sub = "Speak with the Knight Guardian to unlock the portal!"
+                        self.banner_timer = 4.0
+                        return "handled"
+            elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                self.cursor_pos = event.pos
+                self.trigger_click(event.pos)
+                return "handled"
+            elif event.type == pygame.MOUSEBUTTONUP and event.button == 1:
+                self.release_dragged_currency_piece()
+                return "handled"
+            elif event.type == pygame.MOUSEMOTION:
+                if not getattr(self, 'hand_detected', False) or getattr(self, 'current_gesture', 'NO HAND') in ['NO HAND', 'NO HAND (GRACE)']:
+                    self.cursor_pos = event.pos
+                if getattr(self, 'dragged_currency_piece', None):
+                    self.dragged_currency_piece["x"] = event.pos[0] - self.currency_drag_offset_x
+                    self.dragged_currency_piece["y"] = event.pos[1] - self.currency_drag_offset_y
+                return "handled"
             return "blocked"
 
         if event.type == pygame.KEYDOWN:
@@ -4836,6 +5058,7 @@ class Quarter2:
             if event.key in [pygame.K_SPACE, pygame.K_RETURN, pygame.K_e]:
                 if getattr(self, 'instruction_modal', None) and self.instruction_modal.is_visible:
                     self.instruction_modal.hide()
+                    self.sync_ui_state()
                     return "handled"
                 elif getattr(self, 'greeting_dialog', None) and self.greeting_dialog.is_visible:
                     self.greeting_dialog.hide()
@@ -4844,6 +5067,7 @@ class Quarter2:
                     self.eliminated_choices.clear()
                     self.wrong_feedback_msg = ""
                     self.current_question_index = self.quiz_station_index - 1
+                    self.sync_ui_state()
                     if getattr(self, 'coin_clink', None):
                         self.coin_clink.play()
                     return "handled"
@@ -4851,6 +5075,7 @@ class Quarter2:
                     self.guardian_knight_state = 3
                     self.init_currency_matching_puzzle()
                     self.currency_puzzle_active = True
+                    self.state_machine.push(State.CognitivePuzzle, {"puzzle": "currency"})
                     if getattr(self, 'coin_clink', None):
                         self.coin_clink.play()
                     return "handled"
@@ -4882,36 +5107,30 @@ class Quarter2:
                     if self.quiz_state == 2:
                         self.quiz_state = 1
                         save_student_progress(self.main_menu)
-                    elif self.quiz_state == 3:
+                    elif self.quiz_state in [3, 4]:
+                        tot_st = getattr(self, 'active_station_count', len(self.quiz_questions))
                         current_st = self.quiz_station_index
-                        if self.map_name == "map5.txt":
-                            self.kubo_pieces_collected = current_st
-                            self.trigger_kubo_pan_sequence(current_st)
+                        if self.map_name == "map5.txt" and tot_st > 0:
+                            target_kubo = max(1, min(5, int(round(current_st * 5.0 / float(tot_st)))))
+                            self.kubo_pieces_collected = target_kubo
+                            self.trigger_kubo_pan_sequence(target_kubo)
 
-                        if self.quiz_station_index < 5:
+                        if self.quiz_station_index < tot_st:
                             self.quiz_station_index += 1
                             self.current_question_index = self.quiz_station_index - 1
                             self.quiz_state = 0
                         else:
                             self.quiz_station_index = 6
-                            self.current_question_index = 5
+                            self.current_question_index = tot_st
                             self.quiz_state = 0
                             self.guardian_knight_state = 1
-                            self.banner_text = "ALL 5 BARRIO STALLS CLEARED!"
+                            self.banner_text = f"ALL {tot_st} BARRIO STALL(S) CLEARED!"
                             self.banner_sub = "Find the Knight Guardian at the portal to take the Currency Matching Trial!"
                             self.banner_timer = 5.0
-                        save_student_progress(self.main_menu)
-                    elif self.quiz_state == 4:
                         self.eliminated_choices.clear()
                         self.wrong_feedback_msg = ""
                         self.speed_boost_timer = 3.0
-                        self.station_attempts[self.quiz_station_index] = 0
-                        self.quiz_state = 0
-                        st_info = self.station_npc_info.get(self.quiz_station_index, {})
-                        st_name = st_info.get("name", f"Station {self.quiz_station_index}")
-                        self.banner_text = "2 TRIES EXHAUSTED!"
-                        self.banner_sub = f"Speak with {st_name} again to retry the question!"
-                        self.banner_timer = 3.0
+                        self.station_attempts[current_st] = 0
                         save_student_progress(self.main_menu)
                     elif self.quiz_state == 5:
                         self.quiz_state = 6
@@ -4931,10 +5150,14 @@ class Quarter2:
                     self.reset_currency_matching_puzzle()
                     return "handled"
             elif event.key == pygame.K_ESCAPE:
-                if self.quiz_state in [1, 2, 4]:
+                if self.quiz_state in [1, 2]:
                     self.quiz_state = 0
                     self.eliminated_choices.clear()
                     self.station_attempts[self.quiz_station_index] = 0
+                    return "handled"
+                elif self.quiz_state == 4:
+                    click_pos = self.out_of_tries_btn_rect.center if hasattr(self, 'out_of_tries_btn_rect') and self.out_of_tries_btn_rect else (self.width // 2, self.height // 2)
+                    self.trigger_click(click_pos)
                     return "handled"
                 if self.main_menu:
                     from db.save_system import show_saving_and_exit
@@ -4949,7 +5172,8 @@ class Quarter2:
             if getattr(self, 'currency_puzzle_active', False):
                 self.release_dragged_currency_piece()
         elif event.type == pygame.MOUSEMOTION:
-            self.cursor_pos = event.pos
+            if not getattr(self, 'hand_detected', False) or getattr(self, 'current_gesture', 'NO HAND') in ['NO HAND', 'NO HAND (GRACE)']:
+                self.cursor_pos = event.pos
             if getattr(self, 'currency_puzzle_active', False) and getattr(self, 'dragged_currency_piece', None):
                 self.dragged_currency_piece["x"] = event.pos[0] - self.currency_drag_offset_x
                 self.dragged_currency_piece["y"] = event.pos[1] - self.currency_drag_offset_y
@@ -4980,10 +5204,11 @@ class Quarter2:
             txt_col = (254, 202, 202)
             border_w = 3
 
-        # Translucent Background
-        hud_surf = pygame.Surface((hud_w, hud_h), pygame.SRCALPHA)
-        hud_surf.fill((15, 23, 42, 220))
-        self.screen.blit(hud_surf, (hud_x, hud_y))
+        # Translucent Background (cached)
+        if not hasattr(self, '_hud_timer_surf'):
+            self._hud_timer_surf = pygame.Surface((hud_w, hud_h), pygame.SRCALPHA)
+            self._hud_timer_surf.fill((15, 23, 42, 220))
+        self.screen.blit(self._hud_timer_surf, (hud_x, hud_y))
         pygame.draw.rect(self.screen, border_col, (hud_x, hud_y, hud_w, hud_h), border_w, border_radius=10)
 
         # Draw mini analog clock icon

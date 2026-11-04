@@ -1,0 +1,18 @@
+{
+  "id": "q4_algebraic_lockbox",
+  "type": "lockbox",
+  "title": "Quarter 4: Algebraic Key Lockbox",
+  "quarter": 4,
+  "cognitive_domain": "Algebraic Deductive Reasoning",
+  "clue_expression": "3x + 6 = 21  (Deduce x)",
+  "target_solution": 5,
+  "key_options": [
+    2,
+    3,
+    4,
+    5,
+    7,
+    9
+  ],
+  "time_limit": 100.0
+}

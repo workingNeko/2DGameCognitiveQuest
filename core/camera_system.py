@@ -15,10 +15,11 @@ import pygame
 
 
 class LoLCamera:
-    def __init__(self, screen_width, screen_height, zoom=1.0):
+    def __init__(self, screen_width, screen_height, zoom=1.0, focus_character=True):
         self.screen_width = screen_width
         self.screen_height = screen_height
         self.zoom = zoom
+        self.focus_character = focus_character
 
         # Current camera world coordinates (top-left of viewport in world units)
         self.camera_x = 0.0
@@ -28,13 +29,15 @@ class LoLCamera:
         self.pan_offset_x = 0.0
         self.pan_offset_y = 0.0
 
-        # Tuning Parameters (League of Legends feel)
-        self.smooth_rate = 0.12        # Damping factor per frame
-        self.lead_factor = 0.18        # Cursor-forward lookahead multiplier
-        self.max_lead_x = 90.0         # Max world pixels cursor can lead horizontally
-        self.max_lead_y = 70.0         # Max world pixels cursor can lead vertically
+        # Tuning Parameters
+        # When focus_character is True (default): camera locks directly onto the character,
+        # completely preventing cursor-lead deviation, screen wander, or edge-scroll displacement.
+        self.smooth_rate = 0.16
+        self.lead_factor = 0.0 if focus_character else 0.18
+        self.max_lead_x = 0.0 if focus_character else 90.0
+        self.max_lead_y = 0.0 if focus_character else 70.0
         self.edge_margin = 35          # Pixels from screen border to trigger edge scrolling
-        self.edge_scroll_speed = 6.0   # World pixels per frame during edge scroll
+        self.edge_scroll_speed = 0.0 if focus_character else 6.0
         self.max_pan_range = 280.0     # Max free exploration pan distance from player
 
         # Middle mouse drag
@@ -101,9 +104,11 @@ class LoLCamera:
 
         return False
 
-    def update(self, player_x, player_y, cursor_pos=(0, 0), map_width=1000, map_height=1000, tile_size=48, enable_edge_scroll=True):
+    def update(self, player_x, player_y, cursor_pos=(0, 0), map_width=1000, map_height=1000, tile_size=48, enable_edge_scroll=None):
         """
-        Update camera position following player with LoL-style cursor leading and edge panning.
+        Update camera position following player character.
+        When focus_character is True (default), camera focuses strictly on the character,
+        preventing cursor pull, wandering, or accidental edge panning.
         """
         # If a scripted cutscene is active, use explicit coords
         if self.scripted_pan_active:
@@ -123,41 +128,51 @@ class LoLCamera:
         base_cam_x = player_center_world_x - (self.screen_width // 2) / self.zoom
         base_cam_y = player_center_world_y - (self.screen_height // 2) / self.zoom
 
-        # 2. Dynamic Cursor Lead (Semi-Locked Forward Vision)
-        lead_x = 0.0
-        lead_y = 0.0
-        if cursor_pos:
-            screen_mid_x = self.screen_width / 2.0
-            screen_mid_y = self.screen_height / 2.0
-            cur_offset_x = (cursor_pos[0] - screen_mid_x) / self.zoom
-            cur_offset_y = (cursor_pos[1] - screen_mid_y) / self.zoom
+        if self.focus_character:
+            # Strictly center on character: no cursor offset, no edge scroll drift
+            target_x = base_cam_x
+            target_y = base_cam_y
+            self.pan_offset_x = 0.0
+            self.pan_offset_y = 0.0
+        else:
+            if enable_edge_scroll is None:
+                enable_edge_scroll = True
 
-            # Scale and clamp cursor lead
-            raw_lead_x = cur_offset_x * self.lead_factor
-            raw_lead_y = cur_offset_y * self.lead_factor
-            lead_x = max(-self.max_lead_x, min(self.max_lead_x, raw_lead_x))
-            lead_y = max(-self.max_lead_y, min(self.max_lead_y, raw_lead_y))
+            # 2. Dynamic Cursor Lead (Semi-Locked Forward Vision)
+            lead_x = 0.0
+            lead_y = 0.0
+            if cursor_pos and self.lead_factor > 0:
+                screen_mid_x = self.screen_width / 2.0
+                screen_mid_y = self.screen_height / 2.0
+                cur_offset_x = (cursor_pos[0] - screen_mid_x) / self.zoom
+                cur_offset_y = (cursor_pos[1] - screen_mid_y) / self.zoom
 
-        # 3. Edge Scrolling (Screen Border Pan)
-        if enable_edge_scroll and not self.is_middle_dragging and cursor_pos:
-            cx, cy = cursor_pos
-            if cx < self.edge_margin:
-                self.pan_offset_x -= self.edge_scroll_speed
-            elif cx > self.screen_width - self.edge_margin:
-                self.pan_offset_x += self.edge_scroll_speed
+                # Scale and clamp cursor lead
+                raw_lead_x = cur_offset_x * self.lead_factor
+                raw_lead_y = cur_offset_y * self.lead_factor
+                lead_x = max(-self.max_lead_x, min(self.max_lead_x, raw_lead_x))
+                lead_y = max(-self.max_lead_y, min(self.max_lead_y, raw_lead_y))
 
-            if cy < self.edge_margin:
-                self.pan_offset_y -= self.edge_scroll_speed
-            elif cy > self.screen_height - self.edge_margin:
-                self.pan_offset_y += self.edge_scroll_speed
+            # 3. Edge Scrolling (Screen Border Pan)
+            if enable_edge_scroll and not self.is_middle_dragging and cursor_pos and self.edge_scroll_speed > 0:
+                cx, cy = cursor_pos
+                if cx < self.edge_margin:
+                    self.pan_offset_x -= self.edge_scroll_speed
+                elif cx > self.screen_width - self.edge_margin:
+                    self.pan_offset_x += self.edge_scroll_speed
 
-            # Clamp accumulated edge pan range
-            self.pan_offset_x = max(-self.max_pan_range, min(self.max_pan_range, self.pan_offset_x))
-            self.pan_offset_y = max(-self.max_pan_range, min(self.max_pan_range, self.pan_offset_y))
+                if cy < self.edge_margin:
+                    self.pan_offset_y -= self.edge_scroll_speed
+                elif cy > self.screen_height - self.edge_margin:
+                    self.pan_offset_y += self.edge_scroll_speed
 
-        # 4. Final Desired Target Position
-        target_x = base_cam_x + lead_x + self.pan_offset_x
-        target_y = base_cam_y + lead_y + self.pan_offset_y
+                # Clamp accumulated edge pan range
+                self.pan_offset_x = max(-self.max_pan_range, min(self.max_pan_range, self.pan_offset_x))
+                self.pan_offset_y = max(-self.max_pan_range, min(self.max_pan_range, self.pan_offset_y))
+
+            # 4. Final Desired Target Position
+            target_x = base_cam_x + lead_x + self.pan_offset_x
+            target_y = base_cam_y + lead_y + self.pan_offset_y
 
         # 5. Smooth Exponential Damping (Lerp)
         self.camera_x += (target_x - self.camera_x) * self.smooth_rate

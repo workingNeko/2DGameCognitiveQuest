@@ -135,7 +135,7 @@ class TestQuarter2PortalClick(unittest.TestCase):
         self.assertIsNotNone(q2.out_of_tries_btn_rect)
         q2.trigger_click(q2.out_of_tries_btn_rect.center)
         self.assertEqual(q2.quiz_state, 0)
-        self.assertEqual(q2.quiz_station_index, 2)
+        self.assertEqual(q2.quiz_station_index, 3, "quiz_station_index must advance to 3 without requiring retry")
 
 
 if __name__ == "__main__":

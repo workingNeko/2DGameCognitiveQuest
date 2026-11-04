@@ -9,9 +9,17 @@ import random
 import collections
 from .map_loader import MapLoader
 from core.camera_system import LoLCamera
-from core.visual_effects import DustParticleSystem, draw_beacon_marker, draw_aura_glow
+from core.font_manager import get_font
+from core.visual_effects import (
+    DustParticleSystem,
+    draw_beacon_marker,
+    draw_aura_glow,
+    build_composite_title_letters,
+    draw_composite_title_wave,
+)
 from core.npc_scripts import get_map_instructions, get_station_script, get_mentor_script
 from core.npc_dialog_system import InstructionModal, NPCGreetingDialog
+from core.state_machine import State, UIStateMachine
 
 try:
     from db import db
@@ -20,6 +28,8 @@ except ImportError:
         from db.connect_db import db
     except ImportError:
         db = None
+
+from db.save_system import save_student_progress
 
 # ============================================================
 # SETTINGS
@@ -68,9 +78,16 @@ class Quarter3:
         self.time_up_dialog_active = False
         self.timer_warning_played = False
 
+        # Strict UI State Machine & Pushdown Automata
+        from core.state_machine import State, UIStateMachine
+        self.state_machine = UIStateMachine(initial_state=State.Exploration, host=self)
+
         # Universal In-Stage Pause Menu
         from core.pause_menu import InGamePauseMenu
-        self.pause_menu = InGamePauseMenu(self.screen, self.width, self.height, self.main_menu, self.return_to_stage_select, restart_callback=self.restart_level)
+        self.pause_menu = InGamePauseMenu(self.screen, self.width, self.height, self.main_menu, self.return_to_stage_select, restart_callback=self.restart_level, state_machine=self.state_machine)
+
+        # Cognitive Array Matrix / Fraction Bakery Subsystem (Normal In-Engine Puzzle)
+        self.array_puzzle = None
 
         # 3-Star Victory Report Card & Celebration Particles
         from core.report_card import VictoryReportCard, CelebrationParticleSystem
@@ -276,12 +293,16 @@ class Quarter3:
         self.guardian_skeleton_state = 0
         self.skeleton_guardian_active = True
         self.guardian_skeleton_proximity_cooldown = 0
-        p_box_w, p_box_h = 760, 360
+        p_box_w = min(860, self.width - 40)
+        p_box_h = 370
         p_box_x = (self.width - p_box_w) // 2
         p_box_y = (self.height - p_box_h) // 2
-        self.guardian_skeleton_btn_rect = pygame.Rect(p_box_x + (p_box_w - 320) // 2, p_box_y + 280, 320, 50)
+        p_diag_x = p_box_x + 24 + 140 + 24
+        self.guardian_skeleton_btn_rect = pygame.Rect(p_diag_x, p_box_y + p_box_h - 76, 380, 52)
+        self.guardian_skeleton_close_btn_rect = pygame.Rect(p_diag_x + 380 + 16, p_box_y + p_box_h - 76, 190, 52)
+        self.guardian_skeleton_x_btn_rect = pygame.Rect(p_box_x + p_box_w - 38, p_box_y + 8, 28, 28)
 
-        # Solar Array Keystone Math Puzzle (Guardian Skeleton Trial)
+        # Solar Array Keystone Math Puzzle & Fraction Bakery (Guardian Skeleton Trial)
         self.solar_array_puzzle_active = False
         self.solar_array_puzzle_solved = False
         self.solar_array_puzzle_solved_time = 0
@@ -301,6 +322,27 @@ class Quarter3:
         self.solar_matrix_rows = 3
         self.solar_matrix_cols = 4
         self.solar_matrix_row_completed = []
+
+        # Royal Oasis Fraction Bakery Mini-Game State
+        self.fraction_bakery_active = False
+        self.fraction_bakery_solved = False
+        self.fraction_bakery_orders = []
+        self.current_fraction_order_index = 0
+        self.fraction_orders_completed = [False, False, False, False]
+        self.fraction_bakery_plate_slots = []
+        self.fraction_bakery_slices = []
+        self.dragged_bakery_slice = None
+        self.bakery_drag_offset_x = 0
+        self.bakery_drag_offset_y = 0
+        self.bakery_drag_start_pos = (0, 0)
+        self.bakery_sparkles = []
+        self.bakery_reset_btn_rect = None
+        self.bakery_serve_btn_rect = None
+        self.bakery_close_btn_rect = None
+        self.bakery_x_btn_rect = None
+        self.bakery_auto_btn_rect = None
+        self.bakery_tab_rects = []
+        self.bakery_order_matched = False
         self.solar_matrix_beam_alphas = []
         self.solar_matrix_challenge = None
         self.solar_array_target_equation = ''
@@ -383,19 +425,19 @@ class Quarter3:
         # ============================================================
         # UI & REUSABLE FONTS
         # ============================================================
-        self.show_info = True
-        self.font = pygame.font.SysFont("Comic Sans MS", 16)
-        self.small_font = pygame.font.SysFont(["Segoe UI", "Tahoma", "Comic Sans MS", "Arial"], 13, bold=True)
-        self.dialog_header_font = pygame.font.SysFont(["Segoe UI", "Tahoma", "Comic Sans MS", "Arial"], 24, bold=True)
-        self.dialog_q_font = pygame.font.SysFont(["Segoe UI", "Tahoma", "Comic Sans MS", "Arial"], 19, bold=True)
-        self.dialog_choice_font = pygame.font.SysFont(["Segoe UI", "Tahoma", "Comic Sans MS", "Arial"], 20, bold=True)
-        self.dialog_badge_font = pygame.font.SysFont(["Segoe UI", "Tahoma", "Comic Sans MS", "Arial"], 22, bold=True)
-        self.dialog_hint_font = pygame.font.SysFont(["Segoe UI", "Tahoma", "Comic Sans MS", "Arial"], 17, bold=True)
-        self.dialog_speaker_font = pygame.font.SysFont(["Segoe UI", "Tahoma", "Comic Sans MS", "Arial"], 24, bold=True)
-        self.dialog_btn_font = pygame.font.SysFont(["Segoe UI", "Tahoma", "Comic Sans MS", "Arial"], 20, bold=True)
-        self.dialog_msg_font = pygame.font.SysFont(["Segoe UI", "Tahoma", "Comic Sans MS", "Arial"], 19, bold=True)
-        self.dialog_regular_font = pygame.font.SysFont(["Segoe UI", "Tahoma", "Comic Sans MS", "Arial"], 18)
-        self.dialog_stat_font = pygame.font.SysFont(["Segoe UI", "Tahoma", "Comic Sans MS", "Arial"], 16, bold=True)
+        self.show_info = False
+        self.font = get_font("Comic Sans MS", 16)
+        self.small_font = get_font(["Segoe UI", "Tahoma", "Comic Sans MS", "Arial"], 13, bold=True)
+        self.dialog_header_font = get_font(["Segoe UI", "Tahoma", "Comic Sans MS", "Arial"], 24, bold=True)
+        self.dialog_q_font = get_font(["Segoe UI", "Tahoma", "Comic Sans MS", "Arial"], 19, bold=True)
+        self.dialog_choice_font = get_font(["Segoe UI", "Tahoma", "Comic Sans MS", "Arial"], 20, bold=True)
+        self.dialog_badge_font = get_font(["Segoe UI", "Tahoma", "Comic Sans MS", "Arial"], 22, bold=True)
+        self.dialog_hint_font = get_font(["Segoe UI", "Tahoma", "Comic Sans MS", "Arial"], 17, bold=True)
+        self.dialog_speaker_font = get_font(["Segoe UI", "Tahoma", "Comic Sans MS", "Arial"], 24, bold=True)
+        self.dialog_btn_font = get_font(["Segoe UI", "Tahoma", "Comic Sans MS", "Arial"], 20, bold=True)
+        self.dialog_msg_font = get_font(["Segoe UI", "Tahoma", "Comic Sans MS", "Arial"], 19, bold=True)
+        self.dialog_regular_font = get_font(["Segoe UI", "Tahoma", "Comic Sans MS", "Arial"], 18)
+        self.dialog_stat_font = get_font(["Segoe UI", "Tahoma", "Comic Sans MS", "Arial"], 16, bold=True)
 
         # Pre-created cached surfaces for high performance and zero allocations in draw()
         shadow_w = int(24 * ZOOM)
@@ -480,72 +522,9 @@ class Quarter3:
         self.player_block_timer = 0.0
         self.ident_input_text = ""
 
-        # DepEd MATATAG Grade 2 Quarter 3 Multiple Choice Questions
-        self.quiz_questions = [
-            {
-                "station": 1,
-                "title": "MULTIPLICATION ARRAYS",
-                "question": "Farmer Ben arranged golden apples into 3 equal rows with 4 apples in each row. What is the total product of 3 x 4?",
-                "q_type": "multiple_choice",
-                "choices": ["A. 7 apples", "B. 10 apples", "C. 12 apples", "D. 15 apples"],
-                "correct": 2,  # C. 12
-                "visual_type": "array",
-                "visual_rows": 3,
-                "visual_cols": 4,
-                "hint": "Count the total number of apples across all 3 rows of 4!"
-            },
-            {
-                "station": 2,
-                "title": "REPEATED ADDITION",
-                "question": "Which repeated addition sentence matches 4 groups with 2 coconuts in each group?",
-                "q_type": "multiple_choice",
-                "choices": ["A. 4 + 4", "B. 2 + 2 + 2 + 2", "C. 4 + 2", "D. 2 + 4 + 2"],
-                "correct": 1,  # B. 2 + 2 + 2 + 2
-                "visual_type": "groups",
-                "visual_groups": 4,
-                "visual_items_per_group": 2,
-                "hint": "Think about which addition sentence adds 2 coconuts four times!"
-            },
-            {
-                "station": 3,
-                "title": "EQUAL SHARING DIVISION",
-                "question": "You gathered 10 gold coins to share equally between 2 treasure chests. How many coins belong in each chest (10 / 2)?",
-                "q_type": "multiple_choice",
-                "choices": ["A. 3 coins", "B. 4 coins", "C. 5 coins", "D. 8 coins"],
-                "correct": 2,  # C. 5 coins
-                "visual_type": "sharing",
-                "visual_total": 10,
-                "visual_chests": 2,
-                "hint": "Divide the 10 coins into 2 equal piles to find how many go in each chest!"
-            },
-            {
-                "station": 4,
-                "title": "UNIT FRACTIONS (ONE-HALF)",
-                "question": "The Sacred Sun Disk is divided into 2 equal parts. What unit fraction represents 1 shaded part out of 2?",
-                "q_type": "multiple_choice",
-                "choices": ["A. 1/4 (One-Fourth)", "B. 1/3 (One-Third)", "C. 1/2 (One-Half)", "D. 2/2 (Whole)"],
-                "correct": 2,  # C. 1/2
-                "visual_type": "fraction_circle",
-                "visual_slices": 2,
-                "visual_shaded": 1,
-                "hint": "A unit fraction has 1 on top (numerator) and total equal parts on the bottom!"
-            },
-            {
-                "station": 5,
-                "title": "UNIT FRACTIONS (ONE-THIRD)",
-                "question": "The golden ingot bar is divided into 3 equal segments. What unit fraction represents 1 shaded segment out of 3?",
-                "q_type": "multiple_choice",
-                "choices": ["A. 1/3 (One-Third)", "B. 1/2 (One-Half)", "C. 1/4 (One-Fourth)", "D. 3/1"],
-                "correct": 0,  # A. 1/3
-                "visual_type": "fraction_bar",
-                "visual_segments": 3,
-                "visual_shaded": 1,
-                "hint": "A unit fraction has 1 on top (numerator) and total equal parts on the bottom!"
-            }
-        ]
-
-        # Load dynamic questions from Database / Vercel API
-        self.load_database_questions()
+        # Cloud-authoritative Questions List (0..N active cloud questions)
+        self.quiz_questions = []
+        self.active_station_count = 0
 
         # ============================================================
         # EXPLORER'S CARAVAN & COMPANION WAGON SYSTEM
@@ -587,6 +566,9 @@ class Quarter3:
         else:
             self.bridge_tiles = []
             self.built_bridge_count = 0
+
+        # Sync questions strictly from the cloud / cloud cache (after bridge_tiles & banners exist)
+        self.load_database_questions()
 
         # Cinematic Drone Camera Pan State
         self.camera_pan_active = False
@@ -632,18 +614,14 @@ class Quarter3:
         self.title_outline_color = (0, 0, 0) # Black outline
         self.title_glow_color = (180, 180, 180) # Grey glow
 
-        # Pre-render letters
-        self.title_letters = []
-        for ch in self.title_text:
-            glow = self.title_font.render(ch, False, self.title_glow_color)
-            outline = self.title_font.render(ch, False, self.title_outline_color)
-            main = self.title_font.render(ch, False, self.title_text_color)
-            self.title_letters.append({
-                "glow": glow,
-                "outline": outline,
-                "main": main,
-                "width": main.get_width()
-            })
+        # Pre-render composite letters (single blit per glyph during wave animation)
+        self.title_letters = build_composite_title_letters(
+            self.title_text,
+            self.title_font,
+            self.title_text_color,
+            self.title_outline_color,
+            self.title_glow_color,
+        )
         self.title_total_width = sum(l["width"] for l in self.title_letters) + self.title_spacing * (len(self.title_text) - 1)
 
         # ============================================================
@@ -707,6 +685,58 @@ class Quarter3:
         print(f"[OK] Quarter3 initialized with map: {self.map_name}")
         print(f"   Goal portal: {self.goal_portal_direction}")
         print(f"   Portals loaded: {len(self.portals)}")
+
+    # ============================================================
+    # UI STATE MACHINE QUERIES & SYNCHRONIZATION
+    # ============================================================
+    def is_dialogue_active(self):
+        """Checks if dialogue, quiz prompt, modal, or cinematic is active."""
+        if getattr(self, 'quiz_dialog', None) and getattr(self.quiz_dialog, 'is_active', False):
+            return True
+        if getattr(self, 'quiz_state', 0) in [1, 2, 3, 4, 5, 7]:
+            return True
+        if getattr(self, 'instruction_modal', None) and getattr(self.instruction_modal, 'is_visible', False):
+            return True
+        if getattr(self, 'greeting_dialog', None) and getattr(self.greeting_dialog, 'is_visible', False):
+            return True
+        if getattr(self, 'time_up_dialog_active', False):
+            return True
+        if getattr(self, 'camera_pan_active', False):
+            return True
+        if getattr(self, 'victory_card', None) and getattr(self.victory_card, 'active', False):
+            return True
+        if getattr(self, 'ident_dialog_active', False):
+            return True
+        if getattr(self, 'guardian_skeleton_state', 0) == 2:
+            return True
+        return False
+
+    def is_cognitive_puzzle_active(self):
+        """Checks if an interactive cognitive puzzle / minigame UI is active."""
+        if getattr(self, 'fraction_bakery_active', False) or getattr(self, 'solar_array_puzzle_active', False):
+            return True
+        if getattr(self, 'guardian_skeleton_state', 0) == 3:
+            return True
+        if getattr(self, 'mini_puzzle_active', False) or getattr(self, 'quiz_state', 0) == 9:
+            return True
+        if getattr(self, 'sun_relic_puzzle_active', False) or getattr(self, 'sun_relic_active', False) or getattr(self, 'quiz_state', 0) == 8:
+            return True
+        if getattr(self, 'dragged_bakery_slice', None) is not None or getattr(self, 'dragged_solar_piece', None) is not None or getattr(self, 'dragged_slab', None) is not None or getattr(self, 'mini_puzzle_dragged_item', None) is not None:
+            return True
+        return False
+
+    def sync_ui_state(self):
+        """Synchronizes the UIStateMachine PDA state with current gameplay flags."""
+        from core.state_machine import State
+        if self.is_cognitive_puzzle_active():
+            if self.state_machine.current_state != State.CognitivePuzzle:
+                self.state_machine.set_state(State.CognitivePuzzle)
+        elif self.is_dialogue_active():
+            if self.state_machine.current_state != State.Dialogue:
+                self.state_machine.set_state(State.Dialogue)
+        else:
+            if self.state_machine.current_state != State.Exploration:
+                self.state_machine.set_state(State.Exploration)
 
     # ============================================================
     # RASPBERRY PI HIGH-PERFORMANCE PRE-CACHING (60 FPS)
@@ -779,18 +809,25 @@ class Quarter3:
             x = (i * 97) % self.width
             y = (i * 43) % (self.height // 2)
             pygame.draw.circle(self.cached_math_bg, (255, 255, 255), (x, y), 2, 0)
-        math_font = pygame.font.SysFont("Comic Sans MS", 22, bold=True)
+        math_font = get_font("Comic Sans MS", 22, bold=True)
         for label, x_pos in [("+", 70), ("=", 180), ("3", 290), ("x", 390), ("7", 520), ("-", 610)]:
             text = math_font.render(label, True, (59, 130, 246))
             self.cached_math_bg.blit(text, (x_pos, 18))
+        has_disp = pygame.display.get_surface() is not None
+        if has_disp:
+            self.cached_math_bg = self.cached_math_bg.convert()
 
         # 8. Pre-render full-screen dimming overlays
         self.dialog_dim_overlay = pygame.Surface((self.width, self.height))
         self.dialog_dim_overlay.fill((0, 0, 0))
+        if has_disp:
+            self.dialog_dim_overlay = self.dialog_dim_overlay.convert()
         self.dialog_dim_overlay.set_alpha(175)
 
         self.wrong_dialog_dim_overlay = pygame.Surface((self.width, self.height))
         self.wrong_dialog_dim_overlay.fill((0, 0, 0))
+        if has_disp:
+            self.wrong_dialog_dim_overlay = self.wrong_dialog_dim_overlay.convert()
         self.wrong_dialog_dim_overlay.set_alpha(160)
 
         # 9. Pre-render HUD & Banner glassmorphic background surfaces
@@ -838,6 +875,48 @@ class Quarter3:
 
         # 14. Scaled Icon Cache mapping (icon_key, target_size) -> pre-scaled Surface
         self._scaled_icon_cache = {}
+        self._skel_portrait_surf = None
+        self._skel_aura_cache = {}
+        self._skel_sun_cache = {}
+        self._npc_tag_bg_cache = {}
+        self._hud_timer_surf = pygame.Surface((160, 38), pygame.SRCALPHA)
+        self._hud_timer_surf.fill((15, 23, 42, 220))
+        if pygame.display.get_surface() is not None:
+            self._hud_timer_surf = self._hud_timer_surf.convert_alpha()
+
+        # 15. Pre-render full static desert ground & foreground tree layers (eliminates Python tile loops)
+        self.build_prerendered_map()
+
+    def build_prerendered_map(self):
+        """Pre-bakes static ground/walls and foreground trees/tumbleweeds into C-blittable map surfaces."""
+        ts = self.scaled_tile_size
+        map_w = max(1, self.COLS * ts)
+        map_h = max(1, self.ROWS * ts)
+        bg_surf = pygame.Surface((map_w, map_h), pygame.SRCALPHA)
+        fg_surf = pygame.Surface((map_w, map_h), pygame.SRCALPHA)
+
+        sand_img = self.scaled_tile_images.get('G', self.scaled_fallback_tile)
+        sand_under_set = {'T', 'w', 'Z', 'M', 'n', 's', 't', 'J', 'Q', 'V', 'X', 'Y'}
+
+        for row in range(min(self.ROWS, len(self.render_map))):
+            row_str = self.render_map[row]
+            dy = row * ts
+            for col in range(min(self.COLS, len(row_str))):
+                tile_char = row_str[col]
+                dx = col * ts
+                if tile_char in sand_under_set:
+                    bg_surf.blit(sand_img, (dx, dy))
+                if tile_char == 'T' or tile_char == 'w':
+                    fg_surf.blit(self.scaled_tile_images.get(tile_char, self.scaled_fallback_tile), (dx, dy))
+                else:
+                    bg_surf.blit(self.scaled_tile_images.get(tile_char, self.scaled_fallback_tile), (dx, dy))
+
+        if pygame.display.get_surface() is not None:
+            self._bg_map_surface = bg_surf.convert_alpha()
+            self._fg_trees_surface = fg_surf.convert_alpha()
+        else:
+            self._bg_map_surface = bg_surf
+            self._fg_trees_surface = fg_surf
 
     def show_instructions(self):
         """Displays the map instructions modal with student context."""
@@ -850,74 +929,55 @@ class Quarter3:
     # ============================================================
     def load_database_questions(self):
         if not self.is_quiz_map:
+            self.active_station_count = 0
             return
+
+        from db.connect_db import map_cloud_questions
+        mapped_questions = []
         try:
-            if not db:
-                return
-            questions_result = db.get_questions(quarter=3)
-            if not questions_result or len(questions_result) == 0:
-                print("[INFO] No custom database questions found for Quarter 3. Using default curriculum questions.")
-                return
-
-            mapped_questions = []
-            for idx, row in enumerate(questions_result):
-                prompt = row.get("prompt") or row.get("question") or ""
-                opt_a = row.get("optionA") or row.get("option_a")
-                opt_b = row.get("optionB") or row.get("option_b")
-                opt_c = row.get("optionC") or row.get("option_c")
-                opt_d = row.get("optionD") or row.get("option_d")
-                correct_answer = row.get("correctAnswer") or row.get("correct_answer")
-
-                raw_options = [opt for opt in [opt_a, opt_b, opt_c, opt_d] if opt is not None and str(opt).strip() != ""]
-                if not raw_options:
-                    continue
-
-                choices = []
-                choice_letters = ["A", "B", "C", "D"]
-                for c_i, opt in enumerate(raw_options):
-                    prefix = f"{choice_letters[c_i]}. " if c_i < len(choice_letters) else f"{c_i+1}. "
-                    choices.append(f"{prefix}{opt}")
-
-                ans = str(correct_answer).upper().strip()
-                if ans == "A" or ans == "OPTION_A" or ans.endswith("A") or ans == "0":
-                    correct_idx = 0
-                elif ans == "B" or ans == "OPTION_B" or ans.endswith("B") or ans == "1":
-                    correct_idx = 1
-                elif ans == "C" or ans == "OPTION_C" or ans.endswith("C") or ans == "2":
-                    correct_idx = 2
-                elif ans == "D" or ans == "OPTION_D" or ans.endswith("D") or ans == "3":
-                    correct_idx = 3
-                else:
-                    correct_idx = 0
-                    for c_i, opt in enumerate(raw_options):
-                        if opt and str(opt).strip().lower() == ans.lower():
-                            correct_idx = c_i
-                            break
-
-                station_num = idx + 1
-                mapped_questions.append({
-                    "station": station_num,
-                    "title": f" CHALLENGE {station_num}",
-                    "question": prompt,
-                    "q_type": "multiple_choice",
-                    "choices": choices,
-                    "correct": correct_idx,
-                    "hint": row.get("hint") or "Examine the choices carefully and select the best answer below! "
-                })
-
-            if mapped_questions:
-                for i in range(min(5, len(mapped_questions))):
-                    if i < len(self.quiz_questions):
-                        orig = self.quiz_questions[i]
-                        if "visual_type" in orig and not mapped_questions[i].get("visual_type"):
-                            mapped_questions[i]["visual_type"] = orig["visual_type"]
-                        self.quiz_questions[i] = mapped_questions[i]
-                    else:
-                        self.quiz_questions.append(mapped_questions[i])
-
-                print(f"[OK] Successfully loaded {len(mapped_questions)} dynamic question(s) from Database for Quarter 3!")
+            if db:
+                questions_result = db.get_questions(quarter=3)
+                mapped_questions = map_cloud_questions(
+                    questions_result,
+                    default_hint="Examine the choices carefully and select the best answer below!",
+                    allow_ident=True,
+                )
         except Exception as e:
-            print(f"[WARN] Exception loading database questions for Quarter 3: {e}")
+            print(f"[WARN] Exception loading cloud questions for Quarter 3: {e}")
+
+        sorted_ids = sorted(self.quiz_stations.keys())
+        active_count = min(len(sorted_ids), len(mapped_questions))
+        active_ids = sorted_ids[:active_count]
+
+        for idx, q_item in enumerate(mapped_questions[:active_count], start=1):
+            q_item.setdefault("station", idx)
+            q_item.setdefault("title", f"CHALLENGE {idx}")
+
+        self.quiz_questions = mapped_questions[:active_count]
+        self.active_station_count = active_count
+        self.quiz_stations = {k: self.quiz_stations[k] for k in active_ids}
+        self.station_npcs = {k: self.station_npcs[k] for k in active_ids if k in self.station_npcs}
+        self.first_attempt_correct = {k: True for k in active_ids}
+        self.station_attempts = {k: 0 for k in active_ids}
+
+        if active_count == 0:
+            self.quiz_station_index = 6
+            self.current_question_index = 0
+            self.guardian_skeleton_state = 1
+            if getattr(self, 'bridge_tiles', None):
+                for bx, by in self.bridge_tiles:
+                    if 0 <= by < len(self.game_map) and 0 <= bx < len(self.game_map[by]):
+                        self.game_map[by] = self.game_map[by][:bx] + "B" + self.game_map[by][bx + 1:]
+                        self.render_map[by] = self.render_map[by][:bx] + "B" + self.render_map[by][bx + 1:]
+                self.built_bridge_count = len(self.bridge_tiles)
+            self.caravan_upgrade_banner_text = "NO CLOUD QUESTIONS SET"
+            self.caravan_upgrade_banner_sub = "Speak with the Skeleton Guardian to begin the Fraction Bakery!"
+            self.caravan_upgrade_banner_timer = 6.0
+            print("[CLOUD SYNC] Quarter 3 synced 0 active cloud questions — stations skipped, Skeleton Guardian unlocked.")
+        else:
+            self.quiz_station_index = active_ids[0]
+            self.current_question_index = 0
+            print(f"[CLOUD SYNC] Quarter 3 synced {active_count} cloud question(s) across {active_count} station(s).")
 
     def save_results_to_database(self):
         import threading
@@ -929,16 +989,19 @@ class Quarter3:
         try:
             if not db:
                 return
+            total_questions = getattr(self, 'active_station_count', len(self.quiz_questions))
+            if total_questions <= 0:
+                print("[CLOUD SYNC] Quarter 3 completed with 0 cloud questions — skipping academic quiz score upload.")
+                return
             student_db_id = getattr(self.main_menu, 'student_db_id', None)
             if not student_db_id and getattr(self.main_menu, 'selected_student', None):
                 student_db_id = self.main_menu.selected_student.get('id')
             if not student_db_id:
                 print("[WARN] No student_db_id available in main_menu. Skipping database record.")
                 return
-            total_questions = min(5, len(self.quiz_questions))
             correct_answers = sum(1 for k, v in self.first_attempt_correct.items() if k <= total_questions and v)
-            percentage = (correct_answers / float(total_questions)) * 100.0 if total_questions > 0 else 0.0
-            score = int(correct_answers * 20)  # 20 points per question -> 100 max points
+            percentage = (correct_answers / float(total_questions)) * 100.0
+            score = int(round(percentage))
 
             assessment_id = db.get_assessment_id(quarter=3)
             if assessment_id:
@@ -1366,6 +1429,7 @@ class Quarter3:
             self.height_tiles = height_tiles
             self.width = TILE_SIZE * width_tiles
             self.height = TILE_SIZE * height_tiles
+            self._scaled_cache = {}
 
         def update(self):
             if self.frames:
@@ -1389,7 +1453,13 @@ class Quarter3:
                 if portal_img:
                     scaled_width = int(self.width * zoom)
                     scaled_height = int(self.height * zoom)
-                    scaled_img = pygame.transform.scale(portal_img, (scaled_width, scaled_height))
+                    cache_key = (self.current_frame, scaled_width, scaled_height)
+                    scaled_img = self._scaled_cache.get(cache_key)
+                    if scaled_img is None:
+                        scaled_img = pygame.transform.scale(portal_img, (scaled_width, scaled_height))
+                        if pygame.display.get_surface() is not None:
+                            scaled_img = scaled_img.convert_alpha()
+                        self._scaled_cache[cache_key] = scaled_img
                     screen.blit(scaled_img, (screen_x, screen_y))
 
     # ============================================================
@@ -1717,10 +1787,10 @@ class Quarter3:
             if completed:
                 self.save_results_to_database()
                 try:
-                    total_questions = min(5, len(self.quiz_questions)) if hasattr(self, 'quiz_questions') and self.quiz_questions else 5
+                    total_questions = getattr(self, 'active_station_count', len(self.quiz_questions))
                     correct_answers = sum(1 for k, v in self.first_attempt_correct.items() if k <= total_questions and v)
                     percentage = (correct_answers / float(total_questions)) * 100.0 if total_questions > 0 else 100.0
-                    score = int(correct_answers * 20)
+                    score = int(round(percentage)) if total_questions > 0 else 100
                     from db.save_system import mark_quarter_completed
                     mark_quarter_completed(self.main_menu, "quarter3", score=score, percentage=percentage, total_questions=total_questions)
                     if getattr(self.main_menu, 'audio_manager', None):
@@ -1770,14 +1840,25 @@ class Quarter3:
                 break
 
         if current_portal and self.teleport_cooldown <= 0:
-            if self.quiz_state == 6:
-                if current_portal.direction == self.goal_portal_direction or current_portal.is_static:
+            is_goal_portal = (current_portal.direction == self.goal_portal_direction or current_portal.is_static)
+            if is_goal_portal:
+                if self.quiz_state == 6 and getattr(self, 'fraction_bakery_solved', False):
                     print("* Entering Desert Sun Portal - Initiating seamless warp transition...")
                     if getattr(self.main_menu, 'audio_manager', None):
                         self.main_menu.audio_manager.play_sfx("portal_transition")
                     self.warp_out_active = True
                     self.warp_out_timer = self.warp_out_duration
                     return True
+                else:
+                    self.caravan_upgrade_banner_text = "PORTAL SEALED!"
+                    self.caravan_upgrade_banner_sub = "Speak with the Skeleton Guardian to solve the Fraction Bakery Trial!"
+                    self.caravan_upgrade_banner_timer = 4.0
+                    if getattr(self, 'guardian_skeleton_state', 0) in [0, 1]:
+                        self.guardian_skeleton_state = 2  # Open Skeleton Guardian trial prompt
+                    if getattr(self.main_menu, 'audio_manager', None):
+                        self.main_menu.audio_manager.play_sfx("incorrect")
+                    self.teleport_cooldown = 1.5
+                    return False
 
             if self.fist_closed:
                 other_portals = [p for p in self.portals if p != current_portal]
@@ -1810,7 +1891,7 @@ class Quarter3:
             map_width=self.MAP_WIDTH,
             map_height=self.MAP_HEIGHT,
             tile_size=TILE_SIZE,
-            enable_edge_scroll=True
+            enable_edge_scroll=False
         )
         self.camera_x = self.lol_camera.camera_x
         self.camera_y = self.lol_camera.camera_y
@@ -1931,44 +2012,50 @@ class Quarter3:
         elif self.map_name == "map8.txt":
             self.speed_boost_timer = 3.0
 
-        # In-World Bridge Construction and Camera Pan for Map 8
+        # In-World Bridge Construction and Camera Pan for Map 8 (scaled proportionally to 1..N cloud stations)
+        tot_st = getattr(self, 'active_station_count', len(self.quiz_questions))
         st_num = self.quiz_station_index
-        if hasattr(self, 'bridge_tiles') and self.bridge_tiles and st_num <= len(self.bridge_tiles):
-            bx, by = self.bridge_tiles[st_num - 1]
-            if by < len(self.game_map) and bx < len(self.game_map[by]):
-                self.game_map[by] = self.game_map[by][:bx] + "B" + self.game_map[by][bx+1:]
-                self.render_map[by] = self.render_map[by][:bx] + "B" + self.render_map[by][bx+1:]
-                self.built_bridge_count = st_num
+        if hasattr(self, 'bridge_tiles') and self.bridge_tiles and tot_st > 0:
+            target_bridges = max(1, min(len(self.bridge_tiles), int(round(st_num * len(self.bridge_tiles) / float(tot_st)))))
+            if target_bridges > self.built_bridge_count:
+                last_bx, last_by = self.bridge_tiles[target_bridges - 1]
+                for b_idx in range(self.built_bridge_count, target_bridges):
+                    bx, by = self.bridge_tiles[b_idx]
+                    if by < len(self.game_map) and bx < len(self.game_map[by]):
+                        self.game_map[by] = self.game_map[by][:bx] + "B" + self.game_map[by][bx+1:]
+                        self.render_map[by] = self.render_map[by][:bx] + "B" + self.render_map[by][bx+1:]
+                self.built_bridge_count = target_bridges
+                self.build_prerendered_map()
 
                 # Initiate Cinematic Drone Camera Pan
                 self.camera_pan_active = True
                 self.camera_pan_timer = 0.0
                 self.camera_pan_duration = 2.4
                 self.camera_pan_burst_done = False
-                self.camera_pan_target_col = bx
-                self.camera_pan_target_row = by
+                self.camera_pan_target_col = last_bx
+                self.camera_pan_target_row = last_by
                 self.camera_pan_origin_x = self.camera_x
                 self.camera_pan_origin_y = self.camera_y
 
-                t_cx = (bx * TILE_SIZE + TILE_SIZE // 2) - (self.width // 2) / ZOOM
-                t_cy = (by * TILE_SIZE + TILE_SIZE // 2) - (self.height // 2) / ZOOM
+                t_cx = (last_bx * TILE_SIZE + TILE_SIZE // 2) - (self.width // 2) / ZOOM
+                t_cy = (last_by * TILE_SIZE + TILE_SIZE // 2) - (self.height // 2) / ZOOM
                 min_cam_x, max_cam_x = 0, max(0, self.MAP_WIDTH - self.width / ZOOM)
                 min_cam_y, max_cam_y = 0, max(0, self.MAP_HEIGHT - self.height / ZOOM)
                 self.camera_pan_dest_x = max(min_cam_x, min(t_cx, max_cam_x))
                 self.camera_pan_dest_y = max(min_cam_y, min(t_cy, max_cam_y))
 
                 self.quiz_state = 7  # State 7: Camera Pan sequence
-                print(f"[BRIDGE] Aqueduct Bridge Segment {st_num}/5 materialized at ({bx}, {by})! Camera panning...")
+                print(f"[BRIDGE] Aqueduct Bridge Segment {target_bridges}/{len(self.bridge_tiles)} materialized at ({last_bx}, {last_by})! Camera panning...")
                 return
 
-        if self.quiz_station_index < 5:
+        if self.quiz_station_index < tot_st:
             self.quiz_station_index += 1
             self.current_question_index += 1
             self.quiz_state = 0
             print(f"[OK] Advanced to Quiz Station {self.quiz_station_index}")
         else:
             self.quiz_station_index = 6
-            self.current_question_index += 1
+            self.current_question_index = tot_st
             self.guardian_skeleton_state = 1
             self.quiz_state = 0
             if self.is_caravan_mode:
@@ -1976,13 +2063,52 @@ class Quarter3:
                 self.caravan_y = self.player_y
                 self.caravan_dir = self.player_dir
                 self.speed_boost_timer = 999.0
-            self.caravan_upgrade_banner_text = "ALL 5 STATIONS SOLVED!"
-            self.caravan_upgrade_banner_sub = "Approach the Skeleton Guardian to begin the Solar Array Trial!"
-            self.caravan_upgrade_banner_timer = 5.0
-            print("[GUARDIAN] All 5 stations solved! Skeleton Guardian activated at the exit portal!")
+            self.caravan_upgrade_banner_text = f"ALL {tot_st} STATION(S) SOLVED!"
+            self.caravan_upgrade_banner_sub = "Speak with the Skeleton Guardian to begin the Fraction Bakery!"
+            self.caravan_upgrade_banner_timer = 6.0
+            print(f"[GUARDIAN] All {tot_st} station(s) solved! Skeleton Guardian activated at the exit portal!")
 
     def trigger_click(self, pos):
+        self.sync_ui_state()
+        from core.state_machine import State
+
         if self.pause_menu.handle_click(pos):
+            return
+
+        if self.state_machine.current_state == State.CognitivePuzzle:
+            # Fraction Bakery Mini-Game Click Interactions
+            if getattr(self, 'fraction_bakery_active', False) or getattr(self, 'solar_array_puzzle_active', False) or getattr(self, 'guardian_skeleton_state', 0) == 3:
+                self.handle_fraction_bakery_mouse_down(pos)
+                return
+            elif self.quiz_state == 9 or getattr(self, 'mini_puzzle_active', False):
+                self.handle_station_mini_puzzle_click(pos)
+                return
+            elif self.quiz_state == 8 or getattr(self, 'sun_relic_puzzle_active', False) or getattr(self, 'sun_relic_active', False):
+                if self.sun_relic_solved:
+                    self.quiz_state = 0
+                    self.quiz_station_index = 6
+                    self.guardian_skeleton_state = 1
+                    self.caravan_upgrade_banner_text = "ALL 5 STATIONS SOLVED!"
+                    self.caravan_upgrade_banner_sub = "Speak with the Skeleton Guardian to begin the Fraction Bakery!"
+                    self.caravan_upgrade_banner_timer = 6.0
+                    return
+                if not self.dragged_slab:
+                    for slab in self.sun_relic_slabs:
+                        if not slab["is_placed"]:
+                            s_rect = pygame.Rect(slab["x"], slab["y"], slab["slot_w"], slab["slot_h"])
+                            if s_rect.collidepoint(pos):
+                                slab["x"] = slab["target_x"]
+                                slab["y"] = slab["target_y"]
+                                slab["is_placed"] = True
+                                if self.snap_sound:
+                                    self.snap_sound.play()
+                                if all(s["is_placed"] for s in self.sun_relic_slabs):
+                                    self.sun_relic_solved = True
+                                    self.sun_relic_solved_time = pygame.time.get_ticks()
+                                    if self.success_sound:
+                                        self.success_sound.play()
+                                break
+                return
             return
 
         if getattr(self, 'time_up_dialog_active', False):
@@ -2006,87 +2132,10 @@ class Quarter3:
                 return
             return
 
-        # Solar Array Keystone Math Puzzle Click Interactions (Active Puzzle in Foreground)
-        if getattr(self, 'solar_array_puzzle_active', False) or getattr(self, 'guardian_skeleton_state', 0) == 3:
-            # 1. Reset Button
-            if hasattr(self, 'solar_puzzle_reset_btn_rect') and self.solar_puzzle_reset_btn_rect:
-                if self.solar_puzzle_reset_btn_rect.collidepoint(pos):
-                    self.reset_solar_array_puzzle()
-                    return
-
-            # 2. Continue / Unlock Portal Button
-            if getattr(self, 'solar_array_puzzle_all_placed', False) and hasattr(self, 'solar_puzzle_continue_btn_rect') and self.solar_puzzle_continue_btn_rect:
-                if self.solar_puzzle_continue_btn_rect.collidepoint(pos):
-                    self.solar_array_puzzle_solved = True
-                    self.solar_array_puzzle_active = False
-                    self.guardian_skeleton_state = 5  # Unlocked portal!
-                    self.quiz_state = 6
-                    self.clear_portal_overlapping_tiles()
-                    self.save_results_to_database()
-                    try:
-                        from db.save_system import save_student_progress
-                        save_student_progress(self.main_menu)
-                    except Exception as e:
-                        print(f"[WARN] Failed to save student progress: {e}")
-                    if getattr(self.main_menu, 'audio_manager', None):
-                        self.main_menu.audio_manager.play_sfx("victory_fanfare")
-                        self.main_menu.audio_manager.play_sfx("portal_warp")
-                    if hasattr(self, 'celebration_particles'):
-                        self.celebration_particles.spawn_burst(self.width // 2, self.height // 2, count=40)
-                    print("[SOLAR ARRAY PUZZLE] Solved! Skeleton Guardian unlocked the Sun Portal!")
-                    return
-
-            # 3. Direct Click-to-Slot Magnetic Snap
-            for piece in self.solar_array_puzzle_pieces:
-                if not piece["is_placed"]:
-                    p_rect = pygame.Rect(piece["x"], piece["y"], piece["w"], piece["h"])
-                    if p_rect.collidepoint(pos):
-                        empty_slots = [s for s in self.solar_array_puzzle_slots if not s["matched"]]
-                        if empty_slots:
-                            slot = empty_slots[0]
-                            slot["matched"] = True
-                            slot["matched_item"] = piece["data"]
-                            slot["placed_gem"] = piece
-                            piece["is_placed"] = True
-                            piece["is_dragging"] = False
-                            piece["target_slot_id"] = slot["id"]
-                            piece["x"] = slot["rect"].centerx - piece["w"] // 2
-                            piece["y"] = slot["rect"].centery - piece["h"] // 2
-                            if getattr(self, 'snap_sound', None):
-                                self.snap_sound.play()
-                            if getattr(self.main_menu, 'audio_manager', None):
-                                self.main_menu.audio_manager.play_sfx("correct")
-
-                            for _ in range(14):
-                                self.solar_sparkles.append({
-                                    "x": slot["rect"].centerx + random.randint(-15, 15),
-                                    "y": slot["rect"].centery + random.randint(-15, 15),
-                                    "vx": random.uniform(-2.5, 2.5),
-                                    "vy": random.uniform(-3.0, 1.0),
-                                    "color": random.choice([(255, 215, 0), (245, 158, 11), (255, 255, 255), (251, 191, 36)]),
-                                    "life": 0.55,
-                                    "max_life": 0.55,
-                                    "rad": random.randint(3, 5)
-                                })
-
-                            row_idx = slot["row"]
-                            row_slots = [s for s in self.solar_array_puzzle_slots if s["row"] == row_idx]
-                            if all(s["matched"] for s in row_slots) and not self.solar_matrix_row_completed[row_idx]:
-                                self.solar_matrix_row_completed[row_idx] = True
-                                self.solar_matrix_beam_alphas[row_idx] = 1.0
-                                if getattr(self.main_menu, 'audio_manager', None):
-                                    self.main_menu.audio_manager.play_sfx("chime")
-
-                            if all(s["matched"] for s in self.solar_array_puzzle_slots):
-                                self.solar_array_puzzle_all_placed = True
-                                self.solar_array_puzzle_solved_time = pygame.time.get_ticks()
-                                if getattr(self, 'success_sound', None):
-                                    self.success_sound.play()
-                                if getattr(self.main_menu, 'audio_manager', None):
-                                    self.main_menu.audio_manager.play_sfx("victory_fanfare")
-                                if hasattr(self, 'celebration_particles'):
-                                    self.celebration_particles.spawn_burst(self.width // 2, self.height // 2, count=45)
-                        return
+        # Fraction Bakery Mini-Game Click Interactions
+        if getattr(self, 'fraction_bakery_active', False) or getattr(self, 'solar_array_puzzle_active', False) or getattr(self, 'guardian_skeleton_state', 0) == 3:
+            if self.handle_fraction_bakery_mouse_down(pos):
+                return
             return
 
         # Check Instruction Modal interaction
@@ -2138,11 +2187,14 @@ class Quarter3:
             s_rect = pygame.Rect(sx_screen, sy_screen, TILE_SIZE * ZOOM, TILE_SIZE * ZOOM).inflate(36, 36)
             if s_rect.collidepoint(pos):
                 self.guardian_skeleton_state = 2
-                box_w = min(840, self.width - 40)
-                box_h = 360
+                box_w = min(860, self.width - 40)
+                box_h = 370
                 box_x = (self.width - box_w) // 2
                 box_y = (self.height - box_h) // 2
-                self.guardian_skeleton_btn_rect = pygame.Rect(box_x + 200, box_y + 285, 340, 50)
+                diag_x = box_x + 24 + 140 + 24
+                self.guardian_skeleton_btn_rect = pygame.Rect(diag_x, box_y + box_h - 76, 380, 52)
+                self.guardian_skeleton_close_btn_rect = pygame.Rect(diag_x + 380 + 16, box_y + box_h - 76, 190, 52)
+                self.guardian_skeleton_x_btn_rect = pygame.Rect(box_x + box_w - 38, box_y + 8, 28, 28)
                 if getattr(self.main_menu, 'audio_manager', None):
                     self.main_menu.audio_manager.play_sfx("correct")
                 return
@@ -2212,7 +2264,7 @@ class Quarter3:
                 self.advance_station_progress()
                 save_student_progress(self.main_menu)
 
-        # State 4: Out of tries reveal screen click -> Closes window without advancing
+        # State 4: Out of tries reveal screen click -> Guaranteed progression without retrying!
         elif self.quiz_state == 4:
             box_w, box_h = 740, 340
             box_x = (self.width - box_w) // 2
@@ -2220,17 +2272,8 @@ class Quarter3:
             box_rect = pygame.Rect(box_x, box_y, box_w, box_h)
             btn_rect = pygame.Rect(box_x + (box_w - 260) // 2, box_y + 260, 260, 50)
             if (hasattr(self, 'out_of_tries_btn_rect') and self.out_of_tries_btn_rect and self.out_of_tries_btn_rect.collidepoint(pos)) or btn_rect.collidepoint(pos) or box_rect.collidepoint(pos):
-                self.eliminated_choices.clear()
-                self.wrong_feedback_msg = ""
-                self.ident_input_text = ""
-                self.speed_boost_timer = 3.0
                 self.station_attempts[self.quiz_station_index] = 0
-                self.quiz_state = 0
-                npc_info = self.station_npcs.get(self.quiz_station_index, {})
-                speaker_name = npc_info.get("name", f"Station {self.quiz_station_index}")
-                self.caravan_upgrade_banner_text = "2 TRIES EXHAUSTED!"
-                self.caravan_upgrade_banner_sub = f"Speak with {speaker_name} again to retry the challenge!"
-                self.caravan_upgrade_banner_timer = 4.0
+                self.advance_station_progress()
                 save_student_progress(self.main_menu)
 
         # State 9: Station Hands-On Mini-Puzzle Click Handling
@@ -2240,8 +2283,12 @@ class Quarter3:
         # State 8: Sun Relic Altar Jigsaw Click Handling
         elif self.quiz_state == 8:
             if self.sun_relic_solved:
-                self.quiz_state = 6
-                self.clear_portal_overlapping_tiles()
+                self.quiz_state = 0
+                self.quiz_station_index = 6
+                self.guardian_skeleton_state = 1
+                self.caravan_upgrade_banner_text = "ALL 5 STATIONS SOLVED!"
+                self.caravan_upgrade_banner_sub = "Speak with the Skeleton Guardian to begin the Fraction Bakery!"
+                self.caravan_upgrade_banner_timer = 6.0
                 return
             if not self.dragged_slab:
                 for slab in self.sun_relic_slabs:
@@ -2262,27 +2309,45 @@ class Quarter3:
                                     self.success_sound.play()
                             break
                 
-        # State 5: Final speech click -> Unlock Goal Portal for manual player guidance!
+        # State 5: Final speech click -> Direct player to the Skeleton Guardian!
         elif self.quiz_state == 5:
             box_w, box_h = 780, 420
             box_x = (self.width - box_w) // 2
             box_y = (self.height - box_h) // 2
             btn_rect = pygame.Rect(box_x + (box_w - 260) // 2, box_y + 340, 260, 50)
             if btn_rect.collidepoint(pos):
-                self.quiz_state = 6
-                self.clear_portal_overlapping_tiles()
-                self.save_results_to_database()
-                save_student_progress(self.main_menu)
+                self.quiz_state = 0
+                self.quiz_station_index = 6
+                self.guardian_skeleton_state = 1
                 self.caravan_riding = False
                 if self.is_caravan_mode:
                     self.caravan_x = self.player_x
                     self.caravan_y = self.player_y
                     self.caravan_dir = self.player_dir
                     self.speed_boost_timer = 999.0
-                self.caravan_upgrade_banner_text = "ROYAL EXPEDITION COMPLETE!"
-                self.caravan_upgrade_banner_sub = "Cross to the Eastern Sun Portal to finish!"
-                self.caravan_upgrade_banner_timer = 5.0
-                print("[TARGET] All stations cleared! Guide your Royal Caravan to the Sun Portal!")
+                self.caravan_upgrade_banner_text = "ALL 5 STATIONS SOLVED!"
+                self.caravan_upgrade_banner_sub = "Speak with the Skeleton Guardian to begin the Fraction Bakery!"
+                self.caravan_upgrade_banner_timer = 6.0
+                print("[GUARDIAN] Mentor dialogue cleared! Guided to Skeleton Guardian at the exit portal!")
+
+        # Check Portal click or Click-to-Move when exploring the stage (only when no mini-game or puzzle is active)
+        if self.state_machine.allows_movement() and self.quiz_state in [0, 6] and not self.is_minigame_or_puzzle_active():
+            for portal in self.portals:
+                screen_px = (portal.get_world_x() - self.camera_x) * ZOOM
+                screen_py = (portal.get_world_y() - self.camera_y) * ZOOM
+                pw = (portal.get_width_pixels() if hasattr(portal, 'get_width_pixels') else getattr(portal, 'width', TILE_SIZE)) * ZOOM
+                ph = (portal.get_height_pixels() if hasattr(portal, 'get_height_pixels') else getattr(portal, 'height', TILE_SIZE)) * ZOOM
+                portal_rect = pygame.Rect(screen_px, screen_py, pw, ph).inflate(24, 24)
+                if portal_rect.collidepoint(pos):
+                    self.click_dest = (portal.get_center_x() - TILE_SIZE // 2, portal.get_center_y() - TILE_SIZE // 2)
+                    self.check_portal_teleport_on_hold()
+                    return
+
+            world_x = pos[0] / ZOOM + self.camera_x
+            world_y = pos[1] / ZOOM + self.camera_y
+            if self.can_move(world_x, world_y):
+                self.click_dest = (world_x, world_y)
+                return
 
     def handle_click(self, pos):
         """Standardized interface for clicking events, redirects to trigger_click"""
@@ -2295,7 +2360,19 @@ class Quarter3:
         dt = min(0.05, max(0.001, self.clock.tick() / 1000.0))
         self.frame_counter += 1
 
+        self.sync_ui_state()
+
         if self.pause_menu.is_paused:
+            return
+
+        # If cognitive puzzle is active: world is paused & dimmed, stage timer is frozen
+        if self.state_machine.is_world_paused():
+            if getattr(self, 'fraction_bakery_active', False) or getattr(self, 'solar_array_puzzle_active', False) or getattr(self, 'guardian_skeleton_state', 0) == 3:
+                self.update_solar_array_puzzle(dt)
+            elif getattr(self, 'mini_puzzle_active', False) or getattr(self, 'quiz_state', 0) == 9:
+                self.update_station_mini_puzzle(dt)
+            elif getattr(self, 'sun_relic_puzzle_active', False) or getattr(self, 'quiz_state', 0) == 8:
+                self.update_sun_relic_puzzle(dt)
             return
 
         # Update celebration particles & victory report card
@@ -2313,10 +2390,10 @@ class Quarter3:
             if self.warp_out_timer <= 0:
                 self.warp_out_active = False
                 self.save_results_to_database()
-                total_questions = min(5, len(self.quiz_questions)) if hasattr(self, 'quiz_questions') and self.quiz_questions else 5
+                total_questions = getattr(self, 'active_station_count', len(self.quiz_questions))
                 correct_answers = sum(1 for k, v in self.first_attempt_correct.items() if k <= total_questions and v)
                 percentage = (correct_answers / float(total_questions)) * 100.0 if total_questions > 0 else 100.0
-                score = int(correct_answers * 20)
+                score = int(round(percentage)) if total_questions > 0 else 100
                 from db.save_system import mark_quarter_completed
                 mark_quarter_completed(self.main_menu, "quarter3", score=score, percentage=percentage, total_questions=total_questions)
                 self.victory_card.show(total_questions=total_questions, correct_first_try=correct_answers, score=score)
@@ -2439,7 +2516,7 @@ class Quarter3:
             if self.guardian_skeleton_state == 1 and self.quiz_station_index >= 6:
                 if getattr(self, 'guardian_skeleton_proximity_cooldown', 0) > 0:
                     self.guardian_skeleton_proximity_cooldown -= dt
-                elif dist_skel < TILE_SIZE * 2.8:
+                elif dist_skel < TILE_SIZE * 3.2:
                     if not self.greeting_dialog.is_visible and not self.instruction_modal.is_visible:
                         self.guardian_skeleton_state = 2  # Open Guardian Trial Prompt modal
                         if getattr(self.main_menu, 'audio_manager', None):
@@ -2482,47 +2559,6 @@ class Quarter3:
         if self.solar_array_puzzle_active or self.guardian_skeleton_state == 3:
             self.update_solar_array_puzzle(dt)
 
-        # Skeleton walking sequence along BFS path
-        if self.quiz_state == 4:
-            if hasattr(self, 'npc_skeleton_path') and self.npc_skeleton_path_index < len(self.npc_skeleton_path):
-                t_col, t_row = self.npc_skeleton_path[self.npc_skeleton_path_index]
-                target_x = t_col * TILE_SIZE
-                target_y = t_row * TILE_SIZE
-                
-                dx = target_x - self.npc_skeleton_x
-                dy = target_y - self.npc_skeleton_y
-                
-                move_speed = 2  # Walk speed: 2 pixels per frame
-                
-                if abs(dx) > abs(dy):
-                    self.npc_skeleton_dir = "right" if dx > 0 else "left"
-                else:
-                    self.npc_skeleton_dir = "down" if dy > 0 else "up"
-                
-                if abs(dx) <= move_speed and abs(dy) <= move_speed:
-                    self.npc_skeleton_x = target_x
-                    self.npc_skeleton_y = target_y
-                    self.npc_skeleton_tile_x = t_col
-                    self.npc_skeleton_tile_y = t_row
-                    self.npc_skeleton_path_index += 1
-                else:
-                    if dx != 0:
-                        self.npc_skeleton_x += move_speed if dx > 0 else -move_speed
-                    if dy != 0:
-                        self.npc_skeleton_y += move_speed if dy > 0 else -move_speed
-                
-                self.npc_skeleton_anim_timer += 1
-                if self.npc_skeleton_anim_timer >= 15:
-                    self.npc_skeleton_anim_timer = 0
-                    self.npc_skeleton_anim_frame = (self.npc_skeleton_anim_frame + 1) % 3
-            else:
-                self.quiz_state = 0
-                self.npc_skeleton_anim_frame = 0
-                self.npc_skeleton_anim_timer = 0
-                self.npc_skeleton_dir = self.station_directions.get(self.quiz_station_index, "right")
-
-
-
         # State 7: Camera Pan sequence for in-world bridge construction
         if self.quiz_state == 7:
             self.camera_pan_timer += dt
@@ -2563,25 +2599,30 @@ class Quarter3:
                 self.camera_y = self.camera_pan_dest_y + (self.camera_pan_origin_y - self.camera_pan_dest_y) * smooth
                 
             if self.camera_pan_timer >= self.camera_pan_duration:
+                tot_st = getattr(self, 'active_station_count', len(self.quiz_questions))
                 self.camera_pan_active = False
-                if self.quiz_station_index < 5:
+                if self.quiz_station_index < tot_st:
                     self.quiz_station_index += 1
                     self.current_question_index += 1
                     self.quiz_state = 0
                 else:
+                    self.quiz_station_index = 6
+                    self.current_question_index = tot_st
+                    self.guardian_skeleton_state = 1
+                    self.quiz_state = 0
+                    if self.is_caravan_mode:
+                        self.caravan_x = self.player_x
+                        self.caravan_y = self.player_y
+                        self.caravan_dir = self.player_dir
+                        self.speed_boost_timer = 999.0
+                    self.caravan_upgrade_banner_text = f"ALL {tot_st} STATION(S) SOLVED!"
+                    self.caravan_upgrade_banner_sub = "Speak with the Skeleton Guardian to begin the Fraction Bakery!"
+                    self.caravan_upgrade_banner_timer = 6.0
                     if self.map_name == "map8.txt":
-                        self.quiz_state = 6
-                        self.quiz_station_index = 6
-                        self.clear_portal_overlapping_tiles()
                         self.relic_banner_text = "GOLDEN CAUSEWAY COMPLETE!"
-                        self.relic_banner_sub = "The bridge is open! Cross to the Eastern Sun Portal Sanctum!"
+                        self.relic_banner_sub = "Cross the causeway to meet the Skeleton Guardian at the Sun Portal!"
                         self.relic_banner_timer = 5.0
-                    elif self.is_puzzle_hybrid_mode:
-                        # Station 5 answered -> Open Sun Relic Altar!
-                        self.quiz_state = 8
-                        self.init_sun_relic_puzzle()
-                    else:
-                        self.quiz_state = 5
+                    print("[GUARDIAN] Camera pan complete! Skeleton Guardian activated at the exit portal!")
 
         # State 8: Sun Relic Altar Jigsaw Update
         if self.quiz_state == 8:
@@ -2682,46 +2723,128 @@ class Quarter3:
         self.update_camera()
 
     # ============================================================
+    # CHECK MINI-GAME / PUZZLE ACTIVE STATUS
+    # ============================================================
+    def is_minigame_or_puzzle_active(self):
+        """Returns True if the player is currently playing a mini-game, puzzle, or interacting with a quiz/modal."""
+        # 1. Hands-on mini-games and math puzzles in Quarter 3
+        if getattr(self, 'fraction_bakery_active', False) or getattr(self, 'solar_array_puzzle_active', False) or getattr(self, 'guardian_skeleton_state', 0) in [2, 3]:
+            return True
+        if getattr(self, 'mini_puzzle_active', False) or getattr(self, 'quiz_state', 0) == 9:
+            return True
+        if getattr(self, 'sun_relic_active', False) or getattr(self, 'quiz_state', 0) == 8:
+            return True
+        if getattr(self, 'dragged_bakery_slice', None) is not None or getattr(self, 'dragged_solar_piece', None) is not None or getattr(self, 'dragged_slab', None) is not None or getattr(self, 'mini_puzzle_dragged_item', None) is not None:
+            return True
+        # 2. Quizzes, dialogues, modals, and camera pans
+        if getattr(self, 'quiz_state', 0) in [1, 2, 3, 4, 5, 7, 8, 9]:
+            return True
+        if getattr(self, 'camera_pan_active', False):
+            return True
+        if getattr(self, 'quiz_dialog', None) and getattr(self.quiz_dialog, 'is_active', False):
+            return True
+        if getattr(self, 'instruction_modal', None) and getattr(self.instruction_modal, 'is_visible', False):
+            return True
+        if getattr(self, 'greeting_dialog', None) and getattr(self.greeting_dialog, 'is_visible', False):
+            return True
+        if getattr(self, 'time_up_dialog_active', False):
+            return True
+        if getattr(self, 'victory_card', None) and getattr(self.victory_card, 'active', False):
+            return True
+        if getattr(self, 'pause_menu', None) and getattr(self.pause_menu, 'is_paused', False):
+            return True
+        return False
+
+    # ============================================================
     # UPDATE PLAYER MOVEMENT
     # ============================================================
     def update_player_movement(self):
-        if self.caravan_riding or self.quiz_state in [1, 2, 3, 4, 5, 8, 9] or (hasattr(self, 'player_block_timer') and self.player_block_timer > 0) or (getattr(self, 'instruction_modal', None) and self.instruction_modal.is_visible) or (getattr(self, 'greeting_dialog', None) and self.greeting_dialog.is_visible):
+        # Freeze player and reset walking animation whenever inside a mini-game, puzzle, quiz, or dialog
+        if not self.state_machine.allows_movement() or self.caravan_riding or self.is_minigame_or_puzzle_active() or (hasattr(self, 'player_block_timer') and self.player_block_timer > 0):
+            self.click_dest = None
             self.anim_frame = 0
+            self.anim_timer = 0
             return
 
         vx, vy = 0, 0
         base_speed = SPEED * (1.65 if self.speed_boost_timer > 0 else 1.0)
 
-        # Hand Gesture / Cursor Directional Controls (Pure Gesture Navigation)
-        player_screen_x = (self.player_x - self.camera_x + TILE_SIZE / 2) * ZOOM
-        player_screen_y = (self.player_y - self.camera_y + TILE_SIZE / 2) * ZOOM
-        cursor_x, cursor_y = self.cursor_pos
-        dx = cursor_x - player_screen_x
-        dy = cursor_y - player_screen_y
+        # 1. Keyboard Controls Fallback
+        keys = pygame.key.get_pressed()
+        has_key_input = (keys[pygame.K_LEFT] or keys[pygame.K_a] or keys[pygame.K_RIGHT] or keys[pygame.K_d] or
+                         keys[pygame.K_UP] or keys[pygame.K_w] or keys[pygame.K_DOWN] or keys[pygame.K_s])
+        if has_key_input:
+            self.click_dest = None
+            if keys[pygame.K_LEFT] or keys[pygame.K_a]:
+                vx = -base_speed
+                self.player_dir = "left"
+            elif keys[pygame.K_RIGHT] or keys[pygame.K_d]:
+                vx = base_speed
+                self.player_dir = "right"
+            if keys[pygame.K_UP] or keys[pygame.K_w]:
+                vy = -base_speed
+                self.player_dir = "up"
+            elif keys[pygame.K_DOWN] or keys[pygame.K_s]:
+                vy = base_speed
+                self.player_dir = "down"
 
-        # Dynamic speed scaling: faster when hand is stretched further out
-        dist_factor = 1.3 if (abs(dx) > 160 or abs(dy) > 160) else 1.0
-        g_speed = base_speed * dist_factor
-
-        deadzone = 45.0
-        if abs(dx) > deadzone or abs(dy) > deadzone:
-            if abs(dx) > deadzone:
-                vx = g_speed if dx > 0 else -g_speed
-            if abs(dy) > deadzone:
-                vy = g_speed if dy > 0 else -g_speed
-
-            if abs(dx) > abs(dy):
-                self.player_dir = "right" if dx > 0 else "left"
+        # 2. Click-to-Move Destination
+        elif getattr(self, 'click_dest', None) is not None:
+            cdx = self.click_dest[0] - self.player_x
+            cdy = self.click_dest[1] - self.player_y
+            cd_dist = math.hypot(cdx, cdy)
+            if cd_dist > 6.0:
+                vx = (cdx / cd_dist) * base_speed
+                vy = (cdy / cd_dist) * base_speed
+                if abs(cdx) > abs(cdy):
+                    self.player_dir = "right" if cdx > 0 else "left"
+                else:
+                    self.player_dir = "down" if cdy > 0 else "up"
             else:
-                self.player_dir = "down" if dy > 0 else "up"
+                self.click_dest = None
+
+        # 3. Universal Hand Gesture / Active Cursor Steering
+        if getattr(self, 'click_dest', None) is None and not has_key_input:
+            is_hand_active = getattr(self, 'hand_detected', False) and getattr(self, 'current_gesture', 'NO HAND') not in ['NO HAND', 'NO HAND (GRACE)']
+            is_mouse_active = getattr(self.main_menu, 'mouse_active', False) if self.main_menu else False
+
+            if is_hand_active or is_mouse_active:
+                player_screen_x = (self.player_x - self.camera_x + TILE_SIZE / 2) * ZOOM
+                player_screen_y = (self.player_y - self.camera_y + TILE_SIZE / 2) * ZOOM
+                cursor_x, cursor_y = self.cursor_pos
+                dx = cursor_x - player_screen_x
+                dy = cursor_y - player_screen_y
+
+                # Dynamic speed scaling: faster when hand is stretched further out
+                dist_factor = 1.3 if (abs(dx) > 160 or abs(dy) > 160) else 1.0
+                g_speed = base_speed * dist_factor
+
+                deadzone = 45.0
+                if abs(dx) > deadzone or abs(dy) > deadzone:
+                    if abs(dx) > deadzone:
+                        vx = g_speed if dx > 0 else -g_speed
+                    if abs(dy) > deadzone:
+                        vy = g_speed if dy > 0 else -g_speed
+
+                    if abs(dx) > abs(dy):
+                        self.player_dir = "right" if dx > 0 else "left"
+                    else:
+                        self.player_dir = "down" if dy > 0 else "up"
 
         new_x = self.player_x + vx
         new_y = self.player_y + vy
 
+        moved_x, moved_y = False, False
         if self.can_move(new_x, self.player_y):
             self.player_x = new_x
+            moved_x = True
         if self.can_move(self.player_x, new_y):
             self.player_y = new_y
+            moved_y = True
+
+        if getattr(self, 'click_dest', None) is not None and (vx != 0 or vy != 0):
+            if not moved_x and not moved_y:
+                self.click_dest = None
 
         if vx != 0 or vy != 0:
             self.player_trail.append((self.player_x, self.player_y, self.player_dir))
@@ -2810,23 +2933,19 @@ class Quarter3:
     def draw(self):
         self.draw_math_background()
 
-        start_col = max(0, int(self.camera_x / TILE_SIZE) - 2)
-        end_col = min(self.COLS, int((self.camera_x + self.width / ZOOM) / TILE_SIZE) + 3)
-        start_row = max(0, int(self.camera_y / TILE_SIZE) - 2)
-        end_row = min(self.ROWS, int((self.camera_y + self.height / ZOOM) / TILE_SIZE) + 3)
+        cam_px = int(self.camera_x * ZOOM)
+        cam_py = int(self.camera_y * ZOOM)
+        dest_x = max(0, -cam_px)
+        dest_y = max(0, -cam_py)
+        src_x = max(0, cam_px)
+        src_y = max(0, cam_py)
+        src_w = max(0, self.width - dest_x)
+        src_h = max(0, self.height - dest_y)
+        view_rect = pygame.Rect(src_x, src_y, src_w, src_h)
 
-        # Draw visible tiles using render_map (First pass: Skip trees/tumbleweeds and draw sand under them)
-        for row in range(start_row, end_row):
-            for col in range(start_col, end_col):
-                if row < len(self.render_map) and col < len(self.render_map[row]):
-                    tile_char = self.render_map[row][col]
-                    # If it's a tree, tumbleweed, or one of the brick tiles, draw sand under it first
-                    if tile_char in ['T', 'w', 'Z', 'M', 'n', 's', 't', 'J', 'Q', 'V', 'X', 'Y']:
-                        self.draw_tile('G', col * TILE_SIZE, row * TILE_SIZE)
-                    
-                    # Now draw the actual tile (unless it is tree/tumbleweed, which are drawn in second pass)
-                    if tile_char != 'T' and tile_char != 'w':
-                        self.draw_tile(tile_char, col * TILE_SIZE, row * TILE_SIZE)
+        # Draw pre-rendered desert ground & walls in a single C-level blit
+        if getattr(self, '_bg_map_surface', None) is not None and src_w > 0 and src_h > 0:
+            self.screen.blit(self._bg_map_surface, (dest_x, dest_y), view_rect)
 
         # Draw Hierarchy Pathfinder Visual Guide Trail
         if hasattr(self, 'path_guide'):
@@ -2882,18 +3001,22 @@ class Quarter3:
         if self.is_caravan_mode:
             self.draw_caravan()
 
+        # Draw Click-to-Move Target Beacon
+        if getattr(self, 'click_dest', None) is not None:
+            cd_screen_x = int((self.click_dest[0] - self.camera_x + TILE_SIZE // 2) * ZOOM)
+            cd_screen_y = int((self.click_dest[1] - self.camera_y + TILE_SIZE // 2) * ZOOM)
+            pulse = math.sin(self.frame_counter * 0.2) * 3 + 8
+            pygame.draw.circle(self.screen, (56, 189, 248), (cd_screen_x, cd_screen_y), int(pulse), 2)
+            pygame.draw.circle(self.screen, (255, 255, 255), (cd_screen_x, cd_screen_y), 3)
+
+        # Draw pre-rendered tree and tumbleweed tiles in a single C-level blit
+        if getattr(self, '_fg_trees_surface', None) is not None and src_w > 0 and src_h > 0:
+            self.screen.blit(self._fg_trees_surface, (dest_x, dest_y), view_rect)
+
         self.draw_player()
 
         # Draw Sparkle Particles
         self.draw_caravan_sparkles()
-
-        # Draw visible tree and tumbleweed tiles on top of everything (Second pass)
-        for row in range(start_row, end_row):
-            for col in range(start_col, end_col):
-                if row < len(self.render_map) and col < len(self.render_map[row]):
-                    tile_char = self.render_map[row][col]
-                    if tile_char == 'T' or tile_char == 'w':
-                        self.draw_tile(tile_char, col * TILE_SIZE, row * TILE_SIZE)
 
         # Draw Activated Portals on top of map tiles & trees (no brick wall overlap)
         if self.quiz_state == 6:
@@ -2912,12 +3035,16 @@ class Quarter3:
             # Draw Caravan Inventory HUD at top right
             self.draw_caravan_hud()
 
-            # Draw Celebratory Upgrade Banner if active
-            if self.caravan_upgrade_banner_text and self.caravan_upgrade_banner_timer > 0:
-                self.draw_caravan_upgrade_banner()
+        # Draw Celebratory Upgrade Banner if active on any map
+        if self.caravan_upgrade_banner_text and self.caravan_upgrade_banner_timer > 0:
+            self.draw_caravan_upgrade_banner()
 
         # Draw Active Objective NPC Indicator and Off-Screen Compass Pointer
         self.draw_offscreen_compass_pointer()
+
+        # Draw dim overlay for State.CognitivePuzzle before minigame UI
+        if self.state_machine.should_dim_world():
+            self.state_machine.render_dim_overlay(self.screen, alpha=160)
 
         # Draw quiz dialog overlays if opened
         if self.quiz_state == 1:
@@ -2941,62 +3068,16 @@ class Quarter3:
         elif self.guardian_skeleton_state == 3 or self.solar_array_puzzle_active:
             self.draw_solar_array_puzzle()
 
-        # Draw Area Title Animation
+        # Draw Area Title Animation (zero-copy composite wave)
         if self.title_active:
-            timer = self.title_elapsed
-            
-            # Alpha fading
-            alpha = 255
-            FADE_START = 4.0
-            FADE_DURATION = 1.0
-            if timer >= FADE_START:
-                fade = (timer - FADE_START) / FADE_DURATION
-                fade = max(0, min(fade, 1))
-                alpha = int(255 * (1 - fade))
-                
-            # Slide animation
-            BASE_Y = self.height // 2 - self.pixel_font_size // 2
-            SLIDE_TIME = 0.35
-            if timer < SLIDE_TIME:
-                t = timer / SLIDE_TIME
-                ease = 1 - (1 - t) ** 3
-                y = BASE_Y - (1 - ease) * 40
-            else:
-                y = BASE_Y
-                
-            # Draw letters centered
-            x = self.width // 2 - self.title_total_width // 2
-            
-            for i, data in enumerate(self.title_letters):
-                phase = timer * 8 - i * 0.55
-                offset = 0
-                
-                # Single traveling wave
-                if -math.pi <= phase <= math.pi:
-                    offset = math.sin(phase) * 12
-                    
-                glow = data["glow"].copy()
-                outline = data["outline"].copy()
-                main = data["main"].copy()
-                
-                glow.set_alpha(alpha // 5)
-                outline.set_alpha(alpha)
-                main.set_alpha(alpha)
-                
-                # Glow
-                for gx in (-5, 0, 5):
-                    for gy in (-5, 0, 5):
-                        self.screen.blit(glow, (x + gx, y + gy + offset))
-                        
-                # Outline
-                for ox in (-2, -1, 1, 2):
-                    for oy in (-2, -1, 1, 2):
-                        self.screen.blit(outline, (x + ox, y + oy + offset))
-                        
-                # Main text
-                self.screen.blit(main, (x, y + offset))
-                
-                x += data["width"] + self.title_spacing
+            draw_composite_title_wave(
+                self.screen,
+                self.title_letters,
+                self.title_total_width,
+                self.title_spacing,
+                self.pixel_font_size,
+                self.title_elapsed,
+            )
 
         self.draw_ui()
 
@@ -3070,24 +3151,32 @@ class Quarter3:
             pygame.draw.rect(self.screen, border_color, (box_x, box_y, box_w, box_h), 2, border_radius=8)
             
             # Header title in Gold
-            title_font = pygame.font.SysFont("Comic Sans MS", 12, bold=True)
+            title_font = get_font("Comic Sans MS", 12, bold=True)
             title_surf = title_font.render("CURRENT OBJECTIVES", True, (255, 215, 0))
             self.screen.blit(title_surf, (box_x + 15, box_y + 8))
             
             # Details font
-            item_font = pygame.font.SysFont("Comic Sans MS", 12)
+            item_font = get_font("Comic Sans MS", 12)
             
-            # Quiz completion progress item
-            q_count = min(self.current_question_index, 5)
-            obj1 = f"- Quiz Progress: {q_count}/5 questions answered"
-            obj1_color = (255, 255, 255) if q_count < 5 else (34, 197, 94)
+            tot_st = getattr(self, 'active_station_count', len(self.quiz_questions))
+            if tot_st <= 0:
+                obj1 = "- Cloud Questions: None Assigned (0 in Cloud)"
+                obj1_color = (56, 189, 248)
+            else:
+                q_count = tot_st if self.quiz_station_index >= 6 else min(self.current_question_index, tot_st)
+                obj1 = f"- Quiz Progress: {q_count}/{tot_st} questions answered"
+                obj1_color = (255, 255, 255) if q_count < tot_st else (34, 197, 94)
             obj1_surf = item_font.render(obj1, True, obj1_color)
             self.screen.blit(obj1_surf, (box_x + 15, box_y + 28))
             
             # Goal portal state item
             if self.quiz_state < 6:
-                obj2 = "- Portal Status: LOCKED"
-                obj2_color = (244, 63, 94)  # Rose
+                if self.quiz_station_index >= 6:
+                    obj2 = "- Visit Skeleton Guardian for Fraction Bakery!"
+                    obj2_color = (250, 204, 21)
+                else:
+                    obj2 = "- Portal Status: LOCKED"
+                    obj2_color = (244, 63, 94)  # Rose
             else:
                 obj2 = "- Portal Status: OPEN (Enter the portal to exit!)"
                 obj2_color = (34, 197, 94)  # Green
@@ -3725,8 +3814,12 @@ class Quarter3:
                 self.render_icon("lock", s_rect.center, (18, 18))
 
     def draw_caravan_upgrade_banner(self):
-        """Draws celebratory gold banner when new cargo is loaded onto the caravan"""
-        b_w, b_h = 580, 60
+        """Draws celebratory gold banner when new cargo is loaded onto the caravan or trial is active"""
+        t_surf = self.dialog_header_font.render(self.caravan_upgrade_banner_text, True, (255, 255, 255))
+        sub_surf = self.dialog_stat_font.render(self.caravan_upgrade_banner_sub, True, (254, 240, 138))
+        
+        b_w = max(640, max(t_surf.get_width(), sub_surf.get_width()) + 50)
+        b_h = 60
         b_x = (self.width - b_w) // 2
         b_y = 120
         b_rect = pygame.Rect(b_x, b_y, b_w, b_h)
@@ -3734,10 +3827,7 @@ class Quarter3:
         pygame.draw.rect(self.screen, (22, 163, 74), b_rect, border_radius=12)
         pygame.draw.rect(self.screen, (255, 255, 255), b_rect, 3, border_radius=12)
         
-        t_surf = self.dialog_header_font.render(self.caravan_upgrade_banner_text, True, (255, 255, 255))
         self.screen.blit(t_surf, t_surf.get_rect(center=(b_rect.centerx, b_rect.top + 20)))
-        
-        sub_surf = self.dialog_stat_font.render(self.caravan_upgrade_banner_sub, True, (254, 240, 138))
         self.screen.blit(sub_surf, sub_surf.get_rect(center=(b_rect.centerx, b_rect.bottom - 16)))
 
     def draw_citadel_hud(self):
@@ -3814,16 +3904,18 @@ class Quarter3:
         """Cheat/Debug shortcut to complete stations, teleport to Skeleton Guardian, enable dialogue, and unlock portal."""
         print("[CHEAT] Quarter 3 Complete Objectives shortcut activated!")
         
-        # Tier 2: If already talking to Skeleton Guardian or inside the Solar Array Trial, solve the puzzle & unlock portal
-        if getattr(self, 'guardian_skeleton_state', 0) in [2, 3, 4] or getattr(self, 'solar_array_puzzle_active', False):
+        # Tier 2: If already talking to Skeleton Guardian or inside the Fraction Bakery / Solar Array Trial, solve the puzzle & unlock portal
+        if getattr(self, 'guardian_skeleton_state', 0) in [2, 3, 4] or getattr(self, 'fraction_bakery_active', False) or getattr(self, 'solar_array_puzzle_active', False):
+            self.fraction_bakery_solved = True
             self.solar_array_puzzle_solved = True
             self.solar_array_puzzle_all_placed = True
+            self.fraction_bakery_active = False
             self.solar_array_puzzle_active = False
             self.guardian_skeleton_state = 5  # Unlocked portal
             self.quiz_state = 6  # Ready for exit portal
             if hasattr(self, 'clear_portal_overlapping_tiles'):
                 self.clear_portal_overlapping_tiles()
-            self.caravan_upgrade_banner_text = "SOLAR ARRAY TRIAL COMPLETED!"
+            self.caravan_upgrade_banner_text = "FRACTION BAKERY MASTERED!"
             self.caravan_upgrade_banner_sub = "Desert Sun Exit Portal is Unlocked!"
             self.caravan_upgrade_banner_timer = 5.0
             if hasattr(self.main_menu, 'audio_manager') and self.main_menu.audio_manager:
@@ -3841,7 +3933,7 @@ class Quarter3:
                     
             # Aqueduct bridge tiles on Map 8
             if "map8" in str(self.map_name).lower():
-                bridge_locs = [(32, 10), (33, 10), (34, 10), (35, 10), (36, 10)]
+                bridge_locs = getattr(self, 'bridge_tiles', None) or [(40, 7), (41, 7), (42, 7), (43, 7), (44, 7)]
                 for bx, by in bridge_locs:
                     if 0 <= by < len(self.render_map) and 0 <= bx < len(self.render_map[by]):
                         row = list(self.render_map[by])
@@ -3851,6 +3943,8 @@ class Quarter3:
                         row = list(self.game_map[by])
                         row[bx] = 'B'
                         self.game_map[by] = ''.join(row)
+                self.built_bridge_count = len(bridge_locs)
+                self.build_prerendered_map()
                         
             # Keystones on Map 9
             if hasattr(self, 'keystones_collected'):
@@ -3903,15 +3997,19 @@ class Quarter3:
                 self.camera_x = self.player_x - (self.width / (2 * ZOOM)) + TILE_SIZE / 2
                 self.camera_y = self.player_y - (self.height / (2 * ZOOM)) + TILE_SIZE / 2
                 if hasattr(self, 'lol_camera'):
-                    self.lol_camera.cam_x = self.camera_x
-                    self.lol_camera.cam_y = self.camera_y
+                    self.lol_camera.camera_x = self.camera_x
+                    self.lol_camera.camera_y = self.camera_y
 
             # Immediately open the Skeleton Guardian Dialogue & Trial Prompt modal
             self.guardian_skeleton_state = 2
-            box_w, box_h = 760, 360
+            box_w = min(860, self.width - 40)
+            box_h = 370
             box_x = (self.width - box_w) // 2
             box_y = (self.height - box_h) // 2
-            self.guardian_skeleton_btn_rect = pygame.Rect(box_x + (box_w - 320) // 2, box_y + 280, 320, 50)
+            diag_x = box_x + 24 + 140 + 24
+            self.guardian_skeleton_btn_rect = pygame.Rect(diag_x, box_y + box_h - 76, 380, 52)
+            self.guardian_skeleton_close_btn_rect = pygame.Rect(diag_x + 380 + 16, box_y + box_h - 76, 190, 52)
+            self.guardian_skeleton_x_btn_rect = pygame.Rect(box_x + box_w - 38, box_y + 8, 28, 28)
             
             self.caravan_upgrade_banner_text = "ALL 5 STATIONS SOLVED!"
             self.caravan_upgrade_banner_sub = "Skeleton Guardian Trial Ready! Press Space or Click to begin!"
@@ -3930,8 +4028,11 @@ class Quarter3:
     # HANDLE EVENT
     # ============================================================
     def handle_event(self, event):
-        # Allow LoL camera to process middle mouse drag or Spacebar recentering
-        self.lol_camera.handle_event(event)
+        self.sync_ui_state()
+
+        # Allow LoL camera to process middle mouse drag or Spacebar recentering only when permitted
+        if self.state_machine.allows_camera_pan():
+            self.lol_camera.handle_event(event)
 
         if hasattr(self, 'victory_card') and self.victory_card.active:
             if self.victory_card.handle_event(event):
@@ -3942,35 +4043,74 @@ class Quarter3:
                     return "blocked"
 
         if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
-            if getattr(self, 'solar_array_puzzle_active', False):
+            if getattr(self, 'fraction_bakery_active', False) or getattr(self, 'solar_array_puzzle_active', False):
+                self.fraction_bakery_active = False
                 self.solar_array_puzzle_active = False
                 self.guardian_skeleton_state = 1 if self.quiz_station_index >= 6 else 0
                 return "handled"
             if getattr(self, 'guardian_skeleton_state', 0) == 2:
                 self.guardian_skeleton_state = 1 if self.quiz_station_index >= 6 else 0
                 return "handled"
-
+        # In-game pause menu (universal across all states)
         if self.pause_menu.handle_event(event):
             return "blocked"
 
+        if self.pause_menu.is_paused:
+            if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                self.cursor_pos = event.pos
+                self.pause_menu.handle_click(event.pos)
+                return "blocked"
+            elif event.type == pygame.MOUSEMOTION:
+                self.cursor_pos = event.pos
+                return "blocked"
+            return "blocked"
+
         if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
-            self.cursor_pos = event.pos
-            if getattr(self, 'solar_array_puzzle_active', False) or getattr(self, 'guardian_skeleton_state', 0) == 3:
-                handled = self.handle_solar_array_mouse_down(event.pos)
-                if handled:
-                    return "handled"
-            self.trigger_click(event.pos)
-            return "handled"
-        elif event.type == pygame.MOUSEMOTION:
-            self.cursor_pos = event.pos
-            if getattr(self, 'solar_array_puzzle_active', False) and getattr(self, 'dragged_solar_piece', None) and getattr(self, 'mouse_drag_active', False):
-                self.dragged_solar_piece["x"] = event.pos[0] - self.solar_drag_offset_x
-                self.dragged_solar_piece["y"] = event.pos[1] - self.solar_drag_offset_y
-        elif event.type == pygame.MOUSEBUTTONUP and event.button == 1:
-            if getattr(self, 'solar_array_puzzle_active', False) and getattr(self, 'mouse_drag_active', False):
-                self.mouse_drag_active = False
-                self.release_dragged_solar_piece()
+            if self.pause_menu.pause_btn_rect.collidepoint(event.pos):
+                self.cursor_pos = event.pos
+                self.pause_menu.toggle_pause()
+                return "blocked"
+        if self.state_machine.current_state == State.CognitivePuzzle:
+            if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                self.cursor_pos = event.pos
+                if getattr(self, 'fraction_bakery_active', False) or getattr(self, 'solar_array_puzzle_active', False) or getattr(self, 'guardian_skeleton_state', 0) == 3:
+                    handled = self.handle_solar_array_mouse_down(event.pos)
+                    if handled:
+                        return "handled"
+                self.trigger_click(event.pos)
                 return "handled"
+            elif event.type == pygame.MOUSEMOTION:
+                if not getattr(self, 'hand_detected', False) or getattr(self, 'current_gesture', 'NO HAND') in ['NO HAND', 'NO HAND (GRACE)']:
+                    self.cursor_pos = event.pos
+                if (getattr(self, 'fraction_bakery_active', False) or getattr(self, 'solar_array_puzzle_active', False)) and getattr(self, 'mouse_drag_active', False):
+                    if getattr(self, 'dragged_bakery_slice', None):
+                        self.dragged_bakery_slice["x"] = event.pos[0] - getattr(self, 'bakery_drag_offset_x', self.solar_drag_offset_x)
+                        self.dragged_bakery_slice["y"] = event.pos[1] - getattr(self, 'bakery_drag_offset_y', self.solar_drag_offset_y)
+                    elif getattr(self, 'dragged_solar_piece', None):
+                        self.dragged_solar_piece["x"] = event.pos[0] - self.solar_drag_offset_x
+                        self.dragged_solar_piece["y"] = event.pos[1] - self.solar_drag_offset_y
+                elif getattr(self, 'mini_puzzle_active', False) and getattr(self, 'mini_puzzle_dragged_item', None):
+                    self.mini_puzzle_dragged_item["x"] = event.pos[0] - getattr(self, 'mini_puzzle_drag_offset_x', 0)
+                    self.mini_puzzle_dragged_item["y"] = event.pos[1] - getattr(self, 'mini_puzzle_drag_offset_y', 0)
+                return "handled"
+            elif event.type == pygame.MOUSEBUTTONUP and event.button == 1:
+                if (getattr(self, 'fraction_bakery_active', False) or getattr(self, 'solar_array_puzzle_active', False)) and getattr(self, 'mouse_drag_active', False):
+                    self.mouse_drag_active = False
+                    self.release_dragged_solar_piece()
+                    return "handled"
+                elif getattr(self, 'mini_puzzle_active', False) and getattr(self, 'mini_puzzle_dragged_item', None):
+                    self.release_mini_puzzle_dragged_item()
+                    return "handled"
+                return "handled"
+            elif event.type == pygame.KEYDOWN:
+                if event.key in [pygame.K_F7, pygame.K_F10]:
+                    if getattr(self, 'fraction_bakery_active', False) or getattr(self, 'solar_array_puzzle_active', False):
+                        self.auto_solve_solar_array_puzzle()
+                    elif getattr(self, 'mini_puzzle_active', False):
+                        self.auto_solve_mini_puzzle()
+                    return "handled"
+                return "handled"
+            return "handled"
 
 
         if event.type == pygame.KEYDOWN:
@@ -4023,21 +4163,30 @@ class Quarter3:
                     player_center_y = self.player_y + TILE_SIZE // 2
                     if math.hypot(player_center_x - skel_center_x, player_center_y - skel_center_y) < TILE_SIZE * 3.5:
                         self.guardian_skeleton_state = 2
-                        box_w = min(840, self.width - 40)
-                        box_h = 360
+                        box_w = min(860, self.width - 40)
+                        box_h = 370
                         box_x = (self.width - box_w) // 2
                         box_y = (self.height - box_h) // 2
-                        self.guardian_skeleton_btn_rect = pygame.Rect(box_x + 200, box_y + 285, 340, 50)
+                        diag_x = box_x + 24 + 140 + 24
+                        self.guardian_skeleton_btn_rect = pygame.Rect(diag_x, box_y + box_h - 76, 380, 52)
+                        self.guardian_skeleton_close_btn_rect = pygame.Rect(diag_x + 380 + 16, box_y + box_h - 76, 190, 52)
+                        self.guardian_skeleton_x_btn_rect = pygame.Rect(box_x + box_w - 38, box_y + 8, 28, 28)
                         if getattr(self.main_menu, 'audio_manager', None):
                             self.main_menu.audio_manager.play_sfx("correct")
                         return "handled"
-                elif getattr(self, 'solar_array_puzzle_active', False) and getattr(self, 'solar_array_puzzle_all_placed', False):
+                elif (getattr(self, 'fraction_bakery_active', False) or getattr(self, 'solar_array_puzzle_active', False)) and getattr(self, 'solar_array_puzzle_all_placed', False):
+                    self.fraction_bakery_solved = True
                     self.solar_array_puzzle_solved = True
+                    self.fraction_bakery_active = False
                     self.solar_array_puzzle_active = False
                     self.guardian_skeleton_state = 5 if self.quiz_station_index >= 6 else 1
                     self.quiz_state = 6 if self.quiz_station_index >= 6 else 0
                     if self.quiz_station_index >= 6 and hasattr(self, 'clear_portal_overlapping_tiles'):
                         self.clear_portal_overlapping_tiles()
+                        self.save_results_to_database()
+                    self.caravan_upgrade_banner_text = "PORTAL UNLOCKED!"
+                    self.caravan_upgrade_banner_sub = "The Sun Gate is open — step through to complete Quarter 3!"
+                    self.caravan_upgrade_banner_timer = 6.0
                     if getattr(self.main_menu, 'audio_manager', None):
                         self.main_menu.audio_manager.play_sfx("victory_fanfare")
                     return "handled"
@@ -4045,32 +4194,23 @@ class Quarter3:
                     self.quiz_state = 1
                     save_student_progress(self.main_menu)
                     return "handled"
-                elif self.quiz_state == 3:
-                    self.advance_station_progress()
-                    save_student_progress(self.main_menu)
-                    return "handled"
-                elif self.quiz_state == 4:
-                    self.eliminated_choices.clear()
-                    self.wrong_feedback_msg = ""
-                    self.ident_input_text = ""
-                    self.speed_boost_timer = 3.0
+                elif self.quiz_state in [3, 4]:
                     self.station_attempts[self.quiz_station_index] = 0
-                    self.quiz_state = 0
-                    npc_info = self.station_npcs.get(self.quiz_station_index, {})
-                    speaker_name = npc_info.get("name", f"Station {self.quiz_station_index}")
-                    self.caravan_upgrade_banner_text = "2 TRIES EXHAUSTED!"
-                    self.caravan_upgrade_banner_sub = f"Speak with {speaker_name} again to retry the challenge!"
-                    self.caravan_upgrade_banner_timer = 4.0
+                    self.advance_station_progress()
                     save_student_progress(self.main_menu)
                     return "handled"
                 if self.quiz_state == 0:
                     self.lol_camera.recenter()
             elif event.key == pygame.K_ESCAPE:
-                if self.quiz_state in [1, 2, 4]:
+                if self.quiz_state in [1, 2]:
                     self.quiz_state = 0
                     self.eliminated_choices.clear()
                     self.ident_input_text = ""
                     self.station_attempts[self.quiz_station_index] = 0
+                    return "handled"
+                elif self.quiz_state == 4:
+                    click_pos = self.out_of_tries_btn_rect.center if hasattr(self, 'out_of_tries_btn_rect') and self.out_of_tries_btn_rect else (self.width // 2, self.height // 2)
+                    self.trigger_click(click_pos)
                     return "handled"
                 if getattr(self, 'guardian_skeleton_state', 0) == 2:
                     self.guardian_skeleton_state = 1 if self.quiz_station_index >= 6 else 0
@@ -4087,7 +4227,7 @@ class Quarter3:
                 self.show_info = not self.show_info
 
             # Physical Keyboard Typing in Identification Question Mode (State 1)
-            elif self.quiz_state == 1:
+            elif self.quiz_state == 1 and self.quiz_questions and 0 <= self.current_question_index < len(self.quiz_questions):
                 q_data = self.quiz_questions[self.current_question_index]
                 if q_data.get("q_type") == "identification":
                     if event.key == pygame.K_BACKSPACE:
@@ -4097,6 +4237,19 @@ class Quarter3:
                     elif event.unicode and (event.unicode.isalnum() or event.unicode in "/+ -"):
                         if len(self.ident_input_text) < 14:
                             self.ident_input_text += event.unicode
+
+        elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+            self.cursor_pos = event.pos
+            self.trigger_click(event.pos)
+        elif event.type == pygame.MOUSEBUTTONUP and event.button == 1:
+            if (getattr(self, 'fraction_bakery_active', False) or getattr(self, 'solar_array_puzzle_active', False)) and getattr(self, 'mouse_drag_active', False):
+                self.mouse_drag_active = False
+                self.release_dragged_solar_piece()
+            elif getattr(self, 'mini_puzzle_active', False) and getattr(self, 'mini_puzzle_dragged_item', None):
+                self.release_mini_puzzle_dragged_item()
+        elif event.type == pygame.MOUSEMOTION:
+            if not getattr(self, 'hand_detected', False) or getattr(self, 'current_gesture', 'NO HAND') in ['NO HAND', 'NO HAND (GRACE)']:
+                self.cursor_pos = event.pos
 
         return None
 
@@ -4320,6 +4473,7 @@ class Quarter3:
             anim_idx = npc_info.get("anim_frame", 0) % len(frames)
             sprite_frame = frames[anim_idx]
 
+        tot_st = max(1, getattr(self, 'active_station_count', len(self.quiz_questions)))
         self.quiz_dialog.update(0.016)
         self.quiz_dialog.draw(
             cursor_pos=self.cursor_pos,
@@ -4328,7 +4482,7 @@ class Quarter3:
             speaker_subtitle=speaker_subtitle,
             sprite_frame=sprite_frame,
             station_idx=self.quiz_station_index,
-            total_stations=5,
+            total_stations=tot_st,
             eliminated_choices=self.eliminated_choices,
             hint_msg=self.wrong_feedback_msg
         )
@@ -4438,14 +4592,24 @@ class Quarter3:
         speaker_surf = self.dialog_header_font.render(f"{speaker_name} — 2 Tries Exhausted", True, (245, 158, 11))
         self.screen.blit(speaker_surf, (box_x + 28, box_y + 18))
 
-        reveal_msg = "You have used both of your 2 attempts for this challenge."
-        lines = self.wrap_text(reveal_msg, self.dialog_q_font, box_w - 56)
+        q_data = self.quiz_questions[self.current_question_index] if self.quiz_questions and self.current_question_index < len(self.quiz_questions) else {}
+        choices = q_data.get("choices", []) if isinstance(q_data, dict) else []
+        c_idx = q_data.get("correct", 0) if isinstance(q_data, dict) else 0
+        if isinstance(c_idx, str) and c_idx.isdigit():
+            c_idx = int(c_idx)
+        correct_choice_text = choices[c_idx] if isinstance(c_idx, int) and 0 <= c_idx < len(choices) else ""
+
+        if correct_choice_text:
+            ans_msg = f"Out of tries! The correct answer was: {correct_choice_text}"
+        else:
+            ans_msg = "You have used both of your 2 attempts for this challenge."
+        lines = self.wrap_text(ans_msg, self.dialog_q_font, box_w - 56)
         y_off = box_y + 65
         for l in lines[:2]:
             self.screen.blit(self.dialog_q_font.render(l, True, (255, 255, 255)), (box_x + 28, y_off))
             y_off += 28
 
-        reward_surf = self.dialog_hint_font.render(f"Review the challenge and talk to {speaker_name} again to retry!", True, (254, 240, 138))
+        reward_surf = self.dialog_hint_font.render(f"Acquired: {item_name}! Recorded as incorrect, but your quest continues!", True, (254, 240, 138))
         self.screen.blit(reward_surf, (box_x + 28, y_off + 10))
 
         button_w, button_h = 260, 50
@@ -4461,7 +4625,7 @@ class Quarter3:
         pygame.draw.rect(self.screen, bg_color, btn_rect, border_radius=12)
         pygame.draw.rect(self.screen, border_color, btn_rect, 2, border_radius=12)
 
-        c_surf = self.dialog_header_font.render("Close Window [Esc]", True, (255, 255, 255) if not is_hovered else (15, 23, 42))
+        c_surf = self.dialog_header_font.render("Continue Quest >>", True, (255, 255, 255) if not is_hovered else (15, 23, 42))
         self.screen.blit(c_surf, c_surf.get_rect(center=btn_rect.center))
 
     def draw_correct_dialog(self):
@@ -4610,561 +4774,582 @@ class Quarter3:
         accent = item.get("accent", (56, 189, 248))
         return self.render_egyptian_scarab_surface(min(width, height) - 6, color, accent)
 
-    def init_solar_array_puzzle(self):
-        """Initializes The Scales of Anubis: Equal Sharing Division Puzzle"""
+    # ============================================================
+    # ROYAL OASIS FRACTION BAKERY (QUARTER 3 MINI-GAME)
+    # ============================================================
+    def init_fraction_bakery(self):
+        """Initializes the Royal Oasis Fraction Bakery mini-game."""
         import math, pygame
-        self.solar_array_puzzle_active = True
-        self.solar_array_puzzle_slots = []
-        self.solar_array_puzzle_pieces = []
-        self.solar_array_puzzle_solved = False
-        self.solar_array_puzzle_all_placed = False
+        self.fraction_bakery_active = True
+        self.solar_array_puzzle_active = True  # Backward compatibility
+        self.click_dest = None
+        self.anim_frame = 0
+        self.anim_timer = 0
+        self.dragged_bakery_slice = None
         self.dragged_solar_piece = None
-        self.solar_drag_offset_x = 0
-        self.solar_drag_offset_y = 0
-        self.solar_sparkles = []
         self.mouse_drag_active = False
-
-        # Scales Physics
-        self.scale_current_angle = 0.0
-        self.scale_target_angle = 0.0
+        self.bakery_sparkles = []
         self.scale_flame_particles = []
 
-        # Master Catalog of Grade 2 Equal Sharing Division Challenges
-        division_catalog = {
-            "map7": {
-                "name": "Trial of the Two Sacred Altars",
-                "total": 10,
-                "gem_name": "Lapis Scarab",
-                "color": (217, 119, 6),
-                "accent": (56, 189, 248)
+        # Master Catalog of Grade 2 Fraction Pastry Recipes
+        self.fraction_bakery_orders = [
+            {
+                "id": "order_halves",
+                "name": "Golden Honey Sun Flatbread",
+                "flavor": "Warm desert flatbread baked with golden wild honey & toasted sesame",
+                "denom": 2,
+                "target": 1,
+                "fraction_str": "1/2",
+                "unit_name": "Halves (1/2)",
+                "slice_name": "Honey Half",
+                "base_color": (217, 119, 6),
+                "crust_color": (146, 64, 14),
+                "fill_color": (251, 191, 36),
+                "decor_color": (254, 240, 138),
+                "topping_type": "sesame",
+                "equation": "1 / 2 = One Half",
+                "desc": "Place 1 out of 2 equal slices (1/2) onto the golden plate.",
+                "explanation": "1 out of 2 equal parts is called One Half (1/2)."
             },
-            "map8": {
-                "name": "Scales of Pharaoh's Treasury",
-                "total": 12,
-                "gem_name": "Emerald Scarab",
-                "color": (180, 83, 9),
-                "accent": (52, 211, 153)
+            {
+                "id": "order_thirds",
+                "name": "Royal Oasis Fig & Berry Pie",
+                "flavor": "Caramelized oasis figs simmered with pomegranate nectar",
+                "denom": 3,
+                "target": 1,
+                "fraction_str": "1/3",
+                "unit_name": "Thirds (1/3)",
+                "slice_name": "Fig Third",
+                "base_color": (159, 18, 57),
+                "crust_color": (194, 65, 12),
+                "fill_color": (244, 63, 94),
+                "decor_color": (253, 164, 175),
+                "topping_type": "seeds",
+                "equation": "1 / 3 = One Third",
+                "desc": "Place 1 out of 3 equal slices (1/3) onto the golden plate.",
+                "explanation": "1 out of 3 equal parts is called One Third (1/3)."
             },
-            "map9": {
-                "name": "The Grand Sun Scales of Anubis",
-                "total": 16,
-                "gem_name": "Ruby Solar Scarab",
-                "color": (225, 29, 72),
-                "accent": (251, 191, 36)
+            {
+                "id": "order_fourths",
+                "name": "Nile Turquoise Berry Cake",
+                "flavor": "Fluffy sponge pastry topped with crystalline azure berry glaze",
+                "denom": 4,
+                "target": 1,
+                "fraction_str": "1/4",
+                "unit_name": "Fourths (1/4)",
+                "slice_name": "Berry Quarter",
+                "base_color": (14, 116, 144),
+                "crust_color": (180, 83, 9),
+                "fill_color": (56, 189, 248),
+                "decor_color": (186, 230, 253),
+                "topping_type": "berries",
+                "equation": "1 / 4 = One Fourth (One Quarter)",
+                "desc": "Place 1 out of 4 equal slices (1/4) onto the golden plate.",
+                "explanation": "1 out of 4 equal parts is called One Fourth (1/4)."
+            },
+            {
+                "id": "order_three_fourths",
+                "name": "Pharaoh's Feast Celebration Tart",
+                "flavor": "Sun Festival royal tart layered with sweet dates & golden pomegranate seeds",
+                "denom": 4,
+                "target": 3,
+                "fraction_str": "3/4",
+                "unit_name": "Three-Fourths (3/4)",
+                "slice_name": "Sun Tart Slice",
+                "base_color": (194, 65, 12),
+                "crust_color": (120, 53, 15),
+                "fill_color": (249, 115, 22),
+                "decor_color": (254, 215, 170),
+                "topping_type": "almonds",
+                "equation": "3 / 4 = Three Fourths",
+                "desc": "Place 3 out of 4 equal slices (3/4) onto the golden plate.",
+                "explanation": "3 out of 4 equal parts is called Three Fourths (3/4)."
             }
-        }
+        ]
 
-        map_key = "map7"
-        cur_map_lower = str(getattr(self, 'map_name', '')).lower()
-        if "map8" in cur_map_lower:
-            map_key = "map8"
-        elif "map9" in cur_map_lower:
-            map_key = "map9"
+        if not hasattr(self, 'fraction_orders_completed') or len(self.fraction_orders_completed) != len(self.fraction_bakery_orders):
+            self.fraction_orders_completed = [False] * len(self.fraction_bakery_orders)
 
-        challenge = division_catalog.get(map_key, division_catalog["map7"])
-        self.solar_matrix_challenge = challenge
-        total_gems = challenge["total"]
-        target_per_pan = total_gems // 2
+        self.setup_fraction_order(self.current_fraction_order_index)
+        print(f"[FRACTION BAKERY] Mini-game initialized with {len(self.fraction_bakery_orders)} royal fraction recipes.")
 
-        self.solar_matrix_rows = 2
-        self.solar_matrix_cols = target_per_pan
-        self.solar_matrix_row_completed = [False, False]
-        self.solar_matrix_beam_alphas = [0.0, 0.0]
+    def setup_fraction_order(self, order_idx):
+        """Sets up the plate sectors and tray slices for the specified order index."""
+        import math, pygame
+        order_idx = max(0, min(order_idx, len(self.fraction_bakery_orders) - 1))
+        self.current_fraction_order_index = order_idx
+        order = self.fraction_bakery_orders[order_idx]
+        denom = order["denom"]
+        target = order["target"]
 
-        self.solar_array_target_equation = f"{total_gems} ÷ 2 = {target_per_pan}"
-        self.solar_array_factor_desc = f"{total_gems} Scarabs Divided into 2 Equal Pans = {target_per_pan} Each (Balanced 1/2)"
-
-        # Geometry
+        # Geometry calculations
         panel_w = min(1140, self.width - 60)
         panel_h = min(620, self.height - 50)
         panel_x = (self.width - panel_w) // 2
         panel_y = (self.height - panel_h) // 2
 
-        self.scale_center_x = panel_x + panel_w // 2
-        self.scale_pivot_y = panel_y + 165
-        self.scale_beam_len = 540
-        self.scale_chain_len = 100
-        self.scale_pan_w = 230
-        self.scale_pan_h = 70
+        self.bakery_panel_rect = pygame.Rect(panel_x, panel_y, panel_w, panel_h)
 
-        # Create slots for Left Pan and Right Pan
-        gem_sz = 44
-        # Left Pan Slots: indices 0 to target_per_pan - 1
-        for i in range(target_per_pan):
-            self.solar_array_puzzle_slots.append({
-                "id": f"slot_left_{i}",
-                "pan": "left",
-                "pan_index": i,
-                "row": 0,
-                "col": i,
-                "rect": pygame.Rect(0, 0, gem_sz, gem_sz),
-                "matched": False,
-                "matched_item": None,
+        # Plate: Left side
+        self.bakery_plate_cx = panel_x + 280
+        self.bakery_plate_cy = panel_y + 335
+        self.bakery_plate_r = 135
+
+        # Build plate angular slots
+        slice_ang = (2.0 * math.pi) / denom
+        self.fraction_bakery_plate_slots = []
+        for i in range(denom):
+            start_ang = -math.pi / 2.0 + i * slice_ang
+            end_ang = start_ang + slice_ang
+            mid_ang = (start_ang + end_ang) / 2.0
+            self.fraction_bakery_plate_slots.append({
+                "id": f"slot_{i}",
+                "index": i,
+                "denom": denom,
+                "start_ang": start_ang,
+                "end_ang": end_ang,
+                "mid_ang": mid_ang,
+                "slice": None,
                 "placed_gem": None,
-                "color": challenge["color"],
-                "accent": challenge["accent"],
-                "equation": self.solar_array_target_equation,
-                "factor_desc": self.solar_array_factor_desc
+                "matched": False,
+                "pan": "plate",
+                "label": f"1/{denom}",
+                "rect": pygame.Rect(self.bakery_plate_cx - 40, self.bakery_plate_cy - 40, 80, 80)
             })
 
-        # Right Pan Slots: indices target_per_pan to total_gems - 1
-        for i in range(target_per_pan):
-            self.solar_array_puzzle_slots.append({
-                "id": f"slot_right_{i}",
-                "pan": "right",
-                "pan_index": i,
-                "row": 1,
-                "col": i,
-                "rect": pygame.Rect(0, 0, gem_sz, gem_sz),
-                "matched": False,
-                "matched_item": None,
-                "placed_gem": None,
-                "color": challenge["color"],
-                "accent": challenge["accent"],
-                "equation": self.solar_array_target_equation,
-                "factor_desc": self.solar_array_factor_desc
-            })
+        # Baker's Cooling Tray: Bottom Right
+        tray_x = panel_x + 510
+        tray_y = panel_y + 325
+        tray_w = panel_w - 540
+        tray_h = 195
+        self.bakery_tray_rect = pygame.Rect(tray_x, tray_y, tray_w, tray_h)
+        self.solar_matrix_tray_rect = self.bakery_tray_rect
 
-        # Bottom Offering Tray
-        tray_x = panel_x + 90
-        tray_w = panel_w - 180
-        tray_y = panel_y + panel_h - 150
-        tray_h = 95
-        self.solar_matrix_tray_rect = pygame.Rect(tray_x, tray_y, tray_w, tray_h)
+        # Generate Tray Slices
+        self.fraction_bakery_slices = []
+        col_w = tray_w // denom
+        for i in range(denom):
+            cx = tray_x + i * col_w + col_w // 2
+            cy = tray_y + tray_h // 2 + 8
+            rect_w = min(96, col_w - 12)
+            rect_h = 96
+            rect = pygame.Rect(cx - rect_w // 2, cy - rect_h // 2, rect_w, rect_h)
 
-        piece_surf = self.render_egyptian_scarab_surface(gem_sz, challenge["color"], challenge["accent"])
-        tray_gap = min(18, max(4, (tray_w - 40 - total_gems * gem_sz) // max(1, total_gems - 1)))
-
-        for idx in range(total_gems):
-            px = tray_x + 20 + idx * (gem_sz + tray_gap)
-            py = tray_y + (tray_h - gem_sz) // 2
-            p_rect = pygame.Rect(px, py, gem_sz, gem_sz)
-
-            self.solar_array_puzzle_pieces.append({
-                "id": f"scarab_{idx}",
-                "index": idx,
-                "orig_x": px,
-                "orig_y": py,
-                "x": px,
-                "y": py,
-                "w": gem_sz,
-                "h": gem_sz,
-                "rect": p_rect,
-                "gem_surf": piece_surf,
-                "slab_surf": piece_surf,
-                "color": challenge["color"],
-                "accent": challenge["accent"],
+            slice_obj = {
+                "id": f"slice_{order_idx}_{i}",
+                "order_idx": order_idx,
+                "slice_idx": i,
                 "is_placed": False,
                 "is_dragging": False,
-                "target_slot_id": None,
-                "pan": "tray",
+                "placed_slot": None,
+                "x": rect.x,
+                "y": rect.y,
+                "orig_x": rect.x,
+                "orig_y": rect.y,
+                "w": rect_w,
+                "h": rect_h,
+                "rect": rect,
+                "order": order,
+                "fraction_str": f"1/{denom}",
+                "color": order["base_color"],
+                "accent": order["fill_color"],
                 "data": {
-                    "id": f"scarab_{idx}",
-                    "name": challenge["gem_name"],
-                    "equation": self.solar_array_target_equation,
-                    "factor_desc": self.solar_array_factor_desc
+                    "id": f"slice_{order_idx}_{i}",
+                    "name": order["slice_name"],
+                    "fraction": f"1/{denom}"
                 }
-            })
+            }
+            self.fraction_bakery_slices.append(slice_obj)
 
-        # Update initial scale slots position
-        self.update_anubis_pan_slots()
+        # Backward compatibility sync
+        self.solar_array_puzzle_pieces = self.fraction_bakery_slices
+        self.solar_array_puzzle_slots = self.fraction_bakery_plate_slots
+        self.solar_array_target_equation = order["equation"]
+        self.solar_array_factor_desc = order["desc"]
+        self.update_bakery_placed_state()
 
-        self.solar_puzzle_reset_btn_rect = pygame.Rect(panel_x + 35, panel_y + panel_h - 48, 170, 40)
-        self.solar_puzzle_continue_btn_rect = pygame.Rect(panel_x + panel_w - 240, panel_y + panel_h - 48, 210, 40)
-        print(f"[SCALES OF ANUBIS] ({map_key.upper()}) Balance Scale initialized: {total_gems} Scarabs ÷ 2 = {target_per_pan} per pan ({challenge['name']})")
+        # Action Buttons
+        self.bakery_close_btn_rect = pygame.Rect(panel_x + 30, panel_y + panel_h - 48, 170, 40)
+        self.solar_puzzle_close_btn_rect = self.bakery_close_btn_rect
 
-    def update_anubis_pan_slots(self):
-        """Calculates current dynamic positions of Left Pan and Right Pan based on tilt angle"""
-        import math, pygame
-        tilt = getattr(self, 'scale_current_angle', 0.0)
-        cx = getattr(self, 'scale_center_x', self.width // 2)
-        cy = getattr(self, 'scale_pivot_y', 200)
-        blen = getattr(self, 'scale_beam_len', 540)
-        clen = getattr(self, 'scale_chain_len', 100)
-        pw = getattr(self, 'scale_pan_w', 230)
-        ph = getattr(self, 'scale_pan_h', 70)
+        self.bakery_reset_btn_rect = pygame.Rect(panel_x + 215, panel_y + panel_h - 48, 130, 40)
+        self.solar_puzzle_reset_btn_rect = self.bakery_reset_btn_rect
 
-        # Beam end pivots
-        self.scale_left_pivot = (cx - math.cos(tilt) * (blen // 2), cy - math.sin(tilt) * (blen // 2))
-        self.scale_right_pivot = (cx + math.cos(tilt) * (blen // 2), cy + math.sin(tilt) * (blen // 2))
+        self.bakery_auto_btn_rect = pygame.Rect(panel_x + 360, panel_y + panel_h - 48, 125, 40)
 
-        # Pan Centers
-        self.scale_left_pan_center = (self.scale_left_pivot[0], self.scale_left_pivot[1] + clen)
-        self.scale_right_pan_center = (self.scale_right_pivot[0], self.scale_right_pivot[1] + clen)
+        self.bakery_serve_btn_rect = pygame.Rect(panel_x + panel_w - 275, panel_y + panel_h - 48, 245, 40)
+        self.solar_puzzle_continue_btn_rect = self.bakery_serve_btn_rect
 
-        self.scale_left_pan_rect = pygame.Rect(int(self.scale_left_pan_center[0] - pw // 2), int(self.scale_left_pan_center[1] - ph // 2), pw, ph)
-        self.scale_right_pan_rect = pygame.Rect(int(self.scale_right_pan_center[0] - pw // 2), int(self.scale_right_pan_center[1] - ph // 2), pw, ph)
+        self.bakery_x_btn_rect = pygame.Rect(panel_x + panel_w - 38, panel_y + 12, 26, 26)
+        self.solar_puzzle_x_btn_rect = self.bakery_x_btn_rect
 
-        # Reposition slots and placed pieces inside the pans
-        gem_sz = 44
-        target_each = len(self.solar_array_puzzle_slots) // 2
+        # Order Selector Tabs
+        self.bakery_tab_rects = []
+        tab_y = panel_y + 68
+        tab_total_w = panel_w - 60
+        tab_w = tab_total_w // len(self.fraction_bakery_orders)
+        for i in range(len(self.fraction_bakery_orders)):
+            self.bakery_tab_rects.append(pygame.Rect(panel_x + 30 + i * tab_w, tab_y, tab_w - 8, 36))
 
-        # Left Pan slots
-        left_slots = [s for s in self.solar_array_puzzle_slots if s["pan"] == "left"]
-        left_spacing = min(36, max(18, (pw - 20 - target_each * gem_sz) // max(1, target_each - 1))) if target_each > 1 else 0
-        left_start_x = self.scale_left_pan_rect.x + (pw - (target_each * gem_sz + (target_each - 1) * left_spacing)) // 2
-        slot_y = self.scale_left_pan_rect.y + 12
+    def update_bakery_placed_state(self):
+        """Updates placed counts and checks whether current order or full trial is solved."""
+        order = self.fraction_bakery_orders[self.current_fraction_order_index]
+        placed_count = sum(1 for s in self.fraction_bakery_plate_slots if s["slice"] is not None)
+        target = order["target"]
 
-        for i, s in enumerate(left_slots):
-            sx = left_start_x + i * (gem_sz + left_spacing)
-            s["rect"].x = sx
-            s["rect"].y = slot_y
-            if s["placed_gem"] and not s["placed_gem"].get("is_dragging", False):
-                s["placed_gem"]["x"] = sx
-                s["placed_gem"]["y"] = slot_y
+        is_match = (placed_count == target)
+        self.bakery_order_matched = is_match
 
-        # Right Pan slots
-        right_slots = [s for s in self.solar_array_puzzle_slots if s["pan"] == "right"]
-        right_spacing = min(36, max(18, (pw - 20 - target_each * gem_sz) // max(1, target_each - 1))) if target_each > 1 else 0
-        right_start_x = self.scale_right_pan_rect.x + (pw - (target_each * gem_sz + (target_each - 1) * right_spacing)) // 2
-        r_slot_y = self.scale_right_pan_rect.y + 12
+        all_done = all(self.fraction_orders_completed)
+        self.solar_array_puzzle_all_placed = all_done or is_match
 
-        for i, s in enumerate(right_slots):
-            sx = right_start_x + i * (gem_sz + right_spacing)
-            s["rect"].x = sx
-            s["rect"].y = r_slot_y
-            if s["placed_gem"] and not s["placed_gem"].get("is_dragging", False):
-                s["placed_gem"]["x"] = sx
-                s["placed_gem"]["y"] = r_slot_y
-
-    def reset_solar_array_puzzle(self):
-        """Resets all sacred scarabs back to the offering tray"""
-        for piece in self.solar_array_puzzle_pieces:
-            piece["x"] = piece["orig_x"]
-            piece["y"] = piece["orig_y"]
-            piece["is_dragging"] = False
-            piece["is_placed"] = False
-            piece["target_slot_id"] = None
-            piece["pan"] = "tray"
-        for slot in self.solar_array_puzzle_slots:
-            slot["matched"] = False
-            slot["matched_item"] = None
+    def reset_fraction_bakery(self):
+        """Returns all placed slices back to the tray for the current order."""
+        for slot in self.fraction_bakery_plate_slots:
+            slot["slice"] = None
             slot["placed_gem"] = None
-        self.solar_matrix_row_completed = [False, False]
-        self.solar_matrix_beam_alphas = [0.0, 0.0]
-        self.solar_array_puzzle_all_placed = False
+            slot["matched"] = False
+        for p in self.fraction_bakery_slices:
+            p["is_placed"] = False
+            p["is_dragging"] = False
+            p["placed_slot"] = None
+            p["x"] = p["orig_x"]
+            p["y"] = p["orig_y"]
+            p["rect"].x = p["orig_x"]
+            p["rect"].y = p["orig_y"]
+        self.dragged_bakery_slice = None
         self.dragged_solar_piece = None
-        self.mouse_drag_active = False
-        self.scale_target_angle = 0.0
-        self.update_anubis_pan_slots()
-        if getattr(self, 'snap_sound', None):
-            self.snap_sound.play()
+        self.update_bakery_placed_state()
 
-    def handle_solar_array_mouse_down(self, pos):
-        """Processes mouse button down on scales buttons or draggable scarabs"""
-        import pygame
-        if not getattr(self, 'solar_array_puzzle_active', False) and getattr(self, 'guardian_skeleton_state', 0) != 3:
+    def auto_solve_fraction_bakery(self):
+        """Developer/Hint shortcut: places exact target number of slices onto plate."""
+        self.reset_fraction_bakery()
+        order = self.fraction_bakery_orders[self.current_fraction_order_index]
+        target = order["target"]
+        for i in range(target):
+            slice_obj = self.fraction_bakery_slices[i]
+            slot = self.fraction_bakery_plate_slots[i]
+            slot["slice"] = slice_obj
+            slot["placed_gem"] = slice_obj
+            slot["matched"] = True
+            slice_obj["is_placed"] = True
+            slice_obj["placed_slot"] = slot
+        self.update_bakery_placed_state()
+
+    def handle_fraction_bakery_mouse_down(self, pos):
+        """Processes click and drag events in Fraction Bakery."""
+        import math, pygame
+        if not getattr(self, 'fraction_bakery_active', False) and not getattr(self, 'solar_array_puzzle_active', False):
             return False
 
-        # 0. Close / Return to Desert Buttons
-        if hasattr(self, 'solar_puzzle_close_btn_rect') and self.solar_puzzle_close_btn_rect and self.solar_puzzle_close_btn_rect.collidepoint(pos):
+        # 0. Close / Back to Desert Buttons
+        if hasattr(self, 'bakery_close_btn_rect') and self.bakery_close_btn_rect and self.bakery_close_btn_rect.collidepoint(pos):
+            self.fraction_bakery_active = False
             self.solar_array_puzzle_active = False
             self.guardian_skeleton_state = 1 if self.quiz_station_index >= 6 else 0
             return True
-        if hasattr(self, 'solar_puzzle_x_btn_rect') and self.solar_puzzle_x_btn_rect and self.solar_puzzle_x_btn_rect.collidepoint(pos):
+        if hasattr(self, 'bakery_x_btn_rect') and self.bakery_x_btn_rect and self.bakery_x_btn_rect.collidepoint(pos):
+            self.fraction_bakery_active = False
             self.solar_array_puzzle_active = False
             self.guardian_skeleton_state = 1 if self.quiz_station_index >= 6 else 0
             return True
 
-        # 1. Reset Button
-        if hasattr(self, 'solar_puzzle_reset_btn_rect') and self.solar_puzzle_reset_btn_rect and self.solar_puzzle_reset_btn_rect.collidepoint(pos):
-            self.reset_solar_array_puzzle()
+        # 1. Order Selector Tabs
+        for idx, tab_r in enumerate(getattr(self, 'bakery_tab_rects', [])):
+            if tab_r.collidepoint(pos):
+                if idx != self.current_fraction_order_index:
+                    self.setup_fraction_order(idx)
+                    if getattr(self, 'snap_sound', None):
+                        self.snap_sound.play()
+                return True
+
+        # 2. Reset / Clear Plate Button
+        if hasattr(self, 'bakery_reset_btn_rect') and self.bakery_reset_btn_rect and self.bakery_reset_btn_rect.collidepoint(pos):
+            self.reset_fraction_bakery()
+            if getattr(self, 'snap_sound', None):
+                self.snap_sound.play()
             return True
 
-        # 2. Continue Button (when puzzle is completely balanced)
-        if getattr(self, 'solar_array_puzzle_all_placed', False) and hasattr(self, 'solar_puzzle_continue_btn_rect') and self.solar_puzzle_continue_btn_rect and self.solar_puzzle_continue_btn_rect.collidepoint(pos):
-            self.solar_array_puzzle_solved = True
-            self.solar_array_puzzle_active = False
-            self.guardian_skeleton_state = 5 if self.quiz_station_index >= 6 else 1
-            self.quiz_state = 6 if self.quiz_station_index >= 6 else 0
-            if self.quiz_station_index >= 6:
-                self.clear_portal_overlapping_tiles()
-                self.save_results_to_database()
-            try:
-                from db.save_system import save_student_progress
-                save_student_progress(self.main_menu)
-            except Exception as e:
-                print(f"[WARN] Failed to save student progress: {e}")
-            if getattr(self.main_menu, 'audio_manager', None):
-                self.main_menu.audio_manager.play_sfx("victory_fanfare")
-                self.main_menu.audio_manager.play_sfx("portal_warp")
-            if hasattr(self, 'celebration_particles'):
-                self.celebration_particles.spawn_burst(self.width // 2, self.height // 2, count=40)
+        # 3. Auto-Place / Hint Button
+        if hasattr(self, 'bakery_auto_btn_rect') and self.bakery_auto_btn_rect and self.bakery_auto_btn_rect.collidepoint(pos):
+            self.auto_solve_fraction_bakery()
+            if getattr(self, 'snap_sound', None):
+                self.snap_sound.play()
             return True
 
-        # 3. Grab scarab with mouse (from tray OR from scale pans)
-        if not self.solar_array_puzzle_all_placed:
-            for piece in reversed(self.solar_array_puzzle_pieces):
-                p_rect = pygame.Rect(piece["x"], piece["y"], piece["w"], piece["h"])
-                if p_rect.collidepoint(pos):
+        # 4. Serve Order Button
+        if hasattr(self, 'bakery_serve_btn_rect') and self.bakery_serve_btn_rect and self.bakery_serve_btn_rect.collidepoint(pos):
+            order = self.fraction_bakery_orders[self.current_fraction_order_index]
+            placed_count = sum(1 for s in self.fraction_bakery_plate_slots if s["slice"] is not None)
+            if placed_count == order["target"]:
+                self.fraction_orders_completed[self.current_fraction_order_index] = True
+                self.update_bakery_placed_state()
+
+                # Spawn celebratory sparkles
+                cx = self.bakery_plate_cx
+                cy = self.bakery_plate_cy
+                for i in range(25):
+                    self.bakery_sparkles.append({
+                        "x": cx + (pos[0] - cx) * 0.3,
+                        "y": cy + (pos[1] - cy) * 0.3,
+                        "vx": math.sin(i) * 3.5,
+                        "vy": math.cos(i) * 3.5,
+                        "color": (255, 215, 0),
+                        "life": 0.6,
+                        "max_life": 0.6,
+                        "rad": 4
+                    })
+
+                all_done = all(self.fraction_orders_completed)
+                if all_done:
+                    # Final Master Victory!
+                    self.fraction_bakery_solved = True
+                    self.solar_array_puzzle_solved = True
+                    self.solar_array_puzzle_all_placed = True
+                    self.fraction_bakery_active = False
+                    self.solar_array_puzzle_active = False
+                    self.guardian_skeleton_state = 5  # Unlocked portal!
+                    self.quiz_state = 6 if self.quiz_station_index >= 6 else 0
+                    if self.quiz_station_index >= 6:
+                        self.clear_portal_overlapping_tiles()
+                        self.save_results_to_database()
+                    try:
+                        from db.save_system import save_student_progress
+                        save_student_progress(self.main_menu)
+                    except Exception as e:
+                        print(f"[WARN] Failed to save student progress: {e}")
+                    if getattr(self.main_menu, 'audio_manager', None):
+                        self.main_menu.audio_manager.play_sfx("victory_fanfare")
+                        self.main_menu.audio_manager.play_sfx("portal_warp")
+                    if hasattr(self, 'celebration_particles'):
+                        self.celebration_particles.spawn_burst(self.width // 2, self.height // 2, count=45)
+                    return True
+                else:
+                    # Advance to next uncompleted order
+                    next_idx = (self.current_fraction_order_index + 1) % len(self.fraction_bakery_orders)
+                    self.setup_fraction_order(next_idx)
+                    if getattr(self.main_menu, 'audio_manager', None):
+                        self.main_menu.audio_manager.play_sfx("correct")
+                    return True
+            return True
+
+        # 5. Grab Slice from Plate (Direct Click-to-Remove OR Drag)
+        p_dist = math.hypot(pos[0] - self.bakery_plate_cx, pos[1] - self.bakery_plate_cy)
+        if p_dist <= self.bakery_plate_r + 15:
+            ang = math.atan2(pos[1] - self.bakery_plate_cy, pos[0] - self.bakery_plate_cx)
+            rel_ang = (ang - (-math.pi / 2.0)) % (2.0 * math.pi)
+            denom = len(self.fraction_bakery_plate_slots)
+            slice_ang = (2.0 * math.pi) / denom
+            slot_idx = int(rel_ang // slice_ang)
+            slot_idx = min(denom - 1, max(0, slot_idx))
+
+            slot = self.fraction_bakery_plate_slots[slot_idx]
+            if slot["slice"] is not None:
+                piece = slot["slice"]
+                self.dragged_bakery_slice = piece
+                self.dragged_solar_piece = piece
+                piece["is_dragging"] = True
+                self.mouse_drag_active = True
+                self.bakery_drag_start_pos = pos
+                self.bakery_drag_offset_x = pos[0] - piece["x"]
+                self.bakery_drag_offset_y = pos[1] - piece["y"]
+                self.solar_drag_offset_x = self.bakery_drag_offset_x
+                self.solar_drag_offset_y = self.bakery_drag_offset_y
+                if getattr(self, 'snap_sound', None):
+                    self.snap_sound.play()
+                return True
+
+        # 6. Grab Slice from Baker's Tray (Direct Click-to-Place OR Drag)
+        for piece in reversed(self.fraction_bakery_slices):
+            if not piece["is_placed"]:
+                if piece["rect"].collidepoint(pos):
+                    self.dragged_bakery_slice = piece
                     self.dragged_solar_piece = piece
                     piece["is_dragging"] = True
-                    self.solar_drag_offset_x = pos[0] - piece["x"]
-                    self.solar_drag_offset_y = pos[1] - piece["y"]
                     self.mouse_drag_active = True
-                    self.mouse_drag_start_pos = pos
+                    self.bakery_drag_start_pos = pos
+                    self.bakery_drag_offset_x = pos[0] - piece["x"]
+                    self.bakery_drag_offset_y = pos[1] - piece["y"]
+                    self.solar_drag_offset_x = self.bakery_drag_offset_x
+                    self.solar_drag_offset_y = self.bakery_drag_offset_y
                     if getattr(self, 'snap_sound', None):
                         self.snap_sound.play()
                     return True
+
         return False
 
-    def release_dragged_solar_piece(self):
-        """Handles dropping a dragged sacred scarab into Left Pan, Right Pan, or Tray"""
-        import math, random
-        if not self.dragged_solar_piece:
+    def release_dragged_bakery_slice(self):
+        """Handles releasing or dropping a dragged pastry slice."""
+        import math
+        if not self.dragged_bakery_slice:
             return
 
-        piece = self.dragged_solar_piece
-        piece_center = (piece["x"] + piece["w"] // 2, piece["y"] + piece["h"] // 2)
+        piece = self.dragged_bakery_slice
+        cur_pos = self.cursor_pos
+        start_pos = getattr(self, 'bakery_drag_start_pos', cur_pos)
+        dist_moved = math.hypot(cur_pos[0] - start_pos[0], cur_pos[1] - start_pos[1])
 
-        # Clear existing slot attachment if any
-        old_slot = next((s for s in self.solar_array_puzzle_slots if s["placed_gem"] == piece), None)
-        if old_slot:
-            old_slot["matched"] = False
-            old_slot["placed_gem"] = None
-            old_slot["matched_item"] = None
-
-        target_pan = None
-        if hasattr(self, 'scale_left_pan_rect') and self.scale_left_pan_rect.inflate(30, 40).collidepoint(piece_center):
-            target_pan = "left"
-        elif hasattr(self, 'scale_right_pan_rect') and self.scale_right_pan_rect.inflate(30, 40).collidepoint(piece_center):
-            target_pan = "right"
-        elif any(s["rect"].inflate(24, 24).collidepoint(piece_center) for s in self.solar_array_puzzle_slots):
-            for s in self.solar_array_puzzle_slots:
-                if s["rect"].inflate(24, 24).collidepoint(piece_center):
-                    target_pan = s["pan"]
-                    break
-
-        if target_pan:
-            pan_slots = [s for s in self.solar_array_puzzle_slots if s["pan"] == target_pan and not s["matched"]]
-            if pan_slots:
-                slot = pan_slots[0]
-                slot["matched"] = True
-                slot["placed_gem"] = piece
-                slot["matched_item"] = piece["data"]
-                piece["is_placed"] = True
-                piece["is_dragging"] = False
-                piece["target_slot_id"] = slot["id"]
-                piece["pan"] = target_pan
-                piece["x"] = slot["rect"].x
-                piece["y"] = slot["rect"].y
-
-                if getattr(self, 'snap_sound', None):
-                    self.snap_sound.play()
-                if getattr(self.main_menu, 'audio_manager', None):
-                    self.main_menu.audio_manager.play_sfx("correct")
-
-                # Sparkle burst
-                for _ in range(12):
-                    self.solar_sparkles.append({
-                        "x": piece_center[0] + random.randint(-15, 15),
-                        "y": piece_center[1] + random.randint(-15, 15),
-                        "vx": random.uniform(-2.5, 2.5),
-                        "vy": random.uniform(-3.0, 1.0),
-                        "color": random.choice([(255, 215, 0), (56, 189, 248), (255, 255, 255), (251, 191, 36)]),
-                        "life": 0.55,
-                        "max_life": 0.55,
-                        "rad": random.randint(3, 5)
-                    })
-            else:
-                # Pan full -> bounce to tray
-                piece["x"] = piece["orig_x"]
-                piece["y"] = piece["orig_y"]
+        # Case A: Quick Click (< 14px movement) -> Instant Two-Way Toggle
+        if dist_moved < 14:
+            if piece["is_placed"]:
+                slot = piece.get("placed_slot")
+                if slot:
+                    slot["slice"] = None
+                    slot["placed_gem"] = None
+                    slot["matched"] = False
                 piece["is_placed"] = False
                 piece["is_dragging"] = False
-                piece["target_slot_id"] = None
-                piece["pan"] = "tray"
-        else:
-            # Check quick click (< 12px) accessibility snap
-            dist_moved = math.hypot(piece["x"] - piece["orig_x"], piece["y"] - piece["orig_y"])
-            if dist_moved < 12 and not piece.get("is_placed", False):
-                # Snap to whichever pan has fewer gems
-                left_empty = [s for s in self.solar_array_puzzle_slots if s["pan"] == "left" and not s["matched"]]
-                right_empty = [s for s in self.solar_array_puzzle_slots if s["pan"] == "right" and not s["matched"]]
-                chosen_slot = None
-                if len(left_empty) >= len(right_empty) and left_empty:
-                    chosen_slot = left_empty[0]
-                elif right_empty:
-                    chosen_slot = right_empty[0]
-                elif left_empty:
-                    chosen_slot = left_empty[0]
-
-                if chosen_slot:
-                    chosen_slot["matched"] = True
-                    chosen_slot["placed_gem"] = piece
-                    chosen_slot["matched_item"] = piece["data"]
+                piece["placed_slot"] = None
+                piece["x"] = piece["orig_x"]
+                piece["y"] = piece["orig_y"]
+                piece["rect"].x = piece["orig_x"]
+                piece["rect"].y = piece["orig_y"]
+            else:
+                empty_slots = [s for s in self.fraction_bakery_plate_slots if s["slice"] is None]
+                if empty_slots:
+                    target_slot = empty_slots[0]
+                    target_slot["slice"] = piece
+                    target_slot["placed_gem"] = piece
+                    target_slot["matched"] = True
                     piece["is_placed"] = True
                     piece["is_dragging"] = False
-                    piece["target_slot_id"] = chosen_slot["id"]
-                    piece["pan"] = chosen_slot["pan"]
-                    piece["x"] = chosen_slot["rect"].x
-                    piece["y"] = chosen_slot["rect"].y
-                    if getattr(self, 'snap_sound', None):
-                        self.snap_sound.play()
+                    piece["placed_slot"] = target_slot
                 else:
                     piece["x"] = piece["orig_x"]
                     piece["y"] = piece["orig_y"]
-                    piece["is_placed"] = False
-                    piece["is_dragging"] = False
-                    piece["pan"] = "tray"
-            else:
-                # Returned to tray
-                piece["x"] = piece["orig_x"]
-                piece["y"] = piece["orig_y"]
-                piece["is_placed"] = False
-                piece["is_dragging"] = False
-                piece["target_slot_id"] = None
-                piece["pan"] = "tray"
-                if getattr(self, 'snap_sound', None):
-                    self.snap_sound.play()
-
-        # Update Pan row completion states
-        target_each = len(self.solar_array_puzzle_slots) // 2
-        left_count = sum(1 for s in self.solar_array_puzzle_slots if s["pan"] == "left" and s["matched"])
-        right_count = sum(1 for s in self.solar_array_puzzle_slots if s["pan"] == "right" and s["matched"])
-
-        self.solar_matrix_row_completed[0] = (left_count == target_each)
-        self.solar_matrix_row_completed[1] = (right_count == target_each)
-        if self.solar_matrix_row_completed[0]:
-            self.solar_matrix_beam_alphas[0] = 1.0
-        if self.solar_matrix_row_completed[1]:
-            self.solar_matrix_beam_alphas[1] = 1.0
-
-        # Check full balance solve
-        if left_count == target_each and right_count == target_each:
-            self.solar_array_puzzle_all_placed = True
-            self.solar_array_puzzle_solved_time = pygame.time.get_ticks()
-            if getattr(self, 'success_sound', None):
-                self.success_sound.play()
-            if getattr(self.main_menu, 'audio_manager', None):
-                self.main_menu.audio_manager.play_sfx("victory_fanfare")
-            if hasattr(self, 'celebration_particles'):
-                self.celebration_particles.spawn_burst(self.width // 2, self.height // 2, count=45)
-        else:
-            self.solar_array_puzzle_all_placed = False
-
-        self.dragged_solar_piece = None
-        self.mouse_drag_active = False
-
-    def auto_solve_solar_array_puzzle(self):
-        """Developer/shortcut auto-solve: places half in Left Pan, half in Right Pan"""
-        import pygame
-        target_each = len(self.solar_array_puzzle_slots) // 2
-        left_slots = [s for s in self.solar_array_puzzle_slots if s["pan"] == "left"]
-        right_slots = [s for s in self.solar_array_puzzle_slots if s["pan"] == "right"]
-
-        for i in range(target_each):
-            # Left piece
-            lp = self.solar_array_puzzle_pieces[i]
-            ls = left_slots[i]
-            ls["matched"] = True
-            ls["placed_gem"] = lp
-            ls["matched_item"] = lp["data"]
-            lp["is_placed"] = True
-            lp["is_dragging"] = False
-            lp["target_slot_id"] = ls["id"]
-            lp["pan"] = "left"
-
-            # Right piece
-            rp = self.solar_array_puzzle_pieces[target_each + i]
-            rs = right_slots[i]
-            rs["matched"] = True
-            rs["placed_gem"] = rp
-            rs["matched_item"] = rp["data"]
-            rp["is_placed"] = True
-            rp["is_dragging"] = False
-            rp["target_slot_id"] = rs["id"]
-            rp["pan"] = "right"
-
-        self.solar_matrix_row_completed = [True, True]
-        self.solar_matrix_beam_alphas = [1.0, 1.0]
-        self.scale_target_angle = 0.0
-        self.scale_current_angle = 0.0
-        self.update_anubis_pan_slots()
-        self.solar_array_puzzle_all_placed = True
-        self.solar_array_puzzle_solved_time = pygame.time.get_ticks()
-
-    def update_solar_array_puzzle(self, dt):
-        """Updates physics tilt angle, flame particles, and gesture interactions"""
-        import math, random, pygame
-        if not self.solar_array_puzzle_active:
+                    piece["rect"].x = piece["orig_x"]
+                    piece["rect"].y = piece["orig_y"]
+            if getattr(self, 'snap_sound', None):
+                self.snap_sound.play()
+            self.dragged_bakery_slice = None
+            self.dragged_solar_piece = None
+            self.mouse_drag_active = False
+            self.update_bakery_placed_state()
             return
 
-        # Sparkles update
-        for sp in self.solar_sparkles[:]:
+        # Case B: Dragged & Dropped (Distance >= 14px)
+        p_dist = math.hypot(cur_pos[0] - self.bakery_plate_cx, cur_pos[1] - self.bakery_plate_cy)
+        if p_dist <= self.bakery_plate_r + 40:
+            ang = math.atan2(cur_pos[1] - self.bakery_plate_cy, cur_pos[0] - self.bakery_plate_cx)
+            rel_ang = (ang - (-math.pi / 2.0)) % (2.0 * math.pi)
+            denom = len(self.fraction_bakery_plate_slots)
+            slice_ang = (2.0 * math.pi) / denom
+            slot_idx = int(rel_ang // slice_ang)
+            slot_idx = min(denom - 1, max(0, slot_idx))
+
+            chosen_slot = self.fraction_bakery_plate_slots[slot_idx]
+            if chosen_slot["slice"] is not None and chosen_slot["slice"] != piece:
+                empty_slots = [s for s in self.fraction_bakery_plate_slots if s["slice"] is None]
+                chosen_slot = empty_slots[0] if empty_slots else None
+
+            if chosen_slot:
+                old_slot = piece.get("placed_slot")
+                if old_slot:
+                    old_slot["slice"] = None
+                    old_slot["placed_gem"] = None
+                    old_slot["matched"] = False
+                chosen_slot["slice"] = piece
+                chosen_slot["placed_gem"] = piece
+                chosen_slot["matched"] = True
+                piece["is_placed"] = True
+                piece["is_dragging"] = False
+                piece["placed_slot"] = chosen_slot
+                if getattr(self, 'snap_sound', None):
+                    self.snap_sound.play()
+            else:
+                old_slot = piece.get("placed_slot")
+                if old_slot:
+                    old_slot["slice"] = None
+                    old_slot["placed_gem"] = None
+                    old_slot["matched"] = False
+                piece["is_placed"] = False
+                piece["is_dragging"] = False
+                piece["placed_slot"] = None
+                piece["x"] = piece["orig_x"]
+                piece["y"] = piece["orig_y"]
+                piece["rect"].x = piece["orig_x"]
+                piece["rect"].y = piece["orig_y"]
+        else:
+            old_slot = piece.get("placed_slot")
+            if old_slot:
+                old_slot["slice"] = None
+                old_slot["placed_gem"] = None
+                old_slot["matched"] = False
+            piece["is_placed"] = False
+            piece["is_dragging"] = False
+            piece["placed_slot"] = None
+            piece["x"] = piece["orig_x"]
+            piece["y"] = piece["orig_y"]
+            piece["rect"].x = piece["orig_x"]
+            piece["rect"].y = piece["orig_y"]
+            if getattr(self, 'snap_sound', None):
+                self.snap_sound.play()
+
+        self.dragged_bakery_slice = None
+        self.dragged_solar_piece = None
+        self.mouse_drag_active = False
+        self.update_bakery_placed_state()
+
+    def update_fraction_bakery(self, dt):
+        """Updates sparkles, gesture dragging, and order status."""
+        import pygame
+        if not getattr(self, 'fraction_bakery_active', False) and not getattr(self, 'solar_array_puzzle_active', False):
+            return
+
+        # Sparkles life update
+        for sp in self.bakery_sparkles[:]:
             sp["x"] += sp["vx"]
             sp["y"] += sp["vy"]
             sp["life"] -= dt
             if sp["life"] <= 0:
-                self.solar_sparkles.remove(sp)
+                self.bakery_sparkles.remove(sp)
 
-        # Flame particles under pans
-        for fp in getattr(self, 'scale_flame_particles', [])[:]:
-            fp["x"] += fp["vx"]
-            fp["y"] += fp["vy"]
-            fp["life"] -= dt
-            if fp["life"] <= 0:
-                self.scale_flame_particles.remove(fp)
-
-        # Scale Tilt Physics
-        left_count = sum(1 for s in self.solar_array_puzzle_slots if s["pan"] == "left" and s["matched"])
-        right_count = sum(1 for s in self.solar_array_puzzle_slots if s["pan"] == "right" and s["matched"])
-        weight_diff = right_count - left_count
-
-        if self.solar_array_puzzle_all_placed and left_count == right_count:
-            self.scale_target_angle = 0.0
-        else:
-            self.scale_target_angle = max(-0.32, min(0.32, weight_diff * 0.075))
-
-        self.scale_current_angle += (self.scale_target_angle - self.scale_current_angle) * min(1.0, dt * 9.0)
-        self.update_anubis_pan_slots()
-
-        # Spawn sacred flames under pans
-        if hasattr(self, 'scale_left_pan_rect') and hasattr(self, 'scale_right_pan_rect'):
-            target_each = len(self.solar_array_puzzle_slots) // 2
-            if left_count > 0:
-                self.scale_flame_particles.append({
-                    "x": self.scale_left_pan_rect.centerx + random.randint(-40, 40),
-                    "y": self.scale_left_pan_rect.bottom + random.randint(4, 12),
-                    "vx": random.uniform(-0.8, 0.8),
-                    "vy": random.uniform(-2.5, -1.0),
-                    "color": random.choice([(52, 211, 153), (34, 197, 94), (255, 255, 255)]) if left_count == target_each else (245, 158, 11),
-                    "life": 0.45,
-                    "max_life": 0.45,
-                    "rad": random.randint(3, 6)
-                })
-            if right_count > 0:
-                self.scale_flame_particles.append({
-                    "x": self.scale_right_pan_rect.centerx + random.randint(-40, 40),
-                    "y": self.scale_right_pan_rect.bottom + random.randint(4, 12),
-                    "vx": random.uniform(-0.8, 0.8),
-                    "vy": random.uniform(-2.5, -1.0),
-                    "color": random.choice([(52, 211, 153), (34, 197, 94), (255, 255, 255)]) if right_count == target_each else (245, 158, 11),
-                    "life": 0.45,
-                    "max_life": 0.45,
-                    "rad": random.randint(3, 6)
-                })
-
-        # Gesture Fist Drag Support
-        if self.fist_closed and not self.dragged_solar_piece and not self.solar_array_puzzle_all_placed:
-            for piece in reversed(self.solar_array_puzzle_pieces):
-                p_rect = pygame.Rect(piece["x"], piece["y"], piece["w"], piece["h"])
-                if p_rect.collidepoint(self.cursor_pos):
+        # MediaPipe Fist Drag Support
+        if self.fist_closed and not self.dragged_bakery_slice:
+            for piece in reversed(self.fraction_bakery_slices):
+                if not piece["is_placed"] and piece["rect"].collidepoint(self.cursor_pos):
+                    self.dragged_bakery_slice = piece
                     self.dragged_solar_piece = piece
                     piece["is_dragging"] = True
-                    self.solar_drag_offset_x = self.cursor_pos[0] - piece["x"]
-                    self.solar_drag_offset_y = self.cursor_pos[1] - piece["y"]
+                    self.bakery_drag_start_pos = self.cursor_pos
+                    self.bakery_drag_offset_x = self.cursor_pos[0] - piece["x"]
+                    self.bakery_drag_offset_y = self.cursor_pos[1] - piece["y"]
+                    self.solar_drag_offset_x = self.bakery_drag_offset_x
+                    self.solar_drag_offset_y = self.bakery_drag_offset_y
                     if getattr(self, 'snap_sound', None):
                         self.snap_sound.play()
                     break
 
-        if self.dragged_solar_piece:
+        # Move dragged piece
+        if self.dragged_bakery_slice:
             is_mouse_held = pygame.mouse.get_pressed()[0] if pygame.mouse.get_pressed() else False
             if self.fist_closed or is_mouse_held:
-                self.dragged_solar_piece["x"] = self.cursor_pos[0] - self.solar_drag_offset_x
-                self.dragged_solar_piece["y"] = self.cursor_pos[1] - self.solar_drag_offset_y
+                self.dragged_bakery_slice["x"] = self.cursor_pos[0] - getattr(self, 'bakery_drag_offset_x', self.solar_drag_offset_x)
+                self.dragged_bakery_slice["y"] = self.cursor_pos[1] - getattr(self, 'bakery_drag_offset_y', self.solar_drag_offset_y)
             else:
-                self.release_dragged_solar_piece()
+                self.release_dragged_bakery_slice()
+
+    # Backwards Compatibility Wrappers
+    def init_solar_array_puzzle(self):
+        self.init_fraction_bakery()
+
+    def update_anubis_pan_slots(self):
+        pass
+
+    def reset_solar_array_puzzle(self):
+        self.reset_fraction_bakery()
+
+    def handle_solar_array_mouse_down(self, pos):
+        return self.handle_fraction_bakery_mouse_down(pos)
+
+    def release_dragged_solar_piece(self):
+        self.release_dragged_bakery_slice()
+
+    def auto_solve_solar_array_puzzle(self):
+        self.auto_solve_fraction_bakery()
+
+    def update_solar_array_puzzle(self, dt):
+        self.update_fraction_bakery(dt)
 
     @property
     def skeleton_guardian_x(self):
@@ -5194,16 +5379,31 @@ class Quarter3:
             skeleton_sprite = self.npc_skeleton_down_sprites[self.npc_skeleton_anim_frame % len(self.npc_skeleton_down_sprites)]
 
         if skeleton_sprite:
-            scaled_size = int(TILE_SIZE * ZOOM)
-            scaled_sprite = pygame.transform.scale(skeleton_sprite, (scaled_size, scaled_size))
-            self.screen.blit(scaled_sprite, (screen_x, screen_y))
+            self.screen.blit(skeleton_sprite, (screen_x, screen_y))
 
-        # Golden Floor Aura when awaiting challenge or ready to talk
-        if self.guardian_skeleton_state in [0, 1]:
+        # Golden/Emerald Floor Aura when awaiting challenge or ready to talk
+        if self.guardian_skeleton_state in [0, 1, 5]:
             pulse = (math.sin(self.frame_counter * 0.12) + 1) * 0.5
-            aura_alpha = int(90 + 70 * pulse) if self.guardian_skeleton_state == 1 else int(50 + 40 * pulse)
-            aura_surf = pygame.Surface((int(36 * ZOOM), int(16 * ZOOM)), pygame.SRCALPHA)
-            pygame.draw.ellipse(aura_surf, (255, 215, 0, aura_alpha), (0, 0, int(36 * ZOOM), int(16 * ZOOM)))
+            if self.guardian_skeleton_state == 5:
+                aura_alpha = int(70 + 40 * pulse)
+                aura_col = (74, 222, 128)
+            elif self.guardian_skeleton_state == 1:
+                aura_alpha = int(90 + 70 * pulse)
+                aura_col = (255, 215, 0)
+            else:
+                aura_alpha = int(50 + 40 * pulse)
+                aura_col = (255, 215, 0)
+
+            q_alpha = (aura_alpha // 10) * 10
+            aura_key = (aura_col, q_alpha)
+            aura_surf = self._skel_aura_cache.get(aura_key)
+            if aura_surf is None:
+                aura_w, aura_h = int(36 * ZOOM), int(16 * ZOOM)
+                aura_surf = pygame.Surface((aura_w, aura_h), pygame.SRCALPHA)
+                pygame.draw.ellipse(aura_surf, (*aura_col, q_alpha), (0, 0, aura_w, aura_h))
+                if pygame.display.get_surface() is not None:
+                    aura_surf = aura_surf.convert_alpha()
+                self._skel_aura_cache[aura_key] = aura_surf
             self.screen.blit(aura_surf, (screen_x - int(2 * ZOOM), screen_y + int(22 * ZOOM)))
 
             # Floating Quest Indicator / Talk Bubble above Skeleton
@@ -5214,15 +5414,15 @@ class Quarter3:
             skel_center_y = self.npc_skeleton_y + TILE_SIZE // 2
             is_near = math.hypot(player_center_x - skel_center_x, player_center_y - skel_center_y) < TILE_SIZE * 3.5
 
-            if is_near and not getattr(self, 'solar_array_puzzle_active', False) and self.guardian_skeleton_state != 2:
+            if is_near and not getattr(self, 'fraction_bakery_active', False) and not getattr(self, 'solar_array_puzzle_active', False) and self.guardian_skeleton_state != 2:
                 # Nearby interaction prompt badge
-                prompt_txt = "[E / Click] Talk ⚖️ Scales of Anubis"
+                prompt_txt = "[E / Click] Replay 🧁 Bakery" if self.guardian_skeleton_state == 5 else "[E / Click] Talk 🧁 Fraction Bakery"
                 p_surf = self.get_ui_font(11, bold=True).render(prompt_txt, True, (15, 23, 42))
                 pw, ph = p_surf.get_width() + 16, p_surf.get_height() + 8
                 px = screen_x + (TILE_SIZE * ZOOM) / 2 - pw / 2
                 py = screen_y - 28 * ZOOM + bob
                 p_rect = pygame.Rect(px, py, pw, ph)
-                pygame.draw.rect(self.screen, (255, 215, 0), p_rect, border_radius=6)
+                pygame.draw.rect(self.screen, (74, 222, 128) if self.guardian_skeleton_state == 5 else (255, 215, 0), p_rect, border_radius=6)
                 pygame.draw.rect(self.screen, (255, 255, 255), p_rect, 1, border_radius=6)
                 self.screen.blit(p_surf, p_surf.get_rect(center=p_rect.center))
             elif self.guardian_skeleton_state == 1:
@@ -5236,10 +5436,14 @@ class Quarter3:
 
     def draw_skeleton_guardian_prompt(self):
         """High-Engagement RPG Dialogue Modal when talking to the Skeleton Guardian"""
-        import pygame
-        overlay = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
-        overlay.fill((10, 15, 29, 185))
-        self.screen.blit(overlay, (0, 0))
+        if not hasattr(self, '_skel_prompt_dim') or self._skel_prompt_dim.get_size() != (self.width, self.height):
+            s = pygame.Surface((self.width, self.height))
+            s.fill((10, 15, 29))
+            if pygame.display.get_surface() is not None:
+                s = s.convert()
+            s.set_alpha(185)
+            self._skel_prompt_dim = s
+        self.screen.blit(self._skel_prompt_dim, (0, 0))
 
         box_w = min(860, self.width - 40)
         box_h = 370
@@ -5258,7 +5462,7 @@ class Quarter3:
         pygame.draw.rect(self.screen, (30, 41, 59), hdr_rect, border_top_left_radius=16, border_top_right_radius=16)
         pygame.draw.line(self.screen, (217, 119, 6), (box_x + 4, box_y + 47), (box_x + box_w - 4, box_y + 47), 2)
 
-        hdr_title = self.dialog_header_font.render("⚖️ Ancient Scales of Anubis Trial — Guardian Encounter", True, (253, 224, 71))
+        hdr_title = self.dialog_header_font.render("🧁 Royal Oasis Fraction Bakery — Guardian Encounter", True, (253, 224, 71))
         self.screen.blit(hdr_title, (box_x + 22, box_y + 10))
 
         # Close [✕] Button in Top-Right
@@ -5280,15 +5484,25 @@ class Quarter3:
 
         # Subtle golden sun backglow behind guardian
         pulse = (math.sin(self.frame_counter * 0.12) + 1) * 0.5
-        sun_surf = pygame.Surface((80, 80), pygame.SRCALPHA)
-        pygame.draw.circle(sun_surf, (245, 158, 11, int(40 + 35 * pulse)), (40, 40), 38)
+        sun_alpha = (int(40 + 35 * pulse) // 7) * 7
+        sun_surf = self._skel_sun_cache.get(sun_alpha)
+        if sun_surf is None:
+            sun_surf = pygame.Surface((80, 80), pygame.SRCALPHA)
+            pygame.draw.circle(sun_surf, (245, 158, 11, sun_alpha), (40, 40), 38)
+            if pygame.display.get_surface() is not None:
+                sun_surf = sun_surf.convert_alpha()
+            self._skel_sun_cache[sun_alpha] = sun_surf
         self.screen.blit(sun_surf, (shrine_x + (shrine_w - 80) // 2, shrine_y + 14))
 
         # Draw Skeleton Sprite
         skel_sprite = getattr(self, 'npc_skeleton_sprite', None)
         if skel_sprite:
-            port_img = pygame.transform.scale(skel_sprite, (84, 84))
-            self.screen.blit(port_img, (shrine_x + (shrine_w - 84) // 2, shrine_y + 16))
+            if self._skel_portrait_surf is None:
+                p_img = pygame.transform.scale(skel_sprite, (84, 84))
+                if pygame.display.get_surface() is not None:
+                    p_img = p_img.convert_alpha()
+                self._skel_portrait_surf = p_img
+            self.screen.blit(self._skel_portrait_surf, (shrine_x + (shrine_w - 84) // 2, shrine_y + 16))
 
         # Speaker Name Badge below portrait
         spk_tag = self.get_ui_font(11, bold=True).render("Skeleton Guardian", True, (255, 215, 0))
@@ -5300,25 +5514,32 @@ class Quarter3:
         diag_x = shrine_x + shrine_w + 24
         diag_w = box_w - shrine_w - 72
 
-        if getattr(self, 'solar_array_puzzle_solved', False):
-            greeting = f"Incredible balance, courageous adventurer {self.player_name}!"
-            body = ("The Sacred Scales of Anubis have recognized your mathematical wisdom! "
+        if getattr(self, 'fraction_bakery_solved', False) or getattr(self, 'solar_array_puzzle_solved', False):
+            greeting = f"Master Baker of the Sun Realm, courageous adventurer {self.player_name}!"
+            body = ("Your mastery of Fractions (Halves, Thirds, and Fourths) has fulfilled all royal pastry orders! "
                     "The ancient shadow seal is completely broken, and the Desert Sun Portal is active! "
-                    "Step through the portal to complete your journey, or undertake the scales once more to sharpen your skills!")
-            btn_label = "⚖️ Replay Scales of Anubis Trial >>"
+                    "Step through the portal to complete your journey, or enter the bakery once more to practice your fraction skills!")
+            btn_label = "🧁 Replay Fraction Bakery >>"
         elif self.quiz_station_index >= 6:
+            tot_st = getattr(self, 'active_station_count', len(self.quiz_questions))
             greeting = f"Halt, victorious traveler {self.player_name}!"
-            body = ("You have solved all 5 Desert Station challenges! To break the ancient shadow seal on this Portal, "
-                    "you must face the Sacred Scales of Anubis! Divide the sacred golden scarabs equally between both pans "
-                    "(Left Pan = Right Pan) to restore divine equilibrium and open the Sun Gate!")
-            btn_label = "⚖️ Begin Scales of Anubis Trial >>"
+            if tot_st == 0:
+                body = ("No cloud station questions were set for this stage! To break the ancient shadow seal on this Portal, "
+                        "enter the Royal Oasis Fraction Bakery! Drag and place delicious pastry slices onto the golden plate "
+                        "to match each customer's fraction order (1/2, 1/3, 1/4, 3/4) and open the Sun Gate!")
+            else:
+                body = (f"You have conquered all {tot_st} Desert Station challenge(s)! To break the ancient shadow seal on this Portal, "
+                        "you must enter the Royal Oasis Fraction Bakery! Drag and place delicious pastry slices onto the golden plate "
+                        "to match each customer's fraction order (1/2, 1/3, 1/4, 3/4) and open the Sun Gate!")
+            btn_label = "🧁 Enter Fraction Bakery >>"
         else:
+            tot_st = getattr(self, 'active_station_count', len(self.quiz_questions))
             greeting = f"Greetings, brave traveler {self.player_name}!"
-            body = (f"I am the Ancient Skeleton Guardian of the Sun Temple Portal. While you still have "
-                    f"station challenges remaining ({max(0, 5 - (self.quiz_station_index - 1))} left), you may undertake "
-                    f"the Scales of Anubis Trial right now to test your equal sharing division skills! "
-                    f"Restore balance to prove your worthiness!")
-            btn_label = "⚖️ Challenge Scales of Anubis Trial >>"
+            body = (f"I am the Ancient Guardian of the Sun Temple Portal. While you still have "
+                    f"station challenges remaining ({max(0, tot_st - (self.quiz_station_index - 1))} left), you may enter "
+                    f"the Royal Oasis Fraction Bakery right now to test your fraction skills! "
+                    f"Serve Halves, Thirds, and Fourths to prove your worthiness!")
+            btn_label = "🧁 Enter Fraction Bakery >>"
 
         g_surf = self.dialog_header_font.render(greeting, True, (255, 215, 0))
         self.screen.blit(g_surf, (diag_x, box_y + 68))
@@ -5351,9 +5572,14 @@ class Quarter3:
         # Fist Hold Progress Fill
         if fist_pct > 0.0:
             fill_w = int(btn_w * min(1.0, fist_pct))
-            fill_surf = pygame.Surface((fill_w, btn_h), pygame.SRCALPHA)
-            fill_surf.fill((255, 255, 255, 90))
-            self.screen.blit(fill_surf, (btn_x, btn_y))
+            if fill_w > 0:
+                if not hasattr(self, '_guardian_fill_surf') or self._guardian_fill_surf.get_size() != (btn_w, btn_h):
+                    fs = pygame.Surface((btn_w, btn_h), pygame.SRCALPHA)
+                    fs.fill((255, 255, 255, 90))
+                    if pygame.display.get_surface() is not None:
+                        fs = fs.convert_alpha()
+                    self._guardian_fill_surf = fs
+                self.screen.blit(self._guardian_fill_surf, (btn_x, btn_y), (0, 0, fill_w, btn_h))
 
         btn_txt = self.get_ui_font(14, bold=True).render(btn_label, True, (15, 23, 42) if is_hovered else (255, 255, 255))
         self.screen.blit(btn_txt, btn_txt.get_rect(center=(btn_rect.centerx, btn_rect.centery - 8)))
@@ -5375,244 +5601,365 @@ class Quarter3:
         cls_txt = self.get_ui_font(12, bold=True).render("Back to Desert [Esc]", True, (241, 245, 249))
         self.screen.blit(cls_txt, cls_txt.get_rect(center=cls_rect.center))
 
-    def draw_solar_array_puzzle(self):
-        """Renders The Scales of Anubis: Interactive Balance Scale Apparatus with Sacred Flames"""
-        import math, pygame
-        overlay = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
-        overlay.fill((10, 15, 29, 235))
-        self.screen.blit(overlay, (0, 0))
+    def draw_fraction_bakery(self):
+        """Renders Pharaoh's Royal Oasis Fraction Bakery mini-game."""
+        # 1. Overlay Dim
+        if not hasattr(self, '_bakery_dim_overlay') or self._bakery_dim_overlay.get_size() != (self.width, self.height):
+            s = pygame.Surface((self.width, self.height))
+            s.fill((10, 15, 29))
+            if pygame.display.get_surface() is not None:
+                s = s.convert()
+            s.set_alpha(230)
+            self._bakery_dim_overlay = s
+        self.screen.blit(self._bakery_dim_overlay, (0, 0))
 
-        panel_w = min(1140, self.width - 60)
-        panel_h = min(620, self.height - 50)
-        panel_x = (self.width - panel_w) // 2
-        panel_y = (self.height - panel_h) // 2
+        panel_r = getattr(self, 'bakery_panel_rect', pygame.Rect((self.width - min(1140, self.width - 60)) // 2, (self.height - min(620, self.height - 50)) // 2, min(1140, self.width - 60), min(620, self.height - 50)))
+        px, py, pw, ph = panel_r.x, panel_r.y, panel_r.w, panel_r.h
 
-        # Outer Temple Sanctuary Card
-        pygame.draw.rect(self.screen, (0, 0, 0, 160), (panel_x + 6, panel_y + 6, panel_w, panel_h), border_radius=18)
-        dialog_rect = pygame.Rect(panel_x, panel_y, panel_w, panel_h)
-        pygame.draw.rect(self.screen, (15, 23, 42), dialog_rect, border_radius=18)
-        pygame.draw.rect(self.screen, (217, 119, 6), dialog_rect, 3, border_radius=18)
-        pygame.draw.rect(self.screen, (253, 224, 71), dialog_rect.inflate(-6, -6), 1, border_radius=14)
+        # 2. Main Luxury Card
+        pygame.draw.rect(self.screen, (0, 0, 0, 160), (px + 6, py + 6, pw, ph), border_radius=18)
+        pygame.draw.rect(self.screen, (15, 23, 42), panel_r, border_radius=18)
+        pygame.draw.rect(self.screen, (217, 119, 6), panel_r, 3, border_radius=18)
+        pygame.draw.rect(self.screen, (253, 224, 71), panel_r.inflate(-6, -6), 1, border_radius=14)
 
-        # Header Title & Subtitle
+        # 3. Header Title & Subtitle
         h_font = self.get_ui_font(22, bold=True)
-        sub_font = self.get_ui_font(13)
-        h_surf = h_font.render("THE SACRED SCALES OF ANUBIS", True, (255, 215, 0))
-        self.screen.blit(h_surf, h_surf.get_rect(center=(panel_x + panel_w // 2, panel_y + 28)))
+        sub_font = self.get_ui_font(12)
+        h_surf = h_font.render("🧁 ROYAL OASIS FRACTION BAKERY", True, (255, 215, 0))
+        self.screen.blit(h_surf, h_surf.get_rect(center=(px + pw // 2, py + 26)))
 
-        total_gems = len(self.solar_array_puzzle_pieces)
-        target_each = total_gems // 2
-        sub_text = f"TRIAL OF EQUAL SHARING: Divide {total_gems} Sacred Scarabs equally between the Left & Right Pans ({self.solar_array_target_equation})!"
+        sub_text = "Grade 2 Math Trial: Place pastry slices on the golden plate to match each customer's fraction order!"
         sub_surf = sub_font.render(sub_text, True, (203, 213, 225))
-        self.screen.blit(sub_surf, sub_surf.get_rect(center=(panel_x + panel_w // 2, panel_y + 54)))
+        self.screen.blit(sub_surf, sub_surf.get_rect(center=(px + pw // 2, py + 48)))
 
-        # Section Divider
-        pygame.draw.line(self.screen, (71, 85, 105), (panel_x + 30, panel_y + 72), (panel_x + panel_w - 30, panel_y + 72), 1)
+        # Close [✕] Button
+        x_r = getattr(self, 'bakery_x_btn_rect', pygame.Rect(px + pw - 38, py + 12, 26, 26))
+        is_x_hov = x_r.collidepoint(self.cursor_pos)
+        pygame.draw.rect(self.screen, (220, 38, 38) if is_x_hov else (51, 65, 85), x_r, border_radius=6)
+        x_surf = self.get_ui_font(12, bold=True).render("✕", True, (255, 255, 255))
+        self.screen.blit(x_surf, x_surf.get_rect(center=x_r.center))
 
-        # -------------------------------------------------------------
-        # STATUS & EQUATION BANNER (TOP CENTER)
-        # -------------------------------------------------------------
-        left_count = sum(1 for s in self.solar_array_puzzle_slots if s["pan"] == "left" and s["matched"])
-        right_count = sum(1 for s in self.solar_array_puzzle_slots if s["pan"] == "right" and s["matched"])
-        is_balanced = (left_count == target_each and right_count == target_each)
+        # 4. Order Tabs Across the Top
+        cur_order_idx = getattr(self, 'current_fraction_order_index', 0)
+        orders = getattr(self, 'fraction_bakery_orders', [])
+        if not orders:
+            return
+        cur_order = orders[cur_order_idx]
 
-        status_box = pygame.Rect(panel_x + 180, panel_y + 82, panel_w - 360, 48)
-        bg_status = (20, 50, 36) if is_balanced else ((45, 25, 25) if left_count != right_count and (left_count > 0 or right_count > 0) else (20, 29, 45))
-        border_status = (34, 197, 94) if is_balanced else ((239, 68, 68) if left_count != right_count and (left_count > 0 or right_count > 0) else (71, 85, 105))
+        for idx, tab_r in enumerate(getattr(self, 'bakery_tab_rects', [])):
+            is_active = (idx == cur_order_idx)
+            is_done = self.fraction_orders_completed[idx] if idx < len(self.fraction_orders_completed) else False
+            is_hov = tab_r.collidepoint(self.cursor_pos)
 
-        pygame.draw.rect(self.screen, bg_status, status_box, border_radius=10)
-        pygame.draw.rect(self.screen, border_status, status_box, 2, border_radius=10)
+            t_bg = (30, 58, 95) if is_active else ((22, 101, 52) if is_done else ((45, 55, 72) if is_hov else (20, 27, 40)))
+            t_border = (255, 215, 0) if is_active else ((74, 222, 128) if is_done else (71, 85, 105))
 
-        eq_font = self.get_ui_font(14, bold=True)
-        if is_balanced:
-            eq_text = f"★ EQUAL SHARING BALANCED: {total_gems} ÷ 2 = {target_each} Scarabs Each (1/2 = 1/2)! ★"
-            eq_surf = eq_font.render(eq_text, True, (74, 222, 128))
-        elif left_count > right_count:
-            eq_text = f"LEFT HEAVY! Left: {left_count}/{target_each}  |  Right: {right_count}/{target_each} (Need {target_each} each)"
-            eq_surf = eq_font.render(eq_text, True, (252, 165, 165))
-        elif right_count > left_count:
-            eq_text = f"RIGHT HEAVY! Left: {left_count}/{target_each}  |  Right: {right_count}/{target_each} (Need {target_each} each)"
-            eq_surf = eq_font.render(eq_text, True, (252, 165, 165))
+            pygame.draw.rect(self.screen, t_bg, tab_r, border_radius=8)
+            pygame.draw.rect(self.screen, t_border, tab_r, 2 if is_active else 1, border_radius=8)
+
+            ord_info = orders[idx]
+            check_prefix = "✓ " if is_done else f"#{idx+1} "
+            tab_label = f"{check_prefix}{ord_info['fraction_str']} {ord_info['name'].split()[0]}"
+            t_color = (255, 255, 255) if is_active else ((203, 213, 225) if not is_done else (187, 247, 208))
+            t_surf = self.get_ui_font(11, bold=is_active).render(tab_label, True, t_color)
+            self.screen.blit(t_surf, t_surf.get_rect(center=tab_r.center))
+
+        # 5. LEFT AREA: The Ceramic & Gold Serving Plate
+        pcx = getattr(self, 'bakery_plate_cx', px + 280)
+        pcy = getattr(self, 'bakery_plate_cy', py + 335)
+        pr = getattr(self, 'bakery_plate_r', 135)
+
+        # Plate drop shadow
+        pygame.draw.circle(self.screen, (0, 0, 0, 90), (pcx + 4, pcy + 4), pr + 8)
+        # Outer Gold Filigree Rim
+        pygame.draw.circle(self.screen, (217, 119, 6), (pcx, pcy), pr + 8)
+        pygame.draw.circle(self.screen, (253, 224, 71), (pcx, pcy), pr + 5)
+        # Inner Ceramic Bowl
+        pygame.draw.circle(self.screen, (248, 250, 252), (pcx, pcy), pr)
+        pygame.draw.circle(self.screen, (226, 232, 240), (pcx, pcy), pr - 14)
+
+        # Header Badge Above Plate
+        placed_count = sum(1 for s in getattr(self, 'fraction_bakery_plate_slots', []) if s["slice"] is not None)
+        target = cur_order["target"]
+        denom = cur_order["denom"]
+
+        plate_badge_r = pygame.Rect(pcx - 130, pcy - pr - 32, 260, 24)
+        p_badge_bg = (20, 50, 36) if placed_count == target else (20, 27, 40)
+        p_badge_brd = (34, 197, 94) if placed_count == target else (217, 119, 6)
+        pygame.draw.rect(self.screen, p_badge_bg, plate_badge_r, border_radius=6)
+        pygame.draw.rect(self.screen, p_badge_brd, plate_badge_r, 1, border_radius=6)
+        p_txt = f"🍽️ SERVING PLATE: {placed_count}/{denom} Slices ({placed_count}/{denom})"
+        p_surf = self.get_ui_font(11, bold=True).render(p_txt, True, (254, 240, 138) if placed_count == target else (241, 245, 249))
+        self.screen.blit(p_surf, p_surf.get_rect(center=plate_badge_r.center))
+
+        # Radial Guidelines and Empty Sector Watermarks
+        for slot in getattr(self, 'fraction_bakery_plate_slots', []):
+            s_ang = slot["start_ang"]
+            m_ang = slot["mid_ang"]
+
+            rx = pcx + math.cos(s_ang) * pr
+            ry = pcy + math.sin(s_ang) * pr
+            pygame.draw.line(self.screen, (203, 213, 225), (pcx, pcy), (rx, ry), 2)
+
+            if slot["slice"] is None:
+                lbl_r = pr * 0.58
+                lx = pcx + math.cos(m_ang) * lbl_r
+                ly = pcy + math.sin(m_ang) * lbl_r
+                wm_surf = self.get_ui_font(14, bold=True).render(slot["label"], True, (148, 163, 184))
+                self.screen.blit(wm_surf, wm_surf.get_rect(center=(lx, ly)))
+
+        # Draw Placed Slices on Plate
+        for slot in getattr(self, 'fraction_bakery_plate_slots', []):
+            piece = slot["slice"]
+            if piece and piece != self.dragged_bakery_slice:
+                self.draw_pastry_sector(pcx, pcy, pr - 10, slot["start_ang"], slot["end_ang"], cur_order, is_placed=True)
+
+        # Center Gold Hub
+        pygame.draw.circle(self.screen, (217, 119, 6), (pcx, pcy), 12)
+        pygame.draw.circle(self.screen, (253, 224, 71), (pcx, pcy), 8)
+
+        # 6. RIGHT TOP AREA: Customer Order Scroll & Fraction Equation Card
+        ticket_r = pygame.Rect(px + 490, py + 112, pw - 515, 195)
+        pygame.draw.rect(self.screen, (20, 27, 40), ticket_r, border_radius=12)
+        pygame.draw.rect(self.screen, (217, 119, 6), ticket_r, 2, border_radius=12)
+
+        # Recipe Title
+        title_surf = self.get_ui_font(16, bold=True).render(f"👑 Order #{cur_order_idx+1}: {cur_order['name']}", True, (255, 215, 0))
+        self.screen.blit(title_surf, (ticket_r.x + 18, ticket_r.y + 12))
+
+        # Flavor Description
+        desc_surf = self.get_ui_font(11).render(cur_order['flavor'], True, (203, 213, 225))
+        self.screen.blit(desc_surf, (ticket_r.x + 18, ticket_r.y + 36))
+
+        # Target Fraction Comparison Box
+        eq_box = pygame.Rect(ticket_r.x + 18, ticket_r.y + 60, ticket_r.w - 36, 68)
+        is_matched = (placed_count == target)
+        eq_bg = (20, 50, 36) if is_matched else ((45, 25, 25) if placed_count > target else (15, 23, 42))
+        eq_border = (34, 197, 94) if is_matched else ((239, 68, 68) if placed_count > target else (71, 85, 105))
+        pygame.draw.rect(self.screen, eq_bg, eq_box, border_radius=8)
+        pygame.draw.rect(self.screen, eq_border, eq_box, 2, border_radius=8)
+
+        # Fraction Numbers in Box
+        t_str = f"TARGET FRACTION: {target}/{denom} ({cur_order['unit_name']})"
+        t_surf = self.get_ui_font(13, bold=True).render(t_str, True, (254, 240, 138))
+        self.screen.blit(t_surf, (eq_box.x + 14, eq_box.y + 10))
+
+        c_str = f"ON PLATE: {placed_count}/{denom}   |   NEEDED: {target}/{denom}"
+        c_surf = self.get_ui_font(12, bold=True).render(c_str, True, (74, 222, 128) if is_matched else ((252, 165, 165) if placed_count > target else (203, 213, 225)))
+        self.screen.blit(c_surf, (eq_box.x + 14, eq_box.y + 36))
+
+        # Visual Fraction Bar (Bar Model for Grade 2 understanding)
+        bar_x = eq_box.x + eq_box.w - 180
+        bar_y = eq_box.y + 16
+        bar_w = 160
+        bar_h = 36
+        pygame.draw.rect(self.screen, (10, 15, 29), (bar_x, bar_y, bar_w, bar_h), border_radius=6)
+        seg_w = bar_w // denom
+        for seg_i in range(denom):
+            seg_r = pygame.Rect(bar_x + seg_i * seg_w, bar_y, seg_w, bar_h)
+            if seg_i < placed_count:
+                pygame.draw.rect(self.screen, cur_order["fill_color"], seg_r.inflate(-2, -2), border_radius=4)
+            pygame.draw.rect(self.screen, (203, 213, 225), seg_r, 1)
+            s_num = self.get_ui_font(10, bold=True).render(f"1/{denom}", True, (15, 23, 42) if seg_i < placed_count else (148, 163, 184))
+            self.screen.blit(s_num, s_num.get_rect(center=seg_r.center))
+
+        # Real-Time Educational Status Text
+        if is_matched:
+            stat_msg = f"✨ PERFECT! Plate matches target fraction {target}/{denom} ({cur_order['unit_name']})! Click SERVE ORDER below."
+            stat_col = (74, 222, 128)
+        elif placed_count < target:
+            stat_msg = f"⏳ Add {target - placed_count} more slice(s) to the plate to make {target}/{denom}."
+            stat_col = (251, 191, 36)
         else:
-            eq_text = f"EQUAL SO FAR! Left: {left_count}/{target_each}  |  Right: {right_count}/{target_each} (Add remaining scarabs)"
-            eq_surf = eq_font.render(eq_text, True, (254, 240, 138))
-        self.screen.blit(eq_surf, eq_surf.get_rect(center=status_box.center))
+            stat_msg = f"⚠️ Too many slices on plate ({placed_count}/{denom})! Click a placed slice to return it to the rack."
+            stat_col = (252, 165, 165)
 
-        # -------------------------------------------------------------
-        # THE SCALES APPARATUS (FULCRUM, BEAM, CHAINS, PANS, FLAMES)
-        # -------------------------------------------------------------
-        cx = getattr(self, 'scale_center_x', panel_x + panel_w // 2)
-        cy = getattr(self, 'scale_pivot_y', panel_y + 165)
-        tilt = getattr(self, 'scale_current_angle', 0.0)
+        stat_surf = self.get_ui_font(11, bold=True).render(stat_msg, True, stat_col)
+        self.screen.blit(stat_surf, (ticket_r.x + 18, ticket_r.y + 140))
 
-        # 1. Central Stone & Gold Pedestal (Fulcrum Pillar)
-        pedestal_rect = pygame.Rect(cx - 24, cy, 48, 160)
-        pygame.draw.rect(self.screen, (30, 41, 59), pedestal_rect, border_radius=6)
-        pygame.draw.rect(self.screen, (217, 119, 6), pedestal_rect, 2, border_radius=6)
-        # Pedestal base
-        base_rect = pygame.Rect(cx - 55, cy + 145, 110, 24)
-        pygame.draw.rect(self.screen, (20, 27, 40), base_rect, border_radius=8)
-        pygame.draw.rect(self.screen, (245, 158, 11), base_rect, 2, border_radius=8)
+        # Pedagogical Explanation
+        ped_text = cur_order.get('explanation', cur_order.get('desc', ''))
+        ped_surf = self.get_ui_font(10).render(f"Concept: {ped_text}", True, (148, 163, 184))
+        self.screen.blit(ped_surf, (ticket_r.x + 18, ticket_r.y + 168))
 
-        # 2. Tilted Brass Beam
-        blen = getattr(self, 'scale_beam_len', 540)
-        lp = getattr(self, 'scale_left_pivot', (cx - blen // 2, cy))
-        rp = getattr(self, 'scale_right_pivot', (cx + blen // 2, cy))
+        # 7. RIGHT BOTTOM AREA: The Baker's Cooling Rack (Unplaced Slices)
+        tray_r = getattr(self, 'bakery_tray_rect', pygame.Rect(px + 510, py + 325, pw - 540, 195))
+        pygame.draw.rect(self.screen, (20, 27, 40), tray_r, border_radius=12)
+        pygame.draw.rect(self.screen, (71, 85, 105), tray_r, 2, border_radius=12)
 
-        # Beam outline & glow
-        pygame.draw.line(self.screen, (15, 23, 42), lp, rp, 14)
-        pygame.draw.line(self.screen, (217, 119, 6), lp, rp, 10)
-        pygame.draw.line(self.screen, (253, 224, 71), lp, rp, 4)
+        # Wire rack pattern lines
+        for wx in range(tray_r.x + 15, tray_r.x + tray_r.w - 15, 20):
+            pygame.draw.line(self.screen, (30, 41, 59), (wx, tray_r.y + 30), (wx, tray_r.y + tray_r.h - 10), 1)
 
-        # Beam End Knobs
-        pygame.draw.circle(self.screen, (245, 158, 11), (int(lp[0]), int(lp[1])), 10)
-        pygame.draw.circle(self.screen, (255, 255, 255), (int(lp[0]), int(lp[1])), 4)
-        pygame.draw.circle(self.screen, (245, 158, 11), (int(rp[0]), int(rp[1])), 10)
-        pygame.draw.circle(self.screen, (255, 255, 255), (int(rp[0]), int(rp[1])), 4)
+        unplaced_cnt = sum(1 for p in getattr(self, 'fraction_bakery_slices', []) if not p["is_placed"])
+        rack_lbl = self.get_ui_font(11, bold=True).render(f"🧁 BAKER'S COOLING RACK ({unplaced_cnt} Available) — CLICK TO PLACE OR DRAG WITH MOUSE/FIST", True, (251, 191, 36))
+        self.screen.blit(rack_lbl, (tray_r.x + 16, tray_r.y + 8))
 
-        # 3. Central Pivot Hub (Winged Sun Disk)
-        pygame.draw.circle(self.screen, (20, 27, 40), (cx, cy), 22)
-        pygame.draw.circle(self.screen, (217, 119, 6), (cx, cy), 22, 3)
-        pygame.draw.circle(self.screen, (56, 189, 248) if is_balanced else (245, 158, 11), (cx, cy), 14)
-        pygame.draw.circle(self.screen, (255, 255, 255), (cx - 2, cy - 2), 5)
+        # Draw Unplaced Slices on Tray
+        for piece in getattr(self, 'fraction_bakery_slices', []):
+            if not piece["is_placed"] and piece != self.dragged_bakery_slice:
+                p_rect = piece["rect"]
+                is_hov = p_rect.collidepoint(self.cursor_pos)
 
-        # 4. Central Balance Needle
-        needle_len = 34
-        needle_end = (cx + math.sin(tilt) * needle_len, cy - math.cos(tilt) * needle_len)
-        needle_col = (74, 222, 128) if is_balanced else (239, 68, 68)
-        pygame.draw.line(self.screen, (15, 23, 42), (cx, cy), needle_end, 5)
-        pygame.draw.line(self.screen, needle_col, (cx, cy), needle_end, 3)
+                pygame.draw.rect(self.screen, (15, 23, 42), p_rect, border_radius=10)
+                pygame.draw.rect(self.screen, (255, 215, 0) if is_hov else (51, 65, 85), p_rect, 2 if is_hov else 1, border_radius=10)
 
-        # 5. Hanging Chains (Left & Right)
-        l_pan_rect = getattr(self, 'scale_left_pan_rect', pygame.Rect(int(lp[0] - 115), int(lp[1] + 100), 230, 70))
-        r_pan_rect = getattr(self, 'scale_right_pan_rect', pygame.Rect(int(rp[0] - 115), int(rp[1] + 100), 230, 70))
+                self.draw_tray_slice_icon(p_rect.centerx, p_rect.centery - 8, 38, cur_order)
 
-        for chain_off in [-80, 0, 80]:
-            # Left chains
-            l_target = (l_pan_rect.centerx + chain_off, l_pan_rect.y + 10)
-            pygame.draw.line(self.screen, (180, 83, 9), (int(lp[0]), int(lp[1])), l_target, 2)
-            # Right chains
-            r_target = (r_pan_rect.centerx + chain_off, r_pan_rect.y + 10)
-            pygame.draw.line(self.screen, (180, 83, 9), (int(rp[0]), int(rp[1])), r_target, 2)
+                f_txt = self.get_ui_font(11, bold=True).render(piece["fraction_str"], True, (255, 255, 255))
+                self.screen.blit(f_txt, f_txt.get_rect(center=(p_rect.centerx, p_rect.bottom - 16)))
 
-        # 6. Sacred Flame Particles under Pans
-        for fp in getattr(self, 'scale_flame_particles', []):
-            life_pct = max(0.0, min(1.0, fp["life"] / fp["max_life"]))
-            fr = max(1, int(fp["rad"] * life_pct))
-            pygame.draw.circle(self.screen, fp["color"], (int(fp["x"]), int(fp["y"])), fr)
+                if is_hov:
+                    h_prompt = self.get_ui_font(9).render("[Click to Place]", True, (254, 240, 138))
+                    self.screen.blit(h_prompt, h_prompt.get_rect(center=(p_rect.centerx, p_rect.top - 8)))
 
-        # 7. Stone Flame Braziers under Pans
-        for pan_r, p_count in [(l_pan_rect, left_count), (r_pan_rect, right_count)]:
-            brazier_rect = pygame.Rect(pan_r.centerx - 60, pan_r.bottom + 8, 120, 16)
-            pygame.draw.rect(self.screen, (20, 27, 40), brazier_rect, border_radius=6)
-            b_border = (34, 197, 94) if p_count == target_each else ((245, 158, 11) if p_count > 0 else (71, 85, 105))
-            pygame.draw.rect(self.screen, b_border, brazier_rect, 2, border_radius=6)
+        # 8. Dragged Slice Rendering
+        if getattr(self, 'dragged_bakery_slice', None):
+            dp = self.dragged_bakery_slice
+            self.draw_tray_slice_icon(self.cursor_pos[0] + 6, self.cursor_pos[1] + 6, 48, cur_order, is_shadow=True)
+            self.draw_tray_slice_icon(self.cursor_pos[0], self.cursor_pos[1], 48, cur_order)
+            pygame.draw.circle(self.screen, (255, 255, 255), self.cursor_pos, 52, 2)
 
-        # 8. Scale Pans (Golden Ceremonial Bowls)
-        for pan_r, p_count, pan_name in [(l_pan_rect, left_count, "LEFT PAN"), (r_pan_rect, right_count, "RIGHT PAN")]:
-            is_pan_hovered = pan_r.inflate(20, 30).collidepoint(self.cursor_pos) and getattr(self, 'dragged_solar_piece', None)
-
-            # Bowl background
-            bowl_col = (20, 42, 32) if p_count == target_each else ((35, 45, 65) if is_pan_hovered else (20, 29, 45))
-            rim_col = (34, 197, 94) if p_count == target_each else ((255, 215, 0) if is_pan_hovered else (217, 119, 6))
-
-            pygame.draw.rect(self.screen, bowl_col, pan_r, border_radius=16)
-            pygame.draw.rect(self.screen, rim_col, pan_r, 3, border_radius=16)
-
-            # Pan label badge (Rendered cleanly above bowl so placed scarabs never overlap text)
-            p_badge_font = self.get_ui_font(11, bold=True)
-            p_badge_txt = f"{pan_name} ({p_count} / {target_each})"
-            p_badge_surf = p_badge_font.render(p_badge_txt, True, (254, 240, 138) if p_count == target_each else (203, 213, 225))
-            bw, bh = p_badge_surf.get_width() + 18, p_badge_surf.get_height() + 8
-            badge_pill_rect = pygame.Rect(pan_r.centerx - bw // 2, pan_r.top - 24, bw, bh)
-            pygame.draw.rect(self.screen, (15, 23, 42, 230), badge_pill_rect, border_radius=6)
-            pygame.draw.rect(self.screen, rim_col, badge_pill_rect, 1, border_radius=6)
-            self.screen.blit(p_badge_surf, p_badge_surf.get_rect(center=badge_pill_rect.center))
-
-        # 9. Draw Placed Scarabs Inside Pans
-        for s in self.solar_array_puzzle_slots:
-            piece = s["placed_gem"]
-            if piece and piece != self.dragged_solar_piece:
-                self.screen.blit(piece["gem_surf"], (piece["x"], piece["y"]))
-
-        # -------------------------------------------------------------
-        # BOTTOM OFFERING TRAY (UNPLACED SCARABS)
-        # -------------------------------------------------------------
-        tray_rect = getattr(self, 'solar_matrix_tray_rect', pygame.Rect(panel_x + 90, panel_y + panel_h - 150, panel_w - 180, 95))
-        pygame.draw.rect(self.screen, (20, 29, 45), tray_rect, border_radius=14)
-        pygame.draw.rect(self.screen, (71, 85, 105), tray_rect, 2, border_radius=14)
-
-        tray_lbl_font = self.get_ui_font(11, bold=True)
-        unplaced_count = sum(1 for p in self.solar_array_puzzle_pieces if not p["is_placed"])
-        tray_lbl = tray_lbl_font.render(f"PHARAOH'S TREASURY TRAY ({unplaced_count} Remaining) — DRAG WITH FIST/MOUSE OR CLICK TO PLACE", True, (251, 191, 36))
-        self.screen.blit(tray_lbl, (tray_rect.x + 18, tray_rect.y + 8))
-
-        # Draw Unplaced Scarabs in Tray
-        for piece in self.solar_array_puzzle_pieces:
-            if not piece["is_placed"] and piece != self.dragged_solar_piece:
-                p_rect = pygame.Rect(piece["x"], piece["y"], piece["w"], piece["h"])
-                is_hovered = p_rect.collidepoint(self.cursor_pos)
-
-                pygame.draw.rect(self.screen, (0, 0, 0, 80), (piece["x"] + 3, piece["y"] + 3, piece["w"], piece["h"]), border_radius=8)
-                self.screen.blit(piece["gem_surf"], (piece["x"], piece["y"]))
-
-                if is_hovered:
-                    pygame.draw.rect(self.screen, (255, 215, 0), (piece["x"] - 2, piece["y"] - 2, piece["w"] + 4, piece["h"] + 4), 2, border_radius=8)
-
-        # Draw Dragged Scarab on Top
-        if self.dragged_solar_piece:
-            dp = self.dragged_solar_piece
-            pygame.draw.rect(self.screen, (0, 0, 0, 140), (dp["x"] + 6, dp["y"] + 6, dp["w"], dp["h"]), border_radius=8)
-            self.screen.blit(dp["gem_surf"], (dp["x"], dp["y"]))
-            pygame.draw.rect(self.screen, (255, 255, 255), (dp["x"] - 3, dp["y"] - 3, dp["w"] + 6, dp["h"] + 6), 2, border_radius=8)
-
-        # Draw Sparkles
-        for sp in self.solar_sparkles:
+        # 9. Sparkles
+        for sp in getattr(self, 'bakery_sparkles', []):
             life_pct = max(0.0, min(1.0, sp["life"] / sp["max_life"]))
             r = max(1, int(sp["rad"] * life_pct))
             pygame.draw.circle(self.screen, sp["color"], (int(sp["x"]), int(sp["y"])), r)
 
-        # -------------------------------------------------------------
-        # BOTTOM CONTROLS (BACK, RESET & CONTINUE)
-        # -------------------------------------------------------------
-        # Top-Right [✕] Close Button
-        x_rect = pygame.Rect(panel_x + panel_w - 38, panel_y + 12, 26, 26)
-        self.solar_puzzle_x_btn_rect = x_rect
-        x_hov = x_rect.collidepoint(self.cursor_pos)
-        pygame.draw.rect(self.screen, (220, 38, 38) if x_hov else (51, 65, 85), x_rect, border_radius=6)
-        x_txt = self.get_ui_font(12, bold=True).render("✕", True, (255, 255, 255))
-        self.screen.blit(x_txt, x_txt.get_rect(center=x_rect.center))
-
+        # 10. Bottom Control Buttons
         btn_font = self.get_ui_font(13, bold=True)
 
-        # Back to Desert Button (Wider to give comfortable padding for text)
-        cls_rect = pygame.Rect(panel_x + 30, panel_y + panel_h - 48, 165, 40)
-        self.solar_puzzle_close_btn_rect = cls_rect
-        cls_hov = cls_rect.collidepoint(self.cursor_pos)
-        pygame.draw.rect(self.screen, (51, 65, 85) if cls_hov else (30, 41, 59), cls_rect, border_radius=8)
-        pygame.draw.rect(self.screen, (203, 213, 225) if cls_hov else (100, 116, 139), cls_rect, 1, border_radius=8)
+        # Back to Desert [Esc]
+        cls_r = getattr(self, 'bakery_close_btn_rect', pygame.Rect(px + 30, py + ph - 48, 170, 40))
+        cls_hov = cls_r.collidepoint(self.cursor_pos)
+        pygame.draw.rect(self.screen, (51, 65, 85) if cls_hov else (30, 41, 59), cls_r, border_radius=8)
+        pygame.draw.rect(self.screen, (203, 213, 225) if cls_hov else (100, 116, 139), cls_r, 1, border_radius=8)
         cls_txt = btn_font.render("Back to Desert [Esc]", True, (241, 245, 249))
-        self.screen.blit(cls_txt, cls_txt.get_rect(center=cls_rect.center))
+        self.screen.blit(cls_txt, cls_txt.get_rect(center=cls_r.center))
 
-        # Reset Altar Button
-        r_rect = pygame.Rect(panel_x + 205, panel_y + panel_h - 48, 130, 40)
-        self.solar_puzzle_reset_btn_rect = r_rect
-        r_hov = r_rect.collidepoint(self.cursor_pos)
-        pygame.draw.rect(self.screen, (51, 65, 85) if r_hov else (30, 41, 59), r_rect, border_radius=8)
-        pygame.draw.rect(self.screen, (203, 213, 225) if r_hov else (100, 116, 139), r_rect, 1, border_radius=8)
-        r_txt = btn_font.render("Reset Altar", True, (241, 245, 249))
-        self.screen.blit(r_txt, r_txt.get_rect(center=r_rect.center))
+        # Clear Plate
+        rst_r = getattr(self, 'bakery_reset_btn_rect', pygame.Rect(px + 215, py + ph - 48, 130, 40))
+        rst_hov = rst_r.collidepoint(self.cursor_pos)
+        pygame.draw.rect(self.screen, (51, 65, 85) if rst_hov else (30, 41, 59), rst_r, border_radius=8)
+        pygame.draw.rect(self.screen, (203, 213, 225) if rst_hov else (100, 116, 139), rst_r, 1, border_radius=8)
+        rst_txt = btn_font.render("Clear Plate", True, (241, 245, 249))
+        self.screen.blit(rst_txt, rst_txt.get_rect(center=rst_r.center))
 
-        if self.solar_array_puzzle_all_placed:
+        # Auto-Place / Hint
+        auto_r = getattr(self, 'bakery_auto_btn_rect', pygame.Rect(px + 360, py + ph - 48, 125, 40))
+        auto_hov = auto_r.collidepoint(self.cursor_pos)
+        pygame.draw.rect(self.screen, (51, 65, 85) if auto_hov else (30, 41, 59), auto_r, border_radius=8)
+        pygame.draw.rect(self.screen, (203, 213, 225) if auto_hov else (100, 116, 139), auto_r, 1, border_radius=8)
+        auto_txt = btn_font.render("Auto-Place", True, (241, 245, 249))
+        self.screen.blit(auto_txt, auto_txt.get_rect(center=auto_r.center))
+
+        # Serve / Unlock Portal Button
+        serve_r = getattr(self, 'bakery_serve_btn_rect', pygame.Rect(px + pw - 275, py + ph - 48, 245, 40))
+        all_orders_done = all(getattr(self, 'fraction_orders_completed', []))
+        if placed_count == target:
             pulse = (math.sin(pygame.time.get_ticks() * 0.008) + 1) * 0.5
-            c_hov = self.solar_puzzle_continue_btn_rect.collidepoint(self.cursor_pos)
-            bg_col = (255, 215, 0) if c_hov else (22, 163, 74)
-            txt_col = (15, 23, 42) if c_hov else (255, 255, 255)
+            s_hov = serve_r.collidepoint(self.cursor_pos)
+            s_bg = (255, 215, 0) if s_hov else (22, 163, 74)
+            s_txt_col = (15, 23, 42) if s_hov else (255, 255, 255)
 
-            pygame.draw.rect(self.screen, bg_col, self.solar_puzzle_continue_btn_rect, border_radius=10)
-            pygame.draw.rect(self.screen, (255, 255, 255), self.solar_puzzle_continue_btn_rect, int(2 + pulse * 2), border_radius=10)
-            c_txt = self.get_ui_font(14, bold=True).render("Unlock Sun Portal >>", True, txt_col)
-            self.screen.blit(c_txt, c_txt.get_rect(center=self.solar_puzzle_continue_btn_rect.center))
+            pygame.draw.rect(self.screen, s_bg, serve_r, border_radius=10)
+            pygame.draw.rect(self.screen, (255, 255, 255), serve_r, int(2 + pulse * 2), border_radius=10)
+
+            if all_orders_done or (sum(self.fraction_orders_completed) == len(self.fraction_bakery_orders) - 1 and not self.fraction_orders_completed[cur_order_idx]):
+                lbl = "🌟 UNLOCK SUN GATE >>"
+            else:
+                lbl = f"🔔 SERVE ORDER #{cur_order_idx+1} >>"
+            s_surf = self.get_ui_font(13, bold=True).render(lbl, True, s_txt_col)
+            self.screen.blit(s_surf, s_surf.get_rect(center=serve_r.center))
+        else:
+            pygame.draw.rect(self.screen, (30, 41, 59), serve_r, border_radius=10)
+            pygame.draw.rect(self.screen, (71, 85, 105), serve_r, 1, border_radius=10)
+            s_surf = self.get_ui_font(12).render("Match Target to Serve", True, (148, 163, 184))
+            self.screen.blit(s_surf, s_surf.get_rect(center=serve_r.center))
+
+    def draw_pastry_sector(self, cx, cy, r, start_ang, end_ang, order, is_placed=True):
+        """Draws an authentic, appetizing pastry sector on the serving plate."""
+        import math, pygame
+        steps = 18
+        # 1. Base Crust
+        pts_crust = [(cx, cy)]
+        for i in range(steps + 1):
+            ang = start_ang + (end_ang - start_ang) * (i / steps)
+            pts_crust.append((cx + math.cos(ang) * r, cy + math.sin(ang) * r))
+        pygame.draw.polygon(self.screen, order["crust_color"], pts_crust)
+
+        # 2. Rich Pastry Filling
+        fill_r = r - 12
+        pts_fill = [(cx, cy)]
+        for i in range(steps + 1):
+            ang = start_ang + (end_ang - start_ang) * (i / steps)
+            pts_fill.append((cx + math.cos(ang) * fill_r, cy + math.sin(ang) * fill_r))
+        pygame.draw.polygon(self.screen, order["fill_color"], pts_fill)
+
+        # 3. Outer Edge Outline & Radial Ray Dividers
+        pygame.draw.polygon(self.screen, (255, 255, 255, 180), pts_crust, 2)
+
+        # 4. Toppings
+        mid_ang = (start_ang + end_ang) / 2.0
+        top_type = order.get("topping_type", "sesame")
+        for t_step in [0.25, 0.5, 0.75]:
+            t_ang = start_ang + (end_ang - start_ang) * t_step
+            tx = cx + math.cos(t_ang) * (r * 0.6)
+            ty = cy + math.sin(t_ang) * (r * 0.6)
+            if top_type == "sesame":
+                pygame.draw.circle(self.screen, order["decor_color"], (int(tx), int(ty)), 3)
+            elif top_type == "seeds":
+                pygame.draw.circle(self.screen, (159, 18, 57), (int(tx), int(ty)), 4)
+            elif top_type == "berries":
+                pygame.draw.circle(self.screen, (2, 132, 199), (int(tx), int(ty)), 5)
+                pygame.draw.circle(self.screen, (255, 255, 255), (int(tx - 1), int(ty - 1)), 2)
+            elif top_type == "almonds":
+                pygame.draw.ellipse(self.screen, order["decor_color"], (int(tx - 4), int(ty - 3), 8, 6))
+
+        # 5. Fraction Badge on Slice
+        bx = cx + math.cos(mid_ang) * (r * 0.42)
+        by = cy + math.sin(mid_ang) * (r * 0.42)
+        badge_rect = pygame.Rect(bx - 18, by - 12, 36, 24)
+        pygame.draw.rect(self.screen, (15, 23, 42, 230), badge_rect, border_radius=6)
+        pygame.draw.rect(self.screen, (255, 215, 0), badge_rect, 1, border_radius=6)
+        badge_txt = self.get_ui_font(11, bold=True).render(order["fraction_str"], True, (255, 255, 255))
+        self.screen.blit(badge_txt, badge_txt.get_rect(center=badge_rect.center))
+
+    def draw_tray_slice_icon(self, cx, cy, r, order, is_shadow=False):
+        """Draws an individual unplaced pastry slice on the tray or while dragging."""
+        import math, pygame
+        if is_shadow:
+            pts = [(cx, cy), (cx - r * 0.7, cy - r), (cx + r * 0.7, cy - r)]
+            pygame.draw.polygon(self.screen, (0, 0, 0), pts)
+            return
+
+        ang_span = 0.8
+        start_ang = -math.pi / 2 - ang_span / 2
+        end_ang = -math.pi / 2 + ang_span / 2
+        steps = 12
+
+        pts_crust = [(cx, cy)]
+        for i in range(steps + 1):
+            ang = start_ang + (end_ang - start_ang) * (i / steps)
+            pts_crust.append((cx + math.cos(ang) * r, cy + math.sin(ang) * r))
+        pygame.draw.polygon(self.screen, order["crust_color"], pts_crust)
+
+        pts_fill = [(cx, cy)]
+        for i in range(steps + 1):
+            ang = start_ang + (end_ang - start_ang) * (i / steps)
+            pts_fill.append((cx + math.cos(ang) * (r - 8), cy + math.sin(ang) * (r - 8)))
+        pygame.draw.polygon(self.screen, order["fill_color"], pts_fill)
+        pygame.draw.polygon(self.screen, (255, 255, 255, 200), pts_crust, 2)
+
+        for off in [-0.2, 0.0, 0.2]:
+            ang = -math.pi / 2 + off
+            tx = cx + math.cos(ang) * (r * 0.55)
+            ty = cy + math.sin(ang) * (r * 0.55)
+            pygame.draw.circle(self.screen, order["decor_color"], (int(tx), int(ty)), 3)
+
+    def draw_solar_array_puzzle(self):
+        """Backwards compatibility alias for Fraction Bakery rendering"""
+        self.draw_fraction_bakery()
 
     def wrap_text(self, text, font, max_width):
         from core.font_manager import wrap_multiline_text
@@ -5681,6 +6028,10 @@ class Quarter3:
     # ============================================================
     def init_sun_relic_puzzle(self):
         """Initializes the 5 sacred math relic slabs for the Sun Temple Altar"""
+        self.sun_relic_active = True
+        self.click_dest = None
+        self.anim_frame = 0
+        self.anim_timer = 0
         box_w, box_h = 800, 520
         box_x = (self.width - box_w) // 2
         box_y = (self.height - box_h) // 2
@@ -5755,9 +6106,13 @@ class Quarter3:
             if hasattr(self, 'sun_relic_solved_time') and self.sun_relic_solved_time > 0:
                 if pygame.time.get_ticks() - self.sun_relic_solved_time > 1800:
                     self.sun_relic_active = False
-                    self.quiz_state = 6  # Open Goal Exit Portal!
-                    self.clear_portal_overlapping_tiles()
-                    print(" Sun Relic Altar Restored! Goal Exit Portal Unlocked!")
+                    self.quiz_state = 0
+                    self.quiz_station_index = 6
+                    self.guardian_skeleton_state = 1
+                    self.caravan_upgrade_banner_text = "ALL 5 STATIONS SOLVED!"
+                    self.caravan_upgrade_banner_sub = "Speak with the Skeleton Guardian to begin the Fraction Bakery!"
+                    self.caravan_upgrade_banner_timer = 6.0
+                    print(" Sun Relic Altar Restored! Guided to Skeleton Guardian at the exit portal!")
             return
 
         # Gesture fist drag & drop
@@ -5787,6 +6142,9 @@ class Quarter3:
         self.mini_puzzle_solved = False
         self.mini_puzzle_solved_time = 0
         self.mini_puzzle_active = True
+        self.click_dest = None
+        self.anim_frame = 0
+        self.anim_timer = 0
         self.mini_puzzle_dragged_item = None
         self.mini_puzzle_drag_offset_x = 0
         self.mini_puzzle_drag_offset_y = 0
@@ -6317,7 +6675,7 @@ class Quarter3:
             pygame.draw.rect(self.screen, (255, 215, 0), badge_rect, border_radius=4)
             pygame.draw.rect(self.screen, (0, 0, 0), badge_rect, 1, border_radius=4)
 
-            excl_font = pygame.font.SysFont("Comic Sans MS", int(14 * ZOOM), bold=True)
+            excl_font = get_font("Comic Sans MS", int(14 * ZOOM), bold=True)
             excl_surf = excl_font.render("!", True, (0, 0, 0))
             excl_rect = excl_surf.get_rect(center=badge_rect.center)
             self.screen.blit(excl_surf, excl_rect)
@@ -6330,8 +6688,13 @@ class Quarter3:
             tag_x = screen_npc_x + (TILE_SIZE * ZOOM) / 2 - tag_w / 2
             tag_y = badge_y - tag_h - 2
 
-            tag_bg = pygame.Surface((tag_w, tag_h), pygame.SRCALPHA)
-            tag_bg.fill((15, 23, 42, 210))
+            tag_bg = self._npc_tag_bg_cache.get((tag_w, tag_h))
+            if tag_bg is None:
+                tag_bg = pygame.Surface((tag_w, tag_h), pygame.SRCALPHA)
+                tag_bg.fill((15, 23, 42, 210))
+                if pygame.display.get_surface() is not None:
+                    tag_bg = tag_bg.convert_alpha()
+                self._npc_tag_bg_cache[(tag_w, tag_h)] = tag_bg
             self.screen.blit(tag_bg, (tag_x, tag_y))
             pygame.draw.rect(self.screen, (255, 215, 0), (tag_x, tag_y, tag_w, tag_h), 1, border_radius=4)
             self.screen.blit(name_surf, (tag_x + 5, tag_y + 2))
@@ -6418,10 +6781,8 @@ class Quarter3:
             txt_col = (254, 202, 202)
             border_w = 3
 
-        # Translucent Background
-        hud_surf = pygame.Surface((hud_w, hud_h), pygame.SRCALPHA)
-        hud_surf.fill((15, 23, 42, 220))
-        self.screen.blit(hud_surf, (hud_x, hud_y))
+        # Translucent Background (cached)
+        self.screen.blit(self._hud_timer_surf, (hud_x, hud_y))
         pygame.draw.rect(self.screen, border_col, (hud_x, hud_y, hud_w, hud_h), border_w, border_radius=10)
 
         # Draw mini analog clock icon

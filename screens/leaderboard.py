@@ -3,6 +3,7 @@ import pygame
 import os
 import time
 import math
+import threading
 from db.connect_db import db
 
 
@@ -65,8 +66,10 @@ class LeaderboardScreen:
         self.status_message = "Syncing with live database..."
         self.status_timer = time.time() + 2.0
 
-        # Load initial leaderboard data from live database
-        self.refresh_data()
+        self._refresh_lock = threading.Lock()
+
+        # Load initial leaderboard data non-blockingly so opening Hall of Fame never freezes the UI
+        self.refresh_data(async_load=True)
 
     def update_gesture(self, cursor_pos, fist_start_time, click_hold_time, current_gesture):
         """Update cursor and gesture tracking from MainMenu."""
@@ -75,26 +78,42 @@ class LeaderboardScreen:
         self.CLICK_HOLD_TIME = click_hold_time
         self.current_gesture = current_gesture
 
-    def refresh_data(self):
-        """Fetch and filter leaderboard and highest recent grade data from live database."""
+    def _fetch_leaderboard_worker(self):
+        if not self._refresh_lock.acquire(blocking=False):
+            return
         self.is_loading = True
+        self.status_message = "Syncing with live database..."
+        self.status_timer = time.time() + 10.0
         try:
-            # Query live database for rankings and highest grade
-            self.leaderboard_data = db.get_leaderboard_data()
-            self.highest_student = db.get_highest_grade_student()
+            # Fetch shared API tables ONCE (3 GETs instead of 6 GETs)
+            students = db.get_students()
+            grades = db.get_grades()
+            results = db.get_game_results()
+            lb_data = db.get_leaderboard_data(students_api=students, api_grades=grades, api_results=results)
+            top_student = db.get_highest_grade_student(students=students or [], grades=grades, game_results=results)
+            self.leaderboard_data = lb_data
+            self.highest_student = top_student
             self.apply_filter()
-            
+
             top_name = self.highest_student.get("name", "Student") if self.highest_student else "None"
             top_score = self.highest_student.get("score", 0) if self.highest_student else 0
             self.status_message = f"Live DB Synced: Top Grade - {top_name} ({top_score:.0f}%)"
             self.status_timer = time.time() + 3.0
-            print(f"[LEADERBOARD] Leaderboard updated from live database! Highest Grade: {top_name} ({top_score}%)")
         except Exception as e:
             print(f"[LEADERBOARD ERROR] Leaderboard data fetch error: {e}")
             self.status_message = "Loaded offline save data"
             self.status_timer = time.time() + 2.5
         finally:
             self.is_loading = False
+            self._refresh_lock.release()
+
+    def refresh_data(self, async_load=True):
+        """Fetch and filter leaderboard and highest recent grade data from live database."""
+        if async_load:
+            if not self._refresh_lock.locked():
+                threading.Thread(target=self._fetch_leaderboard_worker, daemon=True).start()
+        else:
+            self._fetch_leaderboard_worker()
 
     def apply_filter(self):
         """Filter and sort leaderboard based on selected tab."""
@@ -172,8 +191,8 @@ class LeaderboardScreen:
         table_y = 186
         table_h = self.height - table_y - 25
 
-        up_btn = pygame.Rect(table_x + table_w - 44, table_y + 12, 36, 36)
-        down_btn = pygame.Rect(table_x + table_w - 44, table_y + table_h - 48, 36, 36)
+        up_btn = pygame.Rect(table_x + table_w - 42, table_y + 48, 34, 34)
+        down_btn = pygame.Rect(table_x + table_w - 42, table_y + table_h - 48, 34, 34)
 
         max_scroll = max(0, len(self.filtered_data) - self.max_visible_rows)
         if up_btn.collidepoint(pos):
@@ -220,10 +239,16 @@ class LeaderboardScreen:
         else:
             self.screen.fill((15, 23, 42))
 
-        # Dark translucent overlay
-        dim = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
-        dim.fill((10, 15, 29, 215))
-        self.screen.blit(dim, (0, 0))
+        # Dark translucent overlay (cached)
+        if not hasattr(self, '_dim_surf') or self._dim_surf.get_size() != (self.width, self.height):
+            self._dim_surf = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
+            self._dim_surf.fill((10, 15, 29, 215))
+            if pygame.display.get_surface() is not None:
+                try:
+                    self._dim_surf = self._dim_surf.convert_alpha()
+                except Exception:
+                    pass
+        self.screen.blit(self._dim_surf, (0, 0))
 
         # 2. Header & Title
         title_surf = self.title_font.render("COGNITIVE MAZE - HALL OF FAME", True, (255, 215, 0))
@@ -258,10 +283,16 @@ class LeaderboardScreen:
         spotlight_y = 74
         spotlight_h = 56
 
-        # Card container
-        spotlight_surf = pygame.Surface((spotlight_w, spotlight_h), pygame.SRCALPHA)
-        spotlight_surf.fill((20, 29, 50, 240))
-        self.screen.blit(spotlight_surf, (spotlight_x, spotlight_y))
+        # Card container (cached)
+        if not hasattr(self, '_spotlight_surf') or self._spotlight_surf.get_size() != (spotlight_w, spotlight_h):
+            self._spotlight_surf = pygame.Surface((spotlight_w, spotlight_h), pygame.SRCALPHA)
+            self._spotlight_surf.fill((20, 29, 50, 240))
+            if pygame.display.get_surface() is not None:
+                try:
+                    self._spotlight_surf = self._spotlight_surf.convert_alpha()
+                except Exception:
+                    pass
+        self.screen.blit(self._spotlight_surf, (spotlight_x, spotlight_y))
         
         # Subtle pulsing gold border
         pulse = (math.sin(now * 0.005) + 1) / 2
@@ -349,10 +380,16 @@ class LeaderboardScreen:
         table_y = 186
         table_h = self.height - table_y - 25
 
-        # Card Background
-        card_surf = pygame.Surface((table_w, table_h), pygame.SRCALPHA)
-        card_surf.fill((15, 23, 42, 235))
-        self.screen.blit(card_surf, (table_x, table_y))
+        # Card Background (cached)
+        if not hasattr(self, '_table_card_surf') or self._table_card_surf.get_size() != (table_w, table_h):
+            self._table_card_surf = pygame.Surface((table_w, table_h), pygame.SRCALPHA)
+            self._table_card_surf.fill((15, 23, 42, 235))
+            if pygame.display.get_surface() is not None:
+                try:
+                    self._table_card_surf = self._table_card_surf.convert_alpha()
+                except Exception:
+                    pass
+        self.screen.blit(self._table_card_surf, (table_x, table_y))
         pygame.draw.rect(self.screen, (51, 65, 85), (table_x, table_y, table_w, table_h), 2, border_radius=14)
 
         # Table Column Positions

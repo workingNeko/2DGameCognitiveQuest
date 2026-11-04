@@ -68,9 +68,11 @@ def test_quarter3_all_maps():
                 q3.camera_pan_timer = q3.camera_pan_duration + 0.1
                 q3.update()
 
-        # In map8.txt, answering all 5 stations should complete the causeway bridge and open the exit portal
+        # In map8.txt, answering all 5 stations should complete the causeway bridge and activate Skeleton Guardian
         if map_file == "map8.txt":
-            assert q3.quiz_state in [5, 6, 8], f"Map 8 should reach completed state, got {q3.quiz_state}"
+            assert q3.quiz_state in [0, 5, 6, 8], f"Map 8 should reach completed state, got {q3.quiz_state}"
+            assert getattr(q3, 'guardian_skeleton_state', 0) == 1, "Skeleton Guardian should be activated at exit portal"
+            assert q3.built_bridge_count == 5, "All 5 bridge segments should be built"
 
         # 4. Render check
         q3.draw()

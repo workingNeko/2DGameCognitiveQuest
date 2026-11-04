@@ -268,11 +268,11 @@ class StudentSelect:
 
             if os.path.exists(boy_path):
                 self.boy_icon = pygame.image.load(boy_path).convert_alpha()
-                self.boy_icon = pygame.transform.scale(self.boy_icon, (40, 40))
+                self.boy_icon = pygame.transform.scale(self.boy_icon, (40, 40)).convert_alpha()
 
             if os.path.exists(girl_path):
                 self.girl_icon = pygame.image.load(girl_path).convert_alpha()
-                self.girl_icon = pygame.transform.scale(self.girl_icon, (40, 40))
+                self.girl_icon = pygame.transform.scale(self.girl_icon, (40, 40)).convert_alpha()
 
         except Exception as e:
             print(f"Icon Error: {e}")
@@ -438,10 +438,16 @@ class StudentSelect:
     def draw_student_list(self):
         list_rect = pygame.Rect(40, 120, self.width - 80, self.height - 200)
 
-        # PANEL
-        panel = pygame.Surface((list_rect.width, list_rect.height), pygame.SRCALPHA)
-        panel.fill((255, 255, 255, 235))
-        self.screen.blit(panel, list_rect.topleft)
+        # PANEL (cached)
+        if not hasattr(self, '_panel_surf') or self._panel_surf.get_size() != (list_rect.width, list_rect.height):
+            self._panel_surf = pygame.Surface((list_rect.width, list_rect.height), pygame.SRCALPHA)
+            self._panel_surf.fill((255, 255, 255, 235))
+            if pygame.display.get_surface() is not None:
+                try:
+                    self._panel_surf = self._panel_surf.convert_alpha()
+                except Exception:
+                    pass
+        self.screen.blit(self._panel_surf, list_rect.topleft)
 
         # Outer border with soft shadow
         shadow_rect = list_rect.inflate(4, 4)
@@ -545,20 +551,35 @@ class StudentSelect:
                 info_surface = tiny_f.render(info, True, (90, 90, 120))
             self.screen.blit(info_surface, (name_x, item_rect.y + 44))
 
-        # Subtle Top / Bottom scroll fades when content overflows
+        # Subtle Top / Bottom scroll fades when content overflows (cached)
+        fade_w = list_rect.width - 25
         if self.scroll_y > 10.0:
-            top_fade = pygame.Surface((list_rect.width - 25, 18), pygame.SRCALPHA)
-            for i in range(18):
-                alpha = int(120 * (1.0 - i / 18.0))
-                pygame.draw.line(top_fade, (210, 225, 245, alpha), (0, i), (list_rect.width - 25, i))
-            self.screen.blit(top_fade, (list_rect.x, list_rect.y))
+            if not hasattr(self, '_top_fade_surf') or self._top_fade_surf.get_width() != fade_w:
+                top_fade = pygame.Surface((fade_w, 18), pygame.SRCALPHA)
+                for i in range(18):
+                    alpha = int(120 * (1.0 - i / 18.0))
+                    pygame.draw.line(top_fade, (210, 225, 245, alpha), (0, i), (fade_w, i))
+                if pygame.display.get_surface() is not None:
+                    try:
+                        top_fade = top_fade.convert_alpha()
+                    except Exception:
+                        pass
+                self._top_fade_surf = top_fade
+            self.screen.blit(self._top_fade_surf, (list_rect.x, list_rect.y))
 
         if self.max_scroll_y > 0 and self.scroll_y < self.max_scroll_y - 10.0:
-            bot_fade = pygame.Surface((list_rect.width - 25, 18), pygame.SRCALPHA)
-            for i in range(18):
-                alpha = int(120 * (i / 18.0))
-                pygame.draw.line(bot_fade, (210, 225, 245, alpha), (0, i), (list_rect.width - 25, i))
-            self.screen.blit(bot_fade, (list_rect.x, list_rect.bottom - 18))
+            if not hasattr(self, '_bot_fade_surf') or self._bot_fade_surf.get_width() != fade_w:
+                bot_fade = pygame.Surface((fade_w, 18), pygame.SRCALPHA)
+                for i in range(18):
+                    alpha = int(120 * (i / 18.0))
+                    pygame.draw.line(bot_fade, (210, 225, 245, alpha), (0, i), (fade_w, i))
+                if pygame.display.get_surface() is not None:
+                    try:
+                        bot_fade = bot_fade.convert_alpha()
+                    except Exception:
+                        pass
+                self._bot_fade_surf = bot_fade
+            self.screen.blit(self._bot_fade_surf, (list_rect.x, list_rect.bottom - 18))
 
         self.screen.set_clip(old_clip)
 
@@ -597,10 +618,16 @@ class StudentSelect:
         else:
             self.screen.fill((180, 220, 255))
 
-        # DARK OVERLAY
-        overlay = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
-        overlay.fill((0, 0, 0, 70))
-        self.screen.blit(overlay, (0, 0))
+        # DARK OVERLAY (cached)
+        if not hasattr(self, '_dim_overlay') or self._dim_overlay.get_size() != (self.width, self.height):
+            self._dim_overlay = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
+            self._dim_overlay.fill((0, 0, 0, 70))
+            if pygame.display.get_surface() is not None:
+                try:
+                    self._dim_overlay = self._dim_overlay.convert_alpha()
+                except Exception:
+                    pass
+        self.screen.blit(self._dim_overlay, (0, 0))
 
         # TITLE
         title = self.title_font.render("Select Student", True, (255, 255, 255))

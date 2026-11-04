@@ -116,7 +116,13 @@ def test_quarter4_complete_objectives_shortcut():
     mock_menu.selected_student = {"first_name": "Hero"}
     mock_menu.audio_manager = MagicMock()
 
-    q4 = Quarter4(screen, mock_menu, map_name="map12.txt")
+    from db.connect_db import Database
+    mock_6_qs = [
+        {"prompt": f"Q{i}", "optionA": "A", "optionB": "B", "optionC": "C", "optionD": "D", "correctAnswer": "A"}
+        for i in range(1, 7)
+    ]
+    with patch.object(Database, "get_questions", return_value=mock_6_qs):
+        q4 = Quarter4(screen, mock_menu, map_name="map12.txt")
     assert len(q4.answered_stations) == 0
     assert q4.key_puzzle_solved is False
 

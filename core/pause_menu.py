@@ -12,13 +12,14 @@ class InGamePauseMenu:
     - Keyboard shortcut support (ESC, P).
     """
 
-    def __init__(self, screen, width, height, main_menu, return_callback, restart_callback=None):
+    def __init__(self, screen, width, height, main_menu, return_callback, restart_callback=None, state_machine=None):
         self.screen = screen
         self.width = width
         self.height = height
         self.main_menu = main_menu
         self.return_callback = return_callback
         self.restart_callback = restart_callback
+        self.state_machine = state_machine
         self.is_paused = False
         self.showing_controls = False
 
@@ -31,7 +32,7 @@ class InGamePauseMenu:
 
         # Modal geometry
         self.modal_w = 460
-        self.modal_h = 390
+        self.modal_h = 410
         self.modal_x = (self.width - self.modal_w) // 2
         self.modal_y = (self.height - self.modal_h) // 2
 
@@ -57,7 +58,7 @@ class InGamePauseMenu:
         return fm_get_font("Comic Sans MS", size, bold=bold)
 
     def handle_event(self, event):
-        """Processes keyboard toggle for pause (ESC or P)."""
+        """Processes keyboard toggle for pause (ESC or P). Universal across all states."""
         if event.type == pygame.KEYDOWN:
             if event.key in [pygame.K_ESCAPE, pygame.K_p]:
                 if self.showing_controls:
@@ -85,6 +86,7 @@ class InGamePauseMenu:
         """Opens the pause menu."""
         self.is_paused = True
         self.showing_controls = False
+        return True
 
     def close(self):
         """Closes the pause menu."""
@@ -241,6 +243,12 @@ class InGamePauseMenu:
         pygame.draw.rect(self.screen, (254, 202, 202), self.exit_rect, 2, border_radius=10)
         e_txt = btn_font.render("Return to Stage Select", True, (255, 255, 255))
         self.screen.blit(e_txt, e_txt.get_rect(center=self.exit_rect.center))
+
+        # Version watermark at bottom of pause modal
+        from .version import APP_VERSION
+        v_font = self.get_font(12)
+        v_txt = v_font.render(f"Cognitive Quest v{APP_VERSION}", True, (100, 116, 139))
+        self.screen.blit(v_txt, v_txt.get_rect(center=(self.modal_x + self.modal_w // 2, self.modal_y + self.modal_h - 14)))
 
     def draw_controls_guide(self, cursor_pos=None):
         """Renders the comprehensive controls guide overlay."""

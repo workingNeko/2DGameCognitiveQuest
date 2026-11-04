@@ -1,0 +1,14 @@
+{
+  "id": "q1_geometric_jigsaw",
+  "type": "jigsaw",
+  "title": "Quarter 1: Geometric Shape Matrix",
+  "quarter": 1,
+  "cognitive_domain": "Spatial Reasoning & Pattern Assembly",
+  "rows": 2,
+  "cols": 3,
+  "board_width": 480,
+  "board_height": 360,
+  "snap_tolerance": 40,
+  "time_limit": 90.0,
+  "image_path": "assets/images/match_shapes.jpg"
+}
