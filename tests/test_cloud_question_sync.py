@@ -226,6 +226,7 @@ class TestCloudQuestionSync(unittest.TestCase):
         self.assertEqual(target[2], "Guardian Bromen")
 
         # Approach Guardian Bromen
+        q4.instruction_modal.hide()
         q4.player_x = q4.npc_bromen_x
         q4.player_y = q4.npc_bromen_y
         q4.update()
@@ -235,6 +236,7 @@ class TestCloudQuestionSync(unittest.TestCase):
         with patch.object(Database, "get_questions", return_value=[]):
             q4_m12 = Quarter4(screen, self.mock_menu, map_name="map12.txt")
         self.assertEqual(q4_m12.active_station_count, 0)
+        q4_m12.instruction_modal.hide()
         q4_m12.player_x = q4_m12.npc_bromen_x
         q4_m12.player_y = q4_m12.npc_bromen_y
         q4_m12.update()

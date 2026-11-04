@@ -629,7 +629,7 @@ class Quarter4:
             return True
         if getattr(self, 'quiz_state', 0) in [1, 2, 3, 4, 5]:
             return True
-        if getattr(self, 'bromen_dialogue_state', 0) in [1, 2, 3]:
+        if getattr(self, 'bromen_dialogue_state', 0) in [1, 2]:
             return True
         if getattr(self, 'instruction_modal', None) and getattr(self.instruction_modal, 'is_visible', False):
             return True
@@ -1736,9 +1736,12 @@ class Quarter4:
                 if getattr(self, 'is_map12', False):
                     self.quiz_state = 0
                     self.raft_state = "ready_to_sail"
+                    self.bromen_dialogue_state = 0
                     print("[BOAT] Bromen dismissed! Step onto the Lotus Raft to sail!")
                 else:
                     self.quiz_state = 6
+                    self.bromen_dialogue_state = 0
+                self.sync_ui_state()
                 save_student_progress(self.main_menu)
                 print("[TUTORIAL] Quarter 4 evaluation completed!")
 
@@ -2098,8 +2101,10 @@ class Quarter4:
                     self.player_x = 37.0 * TILE_SIZE
                     self.player_y = 9.0 * TILE_SIZE
                     self.quiz_state = 6  # Unlock exit portal!
+                    self.bromen_dialogue_state = 0
                     self.open_dungeon_doors()
                     self.save_quarter4_game_result()
+                    self.sync_ui_state()
                     print("[WIN] Lotus Raft docked at East Pier! Portal unlocked!")
                     if hasattr(self, 'sound_correct') and self.sound_correct:
                         try:
@@ -2127,6 +2132,8 @@ class Quarter4:
                     self.raft_passenger = False
                     self.player_x = 29.0 * TILE_SIZE
                     self.player_y = 9.0 * TILE_SIZE
+                    self.bromen_dialogue_state = 0
+                    self.sync_ui_state()
                     print("[BOAT] Lotus Raft returned to West Pier!")
 
         tot_stations = getattr(self, 'active_station_count', len(self.quiz_stations))
@@ -3348,8 +3355,15 @@ class Quarter4:
                     self.bromen_dialogue_state = 0
                     self.bromen_proximity_cooldown_end = pygame.time.get_ticks() + 5000
                     return "handled"
-                elif self.bromen_dialogue_state == 3:
+                elif self.quiz_state == 5 or self.bromen_dialogue_state == 3:
+                    if getattr(self, 'is_map12', False):
+                        self.quiz_state = 0
+                        self.raft_state = "ready_to_sail"
+                    else:
+                        self.quiz_state = 6
                     self.bromen_dialogue_state = 0
+                    self.sync_ui_state()
+                    save_student_progress(self.main_menu)
                     return "handled"
                 if self.check_portal_teleport_on_hold():
                     return "back"
