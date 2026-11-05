@@ -2078,7 +2078,10 @@ class Quarter3:
         if self.state_machine.current_state == State.CognitivePuzzle:
             # Fraction Bakery Mini-Game Click Interactions
             if getattr(self, 'fraction_bakery_active', False) or getattr(self, 'solar_array_puzzle_active', False) or getattr(self, 'guardian_skeleton_state', 0) == 3:
-                self.handle_fraction_bakery_mouse_down(pos)
+                self.cursor_pos = pos
+                handled = self.handle_fraction_bakery_mouse_down(pos)
+                if handled and getattr(self, 'dragged_bakery_slice', None):
+                    self.release_dragged_bakery_slice()
                 return
             elif self.quiz_state == 9 or getattr(self, 'mini_puzzle_active', False):
                 self.handle_station_mini_puzzle_click(pos)
@@ -4911,6 +4914,8 @@ class Quarter3:
                 "matched": False,
                 "pan": "plate",
                 "label": f"1/{denom}",
+                "equation": order.get("equation", f"1/{denom}"),
+                "factor_desc": order.get("desc", f"Fraction slice 1/{denom}"),
                 "rect": pygame.Rect(self.bakery_plate_cx - 40, self.bakery_plate_cy - 40, 80, 80)
             })
 
@@ -4939,6 +4944,8 @@ class Quarter3:
                 "is_placed": False,
                 "is_dragging": False,
                 "placed_slot": None,
+                "target_slot_id": None,
+                "gem_surf": pygame.Surface((rect_w, rect_h), pygame.SRCALPHA),
                 "x": rect.x,
                 "y": rect.y,
                 "orig_x": rect.x,
@@ -4959,9 +4966,13 @@ class Quarter3:
             self.fraction_bakery_slices.append(slice_obj)
 
         # Backward compatibility sync
+        self.solar_matrix_rows = 1
+        self.solar_matrix_cols = denom
+        self.solar_matrix_row_completed = [False]
+        self.solar_matrix_beam_alphas = [0.0]
         self.solar_array_puzzle_pieces = self.fraction_bakery_slices
         self.solar_array_puzzle_slots = self.fraction_bakery_plate_slots
-        self.solar_array_target_equation = order["equation"]
+        self.solar_array_target_equation = order.get("equation", f"1 / {denom} = Fraction")
         self.solar_array_factor_desc = order["desc"]
         self.update_bakery_placed_state()
 
@@ -4999,6 +5010,8 @@ class Quarter3:
 
         all_done = all(self.fraction_orders_completed)
         self.solar_array_puzzle_all_placed = all_done or is_match
+        self.solar_matrix_row_completed = [is_match or all_done or (placed_count >= target)]
+        self.solar_matrix_beam_alphas = [1.0 if (is_match or all_done or placed_count >= target) else 0.0]
 
     def reset_fraction_bakery(self):
         """Returns all placed slices back to the tray for the current order."""
@@ -5010,6 +5023,7 @@ class Quarter3:
             p["is_placed"] = False
             p["is_dragging"] = False
             p["placed_slot"] = None
+            p["target_slot_id"] = None
             p["x"] = p["orig_x"]
             p["y"] = p["orig_y"]
             p["rect"].x = p["orig_x"]
@@ -5031,6 +5045,9 @@ class Quarter3:
             slot["matched"] = True
             slice_obj["is_placed"] = True
             slice_obj["placed_slot"] = slot
+            slice_obj["target_slot_id"] = slot["id"]
+        for o_idx in range(len(self.fraction_orders_completed)):
+            self.fraction_orders_completed[o_idx] = True
         self.update_bakery_placed_state()
 
     def handle_fraction_bakery_mouse_down(self, pos):
@@ -5211,6 +5228,7 @@ class Quarter3:
                     piece["is_placed"] = True
                     piece["is_dragging"] = False
                     piece["placed_slot"] = target_slot
+                    piece["target_slot_id"] = target_slot["id"]
                 else:
                     piece["x"] = piece["orig_x"]
                     piece["y"] = piece["orig_y"]
@@ -5225,16 +5243,30 @@ class Quarter3:
             return
 
         # Case B: Dragged & Dropped (Distance >= 14px)
-        p_dist = math.hypot(cur_pos[0] - self.bakery_plate_cx, cur_pos[1] - self.bakery_plate_cy)
-        if p_dist <= self.bakery_plate_r + 40:
-            ang = math.atan2(cur_pos[1] - self.bakery_plate_cy, cur_pos[0] - self.bakery_plate_cx)
-            rel_ang = (ang - (-math.pi / 2.0)) % (2.0 * math.pi)
-            denom = len(self.fraction_bakery_plate_slots)
-            slice_ang = (2.0 * math.pi) / denom
-            slot_idx = int(rel_ang // slice_ang)
-            slot_idx = min(denom - 1, max(0, slot_idx))
+        piece_cx = piece["x"] + piece["w"] // 2
+        piece_cy = piece["y"] + piece["h"] // 2
+        p_dist_cur = math.hypot(cur_pos[0] - self.bakery_plate_cx, cur_pos[1] - self.bakery_plate_cy)
+        p_dist_piece = math.hypot(piece_cx - self.bakery_plate_cx, piece_cy - self.bakery_plate_cy)
+        slot_match = None
+        for s in self.fraction_bakery_plate_slots:
+            if s["rect"].collidepoint((piece_cx, piece_cy)) or s["rect"].collidepoint(cur_pos):
+                slot_match = s
+                break
 
-            chosen_slot = self.fraction_bakery_plate_slots[slot_idx]
+        if p_dist_cur <= self.bakery_plate_r + 40 or p_dist_piece <= self.bakery_plate_r + 40 or slot_match is not None:
+            denom = len(self.fraction_bakery_plate_slots)
+            if slot_match is not None:
+                chosen_slot = slot_match
+            else:
+                ang_ref_x = piece_cx if p_dist_piece <= self.bakery_plate_r + 40 else cur_pos[0]
+                ang_ref_y = piece_cy if p_dist_piece <= self.bakery_plate_r + 40 else cur_pos[1]
+                ang = math.atan2(ang_ref_y - self.bakery_plate_cy, ang_ref_x - self.bakery_plate_cx)
+                rel_ang = (ang - (-math.pi / 2.0)) % (2.0 * math.pi)
+                slice_ang = (2.0 * math.pi) / denom
+                slot_idx = int(rel_ang // slice_ang)
+                slot_idx = min(denom - 1, max(0, slot_idx))
+                chosen_slot = self.fraction_bakery_plate_slots[slot_idx]
+
             if chosen_slot["slice"] is not None and chosen_slot["slice"] != piece:
                 empty_slots = [s for s in self.fraction_bakery_plate_slots if s["slice"] is None]
                 chosen_slot = empty_slots[0] if empty_slots else None
@@ -5251,6 +5283,7 @@ class Quarter3:
                 piece["is_placed"] = True
                 piece["is_dragging"] = False
                 piece["placed_slot"] = chosen_slot
+                piece["target_slot_id"] = chosen_slot["id"]
                 if getattr(self, 'snap_sound', None):
                     self.snap_sound.play()
             else:
@@ -5337,9 +5370,13 @@ class Quarter3:
         self.reset_fraction_bakery()
 
     def handle_solar_array_mouse_down(self, pos):
-        return self.handle_fraction_bakery_mouse_down(pos)
+        handled = self.handle_fraction_bakery_mouse_down(pos)
+        self.dragged_solar_piece = self.dragged_bakery_slice
+        return handled
 
     def release_dragged_solar_piece(self):
+        if not getattr(self, 'dragged_bakery_slice', None) and getattr(self, 'dragged_solar_piece', None):
+            self.dragged_bakery_slice = self.dragged_solar_piece
         self.release_dragged_bakery_slice()
 
     def auto_solve_solar_array_puzzle(self):

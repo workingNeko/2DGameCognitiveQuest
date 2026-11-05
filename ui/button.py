@@ -1,3 +1,5 @@
+import os
+import sys
 import pygame
 
 class Button:
@@ -11,11 +13,38 @@ class Button:
         self.hovered = False
         self.image = None
 
-        # Load image if provided
+        # Load image if provided with robust resolution and safe fallback
         if image_path:
-            self.image = pygame.image.load(image_path).convert_alpha()
-            # Scale image to height of button (square icon)
-            self.image = pygame.transform.scale(self.image, (self.rect.height, self.rect.height))
+            resolved_path = image_path
+            if not os.path.exists(resolved_path):
+                candidates = []
+                if getattr(sys, "frozen", False):
+                    base_dir = getattr(sys, "_MEIPASS", "")
+                    if base_dir:
+                        candidates.append(os.path.join(base_dir, image_path))
+                    exe_dir = os.path.dirname(os.path.abspath(sys.executable))
+                    candidates.append(os.path.join(exe_dir, image_path))
+                    candidates.append(os.path.join(exe_dir, "_internal", image_path))
+                else:
+                    here = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+                    candidates.append(os.path.join(here, image_path))
+
+                for cand in candidates:
+                    if os.path.exists(cand):
+                        resolved_path = cand
+                        break
+
+            try:
+                if os.path.exists(resolved_path):
+                    self.image = pygame.image.load(resolved_path).convert_alpha()
+                    # Scale image to height of button (square icon)
+                    self.image = pygame.transform.scale(self.image, (self.rect.height, self.rect.height))
+                else:
+                    print(f"[WARN] Button image not found at '{image_path}', falling back gracefully.")
+                    self.image = None
+            except Exception as e:
+                print(f"[WARN] Failed to load button image '{image_path}': {e}")
+                self.image = None
 
     def handle_event(self, event):
         if event.type == pygame.MOUSEBUTTONDOWN:
@@ -36,6 +65,11 @@ class Button:
             ) if self.hovered else self.bg_color
             pygame.draw.rect(screen, color, self.rect, border_radius=12)
             pygame.draw.rect(screen, (0,0,0), self.rect, 3, border_radius=12)
+        elif not self.image:
+            # Fallback styling if image failed to load and no bg_color specified
+            fallback_bg = (239, 68, 68) if self.hovered else (185, 28, 28)
+            pygame.draw.rect(screen, fallback_bg, self.rect, border_radius=12)
+            pygame.draw.rect(screen, (255, 255, 255), self.rect, 2, border_radius=12)
 
         # Draw image (if exists) on left side of button
         text_offset_x = 0
@@ -45,8 +79,13 @@ class Button:
             text_offset_x = self.image.get_width() + 20  # space between image and text
 
         # Draw text (centered horizontally and vertically, adjusted if image exists)
-        if self.text and self.font:
-            text_surf = self.font.render(self.text, True, self.text_color)
+        display_text = self.text
+        if not display_text and not self.image:
+            display_text = "EXIT" if "exit" in str(getattr(self, 'action', '')).lower() else "SELECT"
+
+        if display_text:
+            font = self.font or pygame.font.SysFont("Arial", 16, bold=True)
+            text_surf = font.render(display_text, True, self.text_color if self.text_color else (255, 255, 255))
             text_rect = text_surf.get_rect()
             text_rect.centery = self.rect.y + self.rect.height // 2
             if self.image:
