@@ -122,6 +122,11 @@ class MainMenu:
         self.click_ready = False
         self.popup_state = None
         self.update_manager = UpdateManager(local_version=APP_VERSION)
+        try:
+            # Silent asynchronous background check on launch to detect new releases
+            self.update_manager.check_for_updates()
+        except Exception:
+            pass
         self.update_check_btn_rect = None
         self.update_download_btn_rect = None
         self.footer_update_rect = None
