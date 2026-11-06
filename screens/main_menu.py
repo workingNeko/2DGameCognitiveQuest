@@ -33,14 +33,6 @@ from core.cursor_system import OneEuroFilter, game_cursor
 from ui.button import Button
 from core.version import APP_VERSION, APP_NAME, GITHUB_RELEASES_URL
 from core.update_manager import UpdateManager, UpdateState
-from screens.stageselect import StageSelect
-from screens.studentselect import StudentSelect
-from screens.tutorial import TutorialScreen
-from screens.quarter1 import Quarter1
-from screens.quarter2 import Quarter2
-from screens.quarter3 import Quarter3
-from screens.quarter4 import Quarter4
-from screens.leaderboard import LeaderboardScreen
 
 
 class MainMenu:
@@ -542,31 +534,35 @@ class MainMenu:
 
     def _open_camera(self):
         """Discovers and initializes the best active webcam hardware across available device indices and backends."""
-        backends = [(cv2.CAP_DSHOW, "DirectShow"), (cv2.CAP_MSMF, "Media Foundation"), (cv2.CAP_ANY, "Default")]
-        for idx in range(4):
-            for backend_flag, backend_name in backends:
-                try:
-                    cap = cv2.VideoCapture(idx, backend_flag)
-                    if cap.isOpened():
-                        # Verify with actual frame grab
-                        ret, test_frame = cap.read()
-                        if ret and test_frame is not None and test_frame.size > 0:
-                            try:
-                                cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*'MJPG'))
-                            except Exception:
-                                pass
-                            cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
-                            # Request 320x240 native capture for AMD A4-6300 dual-core hardware (reduces USB bus & memory bandwidth)
-                            cap.set(cv2.CAP_PROP_FRAME_WIDTH, 320)
-                            cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 240)
-                            cap.set(cv2.CAP_PROP_FPS, 30)
-                            actual_w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH) or 320)
-                            actual_h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT) or 240)
-                            print(f"[OK] Camera initialized on Device Index {idx} via {backend_name} ({actual_w}x{actual_h} @ 30 FPS)!")
-                            return cap
-                        cap.release()
-                except Exception:
-                    pass
+        # Prioritize Device 0 DirectShow for fastest Windows launch (<0.1s)
+        fast_attempts = [
+            (0, cv2.CAP_DSHOW, "DirectShow Device 0"),
+            (0, cv2.CAP_MSMF, "Media Foundation Device 0"),
+            (1, cv2.CAP_DSHOW, "DirectShow Device 1"),
+            (0, cv2.CAP_ANY, "Default Device 0"),
+        ]
+        for idx, backend_flag, desc in fast_attempts:
+            try:
+                cap = cv2.VideoCapture(idx, backend_flag)
+                if cap.isOpened():
+                    ret, test_frame = cap.read()
+                    if ret and test_frame is not None and test_frame.size > 0:
+                        try:
+                            cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*'MJPG'))
+                        except Exception:
+                            pass
+                        cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+                        # Request 320x240 native capture for AMD A4-6300 dual-core hardware (reduces USB bus & memory bandwidth)
+                        cap.set(cv2.CAP_PROP_FRAME_WIDTH, 320)
+                        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 240)
+                        cap.set(cv2.CAP_PROP_FPS, 30)
+                        actual_w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH) or 320)
+                        actual_h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT) or 240)
+                        print(f"[OK] Camera initialized via {desc} ({actual_w}x{actual_h} @ 30 FPS)!")
+                        return cap
+                    cap.release()
+            except Exception:
+                pass
         print("[WARN] No working camera found, falling back to mouse control.")
         return None
 
@@ -1148,6 +1144,7 @@ class MainMenu:
                 # Start Tutorial for new activity
                 print("[TUTORIAL] Starting New Activity: Launching Tutorial Screen...")
                 self.current_screen = "tutorial"
+                from screens.tutorial import TutorialScreen
                 self.tutorial = TutorialScreen(self.screen, self)
             elif self.popup_state == "confirm_menu":
                 from db.save_system import show_saving_and_exit
@@ -1678,6 +1675,7 @@ class MainMenu:
         self.fist_start_time = 0
         self.click_ready = True
         self.current_screen = "leaderboard"
+        from screens.leaderboard import LeaderboardScreen
         self.leaderboard = LeaderboardScreen(self.screen, self)
 
     def select_student(self):
@@ -1685,6 +1683,7 @@ class MainMenu:
         self.fist_start_time = 0
         self.click_ready = True
         self.current_screen = "student_select"
+        from screens.studentselect import StudentSelect
         self.student_select = StudentSelect(self.screen, self)
 
     def start_activity(self):
@@ -1712,10 +1711,12 @@ class MainMenu:
         if not is_tutorial_completed(self.student_id):
             print("[TUTORIAL] New player detected! Launching Tutorial Screen...")
             self.current_screen = "tutorial"
+            from screens.tutorial import TutorialScreen
             self.tutorial = TutorialScreen(self.screen, self)
             return
 
         self.current_screen = "stage_select"
+        from screens.stageselect import StageSelect
         self.stage_select = StageSelect(self.screen, self)
 
     def continue_activity(self):

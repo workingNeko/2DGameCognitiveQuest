@@ -173,6 +173,17 @@ def main():
     # Set up clock for FPS
     clock = pygame.time.Clock()
 
+    # Render instant branded splash screen so user has immediate feedback while assets load
+    screen.fill((15, 23, 42))
+    splash_font = pygame.font.SysFont("Comic Sans MS", 46, bold=True)
+    sub_font = pygame.font.SysFont("Comic Sans MS", 20)
+    t_surf = splash_font.render("Cognitive Maze", True, (255, 255, 255))
+    s_surf = sub_font.render("Loading adventure...", True, (148, 163, 184))
+    screen.blit(t_surf, t_surf.get_rect(center=(screen_width // 2, screen_height // 2 - 25)))
+    screen.blit(s_surf, s_surf.get_rect(center=(screen_width // 2, screen_height // 2 + 35)))
+    pygame.display.flip()
+    pygame.event.pump()
+
     # Create the main menu
     main_menu = MainMenu(screen)
 
