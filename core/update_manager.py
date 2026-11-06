@@ -16,6 +16,54 @@ from .version import (
 )
 
 
+def _create_ssl_context():
+    """Builds a resilient SSL context using certifi bundle, Windows cert store, or unverified fallback."""
+    try:
+        import ssl
+    except ImportError:
+        return None
+
+    # 1. Try bundled certifi bundle if available (shipped in PyInstaller _internal/certifi/cacert.pem)
+    try:
+        import certifi
+        ca_path = certifi.where()
+        if ca_path and os.path.exists(ca_path):
+            return ssl.create_default_context(cafile=ca_path)
+    except Exception:
+        pass
+
+    # 2. Try default system certificates
+    try:
+        return ssl.create_default_context()
+    except Exception:
+        pass
+
+    # 3. Fallback unverified context
+    try:
+        return ssl._create_unverified_context()
+    except Exception:
+        return None
+
+
+def _urlopen_resilient(req, timeout=8.0):
+    """Executes urllib.request.urlopen with SSL resilience for educational/proxy environments."""
+    ctx = _create_ssl_context()
+    try:
+        if ctx is not None:
+            return urllib.request.urlopen(req, timeout=timeout, context=ctx)
+        return urllib.request.urlopen(req, timeout=timeout)
+    except urllib.error.URLError as e:
+        err_msg = str(e).lower()
+        if "certificate_verify_failed" in err_msg or "ssl" in err_msg or "certificate" in err_msg:
+            try:
+                import ssl
+                unverified_ctx = ssl._create_unverified_context()
+                return urllib.request.urlopen(req, timeout=timeout, context=unverified_ctx)
+            except Exception:
+                raise e
+        raise e
+
+
 class UpdateState:
     IDLE = "IDLE"
     CHECKING = "CHECKING"
@@ -80,7 +128,7 @@ class UpdateManager:
         return True
 
     def _run_check_worker(self, on_complete=None):
-        """Background worker executing the network request with a 4-second timeout."""
+        """Background worker executing the network request with multi-strategy resilience."""
         result_state = UpdateState.ERROR
         error_msg = None
         latest_ver = None
@@ -93,12 +141,17 @@ class UpdateManager:
             "User-Agent": f"CognitiveQuest-Client/{self.local_version}",
             "Accept": "application/vnd.github.v3+json",
         }
+        browser_headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        }
 
-        # Step 1: Try GitHub Releases API
         fetched_data = None
+
+        # Tier 1: Try GitHub Releases REST API
         try:
             req = urllib.request.Request(GITHUB_API_LATEST_RELEASE, headers=headers)
-            with urllib.request.urlopen(req, timeout=4.0) as resp:
+            with _urlopen_resilient(req, timeout=7.0) as resp:
                 if resp.status == 200:
                     raw_content = resp.read().decode("utf-8")
                     fetched_data = json.loads(raw_content)
@@ -111,11 +164,32 @@ class UpdateManager:
         except Exception as e:
             error_msg = "Connection timed out or network offline."
 
-        # Step 2: Fallback to raw repository version.json if Releases API returned nothing
-        if not fetched_data:
+        # Tier 2: Fallback to GitHub Web Releases Redirect (bypasses GitHub REST API 60 req/hr rate limits)
+        if not fetched_data and (error_msg != "No releases published yet."):
+            try:
+                web_url = f"{GITHUB_RELEASES_URL}/latest"
+                req_web = urllib.request.Request(web_url, headers=browser_headers)
+                with _urlopen_resilient(req_web, timeout=7.0) as resp_web:
+                    final_url = resp_web.geturl()
+                    if "/releases/tag/" in final_url:
+                        tag = final_url.split("/releases/tag/")[-1].strip("/#?")
+                        if tag:
+                            fetched_data = {
+                                "tag_name": tag,
+                                "name": f"Cognitive Maze {tag}",
+                                "body": "Official update released on GitHub.",
+                                "html_url": final_url,
+                                "published_at": None,
+                            }
+                            error_msg = None
+            except Exception:
+                pass
+
+        # Tier 3: Fallback to raw repository version.json if Releases API and Web redirect returned nothing
+        if not fetched_data and (error_msg != "No releases published yet."):
             try:
                 req_raw = urllib.request.Request(RAW_VERSION_URL, headers={"User-Agent": f"CognitiveQuest/{self.local_version}"})
-                with urllib.request.urlopen(req_raw, timeout=3.0) as resp_raw:
+                with _urlopen_resilient(req_raw, timeout=5.0) as resp_raw:
                     if resp_raw.status == 200:
                         raw_data = json.loads(resp_raw.read().decode("utf-8"))
                         fetched_data = {
@@ -125,10 +199,11 @@ class UpdateManager:
                             "html_url": raw_data.get("download_url", GITHUB_RELEASES_URL),
                             "published_at": raw_data.get("date"),
                         }
+                        error_msg = None
             except Exception:
                 pass
 
-        # Step 3: Parse and compare if data retrieved
+        # Step 4: Parse and compare if data retrieved
         if fetched_data:
             latest_ver = fetched_data.get("tag_name") or fetched_data.get("version") or ""
             rel_name = fetched_data.get("name") or f"Version {latest_ver}"
@@ -146,10 +221,10 @@ class UpdateManager:
                 result_state = UpdateState.UP_TO_DATE
         else:
             if not error_msg:
-                error_msg = "Unable to connect to update server."
+                error_msg = "Connection timed out or network offline."
             result_state = UpdateState.ERROR
 
-        # Step 4: Apply results thread-safely
+        # Step 5: Apply results thread-safely
         with self._lock:
             self.state = result_state
             self.latest_version = latest_ver
