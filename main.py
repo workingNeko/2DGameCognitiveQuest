@@ -36,6 +36,15 @@ try:
 except Exception:
     pass
 
+# Force Windows kernel timer granularity to 1ms (standard is 15.625ms).
+# Eliminates thread sleep jitter and scheduling latency on AMD A4-6300 dual-core APU.
+if sys.platform == "win32":
+    try:
+        import ctypes
+        ctypes.windll.winmm.timeBeginPeriod(1)
+    except Exception:
+        pass
+
 # Ensure current working directory is always the application's root directory.
 # On Windows startup/boot, Windows launches applications with cwd = C:\Windows\System32.
 if getattr(sys, "frozen", False):
@@ -152,6 +161,15 @@ def main():
     screen = pygame.display.set_mode((screen_width, screen_height), pygame.FULLSCREEN | pygame.DOUBLEBUF)
     pygame.display.set_caption("Cognitive Maze - Educational Games")
 
+    # Set application window icon
+    icon_path = os.path.join(app_dir, "assets", "images", "icon.png")
+    if os.path.exists(icon_path):
+        try:
+            icon_surf = pygame.image.load(icon_path)
+            pygame.display.set_icon(icon_surf)
+        except Exception:
+            pass
+
     # Set up clock for FPS
     clock = pygame.time.Clock()
 
@@ -185,6 +203,12 @@ def main():
         clock.tick(60)  # 60 FPS
 
     # Quit the game
+    if sys.platform == "win32":
+        try:
+            import ctypes
+            ctypes.windll.winmm.timeEndPeriod(1)
+        except Exception:
+            pass
     pygame.quit()
     sys.exit()
 

@@ -70,21 +70,21 @@ class MainMenu:
                     options = mp_vision.HandLandmarkerOptions(
                         base_options=base_options,
                         running_mode=mp_vision.RunningMode.VIDEO,
-                        num_hands=2,
-                        min_hand_detection_confidence=0.35,
-                        min_hand_presence_confidence=0.35,
-                        min_tracking_confidence=0.35
+                        num_hands=1,
+                        min_hand_detection_confidence=0.45,
+                        min_hand_presence_confidence=0.45,
+                        min_tracking_confidence=0.45
                     )
                     self.hands = mp_vision.HandLandmarker.create_from_options(options)
                     self._use_tasks_api = True
-                    print(f"[OK] MediaPipe HandLandmarker Tasks API initialized from {model_path} (max 2 hands supported)!")
+                    print(f"[OK] MediaPipe HandLandmarker Tasks API initialized from {model_path} (single hand optimized)!")
                 elif hasattr(mp, 'solutions') and hasattr(mp.solutions, 'hands'):
                     self.mp_hands = mp.solutions.hands
-                    # Optimized for AMD A4-6300 (Dual Core): use lightweight model_complexity=0
+                    # Optimized for AMD A4-6300 (Dual Core): use lightweight model_complexity=0 and single hand
                     self.hands = self.mp_hands.Hands(
-                        max_num_hands=2,
-                        min_detection_confidence=0.35,
-                        min_tracking_confidence=0.35,
+                        max_num_hands=1,
+                        min_detection_confidence=0.45,
+                        min_tracking_confidence=0.45,
                         model_complexity=0
                     )
                     self._use_tasks_api = False
@@ -551,10 +551,13 @@ class MainMenu:
                             except Exception:
                                 pass
                             cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
-                            cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
-                            cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+                            # Request 320x240 native capture for AMD A4-6300 dual-core hardware (reduces USB bus & memory bandwidth)
+                            cap.set(cv2.CAP_PROP_FRAME_WIDTH, 320)
+                            cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 240)
                             cap.set(cv2.CAP_PROP_FPS, 30)
-                            print(f"[OK] Camera initialized on Device Index {idx} via {backend_name} (640x480 @ 30 FPS)!")
+                            actual_w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH) or 320)
+                            actual_h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT) or 240)
+                            print(f"[OK] Camera initialized on Device Index {idx} via {backend_name} ({actual_w}x{actual_h} @ 30 FPS)!")
                             return cap
                         cap.release()
                 except Exception:
@@ -584,21 +587,37 @@ class MainMenu:
 
         while self.camera_running and self.cap is not None and self.cap.isOpened():
             try:
-                # Direct hardware grab driven by camera sensor clock (prevents Windows 15.6ms sleep jitter)
+                # Direct hardware grab driven by camera sensor clock.
+                # Flush stale DirectShow buffer backlog (< 2ms per grab means buffered stale frame):
+                t0 = time.perf_counter()
                 if not self.cap.grab():
-                    time.sleep(0.005)
+                    time.sleep(0.002)
                     continue
+                t_elapsed = time.perf_counter() - t0
+                stale_drops = 0
+                while t_elapsed < 0.002 and stale_drops < 4:
+                    t0 = time.perf_counter()
+                    if not self.cap.grab():
+                        break
+                    t_elapsed = time.perf_counter() - t0
+                    stale_drops += 1
+
                 ret, img = self.cap.retrieve()
                 if not ret or img is None:
-                    time.sleep(0.005)
+                    time.sleep(0.002)
                     continue
 
                 now = time.time()
 
-                # Downscale to 320x240 FIRST, then mirror horizontally in-place:
+                # Zero-copy optimization: If native capture is 320x240, bypass resize entirely.
                 # Fits comfortably inside AMD A4-6300's 1MB shared L2 cache and avoids 921KB frame copies.
-                cv2.resize(img, (320, 240), dst=small_bgr, interpolation=cv2.INTER_LINEAR)
-                cv2.flip(small_bgr, 1, dst=flipped_small)
+                h, w = img.shape[:2]
+                if w == 320 and h == 240:
+                    cv2.flip(img, 1, dst=flipped_small)
+                else:
+                    cv2.resize(img, (320, 240), dst=small_bgr, interpolation=cv2.INTER_LINEAR)
+                    cv2.flip(small_bgr, 1, dst=flipped_small)
+
                 cv2.cvtColor(flipped_small, cv2.COLOR_BGR2RGB, dst=rgb_buf)
                 preview = (
                     cv2.resize(flipped_small, self.camera_size, interpolation=cv2.INTER_NEAREST)
@@ -647,7 +666,7 @@ class MainMenu:
 
             except Exception:
                 pass
-            time.sleep(0.003)
+            time.sleep(0.001)
 
     def update_gesture(self):
         """Update gesture detection - Instant read from threaded worker with 60 FPS continuous interpolation"""
