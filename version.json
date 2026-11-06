@@ -1,8 +1,7 @@
 {
-  "version": "1.0.0",
-  "name": "Cognitive Maze v1.0.0 - Official Release",
-  "notes": "Official release of Cognitive Maze: DepEd Grade 2 Mathematics adventure with gesture tracking, offline auto-sync, and rich mini-games.",
-  "download_url": "https://github.com/workingNeko/2DGameCognitiveQuest/releases/latest",
+  "version": "1.2.0",
+  "name": "Cognitive Maze v1.2.0 - Official Release",
+  "notes": "Version 1.2.0: Optimized camera & gesture tracking for AMD A4-6300 APU (single-hand mode, DirectShow buffer flush, 320x240 native pipeline), embedded official Labyrinth Key icon, resilient multi-tier update manager, and Quarter 1-4 bugfixes.",
+  "download_url": "https://github.com/workingNeko/2DGameCognitiveQuest/releases/tag/v1.2.0",
   "date": "2026-11-06"
 }
-
