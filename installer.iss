@@ -2,7 +2,7 @@
 ; Professional Windows Installer with Desktop/Start Menu shortcuts, clean uninstaller, and low-privilege support for school labs.
 
 #define MyAppName "Cognitive Maze"
-#define MyAppVersion "1.2.1"
+#define MyAppVersion "1.2.2"
 #define MyAppPublisher "DepEd Cognitive Quest Team"
 #define MyAppURL "https://github.com/workingNeko/2DGameCognitiveQuest"
 #define MyAppExeName "CognitiveMaze.exe"

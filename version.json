@@ -1,7 +1,7 @@
 {
-  "version": "1.2.1",
-  "name": "Cognitive Maze v1.2.1 - In-App Updates & APU Performance Release",
-  "notes": "Version 1.2.1: Integrated seamless non-blocking in-app updater with live progress bar and clean installer relaunch, optimized for AMD A4-6300 dual-core APU.",
-  "download_url": "https://github.com/workingNeko/2DGameCognitiveQuest/releases/tag/v1.2.1",
+  "version": "1.2.2",
+  "name": "Cognitive Maze v1.2.2 - In-App Updates & Screenshot Release",
+  "notes": "Version 1.2.2: Built-in F12/PrtScn screenshot capture with automatic Windows clipboard copy and on-screen toast HUD, seamless in-app streaming updater, and AMD A4-6300 dual-core performance optimizations.",
+  "download_url": "https://github.com/workingNeko/2DGameCognitiveQuest/releases/tag/v1.2.2",
   "date": "2026-11-07"
 }
