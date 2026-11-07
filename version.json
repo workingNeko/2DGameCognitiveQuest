@@ -1,7 +1,7 @@
 {
-  "version": "1.2.0",
-  "name": "Cognitive Maze v1.2.0 - Official Release",
-  "notes": "Version 1.2.0: Optimized camera & gesture tracking for AMD A4-6300 APU (single-hand mode, DirectShow buffer flush, 320x240 native pipeline), embedded official Labyrinth Key icon, resilient multi-tier update manager, and Quarter 1-4 bugfixes.",
-  "download_url": "https://github.com/workingNeko/2DGameCognitiveQuest/releases/tag/v1.2.0",
-  "date": "2026-11-06"
+  "version": "1.2.1",
+  "name": "Cognitive Maze v1.2.1 - In-App Updates & APU Performance Release",
+  "notes": "Version 1.2.1: Integrated seamless non-blocking in-app updater with live progress bar and clean installer relaunch, optimized for AMD A4-6300 dual-core APU.",
+  "download_url": "https://github.com/workingNeko/2DGameCognitiveQuest/releases/tag/v1.2.1",
+  "date": "2026-11-07"
 }
