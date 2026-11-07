@@ -1493,7 +1493,7 @@ class MainMenu:
             fb_surf = small_font.render(self.autostart_status_msg, True, (250, 204, 21))
             self.screen.blit(fb_surf, (box_x + (box_w - fb_surf.get_width()) // 2, box_y + 400))
         else:
-            hint_surf = small_font.render("Hotkey: [M] Toggle Mute  |  [ [ ] / [ ] ] Adjust Volume  |  [F] Fullscreen", True, (148, 163, 184))
+            hint_surf = small_font.render("Hotkey: [M] Mute  |  [ [ ] / [ ] ] Volume  |  [F] Fullscreen  |  [F12 / PrtScn] Screenshot", True, (148, 163, 184))
             self.screen.blit(hint_surf, (box_x + (box_w - hint_surf.get_width()) // 2, box_y + 400))
 
         # ---------------- Bottom Action Buttons ----------------

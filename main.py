@@ -187,6 +187,10 @@ def main():
     # Create the main menu
     main_menu = MainMenu(screen)
 
+    # In-game screenshot toast notification state
+    toast_text = ""
+    toast_until = 0
+
     # Game loop
     running = True
     while running:
@@ -198,6 +202,14 @@ def main():
                 running = False
             elif event.type == pygame.KEYDOWN and event.key == pygame.K_f:
                 pygame.display.toggle_fullscreen()
+            elif event.type == pygame.KEYDOWN and event.key in (pygame.K_F12, pygame.K_PRINT, pygame.K_F2):
+                from core.screenshot_manager import capture_screenshot
+                filepath, ok = capture_screenshot(screen)
+                if ok:
+                    toast_text = "📸 Screenshot Saved & Copied to Clipboard!"
+                    toast_until = pygame.time.get_ticks() + 3000
+                    if hasattr(main_menu, 'audio_manager') and main_menu.audio_manager:
+                        main_menu.audio_manager.play_sfx("click")
             else:
                 main_menu.handle_event(event)
 
@@ -206,6 +218,24 @@ def main():
 
         # Draw
         main_menu.draw()
+
+        # Render on-screen screenshot confirmation toast if active
+        now_ticks = pygame.time.get_ticks()
+        if toast_until > now_ticks and toast_text:
+            toast_font = pygame.font.SysFont("Comic Sans MS", 13, bold=True)
+            t_surf = toast_font.render(toast_text, True, (255, 255, 255))
+            pad_x, pad_y = 16, 8
+            bg_rect = pygame.Rect(
+                screen_width - t_surf.get_width() - pad_x * 2 - 20,
+                20,
+                t_surf.get_width() + pad_x * 2,
+                t_surf.get_height() + pad_y * 2
+            )
+            pill_surf = pygame.Surface((bg_rect.width, bg_rect.height), pygame.SRCALPHA)
+            pill_surf.fill((15, 23, 42, 225))
+            screen.blit(pill_surf, bg_rect.topleft)
+            pygame.draw.rect(screen, (56, 189, 248), bg_rect, 2, border_radius=8)
+            screen.blit(t_surf, (bg_rect.x + pad_x, bg_rect.y + pad_y))
 
         # Update display
         pygame.display.flip()

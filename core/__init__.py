@@ -23,6 +23,7 @@ from .visual_effects import (
 from .state_machine import State, UIStateMachine
 from .version import APP_VERSION, APP_NAME, compare_versions
 from .update_manager import UpdateManager, UpdateState
+from .screenshot_manager import capture_screenshot, get_screenshots_directory
 
 __all__ = [
     "APP_VERSION",
@@ -30,6 +31,8 @@ __all__ = [
     "compare_versions",
     "UpdateManager",
     "UpdateState",
+    "capture_screenshot",
+    "get_screenshots_directory",
     "State",
     "UIStateMachine",
     "AudioManager",
