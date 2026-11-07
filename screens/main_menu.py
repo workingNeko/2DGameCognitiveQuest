@@ -121,7 +121,14 @@ class MainMenu:
             pass
         self.update_check_btn_rect = None
         self.update_download_btn_rect = None
+        self.update_cancel_btn_rect = None
+        self.update_browser_btn_rect = None
+        self.update_install_btn_rect = None
+        self.update_retry_btn_rect = None
         self.footer_update_rect = None
+        self.audio_dialog_rect = None
+        self.audio_test_rect = None
+        self.audio_done_rect = None
 
         # Multiple hands detection & warning HUD state
         self.multiple_hands_detected = False
@@ -1019,7 +1026,7 @@ class MainMenu:
     def handle_popup_click(self, pos):
         """Handle clicking inside confirmation and settings pop-ups"""
         if self.popup_state == "audio_settings":
-            box_w, box_h = 620, 500
+            box_w, box_h = 620, 520
             box_x = (self.w - box_w) // 2
             box_y = (self.h - box_h) // 2
             dialog_rect = pygame.Rect(box_x, box_y, box_w, box_h)
@@ -1035,12 +1042,6 @@ class MainMenu:
             s_mute_rect = pygame.Rect(box_x + 398, box_y + 162, 180, 34)
 
             autostart_toggle_rect = pygame.Rect(box_x + box_w - 180, box_y + 222, 140, 36)
-
-            update_btn_rect = pygame.Rect(box_x + box_w - 200, box_y + 290, 160, 36)
-            download_btn_rect = pygame.Rect(box_x + box_w - 200, box_y + 332, 160, 34)
-
-            test_rect = pygame.Rect(box_x + 40, box_y + 425, 240, 46)
-            done_rect = pygame.Rect(box_x + box_w - 280, box_y + 425, 240, 46)
 
             if m_minus_rect.collidepoint(pos):
                 self.audio_manager.set_music_volume(self.audio_manager.music_volume - 0.1)
@@ -1079,22 +1080,52 @@ class MainMenu:
                 self.autostart_status_msg = msg
                 self.autostart_msg_timer = pygame.time.get_ticks() + 3500
 
-            elif update_btn_rect.collidepoint(pos):
+            # Update Check Button
+            elif getattr(self, 'update_check_btn_rect', None) and self.update_check_btn_rect.collidepoint(pos):
                 if hasattr(self, 'audio_manager'):
                     self.audio_manager.play_sfx("click")
                 self.update_manager.check_for_updates()
 
-            elif self.update_manager.has_update() and download_btn_rect.collidepoint(pos):
+            # In-App Download Start Button
+            elif getattr(self, 'update_download_btn_rect', None) and self.update_download_btn_rect.collidepoint(pos):
+                if hasattr(self, 'audio_manager'):
+                    self.audio_manager.play_sfx("click")
+                self.update_manager.start_download()
+
+            # In-App Download Cancel Button
+            elif getattr(self, 'update_cancel_btn_rect', None) and self.update_cancel_btn_rect.collidepoint(pos):
+                if hasattr(self, 'audio_manager'):
+                    self.audio_manager.play_sfx("click")
+                self.update_manager.cancel_download()
+
+            # In-App Install & Restart Button
+            elif getattr(self, 'update_install_btn_rect', None) and self.update_install_btn_rect.collidepoint(pos):
+                if hasattr(self, 'audio_manager'):
+                    self.audio_manager.play_sfx("success")
+                self.update_manager.apply_update()
+
+            # Retry Button
+            elif getattr(self, 'update_retry_btn_rect', None) and self.update_retry_btn_rect.collidepoint(pos):
+                if hasattr(self, 'audio_manager'):
+                    self.audio_manager.play_sfx("click")
+                if self.update_manager.installer_download_url:
+                    self.update_manager.start_download()
+                else:
+                    self.update_manager.check_for_updates()
+
+            # Browser Fallback Button
+            elif getattr(self, 'update_browser_btn_rect', None) and self.update_browser_btn_rect.collidepoint(pos):
                 if hasattr(self, 'audio_manager'):
                     self.audio_manager.play_sfx("click")
                 self.update_manager.open_download_page()
 
-            elif test_rect.collidepoint(pos):
+            # Bottom Sound Test / Done / Outside Dismiss
+            elif getattr(self, 'audio_test_rect', None) and self.audio_test_rect.collidepoint(pos):
                 self.audio_manager.play_sfx("success")
-            elif done_rect.collidepoint(pos):
+            elif getattr(self, 'audio_done_rect', None) and self.audio_done_rect.collidepoint(pos):
                 self.audio_manager.play_sfx("click")
                 self.popup_state = None
-            elif not dialog_rect.collidepoint(pos):
+            elif getattr(self, 'audio_dialog_rect', None) and not self.audio_dialog_rect.collidepoint(pos):
                 self.audio_manager.play_sfx("click")
                 self.popup_state = None
             return
@@ -1174,11 +1205,12 @@ class MainMenu:
             self._popup_dim_overlay.set_alpha(180)
         self.screen.blit(self._popup_dim_overlay, (0, 0))
 
-        # 2. Centered dialog box (height 500px for updates & system options)
-        box_w, box_h = 620, 500
+        # 2. Centered dialog box (height 520px for updates & system options)
+        box_w, box_h = 620, 520
         box_x = (self.w - box_w) // 2
         box_y = (self.h - box_h) // 2
         dialog_rect = pygame.Rect(box_x, box_y, box_w, box_h)
+        self.audio_dialog_rect = dialog_rect
 
         pygame.draw.rect(self.screen, (15, 23, 42), dialog_rect, border_radius=14)
         pygame.draw.rect(self.screen, (56, 189, 248), dialog_rect, 3, border_radius=14)
@@ -1317,16 +1349,25 @@ class MainMenu:
         ver_sub_text = f"Installed: v{APP_VERSION}  |  Official DepEd Math Release"
         self.screen.blit(small_font.render(ver_sub_text, True, (148, 163, 184)), (box_x + 40, box_y + 310))
 
+        # Reset frame interactive update button rects
+        self.update_check_btn_rect = None
+        self.update_download_btn_rect = None
+        self.update_cancel_btn_rect = None
+        self.update_browser_btn_rect = None
+        self.update_install_btn_rect = None
+        self.update_retry_btn_rect = None
+
         # Check for Updates Button
-        update_btn_rect = pygame.Rect(box_x + box_w - 200, box_y + 290, 160, 36)
+        update_btn_rect = pygame.Rect(box_x + box_w - 180, box_y + 288, 140, 36)
         self.update_check_btn_rect = update_btn_rect
         hover_update = update_btn_rect.collidepoint(self.cursor_pos)
         is_chk = self.update_manager.is_checking()
+        is_dl = self.update_manager.is_downloading()
 
-        if is_chk:
+        if is_chk or is_dl:
             u_bg = (51, 65, 85)
             u_border = (148, 163, 184)
-            u_label = "Checking..."
+            u_label = "Checking..." if is_chk else "Busy"
         else:
             u_bg = (14, 116, 144) if hover_update else (8, 145, 178)
             u_border = (103, 232, 249)
@@ -1337,53 +1378,129 @@ class MainMenu:
         u_surf = btn_font.render(u_label, True, (255, 255, 255))
         self.screen.blit(u_surf, (update_btn_rect.centerx - u_surf.get_width() // 2, update_btn_rect.centery - u_surf.get_height() // 2))
 
-        # Status Line
+        # Update Status & Action Handling
         st = self.update_manager.state
         if st == UpdateState.IDLE:
             st_text = "Click to verify if a newer game version is available online."
             st_col = (148, 163, 184)
             self.screen.blit(small_font.render(st_text, True, st_col), (box_x + 40, box_y + 338))
+
         elif st == UpdateState.CHECKING:
             dots = "." * ((pygame.time.get_ticks() // 350) % 4)
             st_text = f"Connecting to update server{dots}"
             st_col = (250, 204, 21)
             self.screen.blit(small_font.render(st_text, True, st_col), (box_x + 40, box_y + 338))
+
         elif st == UpdateState.UP_TO_DATE:
             st_text = f"✓ You are running the latest version (v{APP_VERSION})!"
             st_col = (34, 197, 94)
             self.screen.blit(small_font.render(st_text, True, st_col), (box_x + 40, box_y + 338))
+
         elif st == UpdateState.UPDATE_AVAILABLE:
             st_text = f"★ New Version Available: v{self.update_manager.latest_version}!"
-            st_col = (250, 204, 21)
-            self.screen.blit(label_font.render(st_text, True, st_col), (box_x + 40, box_y + 336))
-            
-            # Inline Download Button
-            dl_rect = pygame.Rect(box_x + box_w - 200, box_y + 332, 160, 34)
-            self.update_download_btn_rect = dl_rect
-            hover_dl = dl_rect.collidepoint(self.cursor_pos)
-            dl_bg = (16, 185, 129) if hover_dl else (5, 150, 105)
-            pygame.draw.rect(self.screen, dl_bg, dl_rect, border_radius=8)
-            pygame.draw.rect(self.screen, (110, 231, 183), dl_rect, 2, border_radius=8)
-            dl_txt = btn_font.render("Download >>", True, (255, 255, 255))
-            self.screen.blit(dl_txt, (dl_rect.centerx - dl_txt.get_width() // 2, dl_rect.centery - dl_txt.get_height() // 2))
+            self.screen.blit(label_font.render(st_text, True, (250, 204, 21)), (box_x + 40, box_y + 332))
+            sub_text = "Download directly in-app or view on releases page:"
+            self.screen.blit(small_font.render(sub_text, True, (148, 163, 184)), (box_x + 40, box_y + 354))
+
+            # Primary: In-App Download Button
+            inapp_rect = pygame.Rect(box_x + box_w - 270, box_y + 332, 145, 34)
+            self.update_download_btn_rect = inapp_rect
+            hover_inapp = inapp_rect.collidepoint(self.cursor_pos)
+            inapp_bg = (16, 185, 129) if hover_inapp else (5, 150, 105)
+            pygame.draw.rect(self.screen, inapp_bg, inapp_rect, border_radius=8)
+            pygame.draw.rect(self.screen, (110, 231, 183), inapp_rect, 2, border_radius=8)
+            inapp_txt = btn_font.render("Update In-App", True, (255, 255, 255))
+            self.screen.blit(inapp_txt, (inapp_rect.centerx - inapp_txt.get_width() // 2, inapp_rect.centery - inapp_txt.get_height() // 2))
+
+            # Secondary: Web Browser Button
+            web_rect = pygame.Rect(box_x + box_w - 115, box_y + 332, 75, 34)
+            self.update_browser_btn_rect = web_rect
+            hover_web = web_rect.collidepoint(self.cursor_pos)
+            web_bg = (51, 65, 85) if hover_web else (30, 41, 59)
+            pygame.draw.rect(self.screen, web_bg, web_rect, border_radius=8)
+            pygame.draw.rect(self.screen, (148, 163, 184), web_rect, 2, border_radius=8)
+            web_txt = btn_font.render("Web ↗", True, (255, 255, 255))
+            self.screen.blit(web_txt, (web_rect.centerx - web_txt.get_width() // 2, web_rect.centery - web_txt.get_height() // 2))
+
+        elif st == UpdateState.DOWNLOADING:
+            stats = self.update_manager.get_download_stats()
+            st_text = f"Downloading update: {stats['pct']}% ({stats['mb_done']:.1f} MB / {stats['mb_total']:.1f} MB) • {stats['speed_str']}"
+            self.screen.blit(small_font.render(st_text, True, (56, 189, 248)), (box_x + 40, box_y + 330))
+
+            # Progress Bar
+            bar_rect = pygame.Rect(box_x + 40, box_y + 352, box_w - 170, 16)
+            pygame.draw.rect(self.screen, (30, 41, 59), bar_rect, border_radius=8)
+            fill_w = max(4, int(bar_rect.width * stats['progress'])) if stats['progress'] > 0 else 0
+            if fill_w > 0:
+                pygame.draw.rect(self.screen, (16, 185, 129), (bar_rect.x, bar_rect.y, fill_w, bar_rect.height), border_radius=8)
+            pygame.draw.rect(self.screen, (56, 189, 248), bar_rect, 2, border_radius=8)
+
+            # Cancel Button
+            cancel_rect = pygame.Rect(box_x + box_w - 115, box_y + 344, 75, 28)
+            self.update_cancel_btn_rect = cancel_rect
+            hover_cancel = cancel_rect.collidepoint(self.cursor_pos)
+            c_bg = (185, 28, 28) if hover_cancel else (127, 29, 29)
+            pygame.draw.rect(self.screen, c_bg, cancel_rect, border_radius=6)
+            pygame.draw.rect(self.screen, (248, 113, 113), cancel_rect, 1, border_radius=6)
+            c_txt = small_font.render("Cancel", True, (255, 255, 255))
+            self.screen.blit(c_txt, (cancel_rect.centerx - c_txt.get_width() // 2, cancel_rect.centery - c_txt.get_height() // 2))
+
+        elif st == UpdateState.READY_TO_INSTALL:
+            st_text = f"✓ Update v{self.update_manager.latest_version} ready to install!"
+            self.screen.blit(label_font.render(st_text, True, (34, 197, 94)), (box_x + 40, box_y + 330))
+            sub_text = "Click to launch installer and restart the game cleanly:"
+            self.screen.blit(small_font.render(sub_text, True, (148, 163, 184)), (box_x + 40, box_y + 354))
+
+            install_rect = pygame.Rect(box_x + box_w - 240, box_y + 330, 200, 38)
+            self.update_install_btn_rect = install_rect
+            hover_install = install_rect.collidepoint(self.cursor_pos)
+            inst_bg = (16, 185, 129) if hover_install else (5, 150, 105)
+            pygame.draw.rect(self.screen, inst_bg, install_rect, border_radius=8)
+            pygame.draw.rect(self.screen, (110, 231, 183), install_rect, 2, border_radius=8)
+            inst_txt = btn_font.render("🚀 Install & Restart", True, (255, 255, 255))
+            self.screen.blit(inst_txt, (install_rect.centerx - inst_txt.get_width() // 2, install_rect.centery - inst_txt.get_height() // 2))
+
         elif st == UpdateState.ERROR:
-            err_reason = self.update_manager.error_message or "Offline"
-            st_text = f"Could not check for updates ({err_reason})"
-            st_col = (244, 63, 94)
-            self.screen.blit(small_font.render(st_text, True, st_col), (box_x + 40, box_y + 338))
+            err_reason = self.update_manager.download_error or self.update_manager.error_message or "Offline"
+            st_text = f"Update error: {err_reason}"
+            self.screen.blit(small_font.render(st_text, True, (244, 63, 94)), (box_x + 40, box_y + 330))
+            sub_text = "You can retry or download directly from the website:"
+            self.screen.blit(small_font.render(sub_text, True, (148, 163, 184)), (box_x + 40, box_y + 354))
+
+            # Retry Button
+            retry_rect = pygame.Rect(box_x + box_w - 220, box_y + 332, 95, 34)
+            self.update_retry_btn_rect = retry_rect
+            hover_retry = retry_rect.collidepoint(self.cursor_pos)
+            ret_bg = (14, 116, 144) if hover_retry else (8, 145, 178)
+            pygame.draw.rect(self.screen, ret_bg, retry_rect, border_radius=8)
+            pygame.draw.rect(self.screen, (103, 232, 249), retry_rect, 2, border_radius=8)
+            ret_txt = btn_font.render("Retry", True, (255, 255, 255))
+            self.screen.blit(ret_txt, (retry_rect.centerx - ret_txt.get_width() // 2, retry_rect.centery - ret_txt.get_height() // 2))
+
+            # Web Browser Button
+            web_rect = pygame.Rect(box_x + box_w - 115, box_y + 332, 75, 34)
+            self.update_browser_btn_rect = web_rect
+            hover_web = web_rect.collidepoint(self.cursor_pos)
+            web_bg = (51, 65, 85) if hover_web else (30, 41, 59)
+            pygame.draw.rect(self.screen, web_bg, web_rect, border_radius=8)
+            pygame.draw.rect(self.screen, (148, 163, 184), web_rect, 2, border_radius=8)
+            web_txt = btn_font.render("Web ↗", True, (255, 255, 255))
+            self.screen.blit(web_txt, (web_rect.centerx - web_txt.get_width() // 2, web_rect.centery - web_txt.get_height() // 2))
 
         # Bottom hint / hotkey info
         now = pygame.time.get_ticks()
         if hasattr(self, 'autostart_status_msg') and getattr(self, 'autostart_msg_timer', 0) > now:
             fb_surf = small_font.render(self.autostart_status_msg, True, (250, 204, 21))
-            self.screen.blit(fb_surf, (box_x + (box_w - fb_surf.get_width()) // 2, box_y + 376))
+            self.screen.blit(fb_surf, (box_x + (box_w - fb_surf.get_width()) // 2, box_y + 400))
         else:
             hint_surf = small_font.render("Hotkey: [M] Toggle Mute  |  [ [ ] / [ ] ] Adjust Volume  |  [F] Fullscreen", True, (148, 163, 184))
-            self.screen.blit(hint_surf, (box_x + (box_w - hint_surf.get_width()) // 2, box_y + 376))
+            self.screen.blit(hint_surf, (box_x + (box_w - hint_surf.get_width()) // 2, box_y + 400))
 
         # ---------------- Bottom Action Buttons ----------------
-        test_rect = pygame.Rect(box_x + 40, box_y + 425, 240, 46)
-        done_rect = pygame.Rect(box_x + box_w - 280, box_y + 425, 240, 46)
+        test_rect = pygame.Rect(box_x + 40, box_y + 445, 240, 46)
+        done_rect = pygame.Rect(box_x + box_w - 280, box_y + 445, 240, 46)
+        self.audio_test_rect = test_rect
+        self.audio_done_rect = done_rect
 
         hover_test = test_rect.collidepoint(self.cursor_pos)
         pygame.draw.rect(self.screen, (59, 130, 246) if hover_test else (37, 99, 235), test_rect, border_radius=8)
@@ -2473,20 +2590,48 @@ class MainMenu:
 
         if getattr(self, 'update_manager', None) and self.update_manager.has_update():
             latest = self.update_manager.latest_version or "New"
-            pill_w, pill_h = 200, 26
-            pill_x = 20 + ver_surf.get_width() + 16
-            pill_y = self.h - 30
-            pill_rect = pygame.Rect(pill_x, pill_y, pill_w, pill_h)
-            self.footer_update_rect = pill_rect
-
-            hover = pill_rect.collidepoint(self.cursor_pos)
-            bg = (234, 88, 12) if hover else (180, 83, 9)
-            pygame.draw.rect(self.screen, bg, pill_rect, border_radius=13)
-            pygame.draw.rect(self.screen, (253, 186, 116), pill_rect, 2, border_radius=13)
-
+            st = self.update_manager.state
             p_font = pygame.font.SysFont("Comic Sans MS", 12, bold=True)
-            txt = p_font.render(f"★ Update v{latest} Available!", True, (255, 255, 255))
-            self.screen.blit(txt, (pill_rect.centerx - txt.get_width() // 2, pill_rect.centery - txt.get_height() // 2))
+
+            if st == UpdateState.DOWNLOADING:
+                stats = self.update_manager.get_download_stats()
+                pill_w, pill_h = 240, 26
+                pill_x = 20 + ver_surf.get_width() + 16
+                pill_y = self.h - 30
+                pill_rect = pygame.Rect(pill_x, pill_y, pill_w, pill_h)
+                self.footer_update_rect = pill_rect
+                hover = pill_rect.collidepoint(self.cursor_pos)
+                bg = (14, 116, 144) if hover else (8, 145, 178)
+                pygame.draw.rect(self.screen, bg, pill_rect, border_radius=13)
+                pygame.draw.rect(self.screen, (103, 232, 249), pill_rect, 2, border_radius=13)
+                txt = p_font.render(f"⬇ Updating: {stats['pct']}% ({stats['mb_done']:.1f}/{stats['mb_total']:.1f} MB)", True, (255, 255, 255))
+                self.screen.blit(txt, (pill_rect.centerx - txt.get_width() // 2, pill_rect.centery - txt.get_height() // 2))
+
+            elif st == UpdateState.READY_TO_INSTALL:
+                pill_w, pill_h = 240, 26
+                pill_x = 20 + ver_surf.get_width() + 16
+                pill_y = self.h - 30
+                pill_rect = pygame.Rect(pill_x, pill_y, pill_w, pill_h)
+                self.footer_update_rect = pill_rect
+                hover = pill_rect.collidepoint(self.cursor_pos)
+                bg = (16, 185, 129) if hover else (5, 150, 105)
+                pygame.draw.rect(self.screen, bg, pill_rect, border_radius=13)
+                pygame.draw.rect(self.screen, (110, 231, 183), pill_rect, 2, border_radius=13)
+                txt = p_font.render("🚀 Update Ready - Install & Restart!", True, (255, 255, 255))
+                self.screen.blit(txt, (pill_rect.centerx - txt.get_width() // 2, pill_rect.centery - txt.get_height() // 2))
+
+            else:
+                pill_w, pill_h = 210, 26
+                pill_x = 20 + ver_surf.get_width() + 16
+                pill_y = self.h - 30
+                pill_rect = pygame.Rect(pill_x, pill_y, pill_w, pill_h)
+                self.footer_update_rect = pill_rect
+                hover = pill_rect.collidepoint(self.cursor_pos)
+                bg = (234, 88, 12) if hover else (180, 83, 9)
+                pygame.draw.rect(self.screen, bg, pill_rect, border_radius=13)
+                pygame.draw.rect(self.screen, (253, 186, 116), pill_rect, 2, border_radius=13)
+                txt = p_font.render(f"★ Update v{latest} Available!", True, (255, 255, 255))
+                self.screen.blit(txt, (pill_rect.centerx - txt.get_width() // 2, pill_rect.centery - txt.get_height() // 2))
         else:
             self.footer_update_rect = None
 

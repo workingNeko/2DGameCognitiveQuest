@@ -153,6 +153,113 @@ class TestUpdateManager(unittest.TestCase):
         self.assertTrue(result)
         mock_webbrowser.assert_called_once_with("https://github.com/workingNeko/2DGameCognitiveQuest/releases/latest")
 
+    def test_extract_installer_asset(self):
+        payload = {
+            "tag_name": "v1.2.0",
+            "name": "Cognitive Maze v1.2.0",
+            "body": "Official Release",
+            "html_url": "https://github.com/test",
+            "assets": [
+                {
+                    "name": "CognitiveMaze-v1.2.0-windows-x64.zip",
+                    "browser_download_url": "https://github.com/test/CognitiveMaze-v1.2.0-windows-x64.zip",
+                    "size": 240000000
+                },
+                {
+                    "name": "CognitiveMaze-Setup-v1.2.0.exe",
+                    "browser_download_url": "https://github.com/test/CognitiveMaze-Setup-v1.2.0.exe",
+                    "size": 150000000
+                }
+            ]
+        }
+        with patch("urllib.request.urlopen") as mock_urlopen:
+            mock_resp = MagicMock()
+            mock_resp.status = 200
+            mock_resp.read.return_value = json.dumps(payload).encode("utf-8")
+            mock_resp.__enter__.return_value = mock_resp
+            mock_urlopen.return_value = mock_resp
+
+            self.updater.local_version = "1.1.0"
+            self.updater._run_check_worker()
+
+            self.assertEqual(self.updater.state, UpdateState.UPDATE_AVAILABLE)
+            self.assertEqual(self.updater.installer_asset_name, "CognitiveMaze-Setup-v1.2.0.exe")
+            self.assertEqual(self.updater.installer_download_url, "https://github.com/test/CognitiveMaze-Setup-v1.2.0.exe")
+            self.assertEqual(self.updater.installer_expected_size, 150000000)
+
+    def test_in_app_download_worker(self):
+        import tempfile
+        import os
+
+        self.updater.state = UpdateState.UPDATE_AVAILABLE
+        self.updater.installer_download_url = "https://github.com/test/setup.exe"
+        self.updater.installer_asset_name = "test_setup.exe"
+        self.updater.installer_expected_size = 100
+
+        temp_target = os.path.join(tempfile.gettempdir(), "test_cognitive_setup.exe")
+        temp_tmp = temp_target + ".tmp"
+        if os.path.exists(temp_target):
+            os.remove(temp_target)
+
+        mock_chunks = [b"A" * 50, b"B" * 50, b""]
+        mock_resp = MagicMock()
+        mock_resp.read.side_effect = mock_chunks
+        mock_resp.headers.get.return_value = "100"
+        mock_resp.__enter__.return_value = mock_resp
+
+        with patch("core.update_manager._urlopen_resilient", return_value=mock_resp):
+            self.updater._run_download_worker(temp_target, temp_tmp)
+
+        self.assertEqual(self.updater.state, UpdateState.READY_TO_INSTALL)
+        self.assertEqual(self.updater.download_progress, 1.0)
+        self.assertEqual(self.updater.downloaded_bytes, 100)
+        self.assertTrue(os.path.exists(temp_target))
+        self.assertEqual(os.path.getsize(temp_target), 100)
+
+        # Cleanup
+        if os.path.exists(temp_target):
+            os.remove(temp_target)
+
+    def test_in_app_download_cancellation(self):
+        import tempfile
+        import os
+
+        self.updater.state = UpdateState.DOWNLOADING
+        self.updater.installer_download_url = "https://github.com/test/setup.exe"
+        self.updater._cancel_requested = True
+        temp_target = os.path.join(tempfile.gettempdir(), "test_cancel_setup.exe")
+        temp_tmp = temp_target + ".tmp"
+        with open(temp_tmp, "wb") as f:
+            f.write(b"partial")
+
+        mock_resp = MagicMock()
+        mock_resp.read.return_value = b""
+        mock_resp.__enter__.return_value = mock_resp
+
+        with patch("core.update_manager._urlopen_resilient", return_value=mock_resp):
+            self.updater._run_download_worker(temp_target, temp_tmp)
+
+        self.assertEqual(self.updater.state, UpdateState.UPDATE_AVAILABLE)
+        self.assertFalse(os.path.exists(temp_tmp))
+        self.assertFalse(os.path.exists(temp_target))
+
+    def test_apply_update_execution(self):
+        import tempfile
+        import os
+
+        test_file = os.path.join(tempfile.gettempdir(), "test_dummy_installer.exe")
+        with open(test_file, "wb") as f:
+            f.write(b"installer_data")
+
+        self.updater.installer_path = test_file
+        with patch("subprocess.Popen") as mock_popen, patch("sys.exit") as mock_exit:
+            self.updater.apply_update()
+            mock_popen.assert_called_once()
+            mock_exit.assert_called_once_with(0)
+
+        if os.path.exists(test_file):
+            os.remove(test_file)
+
 
 class TestUIIntegration(unittest.TestCase):
     """Test suite for MainMenu and PauseMenu integration with UpdateManager."""
@@ -185,16 +292,54 @@ class TestUIIntegration(unittest.TestCase):
         menu.update_manager.state = UpdateState.UPDATE_AVAILABLE
         menu.update_manager.latest_version = "v1.5.0"
         menu.update_manager.download_url = "https://github.com/test/download"
+        menu.update_manager.installer_download_url = "https://github.com/test/setup.exe"
 
-        # Draw popup to layout download rect
+        # Draw popup to layout in-app update & web browser rects
         menu.draw_audio_popup()
         self.assertIsNotNone(menu.update_download_btn_rect)
+        self.assertIsNotNone(menu.update_browser_btn_rect)
 
-        # Click download button
+        # Click in-app download button triggers start_download
         download_pos = (menu.update_download_btn_rect.centerx, menu.update_download_btn_rect.centery)
-        with patch.object(menu.update_manager, "open_download_page") as mock_open:
+        with patch.object(menu.update_manager, "start_download") as mock_dl:
             menu.handle_popup_click(download_pos)
-            mock_open.assert_called_once()
+            mock_dl.assert_called_once()
+
+        # Click web browser button triggers open_download_page
+        browser_pos = (menu.update_browser_btn_rect.centerx, menu.update_browser_btn_rect.centery)
+        with patch.object(menu.update_manager, "open_download_page") as mock_web:
+            menu.handle_popup_click(browser_pos)
+            mock_web.assert_called_once()
+
+    def test_main_menu_downloading_and_ready_ui_states(self):
+        menu = MainMenu(self.screen, enable_camera=False)
+        menu.open_audio_settings()
+
+        # State 1: DOWNLOADING
+        menu.update_manager.state = UpdateState.DOWNLOADING
+        menu.update_manager.download_progress = 0.5
+        menu.update_manager.downloaded_bytes = 50 * 1024 * 1024
+        menu.update_manager.total_bytes = 100 * 1024 * 1024
+        menu.draw_audio_popup()
+        self.assertIsNotNone(menu.update_cancel_btn_rect)
+
+        # Click cancel
+        cancel_pos = (menu.update_cancel_btn_rect.centerx, menu.update_cancel_btn_rect.centery)
+        with patch.object(menu.update_manager, "cancel_download") as mock_cancel:
+            menu.handle_popup_click(cancel_pos)
+            mock_cancel.assert_called_once()
+
+        # State 2: READY_TO_INSTALL
+        menu.update_manager.state = UpdateState.READY_TO_INSTALL
+        menu.update_manager.latest_version = "v1.5.0"
+        menu.draw_audio_popup()
+        self.assertIsNotNone(menu.update_install_btn_rect)
+
+        # Click install & restart
+        install_pos = (menu.update_install_btn_rect.centerx, menu.update_install_btn_rect.centery)
+        with patch.object(menu.update_manager, "apply_update") as mock_apply:
+            menu.handle_popup_click(install_pos)
+            mock_apply.assert_called_once()
 
     def test_main_menu_footer_notification_pill(self):
         menu = MainMenu(self.screen, enable_camera=False)
