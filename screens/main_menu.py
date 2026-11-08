@@ -319,6 +319,12 @@ class MainMenu:
         print(f"   - WRIST movement controls cursor (stable when making fist)")
         print(f"   - Make a FIST and hold for {self.CLICK_HOLD_TIME} seconds to click")
 
+        # ==========================================
+        # AUTOSAVE SYSTEM (POWER INTERRUPTION RESILIENCE)
+        # ==========================================
+        from core.autosave_manager import AutosaveManager
+        self.autosave_manager = AutosaveManager(self, interval_seconds=30.0)
+
     def _manual_cloud_probe(self):
         """Perform an immediate non-blocking health check and offline queue sync."""
         lock = getattr(self, '_cloud_probe_lock', None)
@@ -2035,6 +2041,10 @@ class MainMenu:
                 if not self.popup_state and self.leaderboard:
                     self.leaderboard.update()
 
+        # Update Autosave system (periodic countdown + indicator fading)
+        if hasattr(self, 'autosave_manager') and self.autosave_manager:
+            self.autosave_manager.update(0.016)
+
     def handle_event(self, event):
         # Global audio & camera hotkeys (bypass when typing text input in active screens)
         if event.type == pygame.KEYDOWN:
@@ -2791,6 +2801,10 @@ class MainMenu:
         # Draw confirmation pop-up if active (above normal screens)
         if self.popup_state:
             self.draw_popup()
+
+        # Draw autosave indicator badge (smooth fade overlay)
+        if hasattr(self, 'autosave_manager') and self.autosave_manager:
+            self.autosave_manager.draw(self.screen)
 
         # CURSOR IS ALWAYS DRAWN LAST TO REMAIN AT THE TOPMOST Z-LAYER
         self.draw_cursor()

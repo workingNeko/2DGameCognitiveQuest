@@ -2081,6 +2081,9 @@ class StageSelect:
                     if 'O' in self.npc_positions_data:
                         self.npc_positions_data['O'] = []
                     print("[Old Man] Dialog complete! Old Man starts moving left and player follows.")
+                    self.save_ss_state()
+                    from db.save_system import save_student_progress
+                    save_student_progress(self.main_menu)
             return True
 
         if self.skeleton_dialogue_state == 1:
@@ -2097,6 +2100,9 @@ class StageSelect:
                     if 'S' in self.npc_positions_data:
                         self.npc_positions_data['S'] = []
                     print("[Skeleton] Dialog complete! Skeleton starts moving right to portal and player follows.")
+                    self.save_ss_state()
+                    from db.save_system import save_student_progress
+                    save_student_progress(self.main_menu)
             return True
 
         if self.knight_dialogue_state == 1:
@@ -2113,6 +2119,9 @@ class StageSelect:
                     if '1' in self.npc_positions_data:
                         self.npc_positions_data['1'] = []
                     print("[Knight] Dialog complete! Knight starts moving down to portal and player follows.")
+                    self.save_ss_state()
+                    from db.save_system import save_student_progress
+                    save_student_progress(self.main_menu)
             return True
 
         if self.bromen_dialogue_state == 1:
@@ -2129,6 +2138,9 @@ class StageSelect:
                     if 'B' in self.npc_positions_data:
                         self.npc_positions_data['B'] = []
                     print("* Dialogue complete! Bromen starts moving north to portal and player follows.")
+                    self.save_ss_state()
+                    from db.save_system import save_student_progress
+                    save_student_progress(self.main_menu)
             return True
 
         if self.interactable_dialogue_state == 1 and self.active_interactable:

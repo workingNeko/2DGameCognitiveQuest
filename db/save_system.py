@@ -3,11 +3,33 @@ import json
 import time
 import pygame
 
+def cleanup_orphaned_tmp_saves():
+    """Cleans up stray temporary files left over from ungraceful power cuts."""
+    saves_dir = "db/saves"
+    if not os.path.exists(saves_dir):
+        return
+    now = time.time()
+    try:
+        for fname in os.listdir(saves_dir):
+            if ".tmp_" in fname:
+                fpath = os.path.join(saves_dir, fname)
+                try:
+                    if now - os.path.getmtime(fpath) > 10.0:
+                        os.remove(fpath)
+                except Exception:
+                    pass
+    except Exception:
+        pass
+
+# Clean up any leftover temporary files from previous hard power cuts
+cleanup_orphaned_tmp_saves()
+
 def atomic_save_json(path, data):
     """
     Safely writes JSON data atomically:
     Writes to a temporary file first and replaces the target file,
     preventing corrupt/empty (0-byte) save files during crashes or interruptions.
+    Maintains a verified shadow backup (.bak) for recovery against power failures.
     Includes retry and fallback for Windows file lock contention ([WinError 5]).
     """
     directory = os.path.dirname(path)
@@ -21,11 +43,12 @@ def atomic_save_json(path, data):
             os.fsync(f.fileno())
             
         # Attempt atomic replace with retries for Windows file locking
+        saved_ok = False
         for attempt in range(5):
             try:
                 os.replace(tmp_path, path)
-                invalidate_save_cache()
-                return True
+                saved_ok = True
+                break
             except (PermissionError, OSError) as err:
                 if attempt < 4:
                     time.sleep(0.05 * (attempt + 1))
@@ -33,13 +56,28 @@ def atomic_save_json(path, data):
                     # Fallback to direct write if os.replace is repeatedly locked
                     with open(path, "w", encoding="utf-8") as target_f:
                         json.dump(data, target_f, indent=4)
+                        target_f.flush()
+                        os.fsync(target_f.fileno())
                     if os.path.exists(tmp_path):
                         try:
                             os.remove(tmp_path)
                         except Exception:
                             pass
-                    invalidate_save_cache()
-                    return True
+                    saved_ok = True
+                    break
+
+        if saved_ok:
+            # Maintain a verified shadow backup file (.bak) for power-interruption recovery
+            try:
+                bak_path = f"{path}.bak"
+                with open(bak_path, "w", encoding="utf-8") as bf:
+                    json.dump(data, bf, indent=4)
+                    bf.flush()
+                    os.fsync(bf.fileno())
+            except Exception:
+                pass
+            invalidate_save_cache()
+            return True
     except Exception as e:
         if os.path.exists(tmp_path):
             try:
@@ -130,10 +168,10 @@ def delete_student_progress(student_id, student_db_id=None, main_menu=None):
     saves_dir = "db/saves"
     if os.path.exists(saves_dir):
         for fname in os.listdir(saves_dir):
-            if fname.endswith(".json") and fname != "audio_settings.json":
+            if (fname.endswith(".json") or fname.endswith(".bak")) and fname != "audio_settings.json":
                 fpath = os.path.join(saves_dir, fname)
                 should_delete = False
-                base_name = fname[:-5]
+                base_name = fname.replace(".json.bak", "").replace(".bak", "").replace(".json", "")
                 if base_name in target_ids:
                     should_delete = True
                 else:
@@ -150,6 +188,9 @@ def delete_student_progress(student_id, student_db_id=None, main_menu=None):
                 if should_delete:
                     try:
                         os.remove(fpath)
+                        bak_file = f"{fpath}.bak"
+                        if os.path.exists(bak_file):
+                            os.remove(bak_file)
                         invalidate_save_cache()
                         print(f"[DELETE] Deleted local save file: {fpath}")
                     except Exception as e:
@@ -341,7 +382,8 @@ def save_student_progress(main_menu):
             "knight_dialogue_state": ss.knight_dialogue_state,
             "skeleton_dialogue_state": ss.skeleton_dialogue_state,
             "bromen_dialogue_state": ss.bromen_dialogue_state,
-            "player_following_target": ss.player_following_target
+            "player_following_target": ss.player_following_target,
+            "barriers_lifted": getattr(ss, 'barriers_lifted', False)
         }
     elif hasattr(main_menu, 'last_stage_select_data') and main_menu.last_stage_select_data:
         ss_data = main_menu.last_stage_select_data
@@ -378,6 +420,9 @@ def save_student_progress(main_menu):
     try:
         atomic_save_json(path, save_data)
         print(f"[SAVE] Student progress saved successfully to: {path}")
+        # Notify autosave manager for on-screen visual confirmation badge
+        if main_menu and hasattr(main_menu, 'autosave_manager') and main_menu.autosave_manager:
+            main_menu.autosave_manager.notify_saved()
         return True
     except Exception as e:
         print(f"[WARN] Error writing save file: {e}")
@@ -397,6 +442,18 @@ def gather_quarter_data(q, quarter_name):
         "stage_time_remaining": getattr(q, 'stage_time_remaining', 600.0),
         "completed": getattr(q, 'completed', False)
     }
+
+    # Collect answered stations / stalls across all quarters
+    if hasattr(q, 'answered_stations') and isinstance(q.answered_stations, (set, list)):
+        data["answered_stations"] = list(q.answered_stations)
+
+    # Collect cognitive puzzle flags
+    for flag in ('addition_puzzle_solved', 'key_puzzle_solved', 'puzzle_solved', 'oldman_riddle_answered', 'raft_unlocked'):
+        if hasattr(q, flag):
+            data[flag] = bool(getattr(q, flag))
+
+    if hasattr(q, 'raft_state'):
+        data["raft_state"] = getattr(q, 'raft_state')
     
     # Store first attempt correctness tracker (handles all quarters)
     if hasattr(q, 'first_attempt_correct') and q.first_attempt_correct:
@@ -432,7 +489,8 @@ def load_student_progress(student_id):
     if not student_id:
         return None
     path = get_save_path(student_id)
-    if not os.path.exists(path):
+    bak_path = f"{path}.bak"
+    if not os.path.exists(path) and not os.path.exists(bak_path):
         _SAVE_CACHE.pop(str(student_id), None)
         return None
     try:
@@ -442,17 +500,33 @@ def load_student_progress(student_id):
         if cached is not None and (now - cached.get("last_check", 0) < 0.2):
             return cached.get("data")
 
-        mtime = os.path.getmtime(path)
-        if cached is not None and cached.get("mtime") == mtime:
-            cached["last_check"] = now
-            return cached.get("data")
+        if os.path.exists(path):
+            mtime = os.path.getmtime(path)
+            if cached is not None and cached.get("mtime") == mtime:
+                cached["last_check"] = now
+                return cached.get("data")
 
-        with open(path, "r", encoding="utf-8") as f:
-            data = json.load(f)
-            _SAVE_CACHE[sid_str] = {"mtime": mtime, "last_check": now, "data": data}
-            return data
+            with open(path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                if not isinstance(data, dict) or not data:
+                    raise ValueError("Save file empty or malformed")
+                _SAVE_CACHE[sid_str] = {"mtime": mtime, "last_check": now, "data": data}
+                return data
+        else:
+            raise FileNotFoundError(f"{path} missing, falling back to backup")
     except Exception as e:
         print(f"[WARN] Error reading save file {path}: {e}")
+        # Power-interruption recovery: attempt to load from verified shadow backup
+        if os.path.exists(bak_path):
+            try:
+                with open(bak_path, "r", encoding="utf-8") as bf:
+                    bak_data = json.load(bf)
+                if isinstance(bak_data, dict) and bak_data:
+                    print(f"[AUTOSAVE RECOVERY] Restored save data from power-safe backup: {bak_path}")
+                    atomic_save_json(path, bak_data)
+                    return bak_data
+            except Exception as be:
+                print(f"[WARN] Backup recovery also failed: {be}")
         return None
 
 def apply_student_progress(main_menu, save_data):
@@ -573,6 +647,18 @@ def apply_student_progress(main_menu, save_data):
                     k_int = int(k)
                     if k_int in q.shape_npcs:
                         q.shape_npcs[k_int]["answered"] = v.get("answered", False)
+
+            # Restore answered stations across Quarters (Quarter 4, Quarter 3, etc.)
+            if "answered_stations" in q_data and hasattr(q, 'answered_stations'):
+                q.answered_stations = set(q_data["answered_stations"])
+
+            # Restore cognitive puzzle completion flags
+            for flag in ('addition_puzzle_solved', 'key_puzzle_solved', 'puzzle_solved', 'oldman_riddle_answered', 'raft_unlocked'):
+                if flag in q_data and hasattr(q, flag):
+                    setattr(q, flag, q_data[flag])
+
+            if "raft_state" in q_data and hasattr(q, 'raft_state'):
+                q.raft_state = q_data["raft_state"]
                         
             # Reposition companion/NPC pathfinding coordinates based on quiz_station_index
             if current_screen == "quarter2":
