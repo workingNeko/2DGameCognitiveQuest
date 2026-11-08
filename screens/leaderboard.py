@@ -254,7 +254,7 @@ class LeaderboardScreen:
         title_surf = self.title_font.render("COGNITIVE MAZE - HALL OF FAME", True, (255, 215, 0))
         self.screen.blit(title_surf, title_surf.get_rect(center=(self.width // 2, 28)))
 
-        subtitle_surf = self.subtitle_font.render("DepEd MATATAG Grade 2 Mathematics Official Student Rankings", True, (203, 213, 225))
+        subtitle_surf = self.subtitle_font.render("Grade 2 Mathematics Student Rankings", True, (203, 213, 225))
         self.screen.blit(subtitle_surf, subtitle_surf.get_rect(center=(self.width // 2, 54)))
 
         # 3. Top Action Buttons

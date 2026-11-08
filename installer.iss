@@ -2,8 +2,8 @@
 ; Professional Windows Installer with Desktop/Start Menu shortcuts, clean uninstaller, and low-privilege support for school labs.
 
 #define MyAppName "Cognitive Maze"
-#define MyAppVersion "1.2.3"
-#define MyAppPublisher "DepEd Cognitive Quest Team"
+#define MyAppVersion "1.2.4"
+#define MyAppPublisher "Cognitive Maze Development Team"
 #define MyAppURL "https://github.com/workingNeko/2DGameCognitiveQuest"
 #define MyAppExeName "CognitiveMaze.exe"
 
@@ -13,6 +13,10 @@ AppName={#MyAppName}
 AppVersion={#MyAppVersion}
 AppVerName={#MyAppName} {#MyAppVersion}
 AppPublisher={#MyAppPublisher}
+AppCopyright=Copyright (C) 2026 Cognitive Maze Development Team. Independent educational software.
+VersionInfoVersion=1.2.4.0
+VersionInfoCopyright=Copyright (C) 2026 Cognitive Maze Development Team
+VersionInfoDescription=Cognitive Maze - Interactive Grade 2 Mathematics Adventure
 AppPublisherURL={#MyAppURL}
 AppSupportURL={#MyAppURL}/issues
 AppUpdatesURL={#MyAppURL}/releases
@@ -40,7 +44,8 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: checkedonce
 
 [Files]
-Source: "dist\CognitiveMaze\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "dist\CognitiveMaze\*"; DestDir: "{app}"; Excludes: "db\saves\*"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "dist\CognitiveMaze\db\saves\*"; DestDir: "{app}\db\saves"; Flags: onlyifdoesntexist recursesubdirs createallsubdirs
 
 [Icons]
 Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\assets\images\icon.ico"

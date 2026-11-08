@@ -248,17 +248,94 @@ class TestUpdateManager(unittest.TestCase):
         import os
 
         test_file = os.path.join(tempfile.gettempdir(), "test_dummy_installer.exe")
+        script_file = os.path.join(tempfile.gettempdir(), "apply_cognitive_update.cmd")
         with open(test_file, "wb") as f:
-            f.write(b"installer_data")
+            f.write(b"MZ_installer_data")
 
         self.updater.installer_path = test_file
         with patch("subprocess.Popen") as mock_popen, patch("sys.exit") as mock_exit:
             self.updater.apply_update()
             mock_popen.assert_called_once()
             mock_exit.assert_called_once_with(0)
+            if os.path.exists(script_file):
+                with open(script_file, "r", encoding="utf-8") as sf:
+                    script_body = sf.read()
+                self.assertIn("/SILENT", script_body)
+                self.assertIn("/SUPPRESSMSGBOXES", script_body)
+                self.assertIn("/NORESTART", script_body)
+                self.assertIn("/CLOSEAPPLICATIONS", script_body)
 
-        if os.path.exists(test_file):
-            os.remove(test_file)
+        for p in (test_file, script_file):
+            if os.path.exists(p):
+                os.remove(p)
+
+    def test_windows_auto_update_script_targets_exact_app_dir(self):
+        import tempfile
+        import os
+
+        test_installer = os.path.join(tempfile.gettempdir(), "test_dir_installer.exe")
+        script_path = self.updater._write_windows_auto_update_script(
+            installer_path=test_installer,
+            current_pid=99999,
+            app_dir=r"C:\Users\Student\Desktop\Cognitive Maze",
+            exe_path=r"C:\Users\Student\Desktop\Cognitive Maze\CognitiveMaze.exe",
+            needs_elevation=False,
+        )
+        try:
+            with open(script_path, "r", encoding="utf-8") as f:
+                body = f.read()
+            self.assertIn('/DIR="%APP_DIR%"', body)
+            self.assertIn(r'set "APP_DIR=C:\Users\Student\Desktop\Cognitive Maze"', body)
+            self.assertIn('start "" /D "%APP_DIR%" "%APP_EXE%"', body)
+        finally:
+            if os.path.exists(script_path):
+                os.remove(script_path)
+
+    def test_download_rejects_html_error_and_resumes_partial_range(self):
+        import tempfile
+        import os
+
+        temp_target = os.path.join(tempfile.gettempdir(), "test_range_resume_setup.exe")
+        temp_tmp = temp_target + ".tmp"
+        for p in (temp_target, temp_tmp):
+            if os.path.exists(p):
+                os.remove(p)
+
+        # 1. Verify HTML captive portal file is rejected by _is_valid_installer_file
+        with open(temp_tmp, "wb") as f:
+            f.write(b"<!DOCTYPE html><html><body>Login Required</body></html>")
+        self.assertFalse(self.updater._is_valid_installer_file(temp_tmp, expected_size=0))
+        os.remove(temp_tmp)
+
+        # 2. Verify Range resume on interrupted stream + pending_auto_install flag
+        self.updater.state = UpdateState.DOWNLOADING
+        self.updater.auto_install = True
+        self.updater.installer_download_url = "https://github.com/test/setup.exe"
+        self.updater.installer_expected_size = 100
+        self.updater.total_bytes = 100
+
+        resp1 = MagicMock()
+        resp1.status = 200
+        resp1.headers.get.return_value = "100"
+        resp1.read.side_effect = [b"M" * 60, b""]  # Drops early at 60/100 bytes
+        resp1.__enter__.return_value = resp1
+
+        resp2 = MagicMock()
+        resp2.status = 206
+        resp2.headers.get.return_value = "40"
+        resp2.read.side_effect = [b"Z" * 40, b""]  # Resumes remaining 40 bytes
+        resp2.__enter__.return_value = resp2
+
+        with patch("core.update_manager._urlopen_resilient", side_effect=[resp1, resp2]), patch("time.sleep"):
+            self.updater._run_download_worker(temp_target, temp_tmp)
+
+        self.assertEqual(self.updater.state, UpdateState.READY_TO_INSTALL)
+        self.assertEqual(os.path.getsize(temp_target), 100)
+        self.assertTrue(self.updater.consume_pending_auto_install())
+        self.assertFalse(self.updater.consume_pending_auto_install())
+
+        if os.path.exists(temp_target):
+            os.remove(temp_target)
 
 
 class TestUIIntegration(unittest.TestCase):
@@ -294,22 +371,23 @@ class TestUIIntegration(unittest.TestCase):
         menu.update_manager.download_url = "https://github.com/test/download"
         menu.update_manager.installer_download_url = "https://github.com/test/setup.exe"
 
-        # Draw popup to layout in-app update & web browser rects
+        # Draw popup: strictly in-app update button only (no manual web browser button)
         menu.draw_audio_popup()
         self.assertIsNotNone(menu.update_download_btn_rect)
-        self.assertIsNotNone(menu.update_browser_btn_rect)
+        self.assertIsNone(menu.update_browser_btn_rect)
 
-        # Click in-app download button triggers start_download
+        # Click in-app download button triggers start_download(auto_install=True)
         download_pos = (menu.update_download_btn_rect.centerx, menu.update_download_btn_rect.centery)
         with patch.object(menu.update_manager, "start_download") as mock_dl:
             menu.handle_popup_click(download_pos)
-            mock_dl.assert_called_once()
+            mock_dl.assert_called_once_with(auto_install=True)
 
-        # Click web browser button triggers open_download_page
-        browser_pos = (menu.update_browser_btn_rect.centerx, menu.update_browser_btn_rect.centery)
-        with patch.object(menu.update_manager, "open_download_page") as mock_web:
-            menu.handle_popup_click(browser_pos)
-            mock_web.assert_called_once()
+        # Verify MainMenu.update() auto-triggers apply_update when download finishes
+        menu.update_manager.state = UpdateState.READY_TO_INSTALL
+        menu.update_manager._pending_auto_install = True
+        with patch.object(menu.update_manager, "apply_update") as mock_apply:
+            menu.update()
+            mock_apply.assert_called_once()
 
     def test_main_menu_downloading_and_ready_ui_states(self):
         menu = MainMenu(self.screen, enable_camera=False)

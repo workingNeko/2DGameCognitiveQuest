@@ -1,7 +1,7 @@
 {
-  "version": "1.2.3",
-  "name": "Cognitive Maze v1.2.3 - Sun Temple Fraction Match, Portal Sync & APU Optimization Release",
-  "notes": "Version 1.2.3: Replaced Quarter 3 guardian mini-game with the streamlined 4-Card Sun Temple Fraction Match, solidified live Vercel portal synchronization & Summative Assessment mapping, eliminated 96 MB build asset duplication, optimized 60 FPS surface caching for AMD A4-6300 APU, and cleaned up Settings version display.",
-  "download_url": "https://github.com/workingNeko/2DGameCognitiveQuest/releases/tag/v1.2.3",
+  "version": "1.2.4",
+  "name": "Cognitive Maze v1.2.4 - Automatic In-App Updater & Copyright Compliance Release",
+  "notes": "Version 1.2.4 — Changes: 100% automatic one-click in-app updater (downloads, verifies, silently installs in-place, and restarts automatically with zero browser redirects or manual setup wizard steps); updated metadata and release descriptions with independent educational software copyright notices. Fixes: HTTP Range resume and size/header validation preventing incomplete Wi-Fi downloads; clean version tag formatting; preserved local saves and audio settings across upgrades. Copyright (C) 2026 Cognitive Maze Development Team (independent educational software; not affiliated with or endorsed by DepEd or BSP).",
+  "download_url": "https://github.com/workingNeko/2DGameCognitiveQuest/releases/tag/v1.2.4",
   "date": "2026-11-09"
 }

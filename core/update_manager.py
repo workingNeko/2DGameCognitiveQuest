@@ -103,11 +103,30 @@ class UpdateManager:
         self.total_bytes = 0
         self.download_speed_bps = 0.0
         self.download_error = None
+        self.auto_install = True
+        self._pending_auto_install = False
         self._cancel_requested = False
         self._download_thread = None
 
         self._lock = threading.Lock()
         self._worker_thread = None
+
+    def get_clean_latest_version(self):
+        """Returns latest_version stripped of any leading 'v'/'V' prefix for clean UI display."""
+        ver = self.latest_version
+        if not ver:
+            return ""
+        return str(ver).strip().lstrip("vV")
+
+    def consume_pending_auto_install(self):
+        """Fast-path main-thread check: returns True once when an auto-install download completes."""
+        if not self._pending_auto_install:
+            return False
+        with self._lock:
+            if self._pending_auto_install and self.state == UpdateState.READY_TO_INSTALL:
+                self._pending_auto_install = False
+                return True
+            return False
 
     def is_checking(self):
         with self._lock:
@@ -150,6 +169,8 @@ class UpdateManager:
             self.total_bytes = 0
             self.download_speed_bps = 0.0
             self.download_error = None
+            self.auto_install = True
+            self._pending_auto_install = False
             self._cancel_requested = False
 
     def check_for_updates(self, on_complete=None):
@@ -222,7 +243,7 @@ class UpdateManager:
                             fetched_data = {
                                 "tag_name": tag,
                                 "name": f"Cognitive Maze {tag}",
-                                "body": "Official update released on GitHub.",
+                                "body": "Software update released on GitHub.",
                                 "html_url": final_url,
                                 "published_at": None,
                             }
@@ -305,8 +326,32 @@ class UpdateManager:
             except Exception:
                 pass
 
-    def start_download(self, on_progress=None, on_complete=None):
-        """Starts asynchronous in-app download of the update installer on a daemon thread."""
+    @staticmethod
+    def _is_valid_installer_file(file_path, expected_size=0):
+        """Verifies a downloaded installer exists, matches expected byte length,
+        and is not an HTML captive-portal or error document.
+        """
+        if not file_path or not os.path.exists(file_path):
+            return False
+        try:
+            size = os.path.getsize(file_path)
+            if size <= 0:
+                return False
+            if expected_size and expected_size > 0 and size != expected_size:
+                return False
+            with open(file_path, "rb") as f:
+                head = f.read(64).lstrip().lower()
+            if head.startswith((b"<!doctype", b"<html", b"<?xml")):
+                return False
+            return True
+        except Exception:
+            return False
+
+    def start_download(self, on_progress=None, on_complete=None, auto_install=True):
+        """Starts asynchronous in-app download of the update installer on a daemon thread.
+        When auto_install=True (default), automatically signals the main thread to install
+        and restart the game silently once 100% downloaded and verified.
+        """
         with self._lock:
             if self.state == UpdateState.DOWNLOADING:
                 return False
@@ -315,21 +360,35 @@ class UpdateManager:
                 self.state = UpdateState.ERROR
                 return False
 
-            temp_dir = tempfile.gettempdir()
-            fname = self.installer_asset_name or f"CognitiveMaze-Setup-{self.latest_version}.exe"
-            target_path = os.path.join(temp_dir, fname)
+            if not self.installer_download_url and self.latest_version:
+                clean_ver = str(self.latest_version).strip().lstrip("vV")
+                tag = f"v{clean_ver}"
+                self.installer_asset_name = f"CognitiveMaze-Setup-{tag}.exe"
+                self.installer_download_url = (
+                    f"https://github.com/workingNeko/2DGameCognitiveQuest/releases/download/{tag}/{self.installer_asset_name}"
+                )
 
-            # Fast-path: if installer was already completely downloaded previously
-            if (
-                os.path.exists(target_path)
-                and os.path.getsize(target_path) > 0
-                and (self.installer_expected_size <= 0 or os.path.getsize(target_path) == self.installer_expected_size)
-            ):
+            self.auto_install = bool(auto_install)
+            self._pending_auto_install = False
+
+            updates_dir = os.path.join(tempfile.gettempdir(), "CognitiveMazeUpdates")
+            try:
+                os.makedirs(updates_dir, exist_ok=True)
+            except Exception:
+                updates_dir = tempfile.gettempdir()
+
+            clean_ver = self.get_clean_latest_version() or "latest"
+            fname = self.installer_asset_name or f"CognitiveMaze-Setup-v{clean_ver}.exe"
+            target_path = os.path.join(updates_dir, fname)
+
+            # Fast-path: if verified installer was already completely downloaded previously
+            if self._is_valid_installer_file(target_path, self.installer_expected_size):
                 self.installer_path = target_path
                 self.download_progress = 1.0
                 self.downloaded_bytes = os.path.getsize(target_path)
                 self.total_bytes = self.downloaded_bytes
                 self.state = UpdateState.READY_TO_INSTALL
+                self._pending_auto_install = self.auto_install
                 if on_complete and callable(on_complete):
                     try:
                         on_complete(self)
@@ -357,68 +416,106 @@ class UpdateManager:
         return True
 
     def _run_download_worker(self, target_path, tmp_path, on_progress=None, on_complete=None):
-        """Streaming network I/O worker yielding CPU time to preserve 60 FPS on AMD A4-6300."""
+        """Streaming network I/O worker with HTTP Range resume, integrity checks,
+        and 2ms per-chunk CPU yields to preserve 60 FPS on AMD A4-6300 APU.
+        """
         CHUNK_SIZE = 64 * 1024  # 64 KB chunk size
+        MAX_ATTEMPTS = 3
         downloaded = 0
-        total = self.total_bytes
+        total = self.total_bytes if self.total_bytes > 0 else self.installer_expected_size
         last_speed_time = time.time()
         last_speed_bytes = 0
         speed_bps = 0.0
 
         try:
-            req = urllib.request.Request(
-                self.installer_download_url,
-                headers={
-                    "User-Agent": f"CognitiveQuest-Client/{self.local_version}",
-                    "Accept": "application/octet-stream,application/vnd.github.v3.raw,*/*"
-                }
-            )
-            with _urlopen_resilient(req, timeout=15.0) as resp:
-                content_len_header = resp.headers.get("Content-Length")
-                if content_len_header and content_len_header.isdigit():
-                    total = int(content_len_header)
-                    with self._lock:
-                        self.total_bytes = total
+            if os.path.exists(tmp_path):
+                try:
+                    os.remove(tmp_path)
+                except Exception:
+                    pass
 
-                if os.path.exists(tmp_path):
-                    try:
-                        os.remove(tmp_path)
-                    except Exception:
-                        pass
+            last_err = None
+            for attempt in range(MAX_ATTEMPTS):
+                if self._cancel_requested:
+                    break
 
-                with open(tmp_path, "wb") as f:
-                    while True:
-                        if self._cancel_requested:
-                            break
+                try:
+                    req_headers = {
+                        "User-Agent": f"CognitiveQuest-Client/{self.local_version}",
+                        "Accept": "application/octet-stream,application/vnd.github.v3.raw,*/*",
+                    }
+                    resume_offset = downloaded if (downloaded > 0 and os.path.exists(tmp_path)) else 0
+                    if resume_offset > 0:
+                        req_headers["Range"] = f"bytes={resume_offset}-"
 
-                        chunk = resp.read(CHUNK_SIZE)
-                        if not chunk:
-                            break
+                    req = urllib.request.Request(self.installer_download_url, headers=req_headers)
+                    with _urlopen_resilient(req, timeout=20.0) as resp:
+                        raw_status = getattr(resp, "status", 200)
+                        status_code = raw_status if isinstance(raw_status, int) else 200
 
-                        f.write(chunk)
-                        downloaded += len(chunk)
+                        if resume_offset > 0 and status_code == 206:
+                            file_mode = "ab"
+                            downloaded = resume_offset
+                        else:
+                            file_mode = "wb"
+                            downloaded = 0
+                            last_speed_bytes = 0
+                            content_len_header = resp.headers.get("Content-Length") if hasattr(resp, "headers") and resp.headers else None
+                            if isinstance(content_len_header, str) and content_len_header.isdigit():
+                                total = int(content_len_header)
+                                with self._lock:
+                                    self.total_bytes = total
 
-                        now = time.time()
-                        dt = now - last_speed_time
-                        if dt >= 0.4:
-                            speed_bps = (downloaded - last_speed_bytes) / dt
-                            last_speed_time = now
-                            last_speed_bytes = downloaded
+                        with open(tmp_path, file_mode) as f:
+                            while True:
+                                if self._cancel_requested:
+                                    break
 
-                        prog = (downloaded / total) if total > 0 else 0.0
-                        with self._lock:
-                            self.downloaded_bytes = downloaded
-                            self.download_progress = min(1.0, max(0.0, prog))
-                            self.download_speed_bps = speed_bps
+                                chunk = resp.read(CHUNK_SIZE)
+                                if not chunk:
+                                    break
 
-                        if on_progress and callable(on_progress):
-                            try:
-                                on_progress(self.download_progress, downloaded, total)
-                            except Exception:
-                                pass
+                                f.write(chunk)
+                                downloaded += len(chunk)
 
-                        # Yield CPU to ensure Pygame main thread and MediaPipe thread never stutter
-                        time.sleep(0.001)
+                                now = time.time()
+                                dt = now - last_speed_time
+                                if dt >= 0.4:
+                                    speed_bps = max(0.0, (downloaded - last_speed_bytes) / dt)
+                                    last_speed_time = now
+                                    last_speed_bytes = downloaded
+
+                                prog = (downloaded / total) if total > 0 else 0.0
+                                with self._lock:
+                                    self.downloaded_bytes = downloaded
+                                    self.download_progress = min(1.0, max(0.0, prog))
+                                    self.download_speed_bps = speed_bps
+
+                                if on_progress and callable(on_progress):
+                                    try:
+                                        on_progress(self.download_progress, downloaded, total)
+                                    except Exception:
+                                        pass
+
+                                # Yield CPU slice to ensure Pygame main thread and MediaPipe thread stay at 60 FPS
+                                time.sleep(0.002)
+
+                    if self._cancel_requested:
+                        break
+
+                    if total > 0 and downloaded < total:
+                        raise IOError(f"Incomplete download ({downloaded} of {total} bytes received).")
+
+                    last_err = None
+                    break
+                except Exception as attempt_err:
+                    last_err = attempt_err
+                    if self._cancel_requested:
+                        break
+                    if attempt + 1 < MAX_ATTEMPTS:
+                        time.sleep(1.0 * (attempt + 1))
+                    else:
+                        raise last_err
 
             if self._cancel_requested:
                 if os.path.exists(tmp_path):
@@ -430,10 +527,11 @@ class UpdateManager:
                     self.state = UpdateState.UPDATE_AVAILABLE
                     self.download_progress = 0.0
                     self.downloaded_bytes = 0
+                    self._pending_auto_install = False
                 return
 
-            if not os.path.exists(tmp_path) or os.path.getsize(tmp_path) == 0:
-                raise IOError("Downloaded file is empty or missing.")
+            if not self._is_valid_installer_file(tmp_path, expected_size=total if total > 0 else 0):
+                raise IOError("Downloaded installer failed integrity check or is incomplete.")
 
             # Atomically replace tmp file with final installer path
             if os.path.exists(target_path):
@@ -449,6 +547,7 @@ class UpdateManager:
                 self.downloaded_bytes = os.path.getsize(target_path)
                 self.total_bytes = self.downloaded_bytes
                 self.state = UpdateState.READY_TO_INSTALL
+                self._pending_auto_install = bool(self.auto_install)
 
             if on_complete and callable(on_complete):
                 try:
@@ -467,6 +566,7 @@ class UpdateManager:
                     self.state = UpdateState.UPDATE_AVAILABLE
                     self.download_progress = 0.0
                     self.downloaded_bytes = 0
+                    self._pending_auto_install = False
                 return
 
             if os.path.exists(tmp_path):
@@ -478,34 +578,139 @@ class UpdateManager:
                 self.state = UpdateState.ERROR
                 self.error_message = f"Download failed: {str(e)}"
                 self.download_error = str(e)
+                self._pending_auto_install = False
 
     def cancel_download(self):
         """Requests cancellation of active background download."""
         with self._lock:
+            self._pending_auto_install = False
             if self.state == UpdateState.DOWNLOADING:
                 self._cancel_requested = True
 
-    def apply_update(self):
-        """Launches the downloaded installer and terminates the current game process
-        so Windows can cleanly overwrite game files without file lock conflicts.
+    @staticmethod
+    def _write_windows_auto_update_script(installer_path, current_pid, app_dir="", exe_path="", needs_elevation=False):
+        """Creates a self-deleting Windows helper script that waits for the current game PID
+        to exit completely, runs Inno Setup silently into the exact installation directory
+        without manual wizard prompts, relaunches CognitiveMaze.exe automatically, and cleans up.
+        """
+        script_dir = os.path.dirname(os.path.abspath(installer_path)) or tempfile.gettempdir()
+        script_path = os.path.join(script_dir, "apply_cognitive_update.cmd")
+
+        if needs_elevation and app_dir:
+            ps_args = f"'/SILENT','/SUPPRESSMSGBOXES','/NORESTART','/CLOSEAPPLICATIONS','/DIR=\"{app_dir}\"'"
+            install_block = (
+                f'powershell -NoProfile -WindowStyle Hidden -Command '
+                f'"$p = Start-Process -FilePath \'{installer_path}\' -ArgumentList {ps_args} -Verb RunAs -Wait -PassThru; exit $p.ExitCode"\r\n'
+            )
+        elif app_dir:
+            install_block = (
+                f'"{installer_path}" /SILENT /SUPPRESSMSGBOXES /NORESTART /CLOSEAPPLICATIONS /DIR="%APP_DIR%"\r\n'
+            )
+        else:
+            install_block = (
+                f'"{installer_path}" /SILENT /SUPPRESSMSGBOXES /NORESTART /CLOSEAPPLICATIONS\r\n'
+            )
+
+        script_content = (
+            "@echo off\r\n"
+            "setlocal\r\n"
+            f'set "OLD_PID={int(current_pid)}"\r\n'
+            f'set "INSTALLER={os.path.abspath(installer_path)}"\r\n'
+            f'set "APP_DIR={app_dir}"\r\n'
+            f'set "APP_EXE={exe_path}"\r\n'
+            "set /a TRIES=0\r\n"
+            ":wait_exit\r\n"
+            'tasklist /FI "PID eq %OLD_PID%" /NH 2>NUL | findstr /R /C:"\\<%OLD_PID%\\>" >NUL\r\n'
+            'if "%ERRORLEVEL%"=="0" (\r\n'
+            "    set /a TRIES+=1\r\n"
+            "    if %TRIES% LSS 20 (\r\n"
+            "        ping -n 2 127.0.0.1 >NUL\r\n"
+            "        goto wait_exit\r\n"
+            "    )\r\n"
+            ")\r\n"
+            + install_block +
+            'set "INST_ERR=%ERRORLEVEL%"\r\n'
+            'if not "%APP_EXE%"=="" (\r\n'
+            '    if exist "%APP_EXE%" (\r\n'
+            '        start "" /D "%APP_DIR%" "%APP_EXE%"\r\n'
+            "    )\r\n"
+            ") else (\r\n"
+            '    if exist "%LOCALAPPDATA%\\Programs\\Cognitive Maze\\CognitiveMaze.exe" (\r\n'
+            '        start "" /D "%LOCALAPPDATA%\\Programs\\Cognitive Maze" "%LOCALAPPDATA%\\Programs\\Cognitive Maze\\CognitiveMaze.exe"\r\n'
+            "    )\r\n"
+            ")\r\n"
+            'if "%INST_ERR%"=="0" (\r\n'
+            '    del /F /Q "%INSTALLER%" >NUL 2>&1\r\n'
+            ")\r\n"
+            '(goto) 2>NUL & del /F /Q "%~f0" >NUL 2>&1\r\n'
+        )
+        with open(script_path, "w", encoding="utf-8") as f:
+            f.write(script_content)
+        return script_path
+
+    def apply_update(self, on_before_exit=None):
+        """Silently applies the downloaded update into the current installation directory,
+        gracefully closes the running game to unlock all files, and automatically relaunches
+        the updated game with zero manual installer clicks.
         """
         target = self.installer_path
         if not target or not os.path.exists(target):
             print(f"[ERROR] Installer file does not exist: {target}")
             return False
 
+        with self._lock:
+            self._pending_auto_install = False
+
+        if on_before_exit and callable(on_before_exit):
+            try:
+                on_before_exit()
+            except Exception as cb_err:
+                print(f"[WARN] Pre-update shutdown hook warning: {cb_err}")
+
+        try:
+            from db.save_system import flush_pending_async_saves
+            flush_pending_async_saves()
+        except Exception:
+            pass
+
         try:
             import pygame
 
-            print(f"[UPDATER] Spawning installer: {target}")
-            if os.name == 'nt':
-                # Launch detached installer so it runs independently of this python process
-                DETACHED_PROCESS = 0x00000008
-                subprocess.Popen([target], creationflags=DETACHED_PROCESS, close_fds=True)
+            print(f"[UPDATER] Launching automatic in-app update from: {target}")
+            if os.name == "nt":
+                is_frozen = bool(getattr(sys, "frozen", False))
+                exe_path = os.path.abspath(sys.executable) if is_frozen else ""
+                app_dir = os.path.dirname(exe_path) if is_frozen else ""
+                needs_elevation = False
+                if app_dir:
+                    probe_file = os.path.join(app_dir, f".upd_write_probe_{os.getpid()}")
+                    try:
+                        with open(probe_file, "w", encoding="utf-8") as pf:
+                            pf.write("ok")
+                        os.remove(probe_file)
+                    except Exception:
+                        needs_elevation = True
+
+                script_path = self._write_windows_auto_update_script(
+                    installer_path=target,
+                    current_pid=os.getpid(),
+                    app_dir=app_dir,
+                    exe_path=exe_path,
+                    needs_elevation=needs_elevation,
+                )
+                creation_flags = (
+                    getattr(subprocess, "CREATE_NO_WINDOW", 0x08000000)
+                    | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0x00000200)
+                )
+                subprocess.Popen(
+                    ["cmd.exe", "/d", "/c", script_path],
+                    creationflags=creation_flags,
+                    close_fds=True,
+                )
             else:
                 subprocess.Popen([target])
 
-            # Terminate Pygame & python cleanly to unlock files immediately
+            # Terminate Pygame & Python cleanly to unlock files immediately
             try:
                 pygame.quit()
             except Exception:

@@ -917,7 +917,7 @@ class Database:
                     ),
                     "gradeLevel": "Grade 2",
                     "quarter": spec["quarter_label"],
-                    "description": f"Official curriculum unit for {spec['title']}.",
+                    "description": f"Educational mathematics unit for {spec['title']}.",
                     "difficulty": int(quarter),
                     "orderIndex": 10 + int(quarter),
                 }
