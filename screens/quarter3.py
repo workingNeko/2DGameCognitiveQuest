@@ -2077,6 +2077,12 @@ class Quarter3:
         self.sync_ui_state()
         from core.state_machine import State
 
+        # 3-Star Victory Report Card Click Interactions (Replay Game / Continue to Hub)
+        if hasattr(self, 'victory_card') and getattr(self.victory_card, 'active', False):
+            res = self.victory_card.handle_click(pos)
+            if res:
+                return
+
         if self.pause_menu.handle_click(pos):
             return
 
