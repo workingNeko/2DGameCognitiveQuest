@@ -187,7 +187,7 @@ class QuestPathfinderGuide:
                     return (tx, ty, "Bromen (Summative Assessment Guardian)", False)
                 else:
                     p_pos = find_portal_coords('down') or (25, 0)
-                    return (p_pos[0], p_pos[1], "Summative Assessment: Aquatic Temple", True)
+                    return (p_pos[0], p_pos[1], "Summative Assessment", True)
 
             # All Quarters Completed: Center Sanctuary
             else:

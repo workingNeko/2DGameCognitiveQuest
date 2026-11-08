@@ -569,7 +569,7 @@ class StageSelect:
             },
             {
                 "tile_x": 26.5, "tile_y": 6.0,
-                "text": "^ Summative Assessment: Measurement & Time ^",
+                "text": "^ Summative Assessment ^",
                 "rotation": 90,
                 "color": (255, 245, 150)
             }
@@ -1674,8 +1674,8 @@ class StageSelect:
             },
             "quarter4": {
                 "name": "SUMMATIVE ASSESSMENT",
-                "title": "MEASUREMENT & TIME",
-                "realm": "Length, Mass, Time & Equations",
+                "title": "",
+                "realm": "Comprehensive Evaluation",
                 "primary": (56, 189, 248),
                 "secondary": (168, 85, 247),
                 "accent": (216, 180, 254),
@@ -1718,7 +1718,7 @@ class StageSelect:
         # Destination Realm Subtitle Banner (Pre-rendered inside non-overlapping glassmorphic pill badge)
         dest_name = self.portal_transition_theme.get("name", "STAGE")
         dest_title = self.portal_transition_theme.get("title", "")
-        dest_str = f"WARPING TO {dest_name}: {dest_title}"
+        dest_str = f"WARPING TO {dest_name}: {dest_title}" if dest_title else f"WARPING TO {dest_name}"
         sub_font = get_font("Comic Sans MS", 14, bold=True)
         raw_text_surf = sub_font.render(dest_str, True, self.portal_transition_theme.get("accent", (250, 204, 21)))
         tw, th = raw_text_surf.get_size()
@@ -4073,7 +4073,7 @@ class StageSelect:
             ("quarter1", "Quarter 1: 2D Shapes & Geometry", "Shapes & Composite Figures"),
             ("quarter2", "Quarter 2: Numbers, Addition & Subtraction", "Money & Word Problems"),
             ("quarter3", "Quarter 3: Multiplication & Fractions", "Equal Groups & Fractions"),
-            ("quarter4", "Summative Assessment: Measurement & Time", "Length, Mass, Time & Equations"),
+            ("quarter4", "Summative Assessment", "Comprehensive Evaluation"),
         ]
 
         row_y = card_y + 98

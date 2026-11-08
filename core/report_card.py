@@ -197,7 +197,7 @@ class VictoryReportCard:
                 "quarter1": "Quarter 1: Geometric Explorer",
                 "quarter2": "Quarter 2: Fractions & Values",
                 "quarter3": "Quarter 3: Master of Operations",
-                "quarter4": "Summative Assessment: Logic & Data Realm"
+                "quarter4": "Summative Assessment"
             }
             self.stage_title = q_names.get(self.quarter_id, "STAGE CLEAR!")
 
