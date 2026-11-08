@@ -1586,13 +1586,18 @@ class Quarter3:
             w, h = portal.width_tiles, portal.height_tiles
             for r in range(p_y, min(len(self.render_map), p_y + h)):
                 row_list = list(self.render_map[r])
+                game_row_list = list(self.game_map[r]) if r < len(self.game_map) else []
                 modified = False
                 for c in range(p_x, min(len(row_list), p_x + w)):
                     if row_list[c] in ['Z', 'M', 'n', 's', 't', 'J', 'Q', 'V', 'X', 'Y']:
                         row_list[c] = 'G'
+                        if game_row_list and c < len(game_row_list):
+                            game_row_list[c] = 'G'
                         modified = True
                 if modified:
                     self.render_map[r] = ''.join(row_list)
+                    if game_row_list:
+                        self.game_map[r] = ''.join(game_row_list)
 
     def load_static_portals(self):
         self.portals = []
@@ -2178,9 +2183,11 @@ class Quarter3:
                 return
             if getattr(self, 'guardian_skeleton_close_btn_rect', None) and self.guardian_skeleton_close_btn_rect.collidepoint(pos):
                 self.guardian_skeleton_state = 1 if self.quiz_station_index >= 6 else 0
+                self.guardian_skeleton_proximity_cooldown = 4.0
                 return
             if getattr(self, 'guardian_skeleton_x_btn_rect', None) and self.guardian_skeleton_x_btn_rect.collidepoint(pos):
                 self.guardian_skeleton_state = 1 if self.quiz_station_index >= 6 else 0
+                self.guardian_skeleton_proximity_cooldown = 4.0
                 return
 
         # Check clicking directly on the Skeleton Guardian sprite to talk
@@ -4047,9 +4054,11 @@ class Quarter3:
                 self.fraction_bakery_active = False
                 self.solar_array_puzzle_active = False
                 self.guardian_skeleton_state = 1 if self.quiz_station_index >= 6 else 0
+                self.guardian_skeleton_proximity_cooldown = 4.0
                 return "handled"
             if getattr(self, 'guardian_skeleton_state', 0) == 2:
                 self.guardian_skeleton_state = 1 if self.quiz_station_index >= 6 else 0
+                self.guardian_skeleton_proximity_cooldown = 4.0
                 return "handled"
         # In-game pause menu (universal across all states)
         if self.pause_menu.handle_event(event):
@@ -4084,16 +4093,17 @@ class Quarter3:
                     self.cursor_pos = event.pos
                 if (getattr(self, 'fraction_bakery_active', False) or getattr(self, 'solar_array_puzzle_active', False)) and getattr(self, 'mouse_drag_active', False):
                     if getattr(self, 'dragged_bakery_slice', None):
-                        self.dragged_bakery_slice["x"] = event.pos[0] - getattr(self, 'bakery_drag_offset_x', self.solar_drag_offset_x)
-                        self.dragged_bakery_slice["y"] = event.pos[1] - getattr(self, 'bakery_drag_offset_y', self.solar_drag_offset_y)
+                        self.dragged_bakery_slice["x"] = event.pos[0] - getattr(self, 'bakery_drag_offset_x', getattr(self, 'solar_drag_offset_x', 0))
+                        self.dragged_bakery_slice["y"] = event.pos[1] - getattr(self, 'bakery_drag_offset_y', getattr(self, 'solar_drag_offset_y', 0))
                     elif getattr(self, 'dragged_solar_piece', None):
-                        self.dragged_solar_piece["x"] = event.pos[0] - self.solar_drag_offset_x
-                        self.dragged_solar_piece["y"] = event.pos[1] - self.solar_drag_offset_y
+                        self.dragged_solar_piece["x"] = event.pos[0] - getattr(self, 'solar_drag_offset_x', 0)
+                        self.dragged_solar_piece["y"] = event.pos[1] - getattr(self, 'solar_drag_offset_y', 0)
                 elif getattr(self, 'mini_puzzle_active', False) and getattr(self, 'mini_puzzle_dragged_item', None):
-                    self.mini_puzzle_dragged_item["x"] = event.pos[0] - getattr(self, 'mini_puzzle_drag_offset_x', 0)
-                    self.mini_puzzle_dragged_item["y"] = event.pos[1] - getattr(self, 'mini_puzzle_drag_offset_y', 0)
+                    self.mini_puzzle_dragged_item["x"] = event.pos[0] + getattr(self, 'mini_puzzle_drag_offset_x', 0)
+                    self.mini_puzzle_dragged_item["y"] = event.pos[1] + getattr(self, 'mini_puzzle_drag_offset_y', 0)
                 return "handled"
             elif event.type == pygame.MOUSEBUTTONUP and event.button == 1:
+                self.cursor_pos = event.pos
                 if (getattr(self, 'fraction_bakery_active', False) or getattr(self, 'solar_array_puzzle_active', False)) and getattr(self, 'mouse_drag_active', False):
                     self.mouse_drag_active = False
                     self.release_dragged_solar_piece()
@@ -5354,8 +5364,8 @@ class Quarter3:
         if self.dragged_bakery_slice:
             is_mouse_held = pygame.mouse.get_pressed()[0] if pygame.mouse.get_pressed() else False
             if self.fist_closed or is_mouse_held:
-                self.dragged_bakery_slice["x"] = self.cursor_pos[0] - getattr(self, 'bakery_drag_offset_x', self.solar_drag_offset_x)
-                self.dragged_bakery_slice["y"] = self.cursor_pos[1] - getattr(self, 'bakery_drag_offset_y', self.solar_drag_offset_y)
+                self.dragged_bakery_slice["x"] = self.cursor_pos[0] - getattr(self, 'bakery_drag_offset_x', getattr(self, 'solar_drag_offset_x', 0))
+                self.dragged_bakery_slice["y"] = self.cursor_pos[1] - getattr(self, 'bakery_drag_offset_y', getattr(self, 'solar_drag_offset_y', 0))
             else:
                 self.release_dragged_bakery_slice()
 

@@ -1542,6 +1542,34 @@ class Quarter4:
                 if hasattr(self, 'addition_reset_btn_rect') and self.addition_reset_btn_rect and self.addition_reset_btn_rect.collidepoint(pos):
                     self.reset_addition_puzzle()
                     return
+                # Click-to-place / click-to-return for addition puzzle pieces
+                for piece in reversed(getattr(self, 'addition_pieces', [])):
+                    piece_rect = pygame.Rect(piece["x"], piece["y"], piece["w"], piece["h"])
+                    if piece_rect.collidepoint(pos):
+                        if piece.get("is_placed", False):
+                            if piece.get("slot_id") is not None:
+                                for s in getattr(self, 'addition_slots', []):
+                                    if s["id"] == piece["slot_id"]:
+                                        s["placed_piece_id"] = None
+                            piece["slot_id"] = None
+                            piece["is_placed"] = False
+                            piece["x"] = piece["home_x"]
+                            piece["y"] = piece["home_y"]
+                        else:
+                            empty_slots = [s for s in getattr(self, 'addition_slots', []) if s["placed_piece_id"] is None]
+                            if empty_slots:
+                                target_slot = empty_slots[0]
+                                piece["x"] = target_slot["x"]
+                                piece["y"] = target_slot["y"]
+                                piece["slot_id"] = target_slot["id"]
+                                piece["is_placed"] = True
+                                target_slot["placed_piece_id"] = piece["id"]
+                                if hasattr(self, 'sound_snap') and self.sound_snap:
+                                    try:
+                                        self.sound_snap.play()
+                                    except Exception:
+                                        pass
+                        return
             else:
                 if getattr(self, 'key_puzzle_all_placed', False) and hasattr(self, 'key_puzzle_continue_btn_rect'):
                     if self.key_puzzle_continue_btn_rect and self.key_puzzle_continue_btn_rect.collidepoint(pos):
@@ -1557,6 +1585,44 @@ class Quarter4:
                 if hasattr(self, 'reset_btn_rect') and self.reset_btn_rect and self.reset_btn_rect.collidepoint(pos):
                     self.init_key_puzzle()
                     return
+                # Click-to-place / click-to-return for key puzzle pieces
+                now = pygame.time.get_ticks()
+                for piece in getattr(self, 'key_puzzle_pieces', []):
+                    piece_rect = pygame.Rect(piece["x"], piece["y"], 48, 92)
+                    if piece_rect.collidepoint(pos):
+                        if piece.get("is_placed", False):
+                            if piece.get("slot_id") is not None:
+                                for s in getattr(self, 'key_puzzle_slots', []):
+                                    if s["id"] == piece["slot_id"]:
+                                        s["is_filled"] = False
+                                        s["key_id"] = None
+                            piece["is_placed"] = False
+                            piece["slot_id"] = None
+                            piece["inserting"] = False
+                            piece["turning"] = False
+                            piece["turn_angle"] = 0.0
+                            piece["x"] = piece["deck_x"]
+                            piece["y"] = piece["deck_y"]
+                        else:
+                            empty_slots = [s for s in getattr(self, 'key_puzzle_slots', []) if not s.get("is_filled", False)]
+                            if empty_slots:
+                                target_slot = empty_slots[0]
+                                piece["x"] = target_slot["target_x"] - 19
+                                piece["y"] = target_slot["target_y"] - 54
+                                piece["is_placed"] = True
+                                piece["slot_id"] = target_slot["id"]
+                                piece["inserting"] = True
+                                piece["insert_start_time"] = now
+                                piece["turning"] = False
+                                piece["turn_angle"] = 0.0
+                                target_slot["is_filled"] = True
+                                target_slot["key_id"] = piece["id"]
+                                if hasattr(self, 'sound_snap') and self.sound_snap:
+                                    try:
+                                        self.sound_snap.play()
+                                    except Exception:
+                                        pass
+                        return
             return
 
         if getattr(self, 'time_up_dialog_active', False):
@@ -1828,8 +1894,8 @@ class Quarter4:
                 tot_st = getattr(self, 'active_station_count', len(self.quiz_stations))
                 raft_unlocked = (
                     getattr(self, 'key_puzzle_solved', False)
-                    or (tot_st > 0 and len(self.answered_stations) >= tot_st)
-                    or (tot_st == 0 and not getattr(self, 'npc_bromen_found', False))
+                    or getattr(self, 'addition_puzzle_solved', False)
+                    or (not getattr(self, 'npc_bromen_found', False) and (tot_st == 0 or len(self.answered_stations) >= tot_st))
                 )
                 if raft_unlocked:
                     if getattr(self, 'raft_state', None) in ["docked_west", "ready_to_sail"]:
@@ -2049,8 +2115,8 @@ class Quarter4:
             tot_st = getattr(self, 'active_station_count', len(self.quiz_stations))
             raft_unlocked = (
                 getattr(self, 'key_puzzle_solved', False)
-                or (tot_st > 0 and len(self.answered_stations) >= tot_st)
-                or (tot_st == 0 and not getattr(self, 'npc_bromen_found', False))
+                or getattr(self, 'addition_puzzle_solved', False)
+                or (not getattr(self, 'npc_bromen_found', False) and (tot_st == 0 or len(self.answered_stations) >= tot_st))
             )
             if raft_unlocked and self.raft_state == "docked_west":
                 self.raft_state = "ready_to_sail"
@@ -3082,12 +3148,16 @@ class Quarter4:
             self.emblem_puzzle_active = False
             self.dragged_key = None
             self.dragged_emblem = None
+            self.dragged_addition_piece = None
+            self.addition_puzzle_solved = True
+            self.addition_is_correct = True
             self.bromen_dialogue_state = 3
             if getattr(self, 'is_map12', False):
                 self.raft_state = "ready_to_sail"
             else:
                 self.open_dungeon_doors()
             self.quiz_state = 6  # Ready for exit portal
+            self.sync_ui_state()
             if hasattr(self.main_menu, 'audio_manager') and self.main_menu.audio_manager:
                 self.main_menu.audio_manager.play_sfx("victory_fanfare")
         else:
@@ -4583,8 +4653,12 @@ class Quarter4:
                         self.drag_offset_x = piece["x"] - self.cursor_pos[0]
                         self.drag_offset_y = piece["y"] - self.cursor_pos[1]
                         break
-        elif self.dragged_addition_piece and not self.fist_closed and self.hand_detected:
-            self.drop_addition_piece()
+            if self.dragged_addition_piece:
+                self.dragged_addition_piece["x"] = self.cursor_pos[0] + getattr(self, 'drag_offset_x', 0)
+                self.dragged_addition_piece["y"] = self.cursor_pos[1] + getattr(self, 'drag_offset_y', 0)
+        else:
+            if self.dragged_addition_piece:
+                self.drop_addition_piece()
 
     def draw_addition_puzzle(self):
         if not (self.key_puzzle_active or getattr(self, 'emblem_puzzle_active', False)):
