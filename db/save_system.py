@@ -210,34 +210,48 @@ def delete_student_progress(student_id, student_db_id=None, main_menu=None):
     except Exception as e:
         print(f"[WARN] Could not purge database records: {e}")
 
-    # Write a clean initialized fresh save file with 0 score and 0% progress
-    for tid in target_ids:
-        if str(tid).isdigit() or str(tid).startswith("S-") or str(tid).startswith("MOCK-"):
-            clean_path = get_save_path(tid)
-            try:
-                sel_obj = getattr(main_menu, 'selected_student', None) or {}
-                first_n = sel_obj.get("first_name") or "Student"
-                student_clean_data = {
-                    "student_id": str(tid),
-                    "selected_student": {
-                        "id": int(student_db_id) if student_db_id and str(student_db_id).isdigit() else (sel_obj.get("id") or 9),
-                        "student_id": str(tid),
-                        "first_name": first_n,
-                        "last_name": sel_obj.get("last_name") or "",
-                        "score": 0,
-                        "progress": 0,
-                        "level": sel_obj.get("level") or "Grade 2",
-                        "gender": sel_obj.get("gender") or "male"
-                    },
-                    "current_screen": "menu",
-                    "tutorial_completed": False,
-                    "completed_quarters": {},
-                    "timestamp": time.time()
-                }
-                atomic_save_json(clean_path, student_clean_data)
-                print(f"[CLEAN SAVE] Created initialized fresh save for student {tid}")
-            except Exception as se:
-                print(f"[WARN] Error creating clean save file for {tid}: {se}")
+    # Write a single canonical clean save file with 0 score and 0% progress (no duplicate numeric/code files)
+    sel_obj = getattr(main_menu, 'selected_student', None) or {}
+    canonical_sid = (
+        student_id
+        or (getattr(main_menu, 'student_id', None) if main_menu else None)
+        or sel_obj.get("student_id")
+        or sel_obj.get("studentId")
+        or student_db_id
+    )
+    if canonical_sid:
+        tid_str = str(canonical_sid)
+        clean_path = get_save_path(tid_str)
+        try:
+            first_n = sel_obj.get("first_name") or "Student"
+            resolved_pk = (
+                int(student_db_id)
+                if student_db_id and str(student_db_id).isdigit()
+                else (sel_obj.get("id") if sel_obj.get("id") is not None else 9)
+            )
+            student_clean_data = {
+                "student_id": tid_str,
+                "selected_student": {
+                    "id": resolved_pk,
+                    "student_id": tid_str,
+                    "first_name": first_n,
+                    "last_name": sel_obj.get("last_name") or "",
+                    "score": 0,
+                    "progress": 0,
+                    "level": sel_obj.get("level") or sel_obj.get("gradeLevel") or "Grade 2",
+                    "gender": sel_obj.get("gender") or "male",
+                    "section": sel_obj.get("section") or "A",
+                    "avatarColor": sel_obj.get("avatarColor") or ""
+                },
+                "current_screen": "menu",
+                "tutorial_completed": False,
+                "completed_quarters": {},
+                "timestamp": time.time()
+            }
+            atomic_save_json(clean_path, student_clean_data)
+            print(f"[CLEAN SAVE] Created initialized fresh save for student {tid_str}")
+        except Exception as se:
+            print(f"[WARN] Error creating clean save file for {tid_str}: {se}")
 
     # Reset in-memory session states on main_menu
     if main_menu:
@@ -282,11 +296,21 @@ def mark_quarter_completed(main_menu, quarter_name, score=100, percentage=100.0,
     if "completed_quarters" not in save_data:
         save_data["completed_quarters"] = {}
     
+    prev_q = save_data["completed_quarters"].get(quarter_name)
+    if isinstance(prev_q, dict) and prev_q.get("completed"):
+        best_score = max(int(prev_q.get("score", 0)), int(score))
+        best_pct = max(float(prev_q.get("percentage", 0.0)), round(float(percentage), 1))
+        best_tot = int(total_questions) if int(score) >= int(prev_q.get("score", 0)) else int(prev_q.get("total_questions", total_questions))
+    else:
+        best_score = int(score)
+        best_pct = round(float(percentage), 1)
+        best_tot = int(total_questions)
+
     save_data["completed_quarters"][quarter_name] = {
         "completed": True,
-        "score": score,
-        "percentage": round(percentage, 1),
-        "total_questions": total_questions,
+        "score": best_score,
+        "percentage": best_pct,
+        "total_questions": best_tot,
         "timestamp": time.time()
     }
     save_data["timestamp"] = time.time()

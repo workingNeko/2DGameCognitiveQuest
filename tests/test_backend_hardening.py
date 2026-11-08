@@ -31,6 +31,8 @@ def test_atomic_save():
     
     # Cleanup
     os.remove(test_path)
+    if os.path.exists(f"{test_path}.bak"):
+        os.remove(f"{test_path}.bak")
     print("PASS: Atomic save functionality verified (safe atomic replacement with zero corruption risk).")
 
 def test_assessment_cache():

@@ -1508,9 +1508,10 @@ class StageSelect:
             q_map = {"quarter1": 1, "quarter2": 2, "quarter3": 3, "quarter4": 4}
             q_num = q_map.get(qid)
             if q_num is not None:
-                from db import connect_db
-                connect_db.get_questions(q_num)
-                connect_db.get_assessment_id(q_num)
+                from db.connect_db import db
+                if db:
+                    db.get_questions(q_num)
+                    db.get_assessment_id(q_num)
         except Exception as e:
             print(f"[STAGE WARN] DB pre-warm exception for {qid}: {e}")
         finally:

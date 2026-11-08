@@ -46,7 +46,7 @@ class LeaderboardScreen:
         self.tabs = [
             {"id": 0, "label": "OVERALL RANKINGS", "quarter": None},
             {"id": 1, "label": "QUARTER 1 (Shapes)", "quarter": 1},
-            {"id": 2, "label": "QUARTER 2 (Division)", "quarter": 2},
+            {"id": 2, "label": "QUARTER 2 (Money)", "quarter": 2},
             {"id": 3, "label": "QUARTER 3 (Fractions)", "quarter": 3},
             {"id": 4, "label": "SUMMATIVE ASSESSMENT", "quarter": 4}
         ]
@@ -501,7 +501,7 @@ class LeaderboardScreen:
                         pygame.draw.rect(self.screen, (71, 85, 105), q_box, 1, border_radius=6)
                         q_txt_col = (100, 116, 139)
 
-                    qp_surf = self.badge_font.render(f"Q{qn}", True, q_txt_col)
+                    qp_surf = self.badge_font.render("SA" if qn == 4 else f"Q{qn}", True, q_txt_col)
                     self.screen.blit(qp_surf, qp_surf.get_rect(center=q_box.center))
 
                 # Accuracy Percentage

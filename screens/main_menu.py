@@ -1824,12 +1824,34 @@ class MainMenu:
             self.audio_manager.play_sfx("click")
 
         from db.save_system import is_tutorial_completed, delete_student_progress
+        # Visual feedback card so network reset never freezes the UI without feedback
+        try:
+            overlay = pygame.Surface(self.screen.get_size(), pygame.SRCALPHA)
+            overlay.fill((0, 0, 0, 175))
+            self.screen.blit(overlay, (0, 0))
+            font = getattr(self, 'dialogue_font', self.button_font)
+            txt_surf = font.render("Syncing with Cloud & Starting Activity...", True, (255, 255, 255))
+            rect = txt_surf.get_rect(center=(self.w // 2, self.h // 2))
+            card_rect = rect.inflate(80, 40)
+            pygame.draw.rect(self.screen, (15, 23, 42), card_rect, border_radius=12)
+            pygame.draw.rect(self.screen, (56, 189, 248), card_rect, 3, border_radius=12)
+            self.screen.blit(txt_surf, rect)
+            pygame.display.flip()
+        except Exception:
+            pass
+
         # Fresh activity start: purge any leftover stale database/sync records for clean session
         delete_student_progress(
             student_id=self.student_id,
             student_db_id=getattr(self, 'student_db_id', None),
             main_menu=self
         )
+        try:
+            from db.connect_db import db
+            if db:
+                self.cloud_pending_sync = db._count_pending_sync()
+        except Exception:
+            pass
 
         if not is_tutorial_completed(self.student_id):
             print("[TUTORIAL] New player detected! Launching Tutorial Screen...")

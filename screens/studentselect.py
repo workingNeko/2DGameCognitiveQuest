@@ -344,15 +344,31 @@ class StudentSelect:
             from db.save_system import load_student_progress
             for s in self.students:
                 sid = s.get("student_id")
+                local_q_scores = {}
                 if sid:
                     save_data = load_student_progress(sid)
                     if save_data:
-                        q_data = save_data.get("completed_quarters", {})
-                        completed_count = sum(1 for q, d in q_data.items() if isinstance(d, dict) and d.get("completed"))
-                        s["progress"] = int((completed_count / 4.0) * 100)
-                        s["score"] = sum(d.get("score", 0) for q, d in q_data.items() if isinstance(d, dict))
+                        reset_ts = None
+                        if db and hasattr(db, "_get_student_reset_timestamp"):
+                            reset_ts = db._get_student_reset_timestamp(s.get("id")) or db._get_student_reset_timestamp(sid)
+                        save_ts = save_data.get("timestamp")
+                        is_stale = bool(reset_ts and save_ts is not None and float(save_ts) < reset_ts - 1.0)
+                        if not is_stale:
+                            q_data = save_data.get("completed_quarters", {})
+                            for q_key, d in q_data.items():
+                                if isinstance(d, dict) and d.get("completed"):
+                                    qn = (db.normalize_quarter_number(q_key) or db.infer_quarter_from_text(q_key) or 1) if db else 1
+                                    local_q_scores[qn] = max(local_q_scores.get(qn, 0), int(d.get("score", 0)))
+                            s["progress"] = int((len(local_q_scores) / 4.0) * 100)
+                            s["score"] = sum(local_q_scores.values())
+                s["_local_quarters"] = local_q_scores
         except Exception as e:
             print(f"Student progress sync error: {e}")
+
+        # Non-blocking background sync with live cloud game_results & grades (0ms UI stall on AMD A4-6300)
+        if db and self.students and not str(self.students[0].get("student_id", "")).startswith("MOCK-"):
+            import threading
+            threading.Thread(target=self._sync_cloud_progress_worker, daemon=True).start()
 
         # Pre-select currently active student if one is already selected
         if getattr(self.main_menu, 'student_id', None):
@@ -388,6 +404,47 @@ class StudentSelect:
         self.message = text
         self.message_timer = pygame.time.get_ticks() + duration
 
+    def _sync_cloud_progress_worker(self):
+        """Merge post-reset cloud game_results onto student roster cards without blocking 60 FPS UI."""
+        try:
+            if not db or not getattr(self, "students", None):
+                return
+            cloud_results = db.get_game_results(filter_reset=True) or []
+            ass_to_q = db._build_assessment_to_quarter_lookup() if hasattr(db, "_build_assessment_to_quarter_lookup") else {}
+
+            by_student_pk = {}
+            for gr in cloud_results:
+                sid_pk = str(gr.get("studentId") or gr.get("student_id") or "")
+                if not sid_pk:
+                    continue
+                q_num = db._resolve_record_quarter(gr, ass_to_q) if hasattr(db, "_resolve_record_quarter") else 1
+                score = int(gr.get("score") or 0)
+                pct = float(gr.get("percentage") if gr.get("percentage") is not None else score)
+                tot = int(gr.get("totalQuestions") or gr.get("total_questions") or 5)
+                st_map = by_student_pk.setdefault(sid_pk, {})
+                prev = st_map.get(q_num)
+                if prev is None or score >= prev.get("score", -1):
+                    st_map[q_num] = {
+                        "completed": True,
+                        "score": score,
+                        "percentage": round(pct, 1),
+                        "total_questions": tot,
+                        "timestamp": time.time(),
+                    }
+
+            for s in list(self.students):
+                pk_str = str(s.get("id") or "")
+                cloud_qs = by_student_pk.get(pk_str, {})
+                s["_cloud_game_quarters"] = cloud_qs
+                merged_scores = dict(s.get("_local_quarters") or {})
+                for qn, qinfo in cloud_qs.items():
+                    merged_scores[qn] = max(merged_scores.get(qn, 0), int(qinfo.get("score", 0)))
+                if merged_scores:
+                    s["progress"] = int((len(merged_scores) / 4.0) * 100)
+                    s["score"] = sum(merged_scores.values())
+        except Exception as e:
+            print(f"[STUDENT CLOUD SYNC WARN] {e}")
+
     # =========================================================
     # SELECT STUDENT
     # =========================================================
@@ -399,6 +456,41 @@ class StudentSelect:
             self.main_menu.selected_student = student
             self.main_menu.student_id = str(student.get('student_id') or "")
             self.main_menu.student_db_id = student.get('id')  # Store the primary key ID from database
+
+            # Hydrate cross-machine Cognitive Maze completed quarters from cloud if missing locally
+            cloud_qs = student.get("_cloud_game_quarters") or {}
+            if cloud_qs and self.main_menu.student_id:
+                try:
+                    from db.save_system import load_student_progress, get_save_path, atomic_save_json
+                    local_save = load_student_progress(self.main_menu.student_id) or {
+                        "student_id": self.main_menu.student_id,
+                        "selected_student": {k: v for k, v in student.items() if not str(k).startswith("_")},
+                        "current_screen": "menu",
+                        "tutorial_completed": True,
+                        "completed_quarters": {},
+                    }
+                    comp_dict = local_save.setdefault("completed_quarters", {})
+                    updated_cloud = False
+                    for qn, qinfo in cloud_qs.items():
+                        q_key = f"quarter{qn}"
+                        prev_local = comp_dict.get(q_key)
+                        if not isinstance(prev_local, dict) or not prev_local.get("completed") or int(qinfo.get("score", 0)) > int(prev_local.get("score", 0)):
+                            comp_dict[q_key] = dict(qinfo)
+                            updated_cloud = True
+                    if updated_cloud:
+                        local_save["tutorial_completed"] = True
+                        local_save["timestamp"] = time.time()
+                        cum_s = sum(int(d.get("score", 0)) for d in comp_dict.values() if isinstance(d, dict))
+                        cum_c = sum(1 for d in comp_dict.values() if isinstance(d, dict) and d.get("completed"))
+                        student["score"] = cum_s
+                        student["progress"] = int((cum_c / 4.0) * 100)
+                        if isinstance(local_save.get("selected_student"), dict):
+                            local_save["selected_student"]["score"] = cum_s
+                            local_save["selected_student"]["progress"] = student["progress"]
+                        atomic_save_json(get_save_path(self.main_menu.student_id), local_save)
+                        print(f"[CLOUD HYDRATE] Synced {len(cloud_qs)} cloud-completed stage(s) into local save for {self.main_menu.student_id}.")
+                except Exception as he:
+                    print(f"[CLOUD HYDRATE WARN] {he}")
 
             self.main_menu.current_screen = "menu"
             self.main_menu.student_select = None

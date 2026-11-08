@@ -109,6 +109,8 @@ def test_quarter_completion_saving():
     assert mm.stage_select.is_quarter_unlocked("quarter2") is True, "Quarter 2 must remain unlocked upon continuing"
     print("[PASS] Continue Activity cleanly resumes Stage Select with Quarter 2 unlocked!")
 
+    # 9. Clean up test student state so workspace and cloud stay clean
+    delete_student_progress("S-2024-001", 18, mm)
     print("\nALL QUARTER COMPLETION SAVING & PERSISTENCE TESTS PASSED!")
 
 if __name__ == "__main__":

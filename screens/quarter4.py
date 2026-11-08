@@ -1338,6 +1338,9 @@ class Quarter4:
             print(f"[CLOUD SYNC] Quarter 4 synced {active_count} cloud question(s) across {active_count} station(s).")
 
     def save_quarter4_game_result(self):
+        if getattr(self, '_results_saved_to_db', False):
+            return
+        self._results_saved_to_db = True
         import threading
         threading.Thread(target=self._run_save_quarter4_game_result, daemon=True).start()
 
@@ -1364,7 +1367,8 @@ class Quarter4:
                 print(f"[LOG] Linked Quarter 4 result to Assessment ID: {assessment_id}")
 
             feedback_msg = f"Completed Summative Assessment (Water Temple). Answered {correct_answers} of {total_questions} questions correctly on first attempt."
-            grade_level = getattr(self.main_menu, 'selected_student', {}).get('level', 'Grade 2')
+            sel_student = getattr(self.main_menu, 'selected_student', None) or {}
+            grade_level = sel_student.get('level') or sel_student.get('gradeLevel') or sel_student.get('grade_level') or 'Grade 2'
 
             success = db.save_game_result(
                 student_id=student_db_id,
