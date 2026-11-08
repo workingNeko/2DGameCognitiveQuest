@@ -29,22 +29,22 @@ def test_quarter_completion_saving():
     # 1. Initialize Main Menu with student
     mm = MainMenu(screen)
     student = {
-        "id": 9,
-        "student_id": "1",
-        "first_name": "Jessuny",
-        "last_name": "Dado",
+        "id": 18,
+        "student_id": "S-2024-001",
+        "first_name": "Juan",
+        "last_name": "Dela Cruz",
         "score": 0,
         "progress": 0,
         "level": "Grade 2",
         "gender": "male"
     }
     mm.selected_student = dict(student)
-    mm.student_id = "1"
-    mm.student_db_id = 9
+    mm.student_id = "S-2024-001"
+    mm.student_db_id = 18
     
     # Clean start
-    delete_student_progress("1", 9, mm)
-    assert check_save_exists("1") is False, "Fresh start should have no save data"
+    delete_student_progress("S-2024-001", 18, mm)
+    assert check_save_exists("S-2024-001") is False, "Fresh start should have no save data"
 
     # 2. Simulate completing Quarter 1
     q1 = Quarter1(screen, mm, "map1.txt")
@@ -58,7 +58,7 @@ def test_quarter_completion_saving():
     mark_quarter_completed(mm, "quarter1", score=100, percentage=100.0, total_questions=5)
 
     # 3. Verify save file updated with score, progress, and completed_quarters
-    save_data = load_student_progress("1")
+    save_data = load_student_progress("S-2024-001")
     assert save_data is not None, "Save file must exist after mark_quarter_completed!"
     assert "quarter1" in save_data.get("completed_quarters", {}), "Quarter 1 must be marked completed!"
     assert save_data["completed_quarters"]["quarter1"]["completed"] is True
@@ -89,7 +89,7 @@ def test_quarter_completion_saving():
 
     # 6. Verify StudentSelect displays real score and progress
     ss_screen = StudentSelect(screen, mm)
-    matching = [s for s in ss_screen.students if str(s.get("student_id")) == "1" or str(s.get("id")) == "9"]
+    matching = [s for s in ss_screen.students if str(s.get("student_id")) in ["S-2024-001", "1"] or str(s.get("id")) in ["18", "9"]]
     assert len(matching) > 0, "Student must exist in student list"
     assert matching[0]["score"] == 100, f"Expected 100 score in StudentSelect, got {matching[0]['score']}"
     assert matching[0]["progress"] == 25, f"Expected 25% progress in StudentSelect, got {matching[0]['progress']}"
@@ -97,7 +97,7 @@ def test_quarter_completion_saving():
 
     # 7. Verify Leaderboard contains completed quarter data
     l_data = db.get_leaderboard_data()
-    matching_lb = [e for e in l_data if str(e.get("student_id")) == "1" or str(e.get("id")) == "9"]
+    matching_lb = [e for e in l_data if str(e.get("student_id")) in ["S-2024-001", "1"] or str(e.get("id")) in ["18", "9"]]
     assert len(matching_lb) > 0, "Student must exist in Leaderboard data"
     assert matching_lb[0]["quarters"][1] is not None, "Quarter 1 must be present in Leaderboard"
     assert matching_lb[0]["quarters"][1]["completed"] is True, "Quarter 1 must be marked completed in Leaderboard"

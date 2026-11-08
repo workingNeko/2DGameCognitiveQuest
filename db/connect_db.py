@@ -514,6 +514,20 @@ class Database:
         # Ensure valid assessment ID (fallback to 1 if None)
         ass_id = assessment_id if assessment_id is not None else 1
 
+        # Check for existing game result for this assessment to avoid duplicate inflation on web portal
+        try:
+            existing_results = self.get_game_results(filter_reset=True)
+            for er in existing_results:
+                er_sid = er.get("studentId") or er.get("student_id")
+                er_aid = er.get("assessmentId") or er.get("assessment_id")
+                if (er_sid == numeric_student_id or str(er_sid) == str(numeric_student_id)) and er_aid == ass_id:
+                    er_score = int(er.get("score") or 0)
+                    if score <= er_score:
+                        print(f"[API INFO] Game result for assessment {ass_id} already recorded with score {er_score} >= {score}. Skipping duplicate submission.")
+                        return True
+        except Exception:
+            pass
+
         payload = {
             "studentId": numeric_student_id,
             "student_id": numeric_student_id,
@@ -573,9 +587,10 @@ class Database:
     def delete_student_records(self, student_id=None, student_db_id=None):
         """
         Purge all past progress and grade records from the live Vercel database for a student:
-        1. Deletes all past grade rows for this student via DELETE /api/grades
-        2. Clears any pending offline synchronization results in db/pending_sync.json
-        3. Records a persistent reset timestamp in db/reset_records.json so historical game results
+        1. Cascade-purges all past game_results and grades via DELETE /api/students and restores clean student profile
+        2. Deletes residual grade rows for this student via DELETE /api/grades as fallback
+        3. Clears any pending offline synchronization results in db/pending_sync.json
+        4. Records a persistent reset timestamp in db/reset_records.json so historical game results
            prior to starting this new game are excluded from leaderboards and rankings.
         """
         import os
@@ -597,7 +612,59 @@ class Database:
 
         print(f"[DB RESET] Purging past database records for student IDs: {target_ids}...")
 
-        # 1. Delete matching grades from live Vercel database (/api/grades)
+        # 1. Purge student game results and grades from Vercel via student cascade reset
+        try:
+            all_students = self.get_students() or []
+            matched_student = None
+            for s in all_students:
+                s_id = s.get("id")
+                s_code = s.get("studentId")
+                if s_id in target_ids or str(s_id) in target_ids or s_code in target_ids or str(s_code) in target_ids:
+                    matched_student = s
+                    break
+
+            if matched_student and matched_student.get("id"):
+                pk_id = matched_student["id"]
+                recreate_payload = {
+                    "id": pk_id,
+                    "userId": matched_student.get("userId", 1),
+                    "studentId": matched_student.get("studentId"),
+                    "fullName": matched_student.get("fullName"),
+                    "gradeLevel": matched_student.get("gradeLevel", "Grade 2"),
+                    "section": matched_student.get("section", "A"),
+                    "gender": matched_student.get("gender", "Male"),
+                    "avatarColor": matched_student.get("avatarColor", "#f97316")
+                }
+
+                # DELETE /api/students cascades in the DB to remove all related game_results and grades
+                del_url = f"{BASE_URL}/students"
+                del_data = json.dumps({"id": pk_id}).encode("utf-8")
+                del_req = urllib.request.Request(
+                    del_url,
+                    data=del_data,
+                    headers={"User-Agent": "Mozilla/5.0", "Content-Type": "application/json"},
+                    method="DELETE"
+                )
+                with urllib.request.urlopen(del_req, timeout=5) as del_resp:
+                    if del_resp.status == 200:
+                        print(f"[DB RESET] Successfully cascade-deleted cloud records for student {pk_id} ({matched_student.get('fullName')}).")
+
+                # Restore the student with the exact same primary key ID and profile
+                post_url = f"{BASE_URL}/students"
+                post_data = json.dumps(recreate_payload).encode("utf-8")
+                post_req = urllib.request.Request(
+                    post_url,
+                    data=post_data,
+                    headers={"User-Agent": "Mozilla/5.0", "Content-Type": "application/json"},
+                    method="POST"
+                )
+                with urllib.request.urlopen(post_req, timeout=5) as post_resp:
+                    if post_resp.status in (200, 201):
+                        print(f"[DB RESET] Successfully restored clean student profile {pk_id} on Vercel.")
+        except Exception as e:
+            print(f"[DB RESET WARN] Cascade reset on Vercel encountered an error: {e}")
+
+        # 2. Delete matching residual grades from live Vercel database (/api/grades) as fallback
         deleted_count = 0
         try:
             all_grades = self.get_grades(filter_reset=False)
@@ -620,7 +687,7 @@ class Database:
                                     deleted_count += 1
                         except Exception as de:
                             print(f"[DB RESET WARN] Failed to delete grade ID {gid}: {de}")
-            print(f"[DB RESET SUCCESS] Deleted {deleted_count} past grade record(s) from Vercel database.")
+            print(f"[DB RESET SUCCESS] Deleted {deleted_count} residual grade record(s) from Vercel database.")
         except Exception as e:
             print(f"[DB RESET ERROR] Error querying/deleting grades from Vercel: {e}")
 

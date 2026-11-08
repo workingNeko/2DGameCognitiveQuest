@@ -31,6 +31,8 @@ db/cache/
 db/reset_records.json
 db/pending_sync.json
 *.tmp
+*.bak
+db/saves/*.bak
 
 # Operating system files
 Thumbs.db

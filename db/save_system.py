@@ -187,7 +187,8 @@ def delete_student_progress(student_id, student_db_id=None, main_menu=None):
                         pass
                 if should_delete:
                     try:
-                        os.remove(fpath)
+                        if os.path.exists(fpath):
+                            os.remove(fpath)
                         bak_file = f"{fpath}.bak"
                         if os.path.exists(bak_file):
                             os.remove(bak_file)
