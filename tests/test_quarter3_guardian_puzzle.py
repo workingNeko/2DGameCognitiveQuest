@@ -26,7 +26,7 @@ class TestQuarter3GuardianPuzzle(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         pygame.init()
-        cls.screen = pygame.display.set_mode((1280, 720))
+        cls.screen = pygame.display.set_mode((1280, 720), pygame.HIDDEN)
 
     def setUp(self):
         self.main_menu = MockMainMenu()
@@ -42,85 +42,102 @@ class TestQuarter3GuardianPuzzle(unittest.TestCase):
             self.assertFalse(q3.solar_array_puzzle_solved, f"Puzzle should start unsolved in {map_file}")
 
     def test_solar_array_puzzle_initialization(self):
-        """Test that init_solar_array_puzzle creates authentic array matrix grid and matching gems"""
+        """Test that init_solar_array_puzzle initializes the 4-Card Sun Temple Fraction Match cleanly"""
         q3 = Quarter3(self.screen, self.main_menu, "map7.txt")
         q3.init_solar_array_puzzle()
 
-        total_expected = q3.solar_matrix_rows * q3.solar_matrix_cols
-        self.assertEqual(len(q3.solar_array_puzzle_slots), total_expected, f"Must have {total_expected} matrix sockets")
-        self.assertEqual(len(q3.solar_array_puzzle_pieces), total_expected, f"Must have {total_expected} draggable solar crystals")
+        self.assertEqual(len(q3.solar_array_puzzle_slots), 4, "Must have 4 target fraction slots")
+        self.assertEqual(len(q3.solar_array_puzzle_pieces), 4, "Must have 4 draggable visual fraction cards")
 
-        # Verify pieces have pre-rendered surfaces and valid data
+        # Ensure all 4 sampled fractions are non-equivalent values (no 1/2 + 2/4 collision)
+        values = [round(s["data"]["num"] / s["data"]["denom"], 4) for s in q3.solar_array_puzzle_slots]
+        self.assertEqual(len(values), len(set(values)), "All 4 sampled fractions in a round must be non-equivalent")
+
+        # Verify zero Measurement & Time content in pool or active slots
+        banned_time_words = ("minute", "hour", "clock", "sundial", "60 min")
+        for item in q3.SUN_TEMPLE_FRACTION_POOL:
+            combined = f"{item['fraction_str']} {item['word_name']} {item['parts_hint']} {item['desc']}".lower()
+            for bw in banned_time_words:
+                self.assertNotIn(bw, combined, f"Measurement & Time term '{bw}' must not appear in Quarter 3 pool")
+
+        # Verify pieces and slots have pre-baked surfaces and valid initial state
+        for slot in q3.solar_array_puzzle_slots:
+            self.assertIsNotNone(slot["empty_surf"])
+            self.assertIsNotNone(slot["hover_surf"])
+            self.assertIsNotNone(slot["matched_surf"])
+            self.assertFalse(slot["matched"])
+
         for piece in q3.solar_array_puzzle_pieces:
             self.assertIsNotNone(piece["gem_surf"])
+            self.assertIsNotNone(piece["token_surf"])
+            self.assertIsNotNone(piece["hover_surf"])
+            self.assertIsNotNone(piece["selected_surf"])
+            self.assertIsNotNone(piece["placed_surf"])
             self.assertFalse(piece["is_placed"])
 
     def test_solar_array_puzzle_randomization_across_maps_and_sessions(self):
-        """Test that different maps and successive initializations produce randomized array matrix configurations"""
-        q3_map7 = Quarter3(self.screen, self.main_menu, "map7.txt")
-        q3_map7.init_solar_array_puzzle()
-        eq_map7 = q3_map7.solar_array_target_equation
-
-        q3_map8 = Quarter3(self.screen, self.main_menu, "map8.txt")
-        q3_map8.init_solar_array_puzzle()
-        eq_map8 = q3_map8.solar_array_target_equation
-
-        q3_map9 = Quarter3(self.screen, self.main_menu, "map9.txt")
-        q3_map9.init_solar_array_puzzle()
-        eq_map9 = q3_map9.solar_array_target_equation
-
-        self.assertIn("=", eq_map7)
-        self.assertIn("=", eq_map8)
-        self.assertIn("=", eq_map9)
-
-        # Re-initialization on the same map generates dynamic fresh ordering or combinations
-        q3_map7_second = Quarter3(self.screen, self.main_menu, "map7.txt")
-        q3_map7_second.init_solar_array_puzzle()
-        self.assertEqual(len(q3_map7_second.solar_array_puzzle_slots), q3_map7_second.solar_matrix_rows * q3_map7_second.solar_matrix_cols)
+        """Test that map7, map8, and map9 all initialize unified 4-card Sun Temple Fraction Match rounds"""
+        for map_file in ["map7.txt", "map8.txt", "map9.txt"]:
+            q3_map = Quarter3(self.screen, self.main_menu, map_file)
+            q3_map.init_solar_array_puzzle()
+            self.assertIn("=", q3_map.solar_array_target_equation)
+            self.assertEqual(len(q3_map.solar_array_puzzle_slots), 4)
+            self.assertEqual(len(q3_map.solar_array_puzzle_pieces), 4)
 
     def test_solar_array_puzzle_matching_and_reset(self):
-        """Test matching solar crystals into matrix sockets and resetting the altar"""
+        """Test wrong-slot bounce-back, matching visual fraction card to target slot, and resetting tray"""
         q3 = Quarter3(self.screen, self.main_menu, "map7.txt")
         q3.init_solar_array_puzzle()
 
-        # Match 1 piece via mouse drag-and-drop
-        piece = q3.solar_array_puzzle_pieces[0]
         target_slot = q3.solar_array_puzzle_slots[0]
+        matching_piece = next(p for p in q3.solar_array_puzzle_pieces if p["id"] == target_slot["id"])
+        wrong_slot = next(s for s in q3.solar_array_puzzle_slots if s["id"] != matching_piece["id"])
 
-        handled = q3.handle_solar_array_mouse_down((piece["x"] + 5, piece["y"] + 5))
-        self.assertTrue(handled, "Mouse down on gem should initiate drag")
-        self.assertEqual(q3.dragged_solar_piece, piece)
+        # 1. Dropping card onto a non-matching slot must bounce back to tray
+        handled = q3.handle_solar_array_mouse_down((matching_piece["x"] + 5, matching_piece["y"] + 5))
+        self.assertTrue(handled, "Mouse down on visual fraction card should initiate drag")
+        self.assertEqual(q3.dragged_solar_piece, matching_piece)
 
-        # Move piece to target socket center and release
-        piece["x"] = target_slot["rect"].centerx - piece["w"] // 2
-        piece["y"] = target_slot["rect"].centery - piece["h"] // 2
+        matching_piece["x"] = wrong_slot["rect"].centerx - matching_piece["w"] // 2
+        matching_piece["y"] = wrong_slot["rect"].centery - matching_piece["h"] // 2
+        q3.release_dragged_solar_piece()
+
+        self.assertFalse(wrong_slot["matched"], "Wrong slot must not accept non-matching fraction card")
+        self.assertFalse(matching_piece["is_placed"], "Card dropped on wrong slot must remain unplaced")
+        self.assertEqual((matching_piece["x"], matching_piece["y"]), (matching_piece["orig_x"], matching_piece["orig_y"]))
+
+        # 2. Dragging card onto its matching fraction slot must snap into place
+        handled = q3.handle_solar_array_mouse_down((matching_piece["x"] + 5, matching_piece["y"] + 5))
+        self.assertTrue(handled)
+        matching_piece["x"] = target_slot["rect"].centerx - matching_piece["w"] // 2
+        matching_piece["y"] = target_slot["rect"].centery - matching_piece["h"] // 2
         q3.release_dragged_solar_piece()
 
         self.assertTrue(target_slot["matched"])
-        self.assertTrue(piece["is_placed"])
+        self.assertTrue(matching_piece["is_placed"])
 
-        # Reset tray
+        # 3. Reset tray returns all cards to original tray positions
         q3.reset_solar_array_puzzle()
         self.assertFalse(target_slot["matched"])
-        self.assertFalse(piece["is_placed"])
-        self.assertEqual(piece["x"], piece["orig_x"])
-        self.assertEqual(piece["y"], piece["orig_y"])
+        self.assertFalse(matching_piece["is_placed"])
+        self.assertEqual(matching_piece["x"], matching_piece["orig_x"])
+        self.assertEqual(matching_piece["y"], matching_piece["orig_y"])
 
     def test_solar_array_puzzle_gesture_drag_and_drop(self):
-        """Test gesture closed fist grab, motion, and open fist drop into matrix sockets"""
+        """Test MediaPipe closed-fist grab, motion, and open-hand drop into matching fraction slot"""
         q3 = Quarter3(self.screen, self.main_menu, "map7.txt")
         q3.init_solar_array_puzzle()
 
-        piece = q3.solar_array_puzzle_pieces[0]
         target_slot = q3.solar_array_puzzle_slots[0]
+        matching_piece = next(p for p in q3.solar_array_puzzle_pieces if p["id"] == target_slot["id"])
 
-        # Fist closed over piece
-        q3.cursor_pos = (piece["x"] + 5, piece["y"] + 5)
+        # Fist closed over matching card
+        q3.cursor_pos = (matching_piece["x"] + 10, matching_piece["y"] + 10)
         q3.fist_closed = True
         q3.update_solar_array_puzzle(0.016)
-        self.assertEqual(q3.dragged_solar_piece, piece, "Closed fist over crystal must grab it")
+        self.assertEqual(q3.dragged_solar_piece, matching_piece, "Closed fist over card must grab it")
 
-        # Move cursor to target slot
+        # Move cursor to matching target slot center
         q3.cursor_pos = target_slot["rect"].center
         q3.update_solar_array_puzzle(0.016)
 
@@ -128,8 +145,8 @@ class TestQuarter3GuardianPuzzle(unittest.TestCase):
         q3.fist_closed = False
         q3.update_solar_array_puzzle(0.016)
 
-        self.assertTrue(target_slot["matched"], "Socket must be matched upon gesture drop")
-        self.assertTrue(piece["is_placed"], "Piece must be marked placed")
+        self.assertTrue(target_slot["matched"], "Target fraction slot must match upon gesture drop")
+        self.assertTrue(matching_piece["is_placed"], "Card must be marked placed")
 
     def test_full_station_to_guardian_and_puzzle_solve_progression(self):
         """Test full progression: Stations 1-5 cleared -> Guardian activated -> Trial prompt -> Puzzle solve -> Portal unlocked"""
@@ -164,9 +181,9 @@ class TestQuarter3GuardianPuzzle(unittest.TestCase):
         # Click Begin Trial button
         q3.trigger_click(q3.guardian_skeleton_btn_rect.center)
         self.assertEqual(q3.guardian_skeleton_state, 3, "Guardian state must become 3 (puzzle active)")
-        self.assertTrue(q3.solar_array_puzzle_active, "Solar Array puzzle must be active")
+        self.assertTrue(q3.solar_array_puzzle_active, "Sun Temple Fraction Match must be active")
 
-        # Solve all matrix sockets via auto solve
+        # Solve all 4 fraction cards via auto solve
         q3.auto_solve_solar_array_puzzle()
         self.assertTrue(q3.solar_array_puzzle_all_placed)
 
@@ -174,7 +191,7 @@ class TestQuarter3GuardianPuzzle(unittest.TestCase):
         self.assertIsNotNone(q3.solar_puzzle_continue_btn_rect)
         q3.trigger_click(q3.solar_puzzle_continue_btn_rect.center)
 
-        self.assertTrue(q3.solar_array_puzzle_solved, "Solar array puzzle must be marked solved")
+        self.assertTrue(q3.solar_array_puzzle_solved, "Sun Temple Fraction Match must be marked solved")
         self.assertFalse(q3.solar_array_puzzle_active, "Puzzle modal should close")
         self.assertEqual(q3.guardian_skeleton_state, 5, "Guardian state must be 5 (portal unlocked)")
         self.assertEqual(q3.quiz_state, 6, "Quiz state must be 6 (stage complete)")
@@ -217,9 +234,8 @@ class TestQuarter3GuardianPuzzle(unittest.TestCase):
         self.assertIsNotNone(target)
         self.assertTrue(target[3], "Should target exit portal")
 
-
     def test_draw_when_objective_completed_and_talking_to_skeleton(self):
-        """Test that drawing Quarter3 does not crash when stations are completed and skeleton guardian is active"""
+        """Test that drawing Quarter3 does not crash across all guardian and fraction-match states"""
         for map_file in ["map7.txt", "map8.txt", "map9.txt"]:
             q3 = Quarter3(self.screen, self.main_menu, map_file)
             # 1. Test drawing when stations 1-5 cleared (guardian waiting)
@@ -231,55 +247,72 @@ class TestQuarter3GuardianPuzzle(unittest.TestCase):
             q3.guardian_skeleton_state = 2
             q3.draw()
 
-            # 3. Test drawing during solar array puzzle
+            # 3. Test drawing during Sun Temple Fraction Match (normal, selected, and solved states)
             q3.guardian_skeleton_state = 3
             q3.solar_array_puzzle_active = True
             q3.init_solar_array_puzzle()
             q3.draw()
 
+            q3.selected_fraction_piece = q3.fraction_match_pieces[0]
+            q3.draw()
+
+            q3.auto_solve_solar_array_puzzle()
+            q3.draw()
+
             # 4. Test drawing when objective solved and stage complete (quiz_state = 6)
             q3.solar_array_puzzle_active = False
+            q3.fraction_match_active = False
+            q3.fraction_bakery_active = False
             q3.solar_array_puzzle_solved = True
             q3.guardian_skeleton_state = 5
             q3.quiz_state = 6
             q3.draw()
 
     def test_solar_array_puzzle_click_to_place_accessibility(self):
-        """Test quick click on a tray crystal snaps it to the first unoccupied socket without manual dragging"""
+        """Test two-tap accessibility: click card in tray to select, then click matching fraction slot"""
         q3 = Quarter3(self.screen, self.main_menu, "map7.txt")
         q3.init_solar_array_puzzle()
 
         piece = q3.solar_array_puzzle_pieces[0]
-        first_slot = q3.solar_array_puzzle_slots[0]
+        matching_slot = next(s for s in q3.solar_array_puzzle_slots if s["id"] == piece["id"])
+        wrong_slot = next(s for s in q3.solar_array_puzzle_slots if s["id"] != piece["id"])
 
-        # Simulate quick click via trigger_click
-        q3.trigger_click((piece["x"] + 5, piece["y"] + 5))
+        # Step 1: Click card in tray -> selects card
+        q3.trigger_click((piece["x"] + 10, piece["y"] + 10))
+        self.assertEqual(q3.selected_fraction_piece, piece, "First click on tray card must select it")
+        self.assertFalse(piece["is_placed"])
 
-        self.assertTrue(first_slot["matched"], "First socket must be filled by click-to-place")
-        self.assertTrue(piece["is_placed"], "Piece must be marked placed")
-        self.assertEqual(piece["target_slot_id"], first_slot["id"])
+        # Step 2: Clicking a non-matching slot keeps card selected and shows feedback
+        q3.trigger_click(wrong_slot["rect"].center)
+        self.assertFalse(wrong_slot["matched"])
+        self.assertFalse(piece["is_placed"])
+        self.assertEqual(q3.fraction_match_feedback_kind, "wrong")
+
+        # Step 3: Clicking matching slot snaps card into place
+        q3.trigger_click(matching_slot["rect"].center)
+        self.assertTrue(matching_slot["matched"], "Matching slot must fill on second click")
+        self.assertTrue(piece["is_placed"], "Card must be marked placed")
+        self.assertEqual(piece["target_slot_id"], matching_slot["id"])
 
     def test_solar_array_puzzle_row_beam_activation(self):
-        """Test completing all sockets in a row activates that row's solar beam"""
+        """Test matching all 4 fraction cards activates completion flags and unlocks portal button"""
         q3 = Quarter3(self.screen, self.main_menu, "map7.txt")
         q3.init_solar_array_puzzle()
 
-        cols = q3.solar_matrix_cols
-        # Place crystals in row 0
-        for c in range(cols):
-            slot = q3.solar_array_puzzle_slots[c]
-            piece = q3.solar_array_puzzle_pieces[c]
-            # Drag piece directly to slot
+        for slot in q3.solar_array_puzzle_slots:
+            piece = next(p for p in q3.solar_array_puzzle_pieces if p["id"] == slot["id"])
             piece["x"] = slot["rect"].centerx - piece["w"] // 2
             piece["y"] = slot["rect"].centery - piece["h"] // 2
             q3.dragged_solar_piece = piece
             q3.release_dragged_solar_piece()
 
-        self.assertTrue(q3.solar_matrix_row_completed[0], "Row 0 must be marked completed")
-        self.assertGreater(q3.solar_matrix_beam_alphas[0], 0.0, "Row 0 solar laser beam must be activated")
+        self.assertTrue(q3.fraction_match_all_placed)
+        self.assertTrue(q3.solar_array_puzzle_all_placed)
+        self.assertTrue(q3.solar_matrix_row_completed[0], "Completion flag must be activated")
+        self.assertGreater(q3.solar_matrix_beam_alphas[0], 0.0, "Beam alpha compatibility flag must be > 0")
 
     def test_talk_to_skeleton_guardian_accesses_mini_game(self):
-        """Test that talking to the Skeleton Guardian directly opens dialogue and provides access to the Scales of Anubis mini-game"""
+        """Test talking to the Skeleton Guardian opens dialogue and launches Sun Temple Fraction Match"""
         q3 = Quarter3(self.screen, self.main_menu, "map7.txt")
         q3.instruction_modal.hide()
         q3.greeting_dialog.hide()
@@ -292,15 +325,15 @@ class TestQuarter3GuardianPuzzle(unittest.TestCase):
         self.assertEqual(q3.guardian_skeleton_state, 2, "Clicking Skeleton Guardian must open dialogue modal (state 2)")
         self.assertIsNotNone(q3.guardian_skeleton_btn_rect, "Trial button must exist")
 
-        # 2. Click trial button to begin Scales of Anubis mini-game
+        # 2. Click trial button to begin Sun Temple Fraction Match
         q3.trigger_click(q3.guardian_skeleton_btn_rect.center)
         self.assertEqual(q3.guardian_skeleton_state, 3, "Clicking trial button must enter mini-game (state 3)")
-        self.assertTrue(q3.solar_array_puzzle_active, "Scales of Anubis puzzle must be active")
+        self.assertTrue(q3.solar_array_puzzle_active, "Sun Temple Fraction Match must be active")
 
-        # 3. Test Escape key / Close button closes puzzle and returns to desert
+        # 3. Test Escape key closes puzzle and returns to desert
         escape_event = pygame.event.Event(pygame.KEYDOWN, key=pygame.K_ESCAPE)
         q3.handle_event(escape_event)
-        self.assertFalse(q3.solar_array_puzzle_active, "Escape must close Scales of Anubis puzzle")
+        self.assertFalse(q3.solar_array_puzzle_active, "Escape must close Sun Temple Fraction Match")
 
         # 4. Move player close to Skeleton Guardian and press 'E' to talk
         q3.player_x = q3.npc_skeleton_x

@@ -1,7 +1,7 @@
 {
   "version": "1.2.3",
-  "name": "Cognitive Maze v1.2.3 - Solidified Portal Sync & Summative Assessment Release",
-  "notes": "Version 1.2.3: Solidified live Vercel portal synchronization, crash-safe Write-Ahead Log student profile recovery, Summative Assessment curriculum mapping, zero duplicate point inflation, and power-interruption autosave resilience.",
+  "name": "Cognitive Maze v1.2.3 - Sun Temple Fraction Match, Portal Sync & APU Optimization Release",
+  "notes": "Version 1.2.3: Replaced Quarter 3 guardian mini-game with the streamlined 4-Card Sun Temple Fraction Match, solidified live Vercel portal synchronization & Summative Assessment mapping, eliminated 96 MB build asset duplication, optimized 60 FPS surface caching for AMD A4-6300 APU, and cleaned up Settings version display.",
   "download_url": "https://github.com/workingNeko/2DGameCognitiveQuest/releases/tag/v1.2.3",
-  "date": "2026-11-08"
+  "date": "2026-11-09"
 }

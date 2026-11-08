@@ -1368,7 +1368,7 @@ class MainMenu:
 
         # ---------------- Game Version & Updates Row ----------------
         self.screen.blit(label_font.render("Game Version & Updates", True, (241, 245, 249)), (box_x + 40, box_y + 286))
-        ver_sub_text = f"Installed: v{APP_VERSION}  |  Official DepEd Math Release"
+        ver_sub_text = f"Installed: v{APP_VERSION}"
         self.screen.blit(small_font.render(ver_sub_text, True, (148, 163, 184)), (box_x + 40, box_y + 310))
 
         # Reset frame interactive update button rects
