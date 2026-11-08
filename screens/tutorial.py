@@ -239,6 +239,9 @@ class TutorialScreen:
 
     def restart_tutorial(self):
         """Restarts the tutorial screen."""
+        self.main_menu.tutorial = None
+        if hasattr(self, '_bg_map_surface'):
+            self._bg_map_surface = None
         from screens.tutorial import TutorialScreen
         self.main_menu.tutorial = TutorialScreen(self.screen, self.main_menu)
 
@@ -1186,25 +1189,59 @@ class TutorialScreen:
         if t_anim > 2.4:
             fade_alpha = max(0, int(255 * (1.0 - (t_anim - 2.4) / 0.8)))
 
-        overlay = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
-        overlay.fill((10, 15, 30, min(240, fade_alpha)))
+        overlay = getattr(self, '_intro_overlay', None)
+        if overlay is None or overlay.get_size() != (self.width, self.height):
+            overlay = pygame.Surface((self.width, self.height))
+            overlay.fill((10, 15, 30))
+            if pygame.display.get_surface() is not None:
+                try:
+                    overlay = overlay.convert()
+                except Exception:
+                    pass
+            self._intro_overlay = overlay
+        overlay.set_alpha(min(240, fade_alpha))
         self.screen.blit(overlay, (0, 0))
 
+        p_cache = getattr(self, '_intro_p_cache', None)
+        if p_cache is None:
+            p_cache = {}
+            self._intro_p_cache = p_cache
         for p in getattr(self, 'intro_particles', []):
             px, py = p["x"], p["y"]
             p_size = p["size"] + math.sin(t * 4.0 + p["phase"]) * 1.5
             p_alpha = max(0, min(255, int(p.get("alpha", 200) * (fade_alpha / 255.0))))
-            p_surf = pygame.Surface((int(p_size * 4), int(p_size * 4)), pygame.SRCALPHA)
-            pygame.draw.circle(p_surf, (*p["color"], p_alpha), (int(p_size * 2), int(p_size * 2)), int(p_size))
-            self.screen.blit(p_surf, (int(px - p_size * 2), int(py - p_size * 2)))
+            p_dim = max(4, int(p_size * 4))
+            p_surf = p_cache.get(p_dim)
+            if p_surf is None:
+                p_surf = pygame.Surface((p_dim, p_dim), pygame.SRCALPHA)
+                if pygame.display.get_surface() is not None:
+                    try:
+                        p_surf = p_surf.convert_alpha()
+                    except Exception:
+                        pass
+                p_cache[p_dim] = p_surf
+            else:
+                p_surf.fill((0, 0, 0, 0))
+            pygame.draw.circle(p_surf, (*p["color"], p_alpha), (p_dim // 2, p_dim // 2), max(1, int(p_size)))
+            self.screen.blit(p_surf, (int(px - p_dim // 2), int(py - p_dim // 2)))
 
         cx, cy = self.width // 2, self.height // 2 + 10
 
         ring_r1 = int(110 + math.sin(t * 3.0) * 8)
         ring_r2 = int(140 + math.cos(t * 2.5) * 6)
-        
-        rune_surf = pygame.Surface((ring_r2 * 2 + 40, ring_r2 * 2 + 40), pygame.SRCALPHA)
-        r_cx, r_cy = ring_r2 + 20, ring_r2 + 20
+        rune_dim = 340
+        rune_surf = getattr(self, '_intro_rune_surf', None)
+        if rune_surf is None or rune_surf.get_size() != (rune_dim, rune_dim):
+            rune_surf = pygame.Surface((rune_dim, rune_dim), pygame.SRCALPHA)
+            if pygame.display.get_surface() is not None:
+                try:
+                    rune_surf = rune_surf.convert_alpha()
+                except Exception:
+                    pass
+            self._intro_rune_surf = rune_surf
+        else:
+            rune_surf.fill((0, 0, 0, 0))
+        r_cx, r_cy = rune_dim // 2, rune_dim // 2
 
         pygame.draw.circle(rune_surf, (251, 191, 36, min(80, fade_alpha)), (r_cx, r_cy), ring_r1, 2)
         pygame.draw.circle(rune_surf, (254, 240, 138, min(100, fade_alpha)), (r_cx, r_cy), ring_r2, 1)
@@ -1221,8 +1258,17 @@ class TutorialScreen:
         self.screen.blit(rune_surf, (cx - r_cx, cy - r_cy))
 
         emblem_r = 70
-        emblem_glow = pygame.Surface((emblem_r * 4, emblem_r * 4), pygame.SRCALPHA)
-        pygame.draw.circle(emblem_glow, (251, 191, 36, min(60, fade_alpha)), (emblem_r * 2, emblem_r * 2), emblem_r * 2)
+        emblem_glow = getattr(self, '_intro_emblem_glow', None)
+        if emblem_glow is None:
+            emblem_glow = pygame.Surface((emblem_r * 4, emblem_r * 4), pygame.SRCALPHA)
+            pygame.draw.circle(emblem_glow, (251, 191, 36, 60), (emblem_r * 2, emblem_r * 2), emblem_r * 2)
+            if pygame.display.get_surface() is not None:
+                try:
+                    emblem_glow = emblem_glow.convert_alpha()
+                except Exception:
+                    pass
+            self._intro_emblem_glow = emblem_glow
+        emblem_glow.set_alpha(fade_alpha)
         self.screen.blit(emblem_glow, (cx - emblem_r * 2, cy - emblem_r * 2))
 
         pygame.draw.circle(self.screen, (30, 41, 59), (cx, cy), emblem_r)
@@ -1231,7 +1277,19 @@ class TutorialScreen:
 
         dir_sprites = self.player_sprites.get(self.player_dir, self.player_sprites["down"])
         hero_frame = dir_sprites[self.anim_frame]
-        hero_big = pygame.transform.scale(hero_frame, (80, 80))
+        hero_cache = getattr(self, '_intro_hero_cache', None)
+        if hero_cache is None:
+            hero_cache = {}
+            self._intro_hero_cache = hero_cache
+        hero_big = hero_cache.get(hero_frame)
+        if hero_big is None:
+            hero_big = pygame.transform.scale(hero_frame, (80, 80))
+            if pygame.display.get_surface() is not None:
+                try:
+                    hero_big = hero_big.convert_alpha()
+                except Exception:
+                    pass
+            hero_cache[hero_frame] = hero_big
         self.screen.blit(hero_big, hero_big.get_rect(center=(cx, cy - 2)))
 
         badge_y = cy + emblem_r + 14
@@ -1256,8 +1314,17 @@ class TutorialScreen:
         sh_rect.y += 4
         pygame.draw.rect(self.screen, (0, 0, 0, min(160, fade_alpha)), sh_rect, border_radius=18)
 
-        b_surf = pygame.Surface((bw, bh), pygame.SRCALPHA)
-        b_surf.fill((15, 23, 42, min(245, fade_alpha)))
+        b_surf = getattr(self, '_intro_banner_surf', None)
+        if b_surf is None or b_surf.get_size() != (bw, bh):
+            b_surf = pygame.Surface((bw, bh))
+            b_surf.fill((15, 23, 42))
+            if pygame.display.get_surface() is not None:
+                try:
+                    b_surf = b_surf.convert()
+                except Exception:
+                    pass
+            self._intro_banner_surf = b_surf
+        b_surf.set_alpha(min(245, fade_alpha))
         self.screen.blit(b_surf, banner_rect.topleft)
         pygame.draw.rect(self.screen, (245, 158, 11), banner_rect, 3, border_radius=18)
         pygame.draw.rect(self.screen, (251, 191, 36), (bx + 3, banner_y + 3, bw - 6, bh - 6), 1, border_radius=15)

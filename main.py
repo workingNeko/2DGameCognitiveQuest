@@ -187,8 +187,9 @@ def main():
     # Create the main menu
     main_menu = MainMenu(screen)
 
-    # In-game screenshot toast notification state
-    toast_text = ""
+    # In-game screenshot toast notification state (pre-baked on capture to avoid per-frame allocations)
+    toast_panel_surf = None
+    toast_panel_pos = (0, 20)
     toast_until = 0
 
     # Game loop
@@ -197,8 +198,9 @@ def main():
         # Handle events
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
-                from db.save_system import save_student_progress
+                from db.save_system import save_student_progress, flush_pending_async_saves
                 save_student_progress(main_menu)
+                flush_pending_async_saves()
                 running = False
             elif event.type == pygame.KEYDOWN and event.key == pygame.K_f:
                 pygame.display.toggle_fullscreen()
@@ -206,7 +208,17 @@ def main():
                 from core.screenshot_manager import capture_screenshot
                 filepath, ok = capture_screenshot(screen)
                 if ok:
-                    toast_text = "📸 Screenshot Saved & Copied to Clipboard!"
+                    toast_font = pygame.font.SysFont("Comic Sans MS", 13, bold=True)
+                    t_surf = toast_font.render("📸 Screenshot Saved & Copied to Clipboard!", True, (255, 255, 255))
+                    pad_x, pad_y = 16, 8
+                    panel_w = t_surf.get_width() + pad_x * 2
+                    panel_h = t_surf.get_height() + pad_y * 2
+                    toast_panel_surf = pygame.Surface((panel_w, panel_h), pygame.SRCALPHA)
+                    pygame.draw.rect(toast_panel_surf, (15, 23, 42, 225), (0, 0, panel_w, panel_h), border_radius=8)
+                    pygame.draw.rect(toast_panel_surf, (56, 189, 248), (0, 0, panel_w, panel_h), 2, border_radius=8)
+                    toast_panel_surf.blit(t_surf, (pad_x, pad_y))
+                    toast_panel_surf = toast_panel_surf.convert_alpha()
+                    toast_panel_pos = (screen_width - panel_w - 20, 20)
                     toast_until = pygame.time.get_ticks() + 3000
                     if hasattr(main_menu, 'audio_manager') and main_menu.audio_manager:
                         main_menu.audio_manager.play_sfx("click")
@@ -220,22 +232,8 @@ def main():
         main_menu.draw()
 
         # Render on-screen screenshot confirmation toast if active
-        now_ticks = pygame.time.get_ticks()
-        if toast_until > now_ticks and toast_text:
-            toast_font = pygame.font.SysFont("Comic Sans MS", 13, bold=True)
-            t_surf = toast_font.render(toast_text, True, (255, 255, 255))
-            pad_x, pad_y = 16, 8
-            bg_rect = pygame.Rect(
-                screen_width - t_surf.get_width() - pad_x * 2 - 20,
-                20,
-                t_surf.get_width() + pad_x * 2,
-                t_surf.get_height() + pad_y * 2
-            )
-            pill_surf = pygame.Surface((bg_rect.width, bg_rect.height), pygame.SRCALPHA)
-            pill_surf.fill((15, 23, 42, 225))
-            screen.blit(pill_surf, bg_rect.topleft)
-            pygame.draw.rect(screen, (56, 189, 248), bg_rect, 2, border_radius=8)
-            screen.blit(t_surf, (bg_rect.x + pad_x, bg_rect.y + pad_y))
+        if toast_until > pygame.time.get_ticks() and toast_panel_surf is not None:
+            screen.blit(toast_panel_surf, toast_panel_pos)
 
         # Update display
         pygame.display.flip()

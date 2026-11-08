@@ -216,16 +216,30 @@ _MAX_SANITIZE_CACHE = 2048
 _WRAP_CACHE = OrderedDict()
 _MAX_WRAP_CACHE = 1024
 
+# Precompiled C-level str.translate table combining control-char cleanup + all 140+ glyph replacements
+_COMBINED_TRANSLATE = {i: None for i in range(32)}
+_COMBINED_TRANSLATE[9] = " "   # \t
+_COMBINED_TRANSLATE[10] = " "  # \n
+_COMBINED_TRANSLATE[13] = " "  # \r
+_COMBINED_TRANSLATE[127] = None
+for _k, _v in GLYPH_REPLACEMENTS.items():
+    if len(_k) == 1:
+        _COMBINED_TRANSLATE[ord(_k)] = _v
+_MULTI_CHAR_REPLACEMENTS = tuple((_k, _v) for _k, _v in GLYPH_REPLACEMENTS.items() if len(_k) > 1)
+
 
 def sanitize_text(text):
     """
     Strips unrenderable emojis, symbols, control chars, and non-ASCII characters that cause
     'missing character boxes' (tofu boxes) in Pygame fonts.
+    Uses a precompiled C-level translation table for O(N) zero-loop speed on AMD A4-6300.
     """
     if text is None:
         return ""
     if not isinstance(text, str):
         text = str(text)
+    if not text:
+        return ""
 
     cached = _SANITIZE_CACHE.get(text)
     if cached is not None:
@@ -234,28 +248,23 @@ def sanitize_text(text):
 
     raw_key = text
 
-    # 1. Apply explicit replacements
-    for char, rep in GLYPH_REPLACEMENTS.items():
-        if char in text:
-            text = text.replace(char, rep)
+    # 1. Single-pass C translation for control characters and Unicode glyph replacements
+    if _MULTI_CHAR_REPLACEMENTS:
+        for seq, rep in _MULTI_CHAR_REPLACEMENTS:
+            if seq in text:
+                text = text.replace(seq, rep)
+    text = text.translate(_COMBINED_TRANSLATE)
 
-    # 2. Filter any remaining high unicode or control characters that could trigger missing glyph boxes
-    clean_chars = []
-    for ch in text:
-        code = ord(ch)
-        # Allow standard printable ASCII (32-126) and common Western/Latin-1 Supplement (160-255 like accented letters ñ, é, etc.)
-        if 32 <= code <= 126 or 160 <= code <= 255:
-            clean_chars.append(ch)
-        elif ch in ('\n', '\r', '\t'):
-            clean_chars.append(' ')
-        elif code < 32:
-            # Drop unprintable ASCII control characters
-            continue
-        else:
-            # Fallback: drop any unsupported Unicode dingbats / surrogate pairs
-            continue
+    # 2. Fast-path: if result is pure ASCII, all characters are guaranteed printable (32..126)
+    if text.isascii():
+        result = text
+    else:
+        # Preserve printable ASCII (32-126) and Latin-1 Supplement (160-255, e.g. ñ, é)
+        result = "".join(
+            ch for ch in text
+            if (32 <= ord(ch) <= 126) or (160 <= ord(ch) <= 255)
+        )
 
-    result = "".join(clean_chars)
     _SANITIZE_CACHE[raw_key] = result
     while len(_SANITIZE_CACHE) > _MAX_SANITIZE_CACHE:
         _SANITIZE_CACHE.popitem(last=False)
@@ -514,6 +523,13 @@ def clear_font_cache():
     _TEXT_SIZE_CACHE.clear()
     _SANITIZE_CACHE.clear()
     _WRAP_CACHE.clear()
+
+
+def trim_transient_font_caches(keep_surfaces=512):
+    """Trims older rendered text surfaces during stage transitions to bound RAM on 4GB APUs."""
+    keep = max(64, int(keep_surfaces))
+    while len(_TEXT_SURF_CACHE) > keep:
+        _TEXT_SURF_CACHE.popitem(last=False)
 
 
 # Automatically initialize on module import

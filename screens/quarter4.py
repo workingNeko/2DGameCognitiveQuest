@@ -1407,14 +1407,15 @@ class Quarter4:
                 except Exception as e:
                     print(f"[WARN] Error recording Quarter 4 completion: {e}")
 
+            if completed:
+                self.completed = True
             self.main_menu.current_screen = "stage_select"
             self.main_menu.quarter4 = None
+            self.cleanup()
             # Recreate the stage select to reset position
             from .stageselect import StageSelect
             self.main_menu.stage_select = StageSelect(self.screen, self.main_menu)
             print("[HOME] Returning to stage select")
-            if completed:
-                self.completed = True
             
             # Save student progress immediately to record quarter completion
             from db.save_system import save_student_progress
@@ -1424,6 +1425,8 @@ class Quarter4:
 
     def restart_level(self):
         """Restarts the current Quarter 4 level."""
+        self.main_menu.quarter4 = None
+        self.cleanup()
         from screens.quarter4 import Quarter4
         self.main_menu.quarter4 = Quarter4(self.screen, self.main_menu, self.map_name)
 
@@ -2605,19 +2608,34 @@ class Quarter4:
         bob = math.sin(self.frame_counter * 0.12) * (3 * ZOOM)
         draw_y = ry + bob
 
-        # 1. Trailing wake particles
+        # 1. Trailing wake particles (reusing pre-allocated scratch surface cache)
+        wake_cache = getattr(self, '_wake_surf_cache', None)
+        if wake_cache is None:
+            wake_cache = {}
+            self._wake_surf_cache = wake_cache
         for p in getattr(self, 'raft_wake_particles', []):
             px = (p['x'] - self.camera_x) * ZOOM
             py = (p['y'] - self.camera_y) * ZOOM
             if 0 <= px <= self.width and 0 <= py <= self.height:
                 alpha = int(200 * p['life'])
                 pr = max(1, int(p['radius'] * ZOOM))
-                wake_s = pygame.Surface((pr * 2, pr * 2), pygame.SRCALPHA)
-                pygame.draw.circle(wake_s, (255, 255, 255, alpha), (pr, pr), pr)
-                pygame.draw.circle(wake_s, (147, 197, 253, alpha // 2), (pr, pr), pr + 1, 1)
-                self.screen.blit(wake_s, (px - pr, py - pr))
+                w_dim = pr * 2 + 4
+                wake_s = wake_cache.get(w_dim)
+                if wake_s is None:
+                    wake_s = pygame.Surface((w_dim, w_dim), pygame.SRCALPHA)
+                    if pygame.display.get_surface() is not None:
+                        try:
+                            wake_s = wake_s.convert_alpha()
+                        except Exception:
+                            pass
+                    wake_cache[w_dim] = wake_s
+                else:
+                    wake_s.fill((0, 0, 0, 0))
+                pygame.draw.circle(wake_s, (255, 255, 255, alpha), (pr + 2, pr + 2), pr)
+                pygame.draw.circle(wake_s, (147, 197, 253, alpha // 2), (pr + 2, pr + 2), pr + 1, 1)
+                self.screen.blit(wake_s, (px - pr - 2, py - pr - 2))
 
-        # 2. Water ripples around the hull
+        # 2. Water ripples around the hull (reusing pre-allocated max-bounds surface)
         hull_w = int(38 * ZOOM)
         hull_h = int(24 * ZOOM)
         cx = rx + (TILE_SIZE * ZOOM) // 2
@@ -2625,9 +2643,23 @@ class Quarter4:
 
         ripple_w = hull_w + int((math.sin(self.frame_counter * 0.08) + 1) * 4 * ZOOM)
         ripple_h = hull_h + int((math.sin(self.frame_counter * 0.08) + 1) * 2 * ZOOM)
-        ripple_surf = pygame.Surface((ripple_w + 4, ripple_h + 4), pygame.SRCALPHA)
-        pygame.draw.ellipse(ripple_surf, (255, 255, 255, 60), (2, 2, ripple_w, ripple_h), 2)
-        self.screen.blit(ripple_surf, (cx - ripple_w // 2, cy - ripple_h // 2))
+        max_rw = hull_w + int(10 * ZOOM) + 6
+        max_rh = hull_h + int(6 * ZOOM) + 6
+        ripple_surf = getattr(self, '_raft_ripple_surf', None)
+        if ripple_surf is None or ripple_surf.get_size() != (max_rw, max_rh):
+            ripple_surf = pygame.Surface((max_rw, max_rh), pygame.SRCALPHA)
+            if pygame.display.get_surface() is not None:
+                try:
+                    ripple_surf = ripple_surf.convert_alpha()
+                except Exception:
+                    pass
+            self._raft_ripple_surf = ripple_surf
+        else:
+            ripple_surf.fill((0, 0, 0, 0))
+        rx_off = (max_rw - ripple_w) // 2
+        ry_off = (max_rh - ripple_h) // 2
+        pygame.draw.ellipse(ripple_surf, (255, 255, 255, 60), (rx_off, ry_off, ripple_w, ripple_h), 2)
+        self.screen.blit(ripple_surf, (cx - max_rw // 2, cy - max_rh // 2))
 
         # 3. Raft Wooden Hull
         raft_rect = pygame.Rect(cx - hull_w // 2, cy - hull_h // 2, hull_w, hull_h)
@@ -5149,4 +5181,14 @@ class Quarter4:
     # CLEANUP
     # ============================================================
     def cleanup(self):
+        self._bg_map_surface = None
+        self._fg_obstacles_surface = None
+        if hasattr(self, '_scaled_tile_cache'):
+            self._scaled_tile_cache.clear()
+        if hasattr(self, '_scaled_sprite_cache'):
+            self._scaled_sprite_cache.clear()
+        if hasattr(self, '_wake_surf_cache'):
+            self._wake_surf_cache.clear()
+        from core.font_manager import trim_transient_font_caches
+        trim_transient_font_caches()
         cv2.destroyAllWindows()

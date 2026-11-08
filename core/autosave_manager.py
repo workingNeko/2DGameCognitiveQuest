@@ -116,7 +116,7 @@ class AutosaveManager:
                 )
         return None
 
-    def trigger_autosave(self, reason: str = "periodic", force: bool = False) -> bool:
+    def trigger_autosave(self, reason: str = "periodic", force: bool = False, async_flush: bool = False) -> bool:
         """Triggers an atomic save of current student progress."""
         if not self.main_menu:
             return False
@@ -141,7 +141,7 @@ class AutosaveManager:
 
         try:
             from db.save_system import save_student_progress
-            ok = save_student_progress(self.main_menu)
+            ok = save_student_progress(self.main_menu, async_flush=async_flush)
             if ok:
                 self.last_save_time = now
                 self.last_state_signature = self._compute_state_signature()
@@ -169,7 +169,7 @@ class AutosaveManager:
                 curr_sig = self._compute_state_signature()
                 # Only write to disk if state changed (moved, answered, progressed) or 60s max elapsed
                 if curr_sig != self.last_state_signature or (now - self.last_save_time >= self.interval_seconds * 2):
-                    self.trigger_autosave(reason="periodic_timer")
+                    self.trigger_autosave(reason="periodic_timer", async_flush=True)
 
     def draw(self, surface: pygame.Surface) -> None:
         """Renders the subtle autosave indicator badge at top-right with smooth fade."""

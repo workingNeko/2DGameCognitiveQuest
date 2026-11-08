@@ -2089,7 +2089,18 @@ class Quarter2:
                     center_px = (int(screen_x + scaled_width / 2), int(screen_y + scaled_height / 2))
                     pulse = (math.sin(frame_counter * 0.15) + 1) * 0.5
                     rad = int((scaled_width / 2) + pulse * 6 * zoom)
-                    aura_surf = pygame.Surface((rad * 2 + 10, rad * 2 + 10), pygame.SRCALPHA)
+                    aura_dim = rad * 2 + 10
+                    aura_surf = getattr(self, '_aura_surf', None)
+                    if aura_surf is None or aura_surf.get_size() != (aura_dim, aura_dim):
+                        aura_surf = pygame.Surface((aura_dim, aura_dim), pygame.SRCALPHA)
+                        if pygame.display.get_surface() is not None:
+                            try:
+                                aura_surf = aura_surf.convert_alpha()
+                            except Exception:
+                                pass
+                        self._aura_surf = aura_surf
+                    else:
+                        aura_surf.fill((0, 0, 0, 0))
                     pygame.draw.circle(aura_surf, (255, 215, 0, int(80 + 70 * pulse)), (rad + 5, rad + 5), rad)
                     pygame.draw.circle(aura_surf, (74, 222, 128, int(100 + 80 * (1 - pulse))), (rad + 5, rad + 5), int(rad * 0.75))
                     screen.blit(aura_surf, (center_px[0] - rad - 5, center_px[1] - rad - 5))
@@ -2108,16 +2119,33 @@ class Quarter2:
                     bx = center_px[0] - bw / 2
                     by = screen_y - bh - 6 * zoom + bob
 
-                    b_bg = pygame.Surface((bw, bh), pygame.SRCALPHA)
-                    b_bg.fill((15, 23, 42, 220))
+                    b_bg = getattr(self, '_banner_bg_surf', None)
+                    if b_bg is None or b_bg.get_size() != (bw, bh):
+                        b_bg = pygame.Surface((bw, bh), pygame.SRCALPHA)
+                        b_bg.fill((15, 23, 42, 220))
+                        if pygame.display.get_surface() is not None:
+                            try:
+                                b_bg = b_bg.convert_alpha()
+                            except Exception:
+                                pass
+                        self._banner_bg_surf = b_bg
                     screen.blit(b_bg, (bx, by))
                     pygame.draw.rect(screen, (255, 215, 0), (bx, by, bw, bh), 1, border_radius=4)
                     screen.blit(banner_surf, (bx + 6, by + 2))
                 else:
-                    # Stylized Dormant/Locked Gate Arch
-                    gate_surf = pygame.Surface((scaled_width, scaled_height), pygame.SRCALPHA)
-                    gate_surf.fill((35, 40, 50, 190))
-                    pygame.draw.rect(gate_surf, (150, 130, 100), (0, 0, scaled_width, scaled_height), 2, border_radius=4)
+                    # Stylized Dormant/Locked Gate Arch (cached once per size)
+                    gate_size = (int(scaled_width), int(scaled_height))
+                    gate_surf = getattr(self, '_locked_gate_surf', None)
+                    if gate_surf is None or gate_surf.get_size() != gate_size:
+                        gate_surf = pygame.Surface(gate_size, pygame.SRCALPHA)
+                        gate_surf.fill((35, 40, 50, 190))
+                        pygame.draw.rect(gate_surf, (150, 130, 100), (0, 0, gate_size[0], gate_size[1]), 2, border_radius=4)
+                        if pygame.display.get_surface() is not None:
+                            try:
+                                gate_surf = gate_surf.convert_alpha()
+                            except Exception:
+                                pass
+                        self._locked_gate_surf = gate_surf
                     screen.blit(gate_surf, (screen_x, screen_y))
 
                     # Small lock indicator
@@ -2344,14 +2372,15 @@ class Quarter2:
                 except Exception as e:
                     print(f"[WARN] Error recording Quarter 2 completion: {e}")
 
+            if completed:
+                self.completed = True
             self.main_menu.current_screen = "stage_select"
             self.main_menu.quarter2 = None
+            self.cleanup()
             # Recreate the stage select to reset position
             from .stageselect import StageSelect
             self.main_menu.stage_select = StageSelect(self.screen, self.main_menu)
             print("[HOME] Returning to stage select")
-            if completed:
-                self.completed = True
             
             # Save student progress immediately to record quarter completion
             from db.save_system import save_student_progress
@@ -2361,6 +2390,8 @@ class Quarter2:
 
     def restart_level(self):
         """Restarts the current Quarter 2 level."""
+        self.main_menu.quarter2 = None
+        self.cleanup()
         from screens.quarter2 import Quarter2
         self.main_menu.quarter2 = Quarter2(self.screen, self.main_menu, self.map_name)
 
@@ -5268,4 +5299,12 @@ class Quarter2:
     # CLEANUP
     # ============================================================
     def cleanup(self):
+        self._bg_map_surface = None
+        self._fg_obstacles_surface = None
+        if hasattr(self, '_scaled_tile_cache'):
+            self._scaled_tile_cache.clear()
+        if hasattr(self, '_scaled_sprite_cache'):
+            self._scaled_sprite_cache.clear()
+        from core.font_manager import trim_transient_font_caches
+        trim_transient_font_caches()
         cv2.destroyAllWindows()

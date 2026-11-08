@@ -38,7 +38,13 @@ class Button:
                 if os.path.exists(resolved_path):
                     self.image = pygame.image.load(resolved_path).convert_alpha()
                     # Scale image to height of button (square icon)
-                    self.image = pygame.transform.scale(self.image, (self.rect.height, self.rect.height))
+                    scaled_img = pygame.transform.scale(self.image, (self.rect.height, self.rect.height))
+                    if pygame.display.get_surface() is not None:
+                        try:
+                            scaled_img = scaled_img.convert_alpha()
+                        except Exception:
+                            pass
+                    self.image = scaled_img
                 else:
                     print(f"[WARN] Button image not found at '{image_path}', falling back gracefully.")
                     self.image = None

@@ -598,6 +598,12 @@ class MainMenu:
         small_bgr = np.empty((240, 320, 3), dtype=np.uint8)
         flipped_small = np.empty((240, 320, 3), dtype=np.uint8)
         rgb_buf = np.empty((240, 320, 3), dtype=np.uint8)
+        cam_pw, cam_ph = getattr(self, 'camera_size', (240, 180))
+        preview_bufs = (
+            np.empty((cam_ph, cam_pw, 3), dtype=np.uint8),
+            np.empty((cam_ph, cam_pw, 3), dtype=np.uint8),
+        )
+        preview_idx = 0
 
         while self.camera_running and self.cap is not None and self.cap.isOpened():
             try:
@@ -633,11 +639,19 @@ class MainMenu:
                     cv2.flip(small_bgr, 1, dst=flipped_small)
 
                 cv2.cvtColor(flipped_small, cv2.COLOR_BGR2RGB, dst=rgb_buf)
-                preview = (
-                    cv2.resize(flipped_small, self.camera_size, interpolation=cv2.INTER_NEAREST)
-                    if (getattr(self, 'show_camera_overlay', False) or getattr(self, 'current_screen', '') == 'tutorial')
-                    else None
-                )
+                if getattr(self, 'show_camera_overlay', False) or getattr(self, 'current_screen', '') == 'tutorial':
+                    cur_pw, cur_ph = getattr(self, 'camera_size', (cam_pw, cam_ph))
+                    if (cur_pw, cur_ph) != (cam_pw, cam_ph):
+                        cam_pw, cam_ph = cur_pw, cur_ph
+                        preview_bufs = (
+                            np.empty((cam_ph, cam_pw, 3), dtype=np.uint8),
+                            np.empty((cam_ph, cam_pw, 3), dtype=np.uint8),
+                        )
+                    preview = preview_bufs[preview_idx]
+                    cv2.resize(flipped_small, (cam_pw, cam_ph), dst=preview, interpolation=cv2.INTER_NEAREST)
+                    preview_idx ^= 1
+                else:
+                    preview = None
 
                 # MediaPipe inference with instant detection & continuous temporal tracking
                 coords = None
@@ -743,9 +757,11 @@ class MainMenu:
                 palm_x = (wrist[0] + idx_mcp[0] + mid_mcp[0] + rng_mcp[0] + pky_mcp[0]) / 5.0
                 palm_y = (wrist[1] + idx_mcp[1] + mid_mcp[1] + rng_mcp[1] + pky_mcp[1]) / 5.0
 
-                # Map palm position to screen coordinates with increased sensitivity bounds
-                target_x = float(np.interp(palm_x, [self.cam_x_min, self.cam_x_max], [0, self.w]))
-                target_y = float(np.interp(palm_y, [self.cam_y_min, self.cam_y_max], [0, self.h]))
+                # Map palm position to screen coordinates with zero-allocation scalar clamping
+                span_x = max(1e-6, self.cam_x_max - self.cam_x_min)
+                span_y = max(1e-6, self.cam_y_max - self.cam_y_min)
+                target_x = max(0.0, min(float(self.w), ((palm_x - self.cam_x_min) / span_x) * self.w))
+                target_y = max(0.0, min(float(self.h), ((palm_y - self.cam_y_min) / span_y) * self.h))
 
                 # Subtle sensor deadband at rest: absorbs webcam pixel noise & sensor shimmer
                 prev_raw_x = getattr(self, '_last_raw_x', target_x)

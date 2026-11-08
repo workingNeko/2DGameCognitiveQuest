@@ -1808,16 +1808,17 @@ class Quarter3:
                 except Exception as e:
                     print(f"[WARN] Error recording Quarter 3 completion: {e}")
 
+            if completed:
+                self.completed = True
             self.main_menu.current_screen = "stage_select"
             self.main_menu.quarter3 = None
+            self.cleanup()
             try:
                 from screens.stageselect import StageSelect
             except ImportError:
                 from .stageselect import StageSelect
             self.main_menu.stage_select = StageSelect(self.screen, self.main_menu)
             print("[HOME] Returning to stage select")
-            if completed:
-                self.completed = True
             
             # Save student progress immediately to record quarter completion
             from db.save_system import save_student_progress
@@ -1827,6 +1828,8 @@ class Quarter3:
 
     def restart_level(self):
         """Restarts the current Quarter 3 level."""
+        self.main_menu.quarter3 = None
+        self.cleanup()
         from screens.quarter3 import Quarter3
         self.main_menu.quarter3 = Quarter3(self.screen, self.main_menu, self.map_name)
 
@@ -4507,11 +4510,21 @@ class Quarter3:
             hint_msg=self.wrong_feedback_msg
         )
 
+    def _get_dim_overlay(self):
+        ov = getattr(self, '_dim_overlay', None)
+        if ov is None or ov.get_size() != (self.width, self.height):
+            ov = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
+            ov.fill((10, 15, 29, 170))
+            if pygame.display.get_surface() is not None:
+                try:
+                    ov = ov.convert_alpha()
+                except Exception:
+                    pass
+            self._dim_overlay = ov
+        return ov
+
     def draw_wrong_dialog(self):
-        if not getattr(self, '_dim_overlay', None):
-            self._dim_overlay = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
-            self._dim_overlay.fill((10, 15, 29, 170))
-        self.screen.blit(self._dim_overlay, (0, 0))
+        self.screen.blit(self._get_dim_overlay(), (0, 0))
 
         box_w, box_h = 760, 360
         box_x = (self.width - box_w) // 2
@@ -4589,10 +4602,7 @@ class Quarter3:
         self.screen.blit(c_surf, c_rect)
 
     def draw_out_of_tries_dialog(self):
-        if not getattr(self, '_dim_overlay', None):
-            self._dim_overlay = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
-            self._dim_overlay.fill((10, 15, 29, 170))
-        self.screen.blit(self._dim_overlay, (0, 0))
+        self.screen.blit(self._get_dim_overlay(), (0, 0))
 
         box_w, box_h = 740, 340
         box_x = (self.width - box_w) // 2
@@ -4649,10 +4659,7 @@ class Quarter3:
         self.screen.blit(c_surf, c_surf.get_rect(center=btn_rect.center))
 
     def draw_correct_dialog(self):
-        if not getattr(self, '_dim_overlay', None):
-            self._dim_overlay = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
-            self._dim_overlay.fill((10, 15, 29, 170))
-        self.screen.blit(self._dim_overlay, (0, 0))
+        self.screen.blit(self._get_dim_overlay(), (0, 0))
 
         box_w, box_h = 740, 330
         box_x = (self.width - box_w) // 2
@@ -6896,4 +6903,12 @@ class Quarter3:
     # CLEANUP
     # ============================================================
     def cleanup(self):
+        self._bg_map_surface = None
+        self._fg_obstacles_surface = None
+        if hasattr(self, '_scaled_tile_cache'):
+            self._scaled_tile_cache.clear()
+        if hasattr(self, '_scaled_sprite_cache'):
+            self._scaled_sprite_cache.clear()
+        from core.font_manager import trim_transient_font_caches
+        trim_transient_font_caches()
         cv2.destroyAllWindows()

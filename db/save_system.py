@@ -1,7 +1,14 @@
 import os
 import json
 import time
+import copy
+import threading
 import pygame
+
+_IO_SAVE_LOCK = threading.RLock()
+_ASYNC_QUEUE_LOCK = threading.Lock()
+_PENDING_ASYNC_SAVES = {}
+_ASYNC_WORKER_RUNNING = False
 
 def cleanup_orphaned_tmp_saves():
     """Cleans up stray temporary files left over from ungraceful power cuts."""
@@ -27,64 +34,96 @@ cleanup_orphaned_tmp_saves()
 def atomic_save_json(path, data):
     """
     Safely writes JSON data atomically:
-    Writes to a temporary file first and replaces the target file,
-    preventing corrupt/empty (0-byte) save files during crashes or interruptions.
+    Serializes once to compact UTF-8 bytes, writes to a temporary file first and replaces
+    the target file, preventing corrupt/empty (0-byte) save files during crashes or interruptions.
     Maintains a verified shadow backup (.bak) for recovery against power failures.
-    Includes retry and fallback for Windows file lock contention ([WinError 5]).
     """
     directory = os.path.dirname(path)
     if directory:
         os.makedirs(directory, exist_ok=True)
-    tmp_path = f"{path}.tmp_{os.getpid()}_{int(time.time()*1000)}"
-    try:
-        with open(tmp_path, "w", encoding="utf-8") as f:
-            json.dump(data, f, indent=4)
-            f.flush()
-            os.fsync(f.fileno())
-            
-        # Attempt atomic replace with retries for Windows file locking
-        saved_ok = False
-        for attempt in range(5):
-            try:
-                os.replace(tmp_path, path)
-                saved_ok = True
-                break
-            except (PermissionError, OSError) as err:
-                if attempt < 4:
-                    time.sleep(0.05 * (attempt + 1))
-                else:
-                    # Fallback to direct write if os.replace is repeatedly locked
-                    with open(path, "w", encoding="utf-8") as target_f:
-                        json.dump(data, target_f, indent=4)
-                        target_f.flush()
-                        os.fsync(target_f.fileno())
-                    if os.path.exists(tmp_path):
-                        try:
-                            os.remove(tmp_path)
-                        except Exception:
-                            pass
+    payload_bytes = json.dumps(data, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+    with _IO_SAVE_LOCK:
+        tmp_path = f"{path}.tmp_{os.getpid()}_{threading.get_ident()}_{int(time.time()*1000)}"
+        try:
+            with open(tmp_path, "wb") as f:
+                f.write(payload_bytes)
+                f.flush()
+                os.fsync(f.fileno())
+
+            # Attempt atomic replace with retries for Windows file locking
+            saved_ok = False
+            for attempt in range(5):
+                try:
+                    os.replace(tmp_path, path)
                     saved_ok = True
                     break
+                except (PermissionError, OSError):
+                    if attempt < 4:
+                        time.sleep(0.03 * (attempt + 1))
+                    else:
+                        # Fallback to direct write if os.replace is repeatedly locked
+                        with open(path, "wb") as target_f:
+                            target_f.write(payload_bytes)
+                            target_f.flush()
+                            os.fsync(target_f.fileno())
+                        if os.path.exists(tmp_path):
+                            try:
+                                os.remove(tmp_path)
+                            except Exception:
+                                pass
+                        saved_ok = True
+                        break
 
-        if saved_ok:
-            # Maintain a verified shadow backup file (.bak) for power-interruption recovery
+            if saved_ok:
+                # Maintain a verified shadow backup file (.bak) for power-interruption recovery
+                try:
+                    bak_path = f"{path}.bak"
+                    with open(bak_path, "wb") as bf:
+                        bf.write(payload_bytes)
+                        bf.flush()
+                        os.fsync(bf.fileno())
+                except Exception:
+                    pass
+                invalidate_save_cache()
+                return True
+        except Exception as e:
+            if os.path.exists(tmp_path):
+                try:
+                    os.remove(tmp_path)
+                except Exception:
+                    pass
+            raise e
+
+
+def _async_save_worker():
+    global _ASYNC_WORKER_RUNNING
+    while True:
+        with _ASYNC_QUEUE_LOCK:
+            if not _PENDING_ASYNC_SAVES:
+                _ASYNC_WORKER_RUNNING = False
+                return
+            path, payload = next(iter(_PENDING_ASYNC_SAVES.items()))
+            del _PENDING_ASYNC_SAVES[path]
+        try:
+            atomic_save_json(path, payload)
+        except Exception as e:
+            print(f"[WARN] Background autosave write failed for {path}: {e}")
+        time.sleep(0.002)
+
+
+def flush_pending_async_saves():
+    """Flushes any queued asynchronous autosaves synchronously (called on app exit)."""
+    while True:
+        with _ASYNC_QUEUE_LOCK:
+            if not _PENDING_ASYNC_SAVES:
+                break
+            pending_items = list(_PENDING_ASYNC_SAVES.items())
+            _PENDING_ASYNC_SAVES.clear()
+        for path, payload in pending_items:
             try:
-                bak_path = f"{path}.bak"
-                with open(bak_path, "w", encoding="utf-8") as bf:
-                    json.dump(data, bf, indent=4)
-                    bf.flush()
-                    os.fsync(bf.fileno())
-            except Exception:
-                pass
-            invalidate_save_cache()
-            return True
-    except Exception as e:
-        if os.path.exists(tmp_path):
-            try:
-                os.remove(tmp_path)
-            except Exception:
-                pass
-        raise e
+                atomic_save_json(path, payload)
+            except Exception as e:
+                print(f"[WARN] Flush pending save failed for {path}: {e}")
 
 def get_save_path(student_id):
     os.makedirs("db/saves", exist_ok=True)
@@ -165,7 +204,13 @@ def delete_student_progress(student_id, student_db_id=None, main_menu=None):
             if sel.get("student_id"): target_ids.add(str(sel.get("student_id")))
             if sel.get("studentId"): target_ids.add(str(sel.get("studentId")))
 
+    with _ASYNC_QUEUE_LOCK:
+        for tid in target_ids:
+            _PENDING_ASYNC_SAVES.pop(get_save_path(tid), None)
+
     saves_dir = "db/saves"
+    with _IO_SAVE_LOCK:
+        pass
     if os.path.exists(saves_dir):
         for fname in os.listdir(saves_dir):
             if (fname.endswith(".json") or fname.endswith(".bak")) and fname != "audio_settings.json":
@@ -364,7 +409,7 @@ def is_game_completed(student_id):
     req = ["quarter1", "quarter2", "quarter3", "quarter4"]
     return all(completed.get(q, {}).get("completed", False) for q in req)
 
-def save_student_progress(main_menu):
+def save_student_progress(main_menu, async_flush=False):
     if not main_menu or not getattr(main_menu, 'selected_student', None):
         return False
     
@@ -375,7 +420,7 @@ def save_student_progress(main_menu):
         return False
         
     existing_save = load_student_progress(student_id) or {}
-    completed_quarters = existing_save.get("completed_quarters", {})
+    completed_quarters = copy.deepcopy(existing_save.get("completed_quarters", {}))
 
     # Sync cumulative score and progress percentage
     cum_score = sum(d.get("score", 0) for d in completed_quarters.values() if isinstance(d, dict))
@@ -388,7 +433,7 @@ def save_student_progress(main_menu):
 
     save_data = {
         "student_id": str(student_id),
-        "selected_student": main_menu.selected_student,
+        "selected_student": copy.deepcopy(main_menu.selected_student),
         "current_screen": main_menu.current_screen,
         "tutorial_completed": getattr(main_menu, 'tutorial_completed', True if check_save_exists(student_id) else False),
         "completed_quarters": completed_quarters,
@@ -411,7 +456,7 @@ def save_student_progress(main_menu):
             "barriers_lifted": getattr(ss, 'barriers_lifted', False)
         }
     elif hasattr(main_menu, 'last_stage_select_data') and main_menu.last_stage_select_data:
-        ss_data = main_menu.last_stage_select_data
+        ss_data = copy.deepcopy(main_menu.last_stage_select_data)
         
     if ss_data:
         save_data["stage_select"] = ss_data
@@ -434,15 +479,33 @@ def save_student_progress(main_menu):
     if q_data:
         save_data["quarter_data"] = q_data
         if q_data.get("completed"):
+            prev_q = save_data["completed_quarters"].get(q_data["quarter_name"], {})
+            best_score = max(prev_q.get("score", 0), q_data.get("score", prev_q.get("score", 100)))
+            best_pct = max(prev_q.get("percentage", 0.0), q_data.get("percentage", prev_q.get("percentage", 100.0)))
             save_data["completed_quarters"][q_data["quarter_name"]] = {
                 "completed": True,
-                "score": q_data.get("score", 100),
-                "percentage": q_data.get("percentage", 100.0),
+                "score": best_score,
+                "percentage": best_pct,
                 "timestamp": time.time()
             }
         
     path = get_save_path(student_id)
+    if async_flush:
+        global _ASYNC_WORKER_RUNNING
+        sid_str = str(student_id)
+        _SAVE_CACHE[sid_str] = {"mtime": -1.0, "last_check": time.time(), "data": save_data}
+        with _ASYNC_QUEUE_LOCK:
+            _PENDING_ASYNC_SAVES[path] = save_data
+            if not _ASYNC_WORKER_RUNNING:
+                _ASYNC_WORKER_RUNNING = True
+                threading.Thread(target=_async_save_worker, daemon=True).start()
+        if main_menu and hasattr(main_menu, 'autosave_manager') and main_menu.autosave_manager:
+            main_menu.autosave_manager.notify_saved()
+        return True
+
     try:
+        with _ASYNC_QUEUE_LOCK:
+            _PENDING_ASYNC_SAVES.pop(path, None)
         atomic_save_json(path, save_data)
         print(f"[SAVE] Student progress saved successfully to: {path}")
         # Notify autosave manager for on-screen visual confirmation badge
@@ -514,6 +577,10 @@ def load_student_progress(student_id):
     if not student_id:
         return None
     path = get_save_path(student_id)
+    with _ASYNC_QUEUE_LOCK:
+        pending = _PENDING_ASYNC_SAVES.get(path)
+    if pending is not None:
+        return copy.deepcopy(pending)
     bak_path = f"{path}.bak"
     if not os.path.exists(path) and not os.path.exists(bak_path):
         _SAVE_CACHE.pop(str(student_id), None)

@@ -1654,14 +1654,15 @@ class Quarter1:
                 print(f"[WARN] Error recording Quarter 1 completion: {e}")
 
         if self.main_menu:
+            if completed:
+                self.completed = True
             self.main_menu.current_screen = "stage_select"
             self.main_menu.quarter1 = None
+            self.cleanup()
             # Recreate the stage select to reset position
             from .stageselect import StageSelect
             self.main_menu.stage_select = StageSelect(self.screen, self.main_menu)
             print("[HOME] Returning to stage select")
-            if completed:
-                self.completed = True
             
             # Save student progress immediately to record quarter completion
             from db.save_system import save_student_progress
@@ -1671,6 +1672,8 @@ class Quarter1:
 
     def restart_level(self):
         """Restarts the current Quarter 1 level."""
+        self.main_menu.quarter1 = None
+        self.cleanup()
         from screens.quarter1 import Quarter1
         self.main_menu.quarter1 = Quarter1(self.screen, self.main_menu, self.map_name)
 
@@ -3720,10 +3723,16 @@ class Quarter1:
         script_data = get_station_script("quarter1", self.map_name, self.quiz_station_index, student_name)
         speaker_name = script_data["name"]
 
-        if not getattr(self, '_out_of_tries_dim_overlay', None):
-            self._out_of_tries_dim_overlay = pygame.Surface((self.width, self.height))
-            self._out_of_tries_dim_overlay.fill((0, 0, 0))
-            self._out_of_tries_dim_overlay.set_alpha(160)
+        if not getattr(self, '_out_of_tries_dim_overlay', None) or self._out_of_tries_dim_overlay.get_size() != (self.width, self.height):
+            ov = pygame.Surface((self.width, self.height))
+            ov.fill((0, 0, 0))
+            if pygame.display.get_surface() is not None:
+                try:
+                    ov = ov.convert()
+                except Exception:
+                    pass
+            ov.set_alpha(160)
+            self._out_of_tries_dim_overlay = ov
         self.screen.blit(self._out_of_tries_dim_overlay, (0, 0))
 
         box_w, box_h = 760, 350
@@ -4323,10 +4332,17 @@ class Quarter1:
             box_x = (self.width - box_w) // 2
             box_y = self.height - box_h - 20
             
-            # Translucent slate blue background (alpha = 190)
-            bg_surf = pygame.Surface((box_w, box_h), pygame.SRCALPHA)
-            bg_surf.fill((15, 23, 42, 190))
-            self.screen.blit(bg_surf, (box_x, box_y))
+            # Translucent slate blue background (alpha = 190, cached once)
+            if getattr(self, '_objectives_bg_surf', None) is None or self._objectives_bg_surf.get_size() != (box_w, box_h):
+                bg_surf = pygame.Surface((box_w, box_h), pygame.SRCALPHA)
+                bg_surf.fill((15, 23, 42, 190))
+                if pygame.display.get_surface() is not None:
+                    try:
+                        bg_surf = bg_surf.convert_alpha()
+                    except Exception:
+                        pass
+                self._objectives_bg_surf = bg_surf
+            self.screen.blit(self._objectives_bg_surf, (box_x, box_y))
             
             # Border: Gold when locked, Green when complete
             border_color = (218, 165, 32) if self.quiz_state < 6 else (34, 197, 94)
@@ -4901,4 +4917,12 @@ class Quarter1:
     # CLEANUP
     # ============================================================
     def cleanup(self):
+        self._bg_map_surface = None
+        self._fg_obstacles_surface = None
+        if hasattr(self, '_scaled_tile_cache'):
+            self._scaled_tile_cache.clear()
+        if hasattr(self, '_scaled_sprite_cache'):
+            self._scaled_sprite_cache.clear()
+        from core.font_manager import trim_transient_font_caches
+        trim_transient_font_caches()
         cv2.destroyAllWindows()

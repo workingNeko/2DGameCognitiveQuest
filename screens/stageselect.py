@@ -1574,10 +1574,16 @@ class StageSelect:
         from db.save_system import save_student_progress
         save_student_progress(self.main_menu)
 
+        # Free hub map surfaces BEFORE constructing target Quarter to prevent 2x peak RAM spike on 4GB APUs
+        loaded_screen = self.portal_loaded_screen
+        self.portal_loaded_screen = None
+        self.main_menu.stage_select = None
+        self.cleanup()
+
         # Use pre-loaded instance from background thread or fallback to direct load
         if qid == "quarter1":
-            if self.portal_loaded_screen:
-                self.main_menu.quarter1 = self.portal_loaded_screen
+            if loaded_screen:
+                self.main_menu.quarter1 = loaded_screen
             else:
                 map_name = random.choice(["map1.txt", "map2.txt", "map3.txt"])
                 print(f"[STAGE] Entering Quarter 1 - {map_name}")
@@ -1592,8 +1598,8 @@ class StageSelect:
                 )
             self.main_menu.current_screen = "quarter1"
         elif qid == "quarter2":
-            if self.portal_loaded_screen:
-                self.main_menu.quarter2 = self.portal_loaded_screen
+            if loaded_screen:
+                self.main_menu.quarter2 = loaded_screen
             else:
                 map_name = random.choice(["map4.txt", "map5.txt", "map6.txt"])
                 print(f"[STAGE] Entering Quarter 2 - {map_name}")
@@ -1608,8 +1614,8 @@ class StageSelect:
                 )
             self.main_menu.current_screen = "quarter2"
         elif qid == "quarter3":
-            if self.portal_loaded_screen:
-                self.main_menu.quarter3 = self.portal_loaded_screen
+            if loaded_screen:
+                self.main_menu.quarter3 = loaded_screen
             else:
                 map_name = random.choice(["map7.txt", "map8.txt", "map9.txt"])
                 print(f"[STAGE] Entering Quarter 3 - {map_name}")
@@ -1624,8 +1630,8 @@ class StageSelect:
                 )
             self.main_menu.current_screen = "quarter3"
         elif qid == "quarter4":
-            if self.portal_loaded_screen:
-                self.main_menu.quarter4 = self.portal_loaded_screen
+            if loaded_screen:
+                self.main_menu.quarter4 = loaded_screen
             else:
                 map_name = random.choice(["map10.txt", "map11.txt", "map12.txt"])
                 print(f"[STAGE] Entering Quarter 4 - {map_name}")
@@ -1639,9 +1645,6 @@ class StageSelect:
                     self.main_menu.current_gesture
                 )
             self.main_menu.current_screen = "quarter4"
-
-        self.portal_loaded_screen = None
-        self.main_menu.stage_select = None
 
     def _init_portal_transition_fx(self, qid):
         """Initialize theme palettes, pre-composited LOADING text, pre-rendered HUD, and star particles."""
@@ -1993,6 +1996,7 @@ class StageSelect:
             self.main_menu.current_screen = "menu"
             save_student_progress(self.main_menu)
             self.main_menu.stage_select = None
+            self.cleanup()
             if hasattr(self.main_menu, 'setup_buttons'):
                 self.main_menu.setup_buttons()
         return "back"
@@ -3300,6 +3304,11 @@ class StageSelect:
             scaled_image = self._scaled_tile_cache.get(image)
             if scaled_image is None:
                 scaled_image = pygame.transform.scale(image, (scaled_size, scaled_size))
+                if pygame.display.get_surface() is not None:
+                    try:
+                        scaled_image = scaled_image.convert_alpha()
+                    except Exception:
+                        pass
                 self._scaled_tile_cache[image] = scaled_image
             self.screen.blit(scaled_image, (screen_x, screen_y))
 
@@ -3321,6 +3330,11 @@ class StageSelect:
             scaled_sprite = self._scaled_sprite_cache.get(sprite)
             if scaled_sprite is None:
                 scaled_sprite = pygame.transform.scale(sprite, (scaled_size, scaled_size))
+                if pygame.display.get_surface() is not None:
+                    try:
+                        scaled_sprite = scaled_sprite.convert_alpha()
+                    except Exception:
+                        pass
                 self._scaled_sprite_cache[sprite] = scaled_sprite
             self.screen.blit(scaled_sprite, (screen_x, screen_y))
 
@@ -3337,6 +3351,11 @@ class StageSelect:
             scaled_sprite = self._scaled_sprite_cache.get(sprite)
             if scaled_sprite is None:
                 scaled_sprite = pygame.transform.scale(sprite, (scaled_size, scaled_size))
+                if pygame.display.get_surface() is not None:
+                    try:
+                        scaled_sprite = scaled_sprite.convert_alpha()
+                    except Exception:
+                        pass
                 self._scaled_sprite_cache[sprite] = scaled_sprite
             self.screen.blit(scaled_sprite, (screen_x, screen_y))
 
@@ -3358,6 +3377,11 @@ class StageSelect:
             scaled_sprite = self._scaled_sprite_cache.get(sprite)
             if scaled_sprite is None:
                 scaled_sprite = pygame.transform.scale(sprite, (scaled_size, scaled_size))
+                if pygame.display.get_surface() is not None:
+                    try:
+                        scaled_sprite = scaled_sprite.convert_alpha()
+                    except Exception:
+                        pass
                 self._scaled_sprite_cache[sprite] = scaled_sprite
             self.screen.blit(scaled_sprite, (screen_x, screen_y))
 
@@ -3807,6 +3831,11 @@ class StageSelect:
                 pygame.draw.rect(b_surf, border_color, (0, 0, bw, bh), 2, border_radius=10)
                 b_surf.blit(sh_surf, (25, 11))
                 b_surf.blit(msg_surf, (24, 10))
+                if pygame.display.get_surface() is not None:
+                    try:
+                        b_surf = b_surf.convert_alpha()
+                    except Exception:
+                        pass
                 self._cached_banner_surf = b_surf
 
             bw, bh = self._cached_banner_surf.get_size()
@@ -3846,9 +3875,17 @@ class StageSelect:
                     pct = min(1.0, max(0.0, hold_time / getattr(self, 'CLICK_HOLD_TIME', 0.9)))
                     fill_w = int(self.back_button.width * pct)
                     if fill_w > 0:
-                        fill_surf = pygame.Surface((fill_w, self.back_button.height), pygame.SRCALPHA)
-                        fill_surf.fill((34, 197, 94, 120))
-                        self.screen.blit(fill_surf, (self.back_button.x, self.back_button.y))
+                        full_size = (self.back_button.width, self.back_button.height)
+                        if getattr(self, '_peace_fill_surf', None) is None or self._peace_fill_surf.get_size() != full_size:
+                            s = pygame.Surface(full_size, pygame.SRCALPHA)
+                            s.fill((34, 197, 94, 120))
+                            if pygame.display.get_surface() is not None:
+                                try:
+                                    s = s.convert_alpha()
+                                except Exception:
+                                    pass
+                            self._peace_fill_surf = s
+                        self.screen.blit(self._peace_fill_surf, (self.back_button.x, self.back_button.y), (0, 0, fill_w, self.back_button.height))
 
             btn_font = get_font("Comic Sans MS", 13, bold=True)
             txt = btn_font.render("✌️ MENU [Peace]", True, (255, 255, 255) if not (hov or is_peace) else (255, 215, 0))
@@ -3884,12 +3921,21 @@ class StageSelect:
             ]
 
             y_offset = 95
-            for line in info_lines:
-                text = self.small_font.render(line, True, (255, 255, 255))
-                text_bg = pygame.Surface((text.get_width() + 4, text.get_height() + 4))
-                text_bg.set_alpha(180)
-                text_bg.fill((0, 0, 0))
-                self.screen.blit(text_bg, (8, y_offset - 2))
+            rendered_lines = [self.small_font.render(line, True, (255, 255, 255)) for line in info_lines]
+            max_lw = max((t.get_width() for t in rendered_lines), default=120)
+            panel_size = (max_lw + 12, len(rendered_lines) * 18 + 8)
+            if getattr(self, '_info_panel_bg', None) is None or self._info_panel_bg.get_size() != panel_size:
+                bg = pygame.Surface(panel_size)
+                bg.set_alpha(180)
+                bg.fill((0, 0, 0))
+                if pygame.display.get_surface() is not None:
+                    try:
+                        bg = bg.convert()
+                    except Exception:
+                        pass
+                self._info_panel_bg = bg
+            self.screen.blit(self._info_panel_bg, (6, y_offset - 4))
+            for text in rendered_lines:
                 self.screen.blit(text, (10, y_offset))
                 y_offset += 18
 
@@ -4127,6 +4173,14 @@ class StageSelect:
     # CLEANUP
     # ============================================================
     def cleanup(self):
+        self._bg_map_surface = None
+        self._fg_obstacles_surface = None
+        if hasattr(self, '_scaled_tile_cache'):
+            self._scaled_tile_cache.clear()
+        if hasattr(self, '_scaled_sprite_cache'):
+            self._scaled_sprite_cache.clear()
+        from core.font_manager import trim_transient_font_caches
+        trim_transient_font_caches()
         cv2.destroyAllWindows()
 
 
