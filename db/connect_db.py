@@ -1003,7 +1003,7 @@ class Database:
             title = str(g.get("assessmentTitle", "")).upper()
             if "UNIT 2" in title or "Q2" in title or "QUARTER 2" in title: q_num = 2
             elif "UNIT 3" in title or "Q3" in title or "QUARTER 3" in title: q_num = 3
-            elif "UNIT 4" in title or "Q4" in title or "QUARTER 4" in title: q_num = 4
+            elif "UNIT 4" in title or "Q4" in title or "QUARTER 4" in title or "SUMMATIVE" in title: q_num = 4
 
             score = int(g.get("pointsEarned") or g.get("score") or 0)
             pct = float(g.get("score") or 100.0)
@@ -1032,7 +1032,7 @@ class Database:
             fb = str(res.get("feedback", "")).upper()
             if "QUARTER 2" in fb or "Q2" in fb: q_num = 2
             elif "QUARTER 3" in fb or "Q3" in fb: q_num = 3
-            elif "QUARTER 4" in fb or "Q4" in fb: q_num = 4
+            elif "QUARTER 4" in fb or "Q4" in fb or "SUMMATIVE" in fb: q_num = 4
 
             raw_score = int(res.get("score") or 0)
             correct = int(res.get("correctAnswers") or res.get("correct_answers") or raw_score)

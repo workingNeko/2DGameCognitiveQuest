@@ -51,7 +51,7 @@ class LockboxPuzzle(BaseCognitivePuzzle):
 
     def load_config(self, config: Dict[str, Any]) -> None:
         self.puzzle_id = config.get("id", "q4_lockbox")
-        self.title = config.get("title", "Quarter 4 Algebraic Key Lockbox")
+        self.title = config.get("title", "Summative Assessment Algebraic Key Lockbox")
         self.quarter = config.get("quarter", 4)
         self.cognitive_domain = config.get("cognitive_domain", "Algebraic Deductive Reasoning")
         self.target_solution = int(config.get("target_solution", 5))

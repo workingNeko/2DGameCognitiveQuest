@@ -200,7 +200,7 @@ class TestQuarterPathfindingGuide(unittest.TestCase):
         ss.bromen_dialogue_state = 1
         target = guide.get_active_hierarchy_target()
         self.assertEqual((target[0], target[1]), (25, 0))
-        self.assertIn("Quarter 4", target[2])
+        self.assertTrue("Quarter 4" in target[2] or "Summative Assessment" in target[2])
 
         # Step 5: All completed -> Victory Sanctuary
         ss.completed["quarter4"] = True

@@ -291,16 +291,16 @@ class StageSelect:
 
         if self.is_quarter_completed('quarter4'):
             self.bromen_dialogue_lines = [
-                ("Bromen", f"Magnificent achievement, {student_name}! You have mastered Quarter 4 (The Water Temple)!"),
+                ("Bromen", f"Magnificent achievement, {student_name}! You have mastered the Summative Assessment (The Water Temple)!"),
                 ("Bromen", "Speak with the Old Man at the central sanctuary to celebrate your Grand Champion victory!")
             ]
         else:
             self.bromen_dialogue_lines = [
                 ("Bromen", f"Greetings, voyager {student_name}! I am Bromen, guardian of the celestial Water Temple."),
-                ("Student", "Are you guarding the entrance to Quarter 4?"),
+                ("Student", "Are you guarding the entrance to the Summative Assessment?"),
                 ("Bromen", "Indeed! In the sunken aqueducts, you must master fractions, solve rudder equations, and balance the elemental waterways."),
                 ("Student", "I will restore harmony to the temple!"),
-                ("Bromen", "Spoken like a true champion! Follow me to the north portal to enter Quarter 4."),
+                ("Bromen", "Spoken like a true champion! Follow me to the north portal to enter the Summative Assessment."),
                 ("Bromen", "Let us go!")
             ]
 
@@ -351,7 +351,7 @@ class StageSelect:
         if self.is_quarter_completed('quarter3'):
             self.skeleton_dialogue_lines = [
                 ("Skeleton", f"Incredible wisdom across the sands, {student_name}! You have mastered Quarter 3 (Monetary Desert)!"),
-                ("Skeleton", "Head north along the corridor to meet Bromen at the Water Temple in Quarter 4!")
+                ("Skeleton", "Head north along the corridor to meet Bromen at the Water Temple in the Summative Assessment!")
             ]
         else:
             self.skeleton_dialogue_lines = [
@@ -569,7 +569,7 @@ class StageSelect:
             },
             {
                 "tile_x": 26.5, "tile_y": 6.0,
-                "text": "^ Quarter 4: Measurement & Time ^",
+                "text": "^ Summative Assessment: Measurement & Time ^",
                 "rotation": 90,
                 "color": (255, 245, 150)
             }
@@ -1465,11 +1465,11 @@ class StageSelect:
                         self.locked_portal_banner_timer = 2.5
                     return False
 
-            # 3. North Corridor to Quarter 4 (Row <= 11 in cols 25-27)
+            # 3. North Corridor to Summative Assessment (Row <= 11 in cols 25-27)
             if col in (25, 26, 27) and row <= 11:
                 if not self.is_quarter_unlocked("quarter4"):
                     if self.locked_portal_banner_timer <= 0:
-                        self.locked_portal_banner_msg = "Complete Quarter 3 to unlock the path to Quarter 4!"
+                        self.locked_portal_banner_msg = "Complete Quarter 3 to unlock the path to the Summative Assessment!"
                         self.locked_portal_banner_timer = 2.5
                     return False
 
@@ -1527,7 +1527,7 @@ class StageSelect:
                 "quarter1": "Quarter 1",
                 "quarter2": "Quarter 2",
                 "quarter3": "Quarter 3",
-                "quarter4": "Quarter 4"
+                "quarter4": "Summative Assessment"
             }
             q_title = q_names.get(qid, qid.capitalize())
             self.locked_portal_banner_msg = f"{q_title} is already completed!"
@@ -1673,7 +1673,7 @@ class StageSelect:
                 "void": (40, 24, 6),
             },
             "quarter4": {
-                "name": "QUARTER 4",
+                "name": "SUMMATIVE ASSESSMENT",
                 "title": "MEASUREMENT & TIME",
                 "realm": "Length, Mass, Time & Equations",
                 "primary": (56, 189, 248),
@@ -1894,20 +1894,20 @@ class StageSelect:
                     return False
                 self.enter_quarter("quarter3")
                 return True
-            # Check if it's a down portal (goes to Quarter4)
+            # Check if it's a down portal (goes to Quarter4 / Summative Assessment)
             elif current_portal.direction == 'down':
                 if self.is_quarter_completed('quarter4'):
-                    self.locked_portal_banner_msg = "Quarter 4 is already completed!"
+                    self.locked_portal_banner_msg = "Summative Assessment is already completed!"
                     self.locked_portal_banner_timer = 2.5
                     return False
                 if not self.is_quarter_unlocked('quarter4'):
-                    print("[LOCKED] Quarter 4 Locked! Complete Quarter 3 first.")
-                    self.locked_portal_banner_msg = "Complete Quarter 3 to unlock Quarter 4!"
+                    print("[LOCKED] Summative Assessment Locked! Complete Quarter 3 first.")
+                    self.locked_portal_banner_msg = "Complete Quarter 3 to unlock Summative Assessment!"
                     self.locked_portal_banner_timer = 2.5
                     return False
                 if self.bromen_dialogue_state == 0:
-                    print("[LOCKED] Quarter 4 Portal Locked! Talk to Bromen first.")
-                    self.locked_portal_banner_msg = "Talk to Bromen first to unlock Quarter 4!"
+                    print("[LOCKED] Summative Assessment Portal Locked! Talk to Bromen first.")
+                    self.locked_portal_banner_msg = "Talk to Bromen first to unlock Summative Assessment!"
                     self.locked_portal_banner_timer = 2.5
                     return False
                 self.enter_quarter("quarter4")
@@ -2216,7 +2216,7 @@ class StageSelect:
                 dist = math.hypot(self.player_x - self.npc_bromen_x, self.player_y - self.npc_bromen_y)
                 if dist < TILE_SIZE * 3.5:
                     if not self.is_quarter_unlocked('quarter4'):
-                        self.locked_portal_banner_msg = "Complete Quarter 3 to unlock Quarter 4!"
+                        self.locked_portal_banner_msg = "Complete Quarter 3 to unlock Summative Assessment!"
                         self.locked_portal_banner_timer = 2.0
                     else:
                         self.bromen_dialogue_state = 1
@@ -2322,13 +2322,13 @@ class StageSelect:
                 return
             elif clicked_portal.direction == 'down':
                 if self.is_quarter_completed('quarter4'):
-                    self.locked_portal_banner_msg = "Quarter 4 is already completed!"
+                    self.locked_portal_banner_msg = "Summative Assessment is already completed!"
                     self.locked_portal_banner_timer = 2.0
                 elif not self.is_quarter_unlocked('quarter4'):
-                    self.locked_portal_banner_msg = "Complete Quarter 3 to unlock Quarter 4!"
+                    self.locked_portal_banner_msg = "Complete Quarter 3 to unlock Summative Assessment!"
                     self.locked_portal_banner_timer = 2.0
                 elif self.bromen_dialogue_state == 0 and not getattr(self, 'barriers_lifted', False):
-                    self.locked_portal_banner_msg = "Talk to Bromen first to unlock Quarter 4!"
+                    self.locked_portal_banner_msg = "Talk to Bromen first to unlock Summative Assessment!"
                     self.locked_portal_banner_timer = 2.0
                     if self.npc_bromen_found:
                         self.click_dest = (self.npc_bromen_x, self.npc_bromen_y + TILE_SIZE)
@@ -2486,7 +2486,7 @@ class StageSelect:
                 if dist < TILE_SIZE * 2.5:
                     if not self.is_quarter_unlocked('quarter4'):
                         if self.locked_portal_banner_timer <= 0:
-                            self.locked_portal_banner_msg = "Complete Quarter 3 to unlock Quarter 4!"
+                            self.locked_portal_banner_msg = "Complete Quarter 3 to unlock Summative Assessment!"
                             self.locked_portal_banner_timer = 2.0
                     else:
                         self.bromen_dialogue_state = 1
@@ -2872,17 +2872,17 @@ class StageSelect:
                     elif portal.direction == 'down':
                         if self.is_quarter_completed('quarter4'):
                             if self.locked_portal_banner_timer <= 0:
-                                self.locked_portal_banner_msg = "Quarter 4 is already completed!"
+                                self.locked_portal_banner_msg = "Summative Assessment is already completed!"
                                 self.locked_portal_banner_timer = 2.0
                         elif not self.is_quarter_unlocked('quarter4'):
                             if self.locked_portal_banner_timer <= 0:
-                                self.locked_portal_banner_msg = "Complete Quarter 3 to unlock Quarter 4!"
+                                self.locked_portal_banner_msg = "Complete Quarter 3 to unlock Summative Assessment!"
                                 self.locked_portal_banner_timer = 2.0
                         elif self.bromen_dialogue_state >= 2 or self.player_following_target == 'bromen':
                             self.enter_quarter("quarter4")
                             return
                         elif self.bromen_dialogue_state == 0 and self.locked_portal_banner_timer <= 0:
-                            self.locked_portal_banner_msg = "Talk to Bromen first to unlock Quarter 4!"
+                            self.locked_portal_banner_msg = "Talk to Bromen first to unlock Summative Assessment!"
                             self.locked_portal_banner_timer = 2.0
 
         # Update portal animations
@@ -3866,7 +3866,7 @@ class StageSelect:
                 f"NPCs: {npc_text}",
                 f"Hand: {'YES' if self.hand_detected else 'NO'}",
                 f"Gesture: {self.current_gesture}",
-                f"Left Portal >> Quarter 1 | Up Portal >> Quarter 4",
+                f"Left Portal >> Quarter 1 | Up Portal >> Summative Assessment",
                 f"Right Portal >> Quarter 3 | Down Portal >> Quarter 2"
             ]
 
@@ -4022,7 +4022,7 @@ class StageSelect:
                             return "quarter_entered"
                     elif current_portal.direction == 'down':
                         if self.is_quarter_completed('quarter4'):
-                            self.locked_portal_banner_msg = "Quarter 4 is already completed!"
+                            self.locked_portal_banner_msg = "Summative Assessment is already completed!"
                             self.locked_portal_banner_timer = 2.0
                         elif (self.is_quarter_unlocked('quarter4') and self.bromen_dialogue_state >= 2) or getattr(self, 'barriers_lifted', False):
                             self.enter_quarter("quarter4")
@@ -4073,7 +4073,7 @@ class StageSelect:
             ("quarter1", "Quarter 1: 2D Shapes & Geometry", "Shapes & Composite Figures"),
             ("quarter2", "Quarter 2: Numbers, Addition & Subtraction", "Money & Word Problems"),
             ("quarter3", "Quarter 3: Multiplication & Fractions", "Equal Groups & Fractions"),
-            ("quarter4", "Quarter 4: Measurement & Time", "Length, Mass, Time & Equations"),
+            ("quarter4", "Summative Assessment: Measurement & Time", "Length, Mass, Time & Equations"),
         ]
 
         row_y = card_y + 98

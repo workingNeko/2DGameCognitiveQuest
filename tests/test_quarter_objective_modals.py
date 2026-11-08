@@ -137,7 +137,10 @@ class TestQuarterObjectiveModals(unittest.TestCase):
 
         # Must be active on entry
         self.assertTrue(q4.instruction_modal.is_visible, "Q4 modal must be active on entry")
-        self.assertIn("QUARTER 4", q4.instruction_modal.title.upper())
+        self.assertTrue(
+            "QUARTER 4" in q4.instruction_modal.title.upper() or "SUMMATIVE ASSESSMENT" in q4.instruction_modal.title.upper(),
+            f"Expected QUARTER 4 or SUMMATIVE ASSESSMENT in modal title, got {q4.instruction_modal.title}"
+        )
 
         # Simulate update with cursor far from player (should NOT auto-dismiss)
         q4.cursor_pos = (950, 150)

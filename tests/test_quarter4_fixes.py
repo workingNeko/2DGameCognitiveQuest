@@ -342,10 +342,11 @@ class TestQuarter4Fixes(unittest.TestCase):
         q4 = Quarter4(self.screen, self.mm, "map12.txt")
         q4.instruction_modal.hide()
 
-        # 1. Answer all 6 stations
+        # 1. Answer all 6 stations and solve addition helm puzzle
         for st in range(1, len(q4.quiz_stations) + 1):
             q4.answered_stations.add(st)
         q4.quiz_state = 0
+        q4.addition_puzzle_solved = True
 
         # Updating automatically sets raft to ready_to_sail
         q4.update()

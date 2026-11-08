@@ -309,7 +309,7 @@ MAP_INSTRUCTIONS_DATA = {
                 ]
             },
             {
-                "title": "3. Unlock the Pharaoh's Golden Vault to reach Quarter 4!",
+                "title": "3. Unlock the Pharaoh's Golden Vault to reach the Summative Assessment!",
                 "bullets": []
             }
         ]
@@ -385,7 +385,7 @@ MAP_INSTRUCTIONS_DATA = {
         "objectives": [
             "Master multi-step arithmetic word problems combining addition, subtraction, and currency exchange.",
             "Compare numerical expressions and evaluate trade balance inequalities.",
-            "Complete Quarter 3 mastery to unlock the underwater passage to Quarter 4: Water Temple."
+            "Complete Quarter 3 mastery to unlock the underwater passage to the Summative Assessment: Water Temple."
         ],
         "steps": [
             {
@@ -402,7 +402,7 @@ MAP_INSTRUCTIONS_DATA = {
                 ]
             },
             {
-                "title": "3. Step Through the Master Portal to dive into Quarter 4!",
+                "title": "3. Step Through the Master Portal to dive into the Summative Assessment!",
                 "bullets": []
             }
         ]
@@ -412,7 +412,7 @@ MAP_INSTRUCTIONS_DATA = {
     # QUARTER 4: WATER TEMPLE & CLOCKTOWER (Maps 10, 11, 12)
     # ====================================================
     "quarter4": {
-        "title": "QUARTER 4: THE WATER TEMPLE SANCTUARY",
+        "title": "SUMMATIVE ASSESSMENT: THE WATER TEMPLE SANCTUARY",
         "subtitle": "Dive deep into the sunken sanctum, {player_name}!",
         "theme": "water",
         "objectives_title": "🎯 LEARNING OBJECTIVES:",
@@ -446,7 +446,7 @@ MAP_INSTRUCTIONS_DATA = {
         ]
     },
     "map10.txt": {
-        "title": "QUARTER 4: WATER TEMPLE - THE TEMPLE AQUEDUCT",
+        "title": "SUMMATIVE ASSESSMENT: WATER TEMPLE - THE TEMPLE AQUEDUCT",
         "subtitle": "Dive into the outer sanctuary, {player_name}!",
         "theme": "water",
         "objectives_title": "🎯 LEARNING OBJECTIVES:",
@@ -483,7 +483,7 @@ MAP_INSTRUCTIONS_DATA = {
         ]
     },
     "map11.txt": {
-        "title": "QUARTER 4: THE SUBMERGED KEY VAULT",
+        "title": "SUMMATIVE ASSESSMENT: THE SUBMERGED KEY VAULT",
         "subtitle": "The currents run deep, {player_name}!",
         "theme": "water",
         "objectives_title": "🎯 LEARNING OBJECTIVES:",
@@ -520,7 +520,7 @@ MAP_INSTRUCTIONS_DATA = {
         ]
     },
     "map12.txt": {
-        "title": "QUARTER 4: THE LOTUS RAFT & FINAL SANCTUM",
+        "title": "SUMMATIVE ASSESSMENT: THE LOTUS RAFT & FINAL SANCTUM",
         "subtitle": "Master the rapids of the Great Floodgate, {player_name}!",
         "theme": "water",
         "objectives_title": "🎯 LEARNING OBJECTIVES:",

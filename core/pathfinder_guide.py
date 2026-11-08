@@ -184,10 +184,10 @@ class QuestPathfinderGuide:
                 if getattr(self.q, 'bromen_dialogue_state', 0) == 0:
                     tx = getattr(self.q, 'npc_bromen_tile_x', 25)
                     ty = getattr(self.q, 'npc_bromen_tile_y', 3)
-                    return (tx, ty, "Bromen (Quarter 4 Guardian)", False)
+                    return (tx, ty, "Bromen (Summative Assessment Guardian)", False)
                 else:
                     p_pos = find_portal_coords('down') or (25, 0)
-                    return (p_pos[0], p_pos[1], "Quarter 4: Aquatic Temple", True)
+                    return (p_pos[0], p_pos[1], "Summative Assessment: Aquatic Temple", True)
 
             # All Quarters Completed: Center Sanctuary
             else:

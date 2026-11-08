@@ -1363,7 +1363,7 @@ class Quarter4:
             if assessment_id:
                 print(f"[LOG] Linked Quarter 4 result to Assessment ID: {assessment_id}")
 
-            feedback_msg = f"Completed Quarter 4 (Water Temple). Answered {correct_answers} of {total_questions} questions correctly on first attempt."
+            feedback_msg = f"Completed Summative Assessment (Water Temple). Answered {correct_answers} of {total_questions} questions correctly on first attempt."
             grade_level = getattr(self.main_menu, 'selected_student', {}).get('level', 'Grade 2')
 
             success = db.save_game_result(
@@ -3016,7 +3016,7 @@ class Quarter4:
             
             # Header title in Gold
             title_font = get_font("Comic Sans MS", 12, bold=True)
-            header_title = "TEMPLE AQUEDUCT & LOTUS RAFT" if getattr(self, 'is_map12', False) else "WATER TEMPLE OBJECTIVES"
+            header_title = "TEMPLE AQUEDUCT & LOTUS RAFT" if getattr(self, 'is_map12', False) else "SUMMATIVE ASSESSMENT OBJECTIVES"
             title_surf = title_font.render(header_title, True, (255, 215, 0))
             self.screen.blit(title_surf, (box_x + 15, box_y + 8))
             
@@ -3077,7 +3077,7 @@ class Quarter4:
                     obj2 = "- Sailing across rapids to Portal Island!"
                     obj2_color = (56, 189, 248)
                 else:
-                    obj2 = "- Arrived! Step into the Portal to finish Quarter 4!"
+                    obj2 = "- Arrived! Step into the Portal to finish the Summative Assessment!"
                     obj2_color = (34, 197, 94)
                 obj2_surf = item_font.render(obj2, True, obj2_color)
                 self.screen.blit(obj2_surf, (box_x + 15, box_y + 52))

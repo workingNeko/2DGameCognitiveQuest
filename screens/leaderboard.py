@@ -48,7 +48,7 @@ class LeaderboardScreen:
             {"id": 1, "label": "QUARTER 1 (Shapes)", "quarter": 1},
             {"id": 2, "label": "QUARTER 2 (Division)", "quarter": 2},
             {"id": 3, "label": "QUARTER 3 (Fractions)", "quarter": 3},
-            {"id": 4, "label": "QUARTER 4 (Time & Angles)", "quarter": 4}
+            {"id": 4, "label": "SUMMATIVE ASSESSMENT", "quarter": 4}
         ]
 
         # Top Action Buttons
