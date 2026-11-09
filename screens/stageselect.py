@@ -3113,8 +3113,10 @@ class StageSelect:
                 dy = cursor_y - player_screen_y
 
                 deadzone = 45.0
-                if abs(dx) > deadzone or abs(dy) > deadzone:
-                    dist_factor = 1.3 if (abs(dx) > 160 or abs(dy) > 160) else 1.0
+                max_offset = max(abs(dx), abs(dy))
+                if max_offset > deadzone:
+                    # Smoothly ramp walk speed from 1.0x at deadzone (45px) to 1.35x at comfortable camera reach (105px)
+                    dist_factor = min(1.35, 1.0 + ((max_offset - deadzone) / 60.0) * 0.35)
                     g_speed = current_speed * dist_factor
                     if abs(dx) > deadzone:
                         vx = g_speed if dx > 0 else -g_speed

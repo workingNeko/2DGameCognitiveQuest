@@ -139,22 +139,26 @@ class MainMenu:
         self.MIN_HAND_SIZE = 0.055
 
         # Cursor sensitivity, active camera bounds & jitter suppression
-        # Expanded bounds (0.15-0.85) provide comfortable full-screen reach without edge-pegging or twitchiness
-        self.cursor_sensitivity = 2.0
-        self.cam_x_min = 0.15
-        self.cam_x_max = 0.85
-        self.cam_y_min = 0.15
-        self.cam_y_max = 0.85
+        # Ergonomic center-sweetspot bounds (0.25-0.75 x, 0.24-0.76 y via 1.4x gain over 0.70 base span)
+        # let small comfortable wrist/hand movements reach all screen edges effortlessly like a mouse
+        self.cursor_sensitivity = 1.4
+        half_span_x = 0.35 / self.cursor_sensitivity   # 0.25 -> active X range [0.25, 0.75]
+        half_span_y = 0.364 / self.cursor_sensitivity  # 0.26 -> active Y range [0.24, 0.76]
+        self.cam_x_min = 0.5 - half_span_x
+        self.cam_x_max = 0.5 + half_span_x
+        self.cam_y_min = 0.5 - half_span_y
+        self.cam_y_max = 0.5 + half_span_y
 
         self.cursor_x = float(self.w // 2)
         self.cursor_y = float(self.h // 2)
         self.target_history = []
         self.hand_was_detected = False
 
-        # OneEuroFilter tuned for jitter-free tracking and snappy zero-lag movement:
-        # min_cutoff=0.18 eliminates camera sensor noise and resting hand tremor; beta=0.03 eliminates motion latency
-        self.cursor_filter_x = OneEuroFilter(t0=time.time(), x0=self.cursor_x, min_cutoff=0.18, beta=0.03, d_cutoff=1.0)
-        self.cursor_filter_y = OneEuroFilter(t0=time.time(), x0=self.cursor_y, min_cutoff=0.18, beta=0.03, d_cutoff=1.0)
+        # OneEuroFilter tuned for snappy mouse-like tracking with sub-pixel resting stability:
+        # min_cutoff=1.15 keeps stationary cursor rock-solid without choking gentle hand glides;
+        # beta=0.075 opens filter cutoff immediately during normal and fast sweeps (near-zero lag)
+        self.cursor_filter_x = OneEuroFilter(t0=time.time(), x0=self.cursor_x, min_cutoff=1.15, beta=0.075, d_cutoff=1.0)
+        self.cursor_filter_y = OneEuroFilter(t0=time.time(), x0=self.cursor_y, min_cutoff=1.15, beta=0.075, d_cutoff=1.0)
         self.fist_anchor_x = None
         self.fist_anchor_y = None
 
@@ -560,15 +564,25 @@ class MainMenu:
                 if cap.isOpened():
                     ret, test_frame = cap.read()
                     if ret and test_frame is not None and test_frame.size > 0:
+                        cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+                        # Request 320x240 native capture FIRST for AMD A4-6300 dual-core hardware
+                        # (Windows DirectShow resets FOURCC/FPS back to slow YUY2 if resolution is set afterward)
+                        cap.set(cv2.CAP_PROP_FRAME_WIDTH, 320)
+                        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 240)
                         try:
                             cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*'MJPG'))
                         except Exception:
                             pass
-                        cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
-                        # Request 320x240 native capture for AMD A4-6300 dual-core hardware (reduces USB bus & memory bandwidth)
-                        cap.set(cv2.CAP_PROP_FRAME_WIDTH, 320)
-                        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 240)
                         cap.set(cv2.CAP_PROP_FPS, 30)
+                        ret_chk, chk_frame = cap.read()
+                        if not ret_chk or chk_frame is None or chk_frame.size == 0:
+                            # Fallback if UVC driver dislikes MJPG at 320x240: reopen cleanly in native format
+                            cap.release()
+                            cap = cv2.VideoCapture(idx, backend_flag)
+                            cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+                            cap.set(cv2.CAP_PROP_FRAME_WIDTH, 320)
+                            cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 240)
+                            cap.set(cv2.CAP_PROP_FPS, 30)
                         actual_w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH) or 320)
                         actual_h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT) or 240)
                         print(f"[OK] Camera initialized via {desc} ({actual_w}x{actual_h} @ 30 FPS)!")
@@ -733,7 +747,11 @@ class MainMenu:
 
             if img_preview is not None:
                 self.camera_frame = img_preview
-            is_new_camera_frame = (frame_id != getattr(self, '_last_processed_frame_id', -1)) or (self.cap is None)
+            is_new_camera_frame = (
+                (frame_id != getattr(self, '_last_processed_frame_id', -1))
+                or (hand_coords is not getattr(self, '_last_processed_coords_ref', None))
+                or (self.cap is None)
+            )
 
             if hand_detected and hand_coords and len(hand_coords) == 21:
                 self.tracking_lost_frames = 0
@@ -763,19 +781,11 @@ class MainMenu:
                 target_x = max(0.0, min(float(self.w), ((palm_x - self.cam_x_min) / span_x) * self.w))
                 target_y = max(0.0, min(float(self.h), ((palm_y - self.cam_y_min) / span_y) * self.h))
 
-                # Subtle sensor deadband at rest: absorbs webcam pixel noise & sensor shimmer
-                prev_raw_x = getattr(self, '_last_raw_x', target_x)
-                prev_raw_y = getattr(self, '_last_raw_y', target_y)
-                raw_delta = math.hypot(target_x - prev_raw_x, target_y - prev_raw_y)
-                if raw_delta < 2.5 and getattr(self, 'hand_was_detected', False):
-                    target_x = prev_raw_x * 0.85 + target_x * 0.15
-                    target_y = prev_raw_y * 0.85 + target_y * 0.15
-                self._last_raw_x = target_x
-                self._last_raw_y = target_y
-
                 # If hand was just detected after a break, snap filter immediately
                 was_just_acquired = not getattr(self, 'hand_was_detected', False)
                 if was_just_acquired:
+                    self._last_raw_x = target_x
+                    self._last_raw_y = target_y
                     self.cursor_filter_x.reset(now_t, target_x)
                     self.cursor_filter_y.reset(now_t, target_y)
                     self.cursor_x = target_x
@@ -786,14 +796,26 @@ class MainMenu:
                     self.hand_vy = 0.0
                     self.hand_was_detected = True
                     self._last_processed_frame_id = frame_id
+                    self._last_processed_coords_ref = hand_coords
                     self._last_cursor_update_t = now_t
 
                 prev_cx = self.cursor_x
                 prev_cy = self.cursor_y
 
-                # Process OneEuroFilter whenever new camera frame arrived
-                if is_new_camera_frame:
+                # Process micro-deadband & OneEuroFilter only when a new camera sample arrives
+                if is_new_camera_frame and not was_just_acquired:
+                    prev_raw_x = getattr(self, '_last_raw_x', target_x)
+                    prev_raw_y = getattr(self, '_last_raw_y', target_y)
+                    raw_delta = math.hypot(target_x - prev_raw_x, target_y - prev_raw_y)
+                    # Sub-pixel stillness absorber (< 1.2px) prevents webcam sensor shimmer without slowing movement
+                    if raw_delta < 1.2:
+                        target_x = prev_raw_x * 0.55 + target_x * 0.45
+                        target_y = prev_raw_y * 0.55 + target_y * 0.45
+                    self._last_raw_x = target_x
+                    self._last_raw_y = target_y
+
                     self._last_processed_frame_id = frame_id
+                    self._last_processed_coords_ref = hand_coords
                     self.filtered_target_x = self.cursor_filter_x(now_t, target_x)
                     self.filtered_target_y = self.cursor_filter_y(now_t, target_y)
 
@@ -801,13 +823,13 @@ class MainMenu:
                 filt_y = getattr(self, 'filtered_target_y', target_y)
 
                 # Continuous 60 FPS Exponential Interpolation (Lerp)
-                # Blends between camera frames without velocity overshoot or snapping back
+                # Bridges 30 FPS camera samples smoothly onto 60 FPS display ticks without lag or overshoot
                 dt_frame = max(0.001, min(0.05, now_t - getattr(self, '_last_cursor_update_t', now_t)))
                 self._last_cursor_update_t = now_t
 
                 dist_to_target = math.hypot(filt_x - self.cursor_x, filt_y - self.cursor_y)
-                # Adaptive lerp rate: fast response when moving, ultra-smooth dampening when aiming
-                lerp_speed = 36.0 if dist_to_target > 35.0 else (18.0 if dist_to_target < 10.0 else 25.0)
+                # High-gain inter-frame chase: snappy response on motion, crisp settle on fine targets
+                lerp_speed = 60.0 if dist_to_target > 20.0 else (38.0 if dist_to_target < 6.0 else 48.0)
                 alpha = 1.0 - math.exp(-lerp_speed * dt_frame)
 
                 smooth_x = self.cursor_x + (filt_x - self.cursor_x) * alpha
@@ -816,12 +838,13 @@ class MainMenu:
                 # Click / Fist Stabilization:
                 if fist_detected:
                     if self.fist_anchor_x is None:
-                        self.fist_anchor_x = smooth_x
-                        self.fist_anchor_y = smooth_y
+                        # Lock at pre-curl cursor coordinate so finger curling never nudges the click point
+                        self.fist_anchor_x = smooth_x if was_just_acquired else prev_cx
+                        self.fist_anchor_y = smooth_y if was_just_acquired else prev_cy
 
                     anchor_dist = math.hypot(smooth_x - self.fist_anchor_x, smooth_y - self.fist_anchor_y)
-                    # Hold anchor firmly while clicking; if user intentionally moves (> 28px), follow smoothly
-                    if anchor_dist < 28.0:
+                    # Hold anchor firmly while clicking; break free smoothly if user intentionally drags (> 18px)
+                    if anchor_dist < 18.0:
                         self.cursor_x = self.fist_anchor_x
                         self.cursor_y = self.fist_anchor_y
                     else:

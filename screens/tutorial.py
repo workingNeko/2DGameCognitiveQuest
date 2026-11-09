@@ -535,17 +535,20 @@ class TutorialScreen:
         dy = cursor_y - player_screen_y
 
         deadzone = 45.0
-        has_cursor_steer = (abs(dx) > deadzone or abs(dy) > deadzone)
+        max_offset = max(abs(dx), abs(dy))
+        has_cursor_steer = max_offset > deadzone
 
         if has_cursor_steer and not has_key_input:
             self.click_dest = None
             if getattr(self, 'intro_dialog_open', False):
                 self.intro_dialog_open = False
 
+            dist_factor = min(1.35, 1.0 + ((max_offset - deadzone) / 60.0) * 0.35)
+            g_speed = current_speed * dist_factor
             if abs(dx) > deadzone:
-                vx = current_speed if dx > 0 else -current_speed
+                vx = g_speed if dx > 0 else -g_speed
             if abs(dy) > deadzone:
-                vy = current_speed if dy > 0 else -current_speed
+                vy = g_speed if dy > 0 else -g_speed
 
             if abs(dx) > abs(dy):
                 self.player_dir = "right" if dx > 0 else "left"

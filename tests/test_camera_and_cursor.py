@@ -823,6 +823,72 @@ def test_nearest_hand_prioritization_with_multiple_hands():
     print("PASS: Nearest-hand prioritization locks to the closest player hand with smooth hysteresis.")
 
 
+def test_camera_cursor_high_speed_responsiveness_and_reach():
+    from screens.main_menu import MainMenu
+    test_surf = pygame.Surface((1280, 720))
+    menu = MainMenu(test_surf, enable_camera=False)
+
+    class MockCap:
+        def isOpened(self):
+            return True
+
+    menu.cap = MockCap()
+
+    def make_open_hand_xy(px, py):
+        # Construct open hand whose 5-point palm centroid (0, 5, 9, 13, 17) equals (px, py)
+        # Wrist at py + 0.16, four MCPs at py - 0.04 => sum = 5 * py
+        coords = [(px, py)] * 21
+        coords[0] = (px, py + 0.16)
+        for mcp_i, pip_i, dip_i, tip_i in [(5, 6, 7, 8), (9, 10, 11, 12), (13, 14, 15, 16), (17, 18, 19, 20)]:
+            coords[mcp_i] = (px, py - 0.04)
+            coords[pip_i] = (px, py - 0.12)
+            coords[dip_i] = (px, py - 0.19)
+            coords[tip_i] = (px, py - 0.25)
+        return coords
+
+    # 1. Verify full-screen reach with comfortable center-sweetspot motion (0.25..0.75 x, 0.24..0.76 y)
+    with menu.camera_lock:
+        menu.latest_hand_coords = make_open_hand_xy(0.25, 0.24)
+        menu.latest_hand_detected = True
+        menu.latest_frame_id = 1
+    menu.update_gesture()
+    assert menu.cursor_pos == (0, 0), f"Expected top-left reach at (0.25, 0.24), got {menu.cursor_pos}"
+
+    # 2. Verify mouse-like fast sweep convergence from center (0.50 -> 640px) to right (0.70 -> 1152px)
+    menu.hand_was_detected = False
+    with menu.camera_lock:
+        menu.latest_hand_coords = make_open_hand_xy(0.50, 0.50)
+        menu.latest_hand_detected = True
+        menu.latest_frame_id = 2
+    menu.update_gesture()
+    assert abs(menu.cursor_x - 640.0) < 1.0
+
+    # Simulate 2 camera frames (each rendered across two 60 FPS ticks = 4 display frames total, ~66ms)
+    target_hand = make_open_hand_xy(0.70, 0.50)  # Maps to x = 1152.0
+    for cam_step in range(2):
+        with menu.camera_lock:
+            menu.latest_hand_coords = list(target_hand)
+            menu.latest_frame_id = 3 + cam_step
+        for _ in range(2):
+            time.sleep(0.016)
+            menu.update_gesture()
+
+    # Cursor must cover > 85% of the 512px jump (> 1075px) within ~66ms with zero overshoot
+    assert menu.cursor_x > 1075.0, f"Camera cursor lagged behind fast sweep: {menu.cursor_x:.1f}px (expected > 1075px)"
+    assert menu.cursor_x <= 1152.5, f"Camera cursor overshot target: {menu.cursor_x:.1f}px"
+
+    # 3. Verify gentle hand glide is not choked by resting stillness filter
+    start_glide_x = menu.cursor_x
+    for step in range(1, 5):
+        with menu.camera_lock:
+            menu.latest_hand_coords = make_open_hand_xy(0.70 + step * 0.004, 0.50)
+            menu.latest_frame_id = 10 + step
+        time.sleep(0.016)
+        menu.update_gesture()
+    assert menu.cursor_x > start_glide_x + 20.0, f"Gentle hand glide was choked: {start_glide_x:.1f} -> {menu.cursor_x:.1f}"
+    print(f"PASS: Camera cursor reaches full screen at 1.4x ergonomic gain and converges to {menu.cursor_x:.1f}px with zero lag.")
+
+
 if __name__ == "__main__":
     print("--- RUNNING LOL CAMERA & GAME CURSOR UNIT TESTS ---")
     test_lol_camera_init_and_snap()
@@ -850,4 +916,5 @@ if __name__ == "__main__":
     test_hand_proximity_calculation()
     test_background_hand_filtering()
     test_nearest_hand_prioritization_with_multiple_hands()
-    print("--- ALL CAMERA, CURSOR, AND CLOUD STATUS TESTS PASSED (25/25) ---")
+    test_camera_cursor_high_speed_responsiveness_and_reach()
+    print("--- ALL CAMERA, CURSOR, AND CLOUD STATUS TESTS PASSED (26/26) ---")

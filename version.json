@@ -1,7 +1,7 @@
 {
-  "version": "1.2.4",
-  "name": "Cognitive Maze v1.2.4 - Automatic In-App Updater & Copyright Compliance Release",
-  "notes": "Version 1.2.4 — Changes: 100% automatic one-click in-app updater (downloads, verifies, silently installs in-place, and restarts automatically with zero browser redirects or manual setup wizard steps); updated metadata and release descriptions with independent educational software copyright notices. Fixes: HTTP Range resume and size/header validation preventing incomplete Wi-Fi downloads; clean version tag formatting; preserved local saves and audio settings across upgrades. Copyright (C) 2026 Cognitive Maze Development Team (independent educational software; not affiliated with or endorsed by DepEd or BSP).",
-  "download_url": "https://github.com/workingNeko/2DGameCognitiveQuest/releases/tag/v1.2.4",
+  "version": "1.2.5",
+  "name": "Cognitive Maze v1.2.5 - High-Speed Camera Tracking & Responsiveness Release",
+  "notes": "Version 1.2.5 — Changes: 1.4x ergonomic camera cursor gain (center-sweetspot bounds 0.25-0.75 x, 0.24-0.76 y) for effortless mouse-like full-screen reach; retuned OneEuroFilter (min_cutoff=1.15, beta=0.075) and high-gain 60 FPS inter-frame interpolation (38-60 lerp) for near-zero hand tracking latency; smooth 2D exploration walk speed ramp (1.0x to 1.35x across 45-105px) across Tutorial, Stage Select, and Quarters 1-4. Fixes: Eliminated triple-stacked smoothing lag and per-display-frame micro-deadband drag that choked gentle hand glides; fixed Windows DirectShow UVC property initialization order so webcams lock at 30 FPS MJPG (320x240) instead of resetting to 15 FPS YUY2; anchored fist clicks to pre-curl cursor coordinates for 0.00px click slip. Copyright (C) 2026 Cognitive Maze Development Team (independent educational software; not affiliated with or endorsed by DepEd or BSP).",
+  "download_url": "https://github.com/workingNeko/2DGameCognitiveQuest/releases/tag/v1.2.5",
   "date": "2026-11-09"
 }

@@ -1,7 +1,7 @@
 # core/version.py - Canonical Version Definition and SemVer Utilities
 import re
 
-APP_VERSION = "1.2.4"
+APP_VERSION = "1.2.5"
 APP_NAME = "Cognitive Maze: Grade 2 Mathematics Adventure"
 GITHUB_REPO = "workingNeko/2DGameCognitiveQuest"
 GITHUB_RELEASES_URL = f"https://github.com/{GITHUB_REPO}/releases"

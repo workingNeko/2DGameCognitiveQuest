@@ -4,6 +4,20 @@ All notable **Changes & Improvements** and **Bug Fixes** for each version of **C
 
 ---
 
+## [v1.2.5] — 2026-11-09
+### Changes & Improvements
+- **Ergonomic 1.4x Camera Cursor Gain**: Tightened active hand-tracking bounds to the center lens sweet-spot (`cam_x = 0.25..0.75`, `cam_y = 0.24..0.76`) so small, comfortable wrist and forearm movements sweep the entire `1280x720` screen effortlessly like a hardware mouse.
+- **Zero-Lag Hand Tracking Response**: Retuned `OneEuroFilter` (`min_cutoff=1.15`, `beta=0.075`) and raised 60 FPS inter-frame exponential interpolation rates (`38–60`) for crisp, mouse-speed cursor movement on Dual-Core AMD A4-6300 APUs while maintaining sub-pixel resting stillness.
+- **Smooth Camera Exploration Walk Speed Ramp**: Replaced the binary `> 160 px` walk-speed threshold with a continuous zero-allocation speed ramp (`1.0x` at `45 px` deadzone scaling smoothly to `1.35x` at `105 px`) across Tutorial, Stage Select, Quarter 1, Quarter 2, Quarter 3, and Quarter 4.
+- **Faster Intentional Fist-Drag Breakaway**: Reduced fist-drag breakaway radius from `28 px` to `18 px` for snappier drag interactions in visual puzzles while keeping stationary fist-hold clicks locked cleanly.
+
+### Bug Fixes
+- **Triple-Stacked Camera Smoothing & Display-Tick Drag**: Fixed the resting stillness deadband running on every 60 FPS display tick (even between 30 FPS camera frames), which previously damped gentle and moderate hand movements.
+- **Windows DirectShow 30 FPS `MJPG` Capture Reset**: Fixed webcam initialization property ordering in `_open_camera()` so `320x240` resolution and single-frame buffering are set prior to `MJPG` and `30 FPS` (with automatic native fallback), preventing UVC drivers from resetting capture streams back to slow `15 FPS YUY2`.
+- **Finger-Curl Click Drift**: Anchored fist stabilization to the pre-curl cursor coordinate (`prev_cx, prev_cy`) on transition into `FIST`, eliminating downward palm-centroid nudge (`0.00 px` slip) when curling fingers to click.
+
+---
+
 ## [v1.2.4] — 2026-11-09
 ### Changes & Improvements
 - **100% Automatic One-Click In-App Updater**: Replaced manual/browser update flows with a single **`⬇ Update & Restart`** action inside the game that downloads, verifies, silently installs in-place (`/SILENT /SUPPRESSMSGBOXES /NORESTART /CLOSEAPPLICATIONS`), and automatically relaunches `CognitiveMaze.exe` with zero web browser redirects or manual setup wizard steps.
