@@ -209,9 +209,9 @@ def sanitize_cloud_math_text(text):
     return s
 
 
-def map_cloud_questions(raw_rows, default_hint="Examine the choices carefully and select the best answer below!", allow_ident=False, max_questions=10):
+def map_cloud_questions(raw_rows, default_hint="Examine the choices carefully and select the best answer below!", allow_ident=False, max_questions=15):
     """Normalize Vercel API question rows (or pre-mapped dicts) into in-game question dicts.
-    Caps questions to max_questions (default: 10 per quarter / summative assessment).
+    Caps questions to max_questions (default: 15 per quarter / summative assessment).
     """
     if not raw_rows or not isinstance(raw_rows, list):
         return []
@@ -328,6 +328,12 @@ def map_cloud_questions(raw_rows, default_hint="Examine the choices carefully an
         })
 
     if max_questions is not None and max_questions > 0:
+        if len(mapped) > max_questions:
+            print(
+                f"[QUESTION OVERFLOW HANDLER] Web app provided {len(mapped)} questions, "
+                f"exceeding safe maximum capacity of {max_questions}. "
+                f"Clamping and safely accepting first {max_questions} questions only."
+            )
         mapped = mapped[:max_questions]
     return mapped
 

@@ -1330,11 +1330,9 @@ class Quarter4:
         except Exception as e:
             print(f"[WARN] Exception loading cloud questions for Quarter 4: {e}")
 
-        # Enforce maximum 10 questions ceiling for Summative Assessment
-        from core.dynamic_quiz_manager import MAX_QUESTIONS_PER_QUARTER
-        if len(mapped_questions) > MAX_QUESTIONS_PER_QUARTER:
-            print(f"[CLOUD SYNC] Webapp provided {len(mapped_questions)} questions; capping at maximum allowed {MAX_QUESTIONS_PER_QUARTER} questions for Summative Assessment.")
-            mapped_questions = mapped_questions[:MAX_QUESTIONS_PER_QUARTER]
+        # Strict error handler and ceiling: accepts up to 15 questions only for Summative Assessment
+        from core.dynamic_quiz_manager import validate_and_clamp_questions
+        mapped_questions = validate_and_clamp_questions(mapped_questions, quarter_num=4)
 
         tot_questions = len(mapped_questions)
         if tot_questions == 0:

@@ -9,8 +9,56 @@ Enables dynamic game adjustment when questions are added, updated, or removed in
 
 import math
 
-# Maximum questions that the game can handle per quarter and in the summative assessment
-MAX_QUESTIONS_PER_QUARTER = 10
+# Maximum questions that the game can handle per quarter and in the summative assessment (Strict upper ceiling: 15)
+MAX_QUESTIONS_PER_QUARTER = 15
+
+
+def validate_and_clamp_questions(questions, quarter_num=None, max_allowed=MAX_QUESTIONS_PER_QUARTER):
+    """
+    Error handler and dynamic validator for cloud-supplied quiz questions.
+    - Enforces strict upper capacity limit: accepts up to `max_allowed` (15 questions max)
+      from Quarter 1 to Summative Assessment.
+    - If webapp provides > 15 questions, logs an explicit warning/error handler notice
+      and safely clamps to the first 15 questions.
+    - Validates that each item is a valid dictionary with required question content.
+    - Filters out malformed, None, or empty question entries to prevent runtime crashes.
+    
+    Returns:
+        list of validated question dicts, clamped to at most `max_allowed` (15).
+    """
+    if not questions or not isinstance(questions, (list, tuple)):
+        return []
+
+    stage_name = (
+        f"Quarter {quarter_num}"
+        if quarter_num in (1, 2, 3)
+        else ("Summative Assessment" if quarter_num == 4 else f"Stage {quarter_num or 'Unknown'}")
+    )
+
+    # 1. Validate structure of each question entry
+    valid_questions = []
+    for idx, q in enumerate(questions):
+        if not isinstance(q, dict):
+            print(f"[QUESTION FORMAT ERROR] {stage_name}: Question #{idx + 1} is not a valid dict (type={type(q).__name__}). Skipping.")
+            continue
+        # Require non-empty question text or prompt
+        q_text = str(q.get("question") or q.get("text") or q.get("prompt") or "").strip()
+        if not q_text:
+            print(f"[QUESTION FORMAT ERROR] {stage_name}: Question #{idx + 1} has empty text/prompt. Skipping.")
+            continue
+        valid_questions.append(q)
+
+    # 2. Strict capacity check & error handler for webapp providing > 15 questions
+    raw_count = len(valid_questions)
+    if raw_count > max_allowed:
+        print(
+            f"[QUESTION OVERFLOW HANDLER] {stage_name}: Web app provided {raw_count} questions, "
+            f"exceeding safe maximum capacity of {max_allowed}. "
+            f"Clamping and safely accepting first {max_allowed} questions only."
+        )
+        return valid_questions[:max_allowed]
+
+    return valid_questions
 
 
 def allocate_dynamic_stations(
@@ -22,13 +70,13 @@ def allocate_dynamic_stations(
 ):
     """
     Dynamically expands station coordinates on the map if `needed_count` > `len(existing_stations)`.
-    Enforces a strict upper ceiling of MAX_QUESTIONS_PER_QUARTER (10 questions max).
+    Enforces a strict upper ceiling of MAX_QUESTIONS_PER_QUARTER (15 questions max).
     Uses farthest-point sampling on walkable tiles to place new NPCs cleanly without crowding.
     
     Returns:
         dict or list: matching the input format with at most MAX_QUESTIONS_PER_QUARTER stations.
     """
-    # Enforce maximum 10 questions per quarter / summative assessment
+    # Enforce maximum 15 questions per quarter / summative assessment
     needed_count = min(needed_count, MAX_QUESTIONS_PER_QUARTER)
 
     was_list = isinstance(existing_stations, (list, tuple))

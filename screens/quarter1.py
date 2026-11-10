@@ -820,11 +820,9 @@ class Quarter1:
         except Exception as e:
             print(f"[WARN] Exception loading cloud questions for Quarter 1: {e}")
 
-        # Enforce maximum 10 questions ceiling per quarter
-        from core.dynamic_quiz_manager import MAX_QUESTIONS_PER_QUARTER
-        if len(mapped_questions) > MAX_QUESTIONS_PER_QUARTER:
-            print(f"[CLOUD SYNC] Webapp provided {len(mapped_questions)} questions; capping at maximum allowed {MAX_QUESTIONS_PER_QUARTER} questions.")
-            mapped_questions = mapped_questions[:MAX_QUESTIONS_PER_QUARTER]
+        # Strict error handler and ceiling: accepts up to 15 questions only
+        from core.dynamic_quiz_manager import validate_and_clamp_questions
+        mapped_questions = validate_and_clamp_questions(mapped_questions, quarter_num=1)
 
         # Dynamically allocate extra stations if webapp provides more questions
         if mapped_questions and len(mapped_questions) > len(self.quiz_stations):

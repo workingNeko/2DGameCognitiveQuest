@@ -179,34 +179,59 @@ class TestDynamicQuestionsAndObjectiveToggle(unittest.TestCase):
         unanswered = sorted(list(all_stations - answered_stations))
         self.assertEqual(unanswered, [3, 5, 6])
 
-    def test_max_ten_questions_ceiling_enforcement(self):
-        """Verify the game strictly enforces a maximum ceiling of 10 questions per quarter and summative assessment."""
-        from core.dynamic_quiz_manager import MAX_QUESTIONS_PER_QUARTER
+    def test_max_fifteen_questions_ceiling_and_error_handler(self):
+        """Verify the game strictly enforces a maximum ceiling of 15 questions per quarter/summative assessment and handles overflows gracefully."""
+        from core.dynamic_quiz_manager import MAX_QUESTIONS_PER_QUARTER, validate_and_clamp_questions
         from db.connect_db import map_cloud_questions
 
-        self.assertEqual(MAX_QUESTIONS_PER_QUARTER, 10)
+        self.assertEqual(MAX_QUESTIONS_PER_QUARTER, 15)
 
-        # 1. Verify allocate_dynamic_stations caps at 10 even if webapp requests 15+
+        # 1. Verify allocate_dynamic_stations can allocate up to 15 stations, and caps at 15 if webapp provides 20+
         game_map = ["G" * 30 for _ in range(20)]
         existing = {1: (2, 2), 2: (5, 2)}
-        allocated = allocate_dynamic_stations(
+        allocated_15 = allocate_dynamic_stations(
             game_map,
             existing_stations=existing,
-            needed_count=18,  # Request more than 10
+            needed_count=15,  # Follow 15 questions from web app
             walkable_chars={"G"}
         )
-        self.assertEqual(len(allocated), 10)
-        self.assertEqual(max(allocated.keys()), 10)
+        self.assertEqual(len(allocated_15), 15)
+        self.assertEqual(max(allocated_15.keys()), 15)
 
-        # 2. Verify map_cloud_questions caps at 10
+        # Request 25 stations -> must be clamped to 15
+        allocated_over = allocate_dynamic_stations(
+            game_map,
+            existing_stations=existing,
+            needed_count=25,
+            walkable_chars={"G"}
+        )
+        self.assertEqual(len(allocated_over), 15)
+
+        # 2. Verify validate_and_clamp_questions accepts up to 15 questions, and clamps >15
+        sample_questions_20 = [
+            {"question": f"Question {i}", "choices": ["A", "B", "C", "D"], "correct": 0}
+            for i in range(1, 21)
+        ]
+        clamped_q = validate_and_clamp_questions(sample_questions_20, quarter_num=1)
+        self.assertEqual(len(clamped_q), 15)
+        self.assertEqual(clamped_q[0]["question"], "Question 1")
+        self.assertEqual(clamped_q[14]["question"], "Question 15")
+
+        # Verify it skips malformed or empty items
+        malformed = [None, "invalid", {}, {"question": "   "}, {"question": "Valid Question"}]
+        filtered = validate_and_clamp_questions(malformed, quarter_num=4)
+        self.assertEqual(len(filtered), 1)
+        self.assertEqual(filtered[0]["question"], "Valid Question")
+
+        # 3. Verify map_cloud_questions accepts up to 15 questions, and caps at 15
         raw_mock_questions = [
             {"prompt": f"Question {i}", "optionA": "1", "optionB": "2", "optionC": "3", "optionD": "4", "correctAnswer": "A"}
-            for i in range(1, 16)  # 15 questions from cloud
+            for i in range(1, 25)  # 24 questions from cloud
         ]
         mapped = map_cloud_questions(raw_mock_questions)
-        self.assertEqual(len(mapped), 10)
+        self.assertEqual(len(mapped), 15)
         self.assertEqual(mapped[0]["question"], "Question 1")
-        self.assertEqual(mapped[9]["question"], "Question 10")
+        self.assertEqual(mapped[14]["question"], "Question 15")
 
 if __name__ == "__main__":
     unittest.main()
