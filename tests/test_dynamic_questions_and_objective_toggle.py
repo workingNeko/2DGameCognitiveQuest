@@ -283,17 +283,21 @@ class TestDynamicQuestionsAndObjectiveToggle(unittest.TestCase):
 
         test_surf = pygame.Surface((1280, 720), pygame.SRCALPHA)
 
-        # Ground pedestal: active gold vs answered emerald
+        # Ground pedestal: active gold vs answered emerald vs answered wrong red
         draw_npc_ground_pedestal(test_surf, 200, 200, is_active=True, color=(250, 204, 21), pulse_phase=1.0)
         draw_npc_ground_pedestal(test_surf, 300, 200, is_active=False, color=(34, 197, 94), pulse_phase=2.0)
+        draw_npc_ground_pedestal(test_surf, 400, 200, is_active=False, color=(239, 68, 68), pulse_phase=2.0)
 
-        # Overhead badge: with checkmark status
+        # Overhead badge: with checkmark status vs wrong status
         draw_npc_overhead_badge(test_surf, 200, 200, text="Q1: ✓ Correct", is_active=False, badge_color=(34, 197, 94), offset_y=-10)
         draw_npc_overhead_badge(test_surf, 300, 200, text="Station 2: Triangle", is_active=True, badge_color=(250, 204, 21), offset_y=-10)
+        draw_npc_overhead_badge(test_surf, 400, 200, text="Q3: ✗ Wrong", is_active=False, badge_color=(239, 68, 68), offset_y=-10)
 
-        # Radiant beacon marker: check beacon vs question beacon
+        # Radiant beacon marker: check beacon vs question beacon vs wrong cross/x beacon
         draw_beacon_marker(test_surf, 200, 200, color=(34, 197, 94), beacon_type="check", offset_y=-30)
         draw_beacon_marker(test_surf, 300, 200, color=(251, 191, 36), beacon_type="question", offset_y=-32)
+        draw_beacon_marker(test_surf, 400, 200, color=(239, 68, 68), beacon_type="cross", offset_y=-30)
+        draw_beacon_marker(test_surf, 500, 200, color=(239, 68, 68), beacon_type="x", offset_y=-30)
 
         # Confirm surface is drawn to
         self.assertTrue(test_surf.get_width() == 1280 and test_surf.get_height() == 720)

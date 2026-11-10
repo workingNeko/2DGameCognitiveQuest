@@ -4624,7 +4624,11 @@ class Quarter2:
             is_active = (num == self.quiz_station_index and self.quiz_state == 0)
 
             # Ground pedestal & contact shadow
-            ped_color = (34, 197, 94) if is_answered else (251, 191, 36)
+            is_first_correct = self.first_attempt_correct.get(num, True)
+            if is_answered:
+                ped_color = (34, 197, 94) if is_first_correct else (239, 68, 68)
+            else:
+                ped_color = (251, 191, 36)
             draw_npc_ground_pedestal(
                 self.screen, cx, cy,
                 rx=int(16 * ZOOM), ry=int(8 * ZOOM),
@@ -4661,9 +4665,14 @@ class Quarter2:
 
             v_title = info.get("title", f"Station {num}")
             if is_answered:
-                draw_beacon_marker(self.screen, cx, top_y, color=(34, 197, 94), beacon_type="check", offset_y=int(-30 * ZOOM))
-                status_text = f"Q{num}: ✓ Correct" if is_first_correct else f"Q{num}: ✓ Cleared"
-                draw_npc_overhead_badge(self.screen, cx, top_y, status_text, is_active=False, badge_color=(34, 197, 94), offset_y=int(-10 * ZOOM))
+                if is_first_correct:
+                    draw_beacon_marker(self.screen, cx, top_y, color=(34, 197, 94), beacon_type="check", offset_y=int(-30 * ZOOM))
+                    status_text = f"Q{num}: ✓ Correct"
+                    draw_npc_overhead_badge(self.screen, cx, top_y, status_text, is_active=False, badge_color=(34, 197, 94), offset_y=int(-10 * ZOOM))
+                else:
+                    draw_beacon_marker(self.screen, cx, top_y, color=(239, 68, 68), beacon_type="cross", offset_y=int(-30 * ZOOM))
+                    status_text = f"Q{num}: ✗ Wrong"
+                    draw_npc_overhead_badge(self.screen, cx, top_y, status_text, is_active=False, badge_color=(239, 68, 68), offset_y=int(-10 * ZOOM))
             elif is_active:
                 draw_beacon_marker(self.screen, cx, top_y, color=(251, 191, 36), beacon_type="question", offset_y=int(-32 * ZOOM))
                 draw_npc_overhead_badge(self.screen, cx, top_y, v_title, is_active=True, badge_color=(251, 191, 36), offset_y=int(-10 * ZOOM))
@@ -5122,13 +5131,22 @@ class Quarter2:
                     iy = box_y + 36
                     if ix + pill_w <= box_x + box_w - 14:
                         if is_ans:
-                            bg_c = (16, 185, 129) if is_1st else (20, 184, 166)
-                            brd_c = (52, 211, 153)
-                            pygame.draw.rect(self.screen, bg_c, (ix, iy, pill_w, pill_h), border_radius=4)
-                            pygame.draw.rect(self.screen, brd_c, (ix, iy, pill_w, pill_h), 1, border_radius=4)
-                            # Embedded white checkmark
-                            pygame.draw.line(self.screen, (255, 255, 255), (ix + 4, iy + 10), (ix + 9, iy + 15), 2)
-                            pygame.draw.line(self.screen, (255, 255, 255), (ix + 9, iy + 15), (ix + 18, iy + 5), 2)
+                            if is_1st:
+                                bg_c = (16, 185, 129)
+                                brd_c = (52, 211, 153)
+                                pygame.draw.rect(self.screen, bg_c, (ix, iy, pill_w, pill_h), border_radius=4)
+                                pygame.draw.rect(self.screen, brd_c, (ix, iy, pill_w, pill_h), 1, border_radius=4)
+                                # Embedded white checkmark
+                                pygame.draw.line(self.screen, (255, 255, 255), (ix + 4, iy + 10), (ix + 9, iy + 15), 2)
+                                pygame.draw.line(self.screen, (255, 255, 255), (ix + 9, iy + 15), (ix + 18, iy + 5), 2)
+                            else:
+                                bg_c = (220, 38, 38)
+                                brd_c = (248, 113, 113)
+                                pygame.draw.rect(self.screen, bg_c, (ix, iy, pill_w, pill_h), border_radius=4)
+                                pygame.draw.rect(self.screen, brd_c, (ix, iy, pill_w, pill_h), 1, border_radius=4)
+                                # Embedded white X
+                                pygame.draw.line(self.screen, (255, 255, 255), (ix + 6, iy + 5), (ix + pill_w - 6, iy + pill_h - 5), 2)
+                                pygame.draw.line(self.screen, (255, 255, 255), (ix + pill_w - 6, iy + 5), (ix + 6, iy + pill_h - 5), 2)
                         elif is_cur:
                             pygame.draw.rect(self.screen, (245, 158, 11), (ix, iy, pill_w, pill_h), border_radius=4)
                             pygame.draw.rect(self.screen, (253, 224, 71), (ix, iy, pill_w, pill_h), 1, border_radius=4)

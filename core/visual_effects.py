@@ -494,12 +494,12 @@ def draw_beacon_marker(surface, cx, cy, color=(255, 215, 0), beacon_type="exclam
             p3 = (bcx + 7, bcy - 5)
             pygame.draw.lines(badge_surf, (255, 255, 255), False, [p1, p2, p3], 4)
             pygame.draw.lines(badge_surf, dark_ink, False, [p1, p2, p3], 2)
-        elif beacon_type == "cross":
-            # Red/dark cross for incorrect attempt
-            pygame.draw.line(badge_surf, (255, 255, 255), (bcx - 5, bcy - 5), (bcx + 5, bcy + 5), 4)
-            pygame.draw.line(badge_surf, (255, 255, 255), (bcx + 5, bcy - 5), (bcx - 5, bcy + 5), 4)
-            pygame.draw.line(badge_surf, dark_ink, (bcx - 5, bcy - 5), (bcx + 5, bcy + 5), 2)
-            pygame.draw.line(badge_surf, dark_ink, (bcx + 5, bcy - 5), (bcx - 5, bcy + 5), 2)
+        elif beacon_type in ("cross", "x"):
+            # Crisp high-contrast X / cross for incorrect answer
+            pygame.draw.line(badge_surf, (255, 255, 255), (bcx - 6, bcy - 6), (bcx + 6, bcy + 6), 4)
+            pygame.draw.line(badge_surf, (255, 255, 255), (bcx + 6, bcy - 6), (bcx - 6, bcy + 6), 4)
+            pygame.draw.line(badge_surf, dark_ink, (bcx - 6, bcy - 6), (bcx + 6, bcy + 6), 2)
+            pygame.draw.line(badge_surf, dark_ink, (bcx + 6, bcy - 6), (bcx - 6, bcy + 6), 2)
 
         badge_surf = _maybe_convert_alpha(badge_surf)
         _BEACON_CACHE[key] = badge_surf
