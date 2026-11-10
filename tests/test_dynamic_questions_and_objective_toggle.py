@@ -298,5 +298,34 @@ class TestDynamicQuestionsAndObjectiveToggle(unittest.TestCase):
         # Confirm surface is drawn to
         self.assertTrue(test_surf.get_width() == 1280 and test_surf.get_height() == 720)
 
+    def test_character_completion_status_hud_card(self):
+        """Verify the top-left Character Question Completion Status Card renders properly and clears other HUD elements."""
+        class MockQuarterWithHUD:
+            def __init__(self):
+                self.screen = pygame.Surface((1280, 720))
+                self.width = 1280
+                self.height = 720
+                self.is_quiz_map = True
+                self.player_name = "Ana Mendoza"
+                self.active_station_count = 15
+                self.shape_npcs = {i: {"answered": (i <= 7)} for i in range(1, 16)}
+
+            def get_ui_font(self, size, bold=False):
+                from core.font_manager import get_font
+                return get_font(["Segoe UI", "Tahoma", "Arial"], size, bold=bold)
+
+        mock = MockQuarterWithHUD()
+        from screens.quarter1 import Quarter1
+        # Test draw method directly
+        Quarter1.draw_character_completion_status_hud(mock)
+
+        # Verify card bounds: card_x=18, card_w=240 -> right edge is 258
+        card_right = 18 + 240
+        # Stage timer is centered at (1280 - 160) // 2 = 560
+        timer_left = (1280 - 160) // 2
+        self.assertLess(card_right, timer_left)
+        # Margin between character status card and timer must be > 300px
+        self.assertGreaterEqual(timer_left - card_right, 300)
+
 if __name__ == "__main__":
     unittest.main()

@@ -114,7 +114,9 @@ class Quarter2:
         # Resolve Student Player Name
         self.player_name = "Student"
         if hasattr(self.main_menu, 'selected_student') and self.main_menu.selected_student:
-            self.player_name = self.main_menu.selected_student.get('first_name') or self.main_menu.selected_student.get('username') or "Student"
+            st = self.main_menu.selected_student
+            full = f"{st.get('first_name', '')} {st.get('last_name', '')}".strip()
+            self.player_name = full or st.get('first_name') or st.get('username') or "Student"
 
         # NPC Instruction Modal & Proximity Greeting Dialog System
         self.instruction_modal = InstructionModal(self.screen, self.width, self.height)
@@ -4897,10 +4899,84 @@ class Quarter2:
         if getattr(self, 'instruction_modal', None):
             self.instruction_modal.draw(self.cursor_pos)
 
+    def draw_character_completion_status_hud(self):
+        """Draws character question completion status card at top-left of the game interface."""
+        tot_st = getattr(self, 'active_station_count', len(self.quiz_questions))
+        completed = min(tot_st, max(0, self.quiz_station_index - 1) if self.quiz_state < 6 else tot_st)
+        is_all_done = (completed >= tot_st and tot_st > 0) or (self.quiz_state >= 6)
+
+        card_w, card_h = 240, 58
+        card_x = 18
+        card_y = 16
+
+        # Translucent slate blue background (alpha = 220, cached once)
+        if getattr(self, '_char_status_bg_surf', None) is None or self._char_status_bg_surf.get_size() != (card_w, card_h):
+            bg_surf = pygame.Surface((card_w, card_h), pygame.SRCALPHA)
+            bg_surf.fill((15, 23, 42, 220))
+            if pygame.display.get_surface() is not None:
+                try:
+                    bg_surf = bg_surf.convert_alpha()
+                except Exception:
+                    pass
+            self._char_status_bg_surf = bg_surf
+
+        # Drop shadow for depth and separation from map tiles
+        pygame.draw.rect(self.screen, (0, 0, 0, 110), (card_x, card_y + 3, card_w, card_h), border_radius=10)
+        self.screen.blit(self._char_status_bg_surf, (card_x, card_y))
+
+        # Border: Gold while in progress, Emerald Green when all questions completed
+        border_col = (34, 197, 94) if is_all_done else (251, 191, 36)
+        pygame.draw.rect(self.screen, border_col, (card_x, card_y, card_w, card_h), 2, border_radius=10)
+        pygame.draw.rect(self.screen, (255, 255, 255, 25), (card_x + 2, card_y + 2, card_w - 4, card_h - 4), 1, border_radius=8)
+
+        # Avatar circle badge
+        av_cx, av_cy = card_x + 18, card_y + 17
+        pygame.draw.circle(self.screen, (30, 41, 59), (av_cx, av_cy), 11)
+        pygame.draw.circle(self.screen, border_col, (av_cx, av_cy), 11, 1)
+        pygame.draw.circle(self.screen, (254, 240, 138), (av_cx, av_cy - 3), 4)
+        pygame.draw.arc(self.screen, (254, 240, 138), (av_cx - 6, av_cy + 1, 12, 10), 0, math.pi, 2)
+
+        # Character / Student Name
+        char_name = getattr(self, 'player_name', 'Student')
+        name_font = self.get_ui_font(12, bold=True)
+        name_surf = name_font.render(char_name, True, (255, 255, 255))
+        if name_surf.get_width() > 125:
+            name_surf = pygame.transform.smoothscale(name_surf, (125, name_surf.get_height()))
+        self.screen.blit(name_surf, (card_x + 35, card_y + 8))
+
+        # Percentage / status badge on top right
+        pct = int((completed / max(1, tot_st)) * 100) if tot_st > 0 else 0
+        tag_font = self.get_ui_font(10, bold=True)
+        tag_text = "✓ CLEARED" if is_all_done else f"{pct}%"
+        tag_col = (74, 222, 128) if is_all_done else (254, 240, 138)
+        tag_surf = tag_font.render(tag_text, True, tag_col)
+        self.screen.blit(tag_surf, tag_surf.get_rect(right=card_x + card_w - 12, centery=card_y + 17))
+
+        # Questions Completed Line
+        q_font = self.get_ui_font(10, bold=True)
+        q_text = f"Questions Completed: {completed}/{tot_st}"
+        q_surf = q_font.render(q_text, True, (203, 213, 225))
+        self.screen.blit(q_surf, (card_x + 12, card_y + 30))
+
+        # Mini Progress bar
+        bar_x = card_x + 12
+        bar_y = card_y + 46
+        bar_w = card_w - 24
+        bar_h = 5
+        pygame.draw.rect(self.screen, (30, 41, 59), (bar_x, bar_y, bar_w, bar_h), border_radius=3)
+        pygame.draw.rect(self.screen, (51, 65, 85), (bar_x, bar_y, bar_w, bar_h), 1, border_radius=3)
+        if tot_st > 0 and completed > 0:
+            fill_w = max(4, int(bar_w * (min(completed, tot_st) / tot_st)))
+            fill_col = (34, 197, 94) if is_all_done else (245, 158, 11)
+            pygame.draw.rect(self.screen, fill_col, (bar_x, bar_y, fill_w, bar_h), border_radius=3)
+
     # ============================================================
     # DRAW UI
     # ============================================================
     def draw_ui(self):
+        # Character Question Completion Status HUD Card (Top-Left)
+        self.draw_character_completion_status_hud()
+
         # Draw HUD Guide Button
         if getattr(self, 'guide_btn_rect', None):
             hov = self.guide_btn_rect.collidepoint(self.cursor_pos)
