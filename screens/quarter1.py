@@ -3413,14 +3413,17 @@ class Quarter1:
                 cx = (npc["x"] + TILE_SIZE // 2 - self.camera_x) * ZOOM
                 cy = (npc["y"] + TILE_SIZE - self.camera_y) * ZOOM
                 top_y = (npc["y"] - self.camera_y) * ZOOM
-                is_active = (num == self.quiz_station_index and not npc["answered"] and self.quiz_state == 0)
+                is_answered = npc.get("answered", False)
+                is_active = (num == self.quiz_station_index and not is_answered and self.quiz_state == 0)
+                is_first_correct = self.first_attempt_correct.get(num, True)
 
                 # 1. Ground pedestal & contact shadow
+                ped_color = (34, 197, 94) if is_answered else (250, 204, 21)
                 draw_npc_ground_pedestal(
                     self.screen, cx, cy,
                     rx=int(16 * ZOOM), ry=int(8 * ZOOM),
                     is_active=is_active,
-                    color=(250, 204, 21),
+                    color=ped_color,
                     pulse_phase=pulse_phase
                 )
 
@@ -3433,16 +3436,19 @@ class Quarter1:
                     else:
                         self.draw_npc_static(npc["x"], npc["y"], sprite_data)
 
-                # 3. Overhead badge, beacon, and status
+                # 3. Overhead badge, beacon, and question status marker
                 s_name = npc.get("name", f"Station {num}").capitalize()
-                badge_title = f"Station {num}: {s_name}"
-                if is_active:
+                if is_answered:
+                    draw_beacon_marker(self.screen, cx, top_y, color=(34, 197, 94), beacon_type="check", offset_y=int(-30 * ZOOM))
+                    status_text = f"Q{num}: ✓ Correct" if is_first_correct else f"Q{num}: ✓ Cleared"
+                    draw_npc_overhead_badge(self.screen, cx, top_y, status_text, is_active=False, badge_color=(34, 197, 94), offset_y=int(-10 * ZOOM))
+                elif is_active:
+                    badge_title = f"Station {num}: {s_name}"
                     draw_beacon_marker(self.screen, cx, top_y, color=(250, 204, 21), beacon_type="question", offset_y=int(-32 * ZOOM))
                     draw_npc_overhead_badge(self.screen, cx, top_y, badge_title, is_active=True, badge_color=(250, 204, 21), offset_y=int(-10 * ZOOM))
-                elif not npc["answered"]:
+                else:
+                    badge_title = f"Station {num}: {s_name}"
                     draw_npc_overhead_badge(self.screen, cx, top_y, badge_title, is_active=False, badge_color=(203, 213, 225), offset_y=int(-8 * ZOOM))
-                elif npc["answered"]:
-                    self.draw_answered_checkmark(npc["x"], npc["y"])
 
         if self.npc_oldman_found:
             om_cx = (self.npc_oldman_x + TILE_SIZE // 2 - self.camera_x) * ZOOM
@@ -4468,8 +4474,21 @@ class Quarter1:
                 self.screen.blit(obj1_surf, (box_x + 15, box_y + 28))
                 
                 for i in range(tot_st):
-                    indicator_color = (34, 197, 94) if i < q_count else (71, 85, 105)
-                    pygame.draw.rect(self.screen, indicator_color, (box_x + 220 + i * 14, box_y + 31, 10, 10), border_radius=2)
+                    st_num = i + 1
+                    is_ans = (st_num in self.shape_npcs and self.shape_npcs[st_num].get('answered', False)) or (st_num <= q_count)
+                    is_1st = self.first_attempt_correct.get(st_num, True)
+                    if is_ans:
+                        ind_col = (34, 197, 94) if is_1st else (20, 184, 166)
+                    elif st_num == self.quiz_station_index:
+                        ind_col = (251, 191, 36)
+                    else:
+                        ind_col = (71, 85, 105)
+                    ix = box_x + 220 + i * 16
+                    iy = box_y + 30
+                    pygame.draw.rect(self.screen, ind_col, (ix, iy, 12, 12), border_radius=3)
+                    if is_ans:
+                        pygame.draw.line(self.screen, (255, 255, 255), (ix + 2, iy + 6), (ix + 5, iy + 9), 2)
+                        pygame.draw.line(self.screen, (255, 255, 255), (ix + 5, iy + 9), (ix + 10, iy + 3), 2)
             else:
                 obj1 = f"- Quiz Progress: {q_count}/{tot_st} questions answered"
                 obj1_color = (255, 255, 255) if q_count < tot_st else (34, 197, 94)

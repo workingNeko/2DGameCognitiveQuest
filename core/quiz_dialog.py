@@ -110,7 +110,8 @@ class RPGQuizDialog:
         station_idx=1,
         total_stations=5,
         eliminated_choices=None,
-        hint_msg=None
+        hint_msg=None,
+        revealed_correct_idx=None
     ):
         """
         Renders the complete RPG-style Question Dialog.
@@ -303,11 +304,18 @@ class RPGQuizDialog:
 
             btn_rect = self.get_button_rect(i, slide_offset=curr_slide)
 
+            is_correct = (revealed_correct_idx is not None and i == revealed_correct_idx)
+
             # Button Card Background
-            if is_elim:
-                card_bg = (15, 23, 42)
-                card_border = (51, 65, 85)
-                text_color = (100, 116, 139)
+            if is_correct:
+                card_bg = (6, 78, 59)
+                card_border = (74, 222, 128)
+                text_color = (240, 253, 244)
+                border_width = 2
+            elif is_elim:
+                card_bg = (26, 18, 24)
+                card_border = (239, 68, 68)
+                text_color = (148, 163, 184)
                 border_width = 1
             elif is_hov:
                 card_bg = (30, 41, 59)
@@ -332,10 +340,15 @@ class RPGQuizDialog:
             badge_cfg = self.BADGE_COLORS.get(i, {"bg": (100, 100, 100), "border": (150, 150, 150), "label": chr(65 + i)})
             badge_rect = pygame.Rect(btn_rect.x + 10, btn_rect.y + 8, 40, 40)
 
-            if is_elim:
-                pygame.draw.rect(self.screen, (30, 41, 59), badge_rect, border_radius=10)
-                pygame.draw.rect(self.screen, (71, 85, 105), badge_rect, 1, border_radius=10)
-                x_surf = badge_font.render("X", True, (100, 116, 139))
+            if is_correct:
+                pygame.draw.rect(self.screen, (22, 163, 74), badge_rect, border_radius=10)
+                pygame.draw.rect(self.screen, (74, 222, 128), badge_rect, 2, border_radius=10)
+                chk_surf = badge_font.render("✓", True, (255, 255, 255))
+                self.screen.blit(chk_surf, chk_surf.get_rect(center=badge_rect.center))
+            elif is_elim:
+                pygame.draw.rect(self.screen, (127, 29, 29), badge_rect, border_radius=10)
+                pygame.draw.rect(self.screen, (239, 68, 68), badge_rect, 1, border_radius=10)
+                x_surf = badge_font.render("✗", True, (248, 113, 113))
                 self.screen.blit(x_surf, x_surf.get_rect(center=badge_rect.center))
             else:
                 badge_bg = badge_cfg["bg"]
@@ -348,6 +361,17 @@ class RPGQuizDialog:
                 pygame.draw.rect(self.screen, badge_border, badge_rect, 2, border_radius=10)
                 b_lbl = badge_font.render(badge_cfg["label"], True, (255, 255, 255))
                 self.screen.blit(b_lbl, b_lbl.get_rect(center=badge_rect.center))
+
+            # Status pill indicator on the right side if correct or eliminated
+            status_tag_font = get_font(["Segoe UI", "Comic Sans MS"], 13, bold=True)
+            if is_correct:
+                tag_surf = status_tag_font.render("✓ CORRECT", True, (74, 222, 128))
+                tag_rect = tag_surf.get_rect(midright=(btn_rect.right - 14, btn_rect.centery))
+                self.screen.blit(tag_surf, tag_rect)
+            elif is_elim:
+                tag_surf = status_tag_font.render("✗ INCORRECT", True, (248, 113, 113))
+                tag_rect = tag_surf.get_rect(midright=(btn_rect.right - 14, btn_rect.centery))
+                self.screen.blit(tag_surf, tag_rect)
 
             # Choice text next to badge (stripped of redundant leading letter, auto-scaled if wide)
             display_text = clean_choice_text(choice_text)

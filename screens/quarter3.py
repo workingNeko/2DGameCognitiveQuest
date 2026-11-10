@@ -2975,20 +2975,24 @@ class Quarter3:
         # Draw Station NPCs with prominent ground pedestals, overhead badges, and radiant beacons
         if hasattr(self, 'quiz_stations') and hasattr(self, 'station_npcs'):
             for num, pos in self.quiz_stations.items():
-                if num in self.station_npcs and num >= self.quiz_station_index and self.quiz_state < 6:
+                if num in self.station_npcs:
                     data = self.station_npcs[num]
                     frame = data["frames"][data["anim_frame"]]
                     cx = (pos[0] * TILE_SIZE + TILE_SIZE // 2 - self.camera_x) * ZOOM
                     cy = (pos[1] * TILE_SIZE + TILE_SIZE - self.camera_y) * ZOOM
                     top_y = (pos[1] * TILE_SIZE - self.camera_y) * ZOOM
+
+                    is_answered = (num < self.quiz_station_index or data.get("answered", False) or (hasattr(self, 'answered_stations') and num in self.answered_stations))
                     is_active = (num == self.quiz_station_index and self.quiz_state == 0)
+                    is_first_correct = self.first_attempt_correct.get(num, True)
 
                     # Ground pedestal & contact shadow
+                    ped_color = (34, 197, 94) if is_answered else (251, 191, 36)
                     draw_npc_ground_pedestal(
                         self.screen, cx, cy,
                         rx=int(16 * ZOOM), ry=int(8 * ZOOM),
                         is_active=is_active,
-                        color=(251, 191, 36),
+                        color=ped_color,
                         pulse_phase=self.frame_counter * 0.12
                     )
 
@@ -2996,10 +3000,14 @@ class Quarter3:
 
                     # Overhead badge and beacon
                     g_name = data.get("name", f"Station {num}")
-                    if is_active:
+                    if is_answered:
+                        draw_beacon_marker(self.screen, cx, top_y, color=(34, 197, 94), beacon_type="check", offset_y=int(-30 * ZOOM))
+                        status_text = f"Q{num}: ✓ Correct" if is_first_correct else f"Q{num}: ✓ Cleared"
+                        draw_npc_overhead_badge(self.screen, cx, top_y, status_text, is_active=False, badge_color=(34, 197, 94), offset_y=int(-10 * ZOOM))
+                    elif is_active:
                         draw_beacon_marker(self.screen, cx, top_y, color=(251, 191, 36), beacon_type="question", offset_y=int(-32 * ZOOM))
                         draw_npc_overhead_badge(self.screen, cx, top_y, g_name, is_active=True, badge_color=(251, 191, 36), offset_y=int(-10 * ZOOM))
-                    elif num > self.quiz_station_index:
+                    else:
                         draw_npc_overhead_badge(self.screen, cx, top_y, g_name, is_active=False, badge_color=(203, 213, 225), offset_y=int(-8 * ZOOM))
 
         # Draw Skeleton Portal Guardian
@@ -3202,6 +3210,24 @@ class Quarter3:
                 obj1_color = (255, 255, 255) if q_count < tot_st else (34, 197, 94)
             obj1_surf = item_font.render(obj1, True, obj1_color)
             self.screen.blit(obj1_surf, (box_x + 15, box_y + 28))
+
+            for i in range(tot_st):
+                st_num = i + 1
+                is_ans = st_num < self.quiz_station_index or (hasattr(self, 'answered_stations') and st_num in self.answered_stations)
+                is_1st = self.first_attempt_correct.get(st_num, True)
+                if is_ans:
+                    ind_col = (34, 197, 94) if is_1st else (20, 184, 166)
+                elif st_num == self.quiz_station_index:
+                    ind_col = (251, 191, 36)
+                else:
+                    ind_col = (71, 85, 105)
+                ix = box_x + 280 + i * 16
+                iy = box_y + 28
+                if ix + 12 < box_x + box_w - 10:
+                    pygame.draw.rect(self.screen, ind_col, (ix, iy, 12, 12), border_radius=3)
+                    if is_ans:
+                        pygame.draw.line(self.screen, (255, 255, 255), (ix + 2, iy + 6), (ix + 5, iy + 9), 2)
+                        pygame.draw.line(self.screen, (255, 255, 255), (ix + 5, iy + 9), (ix + 10, iy + 3), 2)
             
             # Goal portal state item
             if self.quiz_state < 6:

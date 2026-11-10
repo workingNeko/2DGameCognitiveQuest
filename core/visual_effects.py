@@ -487,6 +487,19 @@ def draw_beacon_marker(surface, cx, cy, color=(255, 215, 0), beacon_type="exclam
             pygame.draw.circle(badge_surf, dark_ink, (bcx, bcy + 6), 2)
             pygame.draw.arc(badge_surf, dark_ink, pygame.Rect(bcx - 5, bcy - 9, 10, 10), 0, math.pi, 3)
             pygame.draw.line(badge_surf, dark_ink, (bcx, bcy - 4), (bcx, bcy + 2), 3)
+        elif beacon_type == "check":
+            # Crisp high-contrast checkmark marker for correct question answer
+            p1 = (bcx - 6, bcy + 1)
+            p2 = (bcx - 1, bcy + 6)
+            p3 = (bcx + 7, bcy - 5)
+            pygame.draw.lines(badge_surf, (255, 255, 255), False, [p1, p2, p3], 4)
+            pygame.draw.lines(badge_surf, dark_ink, False, [p1, p2, p3], 2)
+        elif beacon_type == "cross":
+            # Red/dark cross for incorrect attempt
+            pygame.draw.line(badge_surf, (255, 255, 255), (bcx - 5, bcy - 5), (bcx + 5, bcy + 5), 4)
+            pygame.draw.line(badge_surf, (255, 255, 255), (bcx + 5, bcy - 5), (bcx - 5, bcy + 5), 4)
+            pygame.draw.line(badge_surf, dark_ink, (bcx - 5, bcy - 5), (bcx + 5, bcy + 5), 2)
+            pygame.draw.line(badge_surf, dark_ink, (bcx + 5, bcy - 5), (bcx - 5, bcy + 5), 2)
 
         badge_surf = _maybe_convert_alpha(badge_surf)
         _BEACON_CACHE[key] = badge_surf
@@ -574,20 +587,33 @@ def draw_npc_overhead_badge(surface, cx, top_y, text, is_active=False, badge_col
     if badge_surf is None:
         from .font_manager import get_font
         font = get_font("Comic Sans MS", 11, bold=True)
-        display_str = f"★ {clean_text}" if is_active else clean_text
-        text_color = (254, 240, 138) if is_active else (241, 245, 249)
+        is_cleared = "✓" in clean_text or "Correct" in clean_text
+        display_str = f"★ {clean_text}" if (is_active and not is_cleared) else clean_text
+
+        if is_cleared:
+            text_color = (240, 253, 244)
+            bg_color = (6, 78, 59, 230)
+            border_color = (74, 222, 128, 255)
+            border_width = 2
+        elif is_active:
+            text_color = (254, 240, 138)
+            bg_color = (15, 23, 42, 215)
+            border_color = (*c_rgb, 240)
+            border_width = 2
+        else:
+            text_color = (241, 245, 249)
+            bg_color = (15, 23, 42, 160)
+            border_color = (148, 163, 184, 140)
+            border_width = 1
+
         t_surf = font.render(display_str, True, text_color)
         tw, th = t_surf.get_size()
         pw, ph = tw + 14, th + 6
         badge_surf = pygame.Surface((pw, ph), pygame.SRCALPHA)
         # Background pill
-        bg_color = (15, 23, 42, 215) if is_active else (15, 23, 42, 160)
         pygame.draw.rect(badge_surf, bg_color, (0, 0, pw, ph), border_radius=ph // 2)
         # Border
-        if is_active:
-            pygame.draw.rect(badge_surf, (*c_rgb, 240), (0, 0, pw, ph), width=2, border_radius=ph // 2)
-        else:
-            pygame.draw.rect(badge_surf, (148, 163, 184, 140), (0, 0, pw, ph), width=1, border_radius=ph // 2)
+        pygame.draw.rect(badge_surf, border_color, (0, 0, pw, ph), width=border_width, border_radius=ph // 2)
         # Text
         badge_surf.blit(t_surf, (7, 3))
         badge_surf = _maybe_convert_alpha(badge_surf)

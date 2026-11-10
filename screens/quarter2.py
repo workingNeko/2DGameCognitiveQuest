@@ -4522,12 +4522,9 @@ class Quarter2:
         if hasattr(self, 'path_guide'):
             self.path_guide.draw()
 
-        # Draw Active Filipino Street Character NPCs and their Landmark Props (Disappear when answered!)
+        # Draw Filipino Street Character NPCs and their Landmark Props (With Question Marker Status)
         sq_prop_sz = int(TILE_SIZE * ZOOM)
         for num, (st_x, st_y) in self.quiz_stations.items():
-            if num < self.quiz_station_index or self.quiz_state >= 6:
-                continue
-
             info = self.station_npc_info.get(num, {})
             frames = info.get("frames", [])
             anim_frame = info.get("anim_frame", 0)
@@ -4537,14 +4534,18 @@ class Quarter2:
             cx = (world_x + TILE_SIZE // 2 - self.camera_x) * ZOOM
             cy = (world_y + TILE_SIZE - self.camera_y) * ZOOM
             top_y = (world_y - self.camera_y) * ZOOM
+
+            is_answered = (num < self.quiz_station_index or info.get("cleared", False))
             is_active = (num == self.quiz_station_index and self.quiz_state == 0)
+            is_first_correct = self.first_attempt_correct.get(num, True)
 
             # Ground pedestal & contact shadow
+            ped_color = (34, 197, 94) if is_answered else (251, 191, 36)
             draw_npc_ground_pedestal(
                 self.screen, cx, cy,
                 rx=int(16 * ZOOM), ry=int(8 * ZOOM),
                 is_active=is_active,
-                color=(251, 191, 36),
+                color=ped_color,
                 pulse_phase=self.frame_counter * 0.12
             )
 
@@ -4565,12 +4566,16 @@ class Quarter2:
             if frames:
                 self.draw_npc_animated(world_x, world_y, frames, anim_frame)
 
-            # Overhead badge & beacon
+            # Overhead badge & question marker status
             v_title = info.get("title", f"Station {num}")
-            if is_active:
+            if is_answered:
+                draw_beacon_marker(self.screen, cx, top_y, color=(34, 197, 94), beacon_type="check", offset_y=int(-30 * ZOOM))
+                status_text = f"Q{num}: ✓ Correct" if is_first_correct else f"Q{num}: ✓ Cleared"
+                draw_npc_overhead_badge(self.screen, cx, top_y, status_text, is_active=False, badge_color=(34, 197, 94), offset_y=int(-10 * ZOOM))
+            elif is_active:
                 draw_beacon_marker(self.screen, cx, top_y, color=(251, 191, 36), beacon_type="question", offset_y=int(-32 * ZOOM))
                 draw_npc_overhead_badge(self.screen, cx, top_y, v_title, is_active=True, badge_color=(251, 191, 36), offset_y=int(-10 * ZOOM))
-            elif num > self.quiz_station_index:
+            else:
                 draw_npc_overhead_badge(self.screen, cx, top_y, v_title, is_active=False, badge_color=(203, 213, 225), offset_y=int(-8 * ZOOM))
 
         # Draw Knight Portal Guardian
@@ -4923,6 +4928,24 @@ class Quarter2:
                     obj1 = f"Target: {cur_target_str}"
                     obj1_surf = item_font.render(obj1, True, (255, 220, 80))
                     self.screen.blit(obj1_surf, (box_x + 16, box_y + 32))
+
+                    for i in range(tot_st):
+                        st_num = i + 1
+                        is_ans = st_num < self.quiz_station_index or self.station_npc_info.get(st_num, {}).get("cleared", False)
+                        is_1st = self.first_attempt_correct.get(st_num, True)
+                        if is_ans:
+                            ind_col = (34, 197, 94) if is_1st else (20, 184, 166)
+                        elif st_num == self.quiz_station_index:
+                            ind_col = (251, 191, 36)
+                        else:
+                            ind_col = (71, 85, 105)
+                        ix = box_x + 330 + i * 15
+                        iy = box_y + 32
+                        if ix + 12 < box_x + box_w - 10:
+                            pygame.draw.rect(self.screen, ind_col, (ix, iy, 12, 12), border_radius=3)
+                            if is_ans:
+                                pygame.draw.line(self.screen, (255, 255, 255), (ix + 2, iy + 6), (ix + 5, iy + 9), 2)
+                                pygame.draw.line(self.screen, (255, 255, 255), (ix + 5, iy + 9), (ix + 10, iy + 3), 2)
 
                     if self.map_name == "map5.txt":
                         obj2 = f"Bahay Kubo: {self.kubo_pieces_collected}/5 Pieces Built (Portal Locked)"

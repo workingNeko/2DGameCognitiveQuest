@@ -2935,20 +2935,22 @@ class Quarter4:
                 if num == 5 and (6 not in self.quiz_stations):
                     is_answered = (5 in self.answered_stations) and (6 in self.answered_stations)
 
-                if num in self.station_npcs and not is_answered and self.quiz_state < 6:
+                if num in self.station_npcs:
                     data = self.station_npcs[num]
                     frame = data["frames"][data["anim_frame"]]
                     cx = (pos[0] * TILE_SIZE + TILE_SIZE // 2 - self.camera_x) * ZOOM
                     cy = (pos[1] * TILE_SIZE + TILE_SIZE - self.camera_y) * ZOOM
                     top_y = (pos[1] * TILE_SIZE - self.camera_y) * ZOOM
-                    is_active = (num == self.quiz_station_index and self.quiz_state == 0)
+                    is_active = (num == self.quiz_station_index and self.quiz_state == 0 and not is_answered)
+                    is_first_correct = self.first_attempt_correct.get(num, True)
 
                     # Ground pedestal & contact shadow
+                    ped_color = (34, 197, 94) if is_answered else (56, 189, 248)
                     draw_npc_ground_pedestal(
                         self.screen, cx, cy,
                         rx=int(16 * ZOOM), ry=int(8 * ZOOM),
                         is_active=is_active,
-                        color=(56, 189, 248),
+                        color=ped_color,
                         pulse_phase=self.frame_counter * 0.12
                     )
 
@@ -2975,11 +2977,15 @@ class Quarter4:
 
                     self.draw_npc_static(pos[0] * TILE_SIZE, pos[1] * TILE_SIZE, frame)
 
-                    # Overhead badge
+                    # Overhead badge and question marker status
                     g_name = data.get("name", f"Station {num}")
-                    if is_active:
+                    if is_answered:
+                        draw_beacon_marker(self.screen, cx, top_y, color=(34, 197, 94), beacon_type="check", offset_y=int(-30 * ZOOM))
+                        status_text = f"Q{num}: ✓ Correct" if is_first_correct else f"Q{num}: ✓ Cleared"
+                        draw_npc_overhead_badge(self.screen, cx, top_y, status_text, is_active=False, badge_color=(34, 197, 94), offset_y=int(-10 * ZOOM))
+                    elif is_active:
                         draw_npc_overhead_badge(self.screen, cx, top_y, g_name, is_active=True, badge_color=(56, 189, 248), offset_y=int(-10 * ZOOM))
-                    elif num > self.quiz_station_index:
+                    else:
                         draw_npc_overhead_badge(self.screen, cx, top_y, g_name, is_active=False, badge_color=(203, 213, 225), offset_y=int(-8 * ZOOM))
 
         # Draw Bromen
@@ -3187,9 +3193,18 @@ class Quarter4:
                         px = start_pip_x + (s_idx - 1) * (pip_w + pip_spacing)
                         py = box_y + 11
                         is_done = s_idx in self.answered_stations
-                        pip_color = (250, 204, 21) if is_done else (40, 60, 75)
+                        is_1st = self.first_attempt_correct.get(s_idx, True)
+                        if is_done:
+                            pip_color = (34, 197, 94) if is_1st else (20, 184, 166)
+                        elif s_idx == self.quiz_station_index:
+                            pip_color = (251, 191, 36)
+                        else:
+                            pip_color = (40, 60, 75)
                         pygame.draw.rect(self.screen, pip_color, (px, py, pip_w, pip_h), border_radius=3)
                         pygame.draw.rect(self.screen, (255, 255, 255) if is_done else (20, 35, 45), (px, py, pip_w, pip_h), 1, border_radius=3)
+                        if is_done:
+                            pygame.draw.line(self.screen, (255, 255, 255), (px + 3, py + 4), (px + 6, py + 7), 2)
+                            pygame.draw.line(self.screen, (255, 255, 255), (px + 6, py + 7), (px + 12, py + 2), 2)
             
             # Details font
             item_font = get_font("Comic Sans MS", 12)
