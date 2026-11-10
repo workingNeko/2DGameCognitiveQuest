@@ -78,10 +78,10 @@ class TestUpdateManager(unittest.TestCase):
     def test_update_available(self, mock_urlopen):
         # Mock GitHub Releases API response returning a higher version
         payload = {
-            "tag_name": "v1.5.0",
-            "name": "Version 1.5.0 Update",
+            "tag_name": "v3.0.0",
+            "name": "Version 3.0.0 Update",
             "body": "Exciting new levels and bugfixes!",
-            "html_url": "https://github.com/workingNeko/2DGameCognitiveQuest/releases/tag/v1.5.0"
+            "html_url": "https://github.com/workingNeko/2DGameCognitiveQuest/releases/tag/v3.0.0"
         }
         mock_response = MagicMock()
         mock_response.status = 200
@@ -93,8 +93,8 @@ class TestUpdateManager(unittest.TestCase):
         self.updater._run_check_worker()
 
         self.assertEqual(self.updater.state, UpdateState.UPDATE_AVAILABLE)
-        self.assertEqual(self.updater.latest_version, "v1.5.0")
-        self.assertEqual(self.updater.download_url, "https://github.com/workingNeko/2DGameCognitiveQuest/releases/tag/v1.5.0")
+        self.assertEqual(self.updater.latest_version, "v3.0.0")
+        self.assertEqual(self.updater.download_url, "https://github.com/workingNeko/2DGameCognitiveQuest/releases/tag/v3.0.0")
         self.assertEqual(self.updater.release_notes, "Exciting new levels and bugfixes!")
         self.assertIsNone(self.updater.error_message)
 

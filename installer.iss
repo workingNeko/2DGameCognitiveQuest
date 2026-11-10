@@ -2,7 +2,7 @@
 ; Professional Windows Installer with Desktop/Start Menu shortcuts, clean uninstaller, and low-privilege support for school labs.
 
 #define MyAppName "Cognitive Maze"
-#define MyAppVersion "1.2.6"
+#define MyAppVersion "2.0.0"
 #define MyAppPublisher "Cognitive Maze Development Team"
 #define MyAppURL "https://github.com/workingNeko/2DGameCognitiveQuest"
 #define MyAppExeName "CognitiveMaze.exe"
@@ -14,7 +14,7 @@ AppVersion={#MyAppVersion}
 AppVerName={#MyAppName} {#MyAppVersion}
 AppPublisher={#MyAppPublisher}
 AppCopyright=Copyright (C) 2026 Cognitive Maze Development Team. Independent educational software.
-VersionInfoVersion=1.2.6.0
+VersionInfoVersion=2.0.0.0
 VersionInfoCopyright=Copyright (C) 2026 Cognitive Maze Development Team
 VersionInfoDescription=Cognitive Maze - Interactive Grade 2 Mathematics Adventure
 AppPublisherURL={#MyAppURL}

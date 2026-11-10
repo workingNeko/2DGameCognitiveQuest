@@ -4,6 +4,18 @@ All notable **Changes & Improvements** and **Bug Fixes** for each version of **C
 
 ---
 
+## [v2.0.0] — 2026-11-11
+### Changes & Improvements
+- **Dynamic 15-Question Scaling & Capacity**: Expanded question loading from static 5/6 stations to dynamically support up to 15 questions per quarter/assessment. Integrated a question overflow handler safely clamping inputs exceeding 15, while dynamically adjusting scoring, percentage calculations, 3-star report card evaluations, and `/api/game-results` submissions.
+- **Universal NPC Question Mark (`?`) Beacons**: Removed cluttered overhead text badges (`Station X: Name`, `Elder Sage`, etc.) across all quarters. Every unanswered station NPC now features a clean floating question mark beacon (`?`), with gold highlighting for the active target and amber for remaining stations.
+- **Answer Status Beacons (`✓` & `✗`)**: Correctly answered stations display a green checkmark beacon (`✓`), while stations answered incorrectly on first try display a red cross beacon (`✗`).
+- **Wrong Answer Indicators in Objectives HUD**: Added a prominent crimson indicator pill `[ ✗ {wrong_count} Wrong ]` in the Objectives window header, red status pills with embedded `✗` in the question progress track, and live `{correct_count}✓ {wrong_count}✗` breakdown in the top-left completion status card.
+- **Clean Static Corridor Barricades in Stage Select**: Replaced animated sci-fi plasma forcefields, scrolling scanlines, and pulsating crystals with clean, top-down wooden/slate barricades featuring anchor posts and a golden padlock icon (`🔒`). Surfaces are pre-rendered and cached with zero per-frame allocation for smooth 60 FPS performance on target AMD A4-6300 APU hardware.
+- **Quarter 2 Dialog Anti-Overlap Layout**: Restructured Filipino character stall dialogs and interaction windows in Quarter 2 with non-overlapping bounds, dedicated margins, and a single-dialog controller ensuring NPC greeting boxes and station questions never collide.
+- **Strict Background Layering**: Enforced map terrain and wall blocks strictly in background passes, guaranteeing floating beacons, checkmarks, question marks, and HUD elements render seamlessly on the top layer without collision or occlusion.
+
+---
+
 ## [v1.2.6] — 2026-11-10
 ### Changes & Improvements
 - **Universal Frozen & Dev Path Resolution (`core.paths`)**: Introduced a centralized path resolution module providing `get_base_dir()`, `get_asset_path()`, `get_db_path()`, `get_dataset_path()`, and `resolve_path()`. Dynamically inspects `sys.frozen`, `sys.executable`, and source trees to reliably anchor the game root across standalone executables, Windows installer paths, and development environments.
