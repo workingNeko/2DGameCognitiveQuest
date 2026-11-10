@@ -1135,12 +1135,24 @@ def get_station_script(arg1, arg2, arg3=None, arg4="Student"):
             "correct_praise": "Outstanding! That is correct!"
         }
 
-    # Item awarded by quarter and station
+    # Item awarded by quarter and station (supports 1..10 stations)
     items_by_quarter = {
-        "quarter1": {1: "Triangle Token", 2: "Square Token", 3: "Star Token", 4: "Circle Token", 5: "Diamond Token"},
-        "quarter2": {1: "Fresh Barrio Fish", 2: "Pure Coconut Milk", 3: "Jeepney Fare Ticket", 4: "Sweet Guimaras Mangoes", 5: "Fiesta Bamboo Parol"},
-        "quarter3": {1: "Solar Cargo Supplies", 2: "Oasis Sunstone", 3: "Desert Vault Keystone", 4: "Golden Altar Rune", 5: "Sun Keystone"},
-        "quarter4": {1: "Golden Key of Tides", 2: "Coral Conch Key", 3: "Neptune's Water Gear", 4: "Aqueduct Sluice Rune", 5: "Chrono Lotus Key", 6: "Master Sanctum Key"}
+        "quarter1": {
+            1: "Triangle Token", 2: "Square Token", 3: "Star Token", 4: "Circle Token", 5: "Diamond Token",
+            6: "Hexagon Token", 7: "Prism Token", 8: "Pentagon Token", 9: "Oval Token", 10: "Octagon Token"
+        },
+        "quarter2": {
+            1: "Fresh Barrio Fish", 2: "Pure Coconut Milk", 3: "Jeepney Fare Ticket", 4: "Sweet Guimaras Mangoes", 5: "Fiesta Bamboo Parol",
+            6: "Kakanin Rice Cake", 7: "Bibingka Clay Pot", 8: "Chilled Buko Juice", 9: "Fresh Tilapia", 10: "Highland Rice Sack"
+        },
+        "quarter3": {
+            1: "Solar Cargo Supplies", 2: "Oasis Sunstone", 3: "Desert Vault Keystone", 4: "Golden Altar Rune", 5: "Sun Keystone",
+            6: "Mirage Crystal", 7: "Obsidian Sun Fragment", 8: "Caravan Gold Doubloon", 9: "Ancient Desert Papyrus", 10: "Golden Solar Seal"
+        },
+        "quarter4": {
+            1: "Golden Key of Tides", 2: "Coral Conch Key", 3: "Neptune's Water Gear", 4: "Aqueduct Sluice Rune", 5: "Chrono Lotus Key",
+            6: "Master Sanctum Key", 7: "Torrent Scepter", 8: "Abyssal Pearl", 9: "Cascade Crest", 10: "Tidal Master Emblem"
+        }
     }
     awarded_item = items_by_quarter.get(q_key, {}).get(station_index, "Progression Item")
 

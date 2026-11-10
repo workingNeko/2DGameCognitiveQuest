@@ -44,6 +44,13 @@ class TestQuarterPathfindingGuide(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         pygame.init()
+        from core.settings_manager import set_objective_finder_enabled
+        set_objective_finder_enabled(True)
+
+    @classmethod
+    def tearDownClass(cls):
+        from core.settings_manager import set_objective_finder_enabled
+        set_objective_finder_enabled(False)
 
     def test_theme_palettes_exist(self):
         for theme in ["forest", "fiesta", "desert", "water"]:

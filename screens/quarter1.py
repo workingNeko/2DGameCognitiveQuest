@@ -812,7 +812,7 @@ class Quarter1:
         mapped_questions = []
         try:
             if db:
-                questions_result = db.get_questions(quarter=1)
+                questions_result = db.get_questions(quarter=1, force_refresh=True)
                 mapped_questions = map_cloud_questions(
                     questions_result,
                     default_hint="Examine the geometric shapes and properties carefully!"
@@ -820,9 +820,56 @@ class Quarter1:
         except Exception as e:
             print(f"[WARN] Exception loading cloud questions for Quarter 1: {e}")
 
+        # Enforce maximum 10 questions ceiling per quarter
+        from core.dynamic_quiz_manager import MAX_QUESTIONS_PER_QUARTER
+        if len(mapped_questions) > MAX_QUESTIONS_PER_QUARTER:
+            print(f"[CLOUD SYNC] Webapp provided {len(mapped_questions)} questions; capping at maximum allowed {MAX_QUESTIONS_PER_QUARTER} questions.")
+            mapped_questions = mapped_questions[:MAX_QUESTIONS_PER_QUARTER]
+
+        # Dynamically allocate extra stations if webapp provides more questions
+        if mapped_questions and len(mapped_questions) > len(self.quiz_stations):
+            from core.dynamic_quiz_manager import allocate_dynamic_stations
+            forbidden = set()
+            if hasattr(self, 'player_x') and hasattr(self, 'player_y'):
+                forbidden.add((int(self.player_x // TILE_SIZE), int(self.player_y // TILE_SIZE)))
+            if hasattr(self, 'npc_oldman_tile_x') and hasattr(self, 'npc_oldman_tile_y'):
+                forbidden.add((self.npc_oldman_tile_x, self.npc_oldman_tile_y))
+            if hasattr(self, 'portals'):
+                for p in self.portals:
+                    tx = getattr(p, 'tile_x', getattr(p, 'x', 0))
+                    ty = getattr(p, 'tile_y', getattr(p, 'y', 0))
+                    forbidden.add((tx, ty))
+            self.quiz_stations = allocate_dynamic_stations(
+                self.game_map,
+                self.quiz_stations,
+                len(mapped_questions),
+                forbidden_tiles=forbidden
+            )
+
         sorted_ids = sorted(self.quiz_stations.keys())
         active_count = min(len(sorted_ids), len(mapped_questions))
         active_ids = sorted_ids[:active_count]
+
+        # Ensure shape_npcs is populated for all active IDs
+        shape_names_pool = ["circle", "heart", "square", "star", "diamond", "hexagon", "triangle", "pentagon", "oval", "octagon"]
+        for num in active_ids:
+            if num not in self.shape_npcs:
+                pos = self.quiz_stations[num]
+                sname = shape_names_pool[(num - 1) % len(shape_names_pool)]
+                self.shape_npcs[num] = {
+                    "id": num,
+                    "name": sname,
+                    "tile_x": pos[0],
+                    "tile_y": pos[1],
+                    "x": pos[0] * TILE_SIZE,
+                    "y": pos[1] * TILE_SIZE,
+                    "answered": False
+                }
+                # Share sprite animation frames if not explicitly loaded
+                if hasattr(self, 'shape_sprites') and self.shape_sprites and num not in self.shape_sprites:
+                    sprite_keys = sorted(self.shape_sprites.keys())
+                    if sprite_keys:
+                        self.shape_sprites[num] = self.shape_sprites[sprite_keys[(num - 1) % len(sprite_keys)]]
 
         self.quiz_questions = mapped_questions[:active_count]
         self.active_station_count = active_count
@@ -877,6 +924,7 @@ class Quarter1:
             feedback_msg = f"Completed Quarter 1. Answered {correct_answers} of {total_questions} questions correctly on the first attempt."
             sel_student = getattr(self.main_menu, 'selected_student', None) or {}
             grade_level = sel_student.get('level') or sel_student.get('gradeLevel') or sel_student.get('grade_level') or 'Grade 2'
+            student_code = sel_student.get('student_id') or sel_student.get('studentId') or getattr(self.main_menu, 'student_id', None)
             
             success = db.save_game_result(
                 student_id=student_db_id,
@@ -886,7 +934,9 @@ class Quarter1:
                 percentage=percentage,
                 feedback=feedback_msg,
                 grade_level=grade_level,
-                assessment_id=assessment_id
+                assessment_id=assessment_id,
+                quarter=1,
+                student_code=student_code
             )
             if success:
                 print(f"[WIN] Successfully saved Quarter 1 Game Result to Vercel for Student DB ID {student_db_id}!")
@@ -2484,8 +2534,10 @@ class Quarter1:
         # Check Proximity Greeting Dialog click -> pops up Dynamic Question
         if hasattr(self, 'greeting_dialog') and self.greeting_dialog.is_active():
             if self.greeting_dialog.handle_click(pos):
-                self.active_shape_id = self.quiz_station_index
-                self.current_question_index = self.quiz_station_index - 1
+                target_sid = getattr(self.greeting_dialog, 'target_station_idx', None) or self.quiz_station_index
+                self.quiz_station_index = target_sid
+                self.active_shape_id = target_sid
+                self.current_question_index = target_sid - 1
                 self.quiz_state = 1
                 self.selected_choice_index = -1
                 self.eliminated_choices.clear()
@@ -2570,11 +2622,13 @@ class Quarter1:
                     self.shape_npcs[self.active_shape_id]['answered'] = True
                     answered_count = sum(1 for s in self.shape_npcs.values() if s['answered'])
                     
-                    if self.active_shape_id < tot_st:
-                        self.quiz_station_index = self.active_shape_id + 1
-                        print(f"[OK] Advanced to Shape Station {self.quiz_station_index}")
+                    # Determine next unanswered station for non-linear progression
+                    unanswered = [sid for sid, s in sorted(self.shape_npcs.items()) if not s.get('answered', False)]
+                    if unanswered:
+                        self.quiz_station_index = unanswered[0]
+                        print(f"[OK] Next active Shape Station: {self.quiz_station_index}")
                     else:
-                        self.quiz_station_index = 6
+                        self.quiz_station_index = tot_st + 1
                         print(f"[OK] All {tot_st} Shape Station(s) restored!")
 
                     # Trigger collect animations or bridge pan sequences
@@ -2615,11 +2669,13 @@ class Quarter1:
                     self.shape_npcs[self.active_shape_id]['answered'] = True
                     answered_count = sum(1 for s in self.shape_npcs.values() if s['answered'])
                     
-                    if self.active_shape_id < tot_st:
-                        self.quiz_station_index = self.active_shape_id + 1
-                        print(f"[OK] Advanced to Shape Station {self.quiz_station_index}")
+                    # Determine next unanswered station for non-linear progression
+                    unanswered = [sid for sid, s in sorted(self.shape_npcs.items()) if not s.get('answered', False)]
+                    if unanswered:
+                        self.quiz_station_index = unanswered[0]
+                        print(f"[OK] Next active Shape Station: {self.quiz_station_index}")
                     else:
-                        self.quiz_station_index = 6
+                        self.quiz_station_index = tot_st + 1
                         print(f"[OK] All {tot_st} Shape Station(s) restored!")
 
                     # Trigger collect animations or bridge pan sequences
@@ -2820,8 +2876,10 @@ class Quarter1:
             hold_time = time.time() - self.fist_start_time if self.fist_start_time > 0 else 0.0
             if self.greeting_dialog.handle_fist_hold(self.current_gesture == "FIST", hold_time, self.CLICK_HOLD_TIME):
                 self.fist_start_time = 0
-                self.active_shape_id = self.quiz_station_index
-                self.current_question_index = self.quiz_station_index - 1
+                target_sid = getattr(self.greeting_dialog, 'target_station_idx', None) or self.quiz_station_index
+                self.quiz_station_index = target_sid
+                self.active_shape_id = target_sid
+                self.current_question_index = target_sid - 1
                 self.quiz_state = 1
                 self.selected_choice_index = -1
                 self.sync_ui_state()
@@ -2904,16 +2962,22 @@ class Quarter1:
                 self.shape_npc_anim_timer = 0
                 self.shape_npc_anim_frame = (self.shape_npc_anim_frame + 1) % 8
 
-        # Proximity interaction check for active Shape Station NPC (Strict 1 to 5 Hierarchy)
-        if self.quiz_state == 0 and self.is_quiz_map and hasattr(self, 'shape_npcs') and self.quiz_station_index in self.shape_npcs:
-            npc = self.shape_npcs[self.quiz_station_index]
-            if not npc["answered"]:
+        # Proximity interaction check for Shape Station NPCs (Dynamic & Non-Linear)
+        if self.quiz_state == 0 and self.is_quiz_map and hasattr(self, 'shape_npcs'):
+            nearby_station_found = False
+            for station_id, npc in self.shape_npcs.items():
+                if npc.get("answered", False):
+                    continue
                 player_center_x = self.player_x + TILE_SIZE // 2
                 player_center_y = self.player_y + TILE_SIZE // 2
                 npc_center_x = npc["x"] + TILE_SIZE // 2
                 npc_center_y = npc["y"] + TILE_SIZE // 2
                 dist = math.hypot(player_center_x - npc_center_x, player_center_y - npc_center_y)
                 if dist < TILE_SIZE * 1.5:
+                    nearby_station_found = True
+                    self.quiz_station_index = station_id
+                    self.active_shape_id = station_id
+                    self.current_question_index = station_id - 1
                     p_dx = npc["x"] - self.player_x
                     p_dy = npc["y"] - self.player_y
                     if abs(p_dx) > abs(p_dy):
@@ -2927,16 +2991,18 @@ class Quarter1:
                         student_name = "Student"
                         if hasattr(self.main_menu, 'selected_student') and self.main_menu.selected_student:
                             student_name = self.main_menu.selected_student.get('first_name', 'Student')
-                        script_data = get_station_script("quarter1", self.map_name, self.quiz_station_index, student_name)
+                        script_data = get_station_script("quarter1", self.map_name, station_id, student_name)
                         sprite_frame = None
-                        if hasattr(self, 'shape_sprites') and self.quiz_station_index in self.shape_sprites:
-                            frames = self.shape_sprites[self.quiz_station_index]
+                        if hasattr(self, 'shape_sprites') and station_id in self.shape_sprites:
+                            frames = self.shape_sprites[station_id]
                             if frames:
                                 sprite_frame = frames[self.shape_npc_anim_frame % len(frames)]
-                        self.greeting_dialog.show(script_data, sprite_frame=sprite_frame, station_idx=self.quiz_station_index, theme="forest")
-                else:
-                    if self.greeting_dialog.is_active() and self.greeting_dialog.target_station_idx == self.quiz_station_index:
-                        self.greeting_dialog.hide()
+                        self.greeting_dialog.show(script_data, sprite_frame=sprite_frame, station_idx=station_id, theme="forest")
+                    break
+
+            if not nearby_station_found:
+                if self.greeting_dialog.is_active() and hasattr(self, 'shape_npcs') and self.greeting_dialog.target_station_idx in self.shape_npcs:
+                    self.greeting_dialog.hide()
 
         # Proximity interaction check for Old Man NPC (All Quarter 1 Maps: map1, map2, map3)
         if self.quiz_state == 0 and self.map_name.lower() in ['map1.txt', 'map2.txt', 'map3.txt'] and self.npc_oldman_found and self.player_block_timer <= 0 and not self.puzzle_solved and getattr(self, 'oldman_interaction_cooldown', 0.0) <= 0:
@@ -4719,6 +4785,10 @@ class Quarter1:
 
     def draw_offscreen_compass_pointer(self):
         """Draw Active Objective NPC Indicator and Off-Screen Compass Pointer for Quarter 1"""
+        from core.settings_manager import is_objective_finder_enabled
+        if not is_objective_finder_enabled():
+            return
+
         # 1. Target determination
         target_info = None
         

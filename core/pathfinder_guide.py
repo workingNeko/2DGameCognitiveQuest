@@ -17,6 +17,7 @@ import math
 import time
 import collections
 from .font_manager import get_font, sanitize_text
+from .settings_manager import is_objective_finder_enabled
 
 _HALO_CACHE = {}
 
@@ -57,29 +58,48 @@ STATION_NAMES = {
         2: "Heart Guardian",
         3: "Square Guardian",
         4: "Star Guardian",
-        5: "Diamond Guardian"
+        5: "Diamond Guardian",
+        6: "Hexagon Guardian",
+        7: "Triangle Guardian",
+        8: "Pentagon Guardian",
+        9: "Oval Guardian",
+        10: "Octagon Guardian"
     },
     "quarter2": {
         1: "Sari-Sari Store (Aling Nena)",
         2: "Sorbetes Cart (Mang Pedring)",
         3: "Jeepney Terminal (Kuya Jomar)",
         4: "Fruit Stand (Ate Maria)",
-        5: "Parol Workshop (Mang Carding)"
+        5: "Parol Workshop (Mang Carding)",
+        6: "Kakanin Stall (Aling Rosa)",
+        7: "Bibingka Corner (Mang Tomas)",
+        8: "Buko Juice Cart (Kuya Rene)",
+        9: "Fish Vendor (Aling Mila)",
+        10: "Rice Merchant (Mang Jose)"
     },
     "quarter3": {
         1: "Desert Sage 1",
         2: "Desert Sage 2",
         3: "Desert Sage 3",
         4: "Desert Sage 4",
-        5: "Desert Sage 5"
+        5: "Desert Sage 5",
+        6: "Desert Sage 6",
+        7: "Desert Sage 7",
+        8: "Desert Sage 8",
+        9: "Desert Sage 9",
+        10: "Desert Sage 10"
     },
     "quarter4": {
-        1: "Water Guardian 1",
-        2: "Water Guardian 2",
-        3: "Water Guardian 3",
-        4: "Water Guardian 4",
-        5: "Water Guardian 5",
-        6: "Water Guardian 6"
+        1: "Aqua Sprite Marina",
+        2: "Coral Sage Sheldon",
+        3: "Tide Knight Finneas",
+        4: "Axolotl Scholar Lani",
+        5: "River Drake Coral",
+        6: "Whirlpool Elder Glaucus",
+        7: "Hydro Sage Kai",
+        8: "Abyssal Warden Nereus",
+        9: "Current Herald Lyra",
+        10: "Mist Weaver Thalassa"
     }
 }
 
@@ -103,7 +123,7 @@ class QuestPathfinderGuide:
         self.font = get_font("Comic Sans MS", 18, bold=True)
         self.beacon_font = get_font("Comic Sans MS", 22, bold=True)
         self.label_font = get_font("Comic Sans MS", 15, bold=True)
-        self.active = True
+        self.active = is_objective_finder_enabled()
 
     def update_theme(self, theme_key):
         self.theme_key = theme_key
@@ -210,11 +230,37 @@ class QuestPathfinderGuide:
         # 1. QUIZ STATIONS (Dynamic 0..N Cloud Station Hierarchy)
         # ----------------------------------------------------
         if max_stations > 0 and st_idx <= max_stations:
-            # Check if current station has valid tile coords
-            if st_idx in quiz_stations:
+            def is_station_answered(sid):
+                if hasattr(self.q, 'shape_npcs') and sid in self.q.shape_npcs:
+                    return self.q.shape_npcs[sid].get('answered', False)
+                if hasattr(self.q, 'station_npc_info') and sid in self.q.station_npc_info:
+                    return self.q.station_npc_info[sid].get('cleared', False)
+                if hasattr(self.q, 'answered_stations'):
+                    return sid in self.q.answered_stations
+                return False
+
+            station_names_map = STATION_NAMES.get(self.quarter_id, {})
+
+            # If current station pointer is active and unanswered, guide to it
+            if st_idx in quiz_stations and not is_station_answered(st_idx):
                 tx, ty = quiz_stations[st_idx]
-                station_names_map = STATION_NAMES.get(self.quarter_id, {})
                 t_name = station_names_map.get(st_idx, f"Station {st_idx}")
+                return (tx, ty, t_name, False)
+
+            # Otherwise, find the nearest unanswered station to support non-linear exploration
+            unanswered_stations = []
+            for sid, coords in quiz_stations.items():
+                if not isinstance(coords, (tuple, list)) or len(coords) < 2:
+                    continue
+                if not is_station_answered(sid):
+                    unanswered_stations.append((sid, coords[0], coords[1]))
+
+            if unanswered_stations:
+                pl_tx = int(getattr(self.q, 'player_x', 0) // 32)
+                pl_ty = int(getattr(self.q, 'player_y', 0) // 32)
+                unanswered_stations.sort(key=lambda s: math.hypot(s[1] - pl_tx, s[2] - pl_ty))
+                best_sid, tx, ty = unanswered_stations[0]
+                t_name = station_names_map.get(best_sid, f"Station {best_sid}")
                 return (tx, ty, t_name, False)
 
         # ----------------------------------------------------
@@ -396,6 +442,11 @@ class QuestPathfinderGuide:
 
     def update(self, dt=0.016):
         """Recalculate path periodically or when positions shift."""
+        if not is_objective_finder_enabled():
+            self.cached_path_world = []
+            self.current_target_info = None
+            return
+
         now = time.time()
         tile_size = 32
         player_x = getattr(self.q, 'player_x', 0)
@@ -466,6 +517,8 @@ class QuestPathfinderGuide:
         Draws the compact, radiant starlight trail along the path
         and off-screen directional compass badge.
         """
+        if not is_objective_finder_enabled():
+            return
         if not self.active or not self.cached_path_world or len(self.cached_path_world) < 2:
             return
 

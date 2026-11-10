@@ -621,6 +621,192 @@ def load_student_progress(student_id):
                 print(f"[WARN] Backup recovery also failed: {be}")
         return None
 
+def sync_student_with_cloud(student_id, student_db_id=None, main_menu=None, force_cloud_refresh=False):
+    """
+    Authoritative inbound synchronization from Vercel Web App to local game:
+    - If student records/grades/game results were deleted on the web app,
+      automatically purges or removes those completed stages from the local save file.
+    - If cloud data has higher/updated stage scores, hydrates them locally.
+    - If all records for the student were wiped on the web app (and no pending offline queue),
+      resets local save so student starts fresh with 'START ACTIVITY' and 0 score.
+    Returns:
+        dict with {'synced': bool, 'action': str, ...}
+    """
+    if not student_id and not student_db_id:
+        return {"synced": False}
+
+    try:
+        from db.connect_db import db
+    except ImportError:
+        return {"synced": False}
+
+    if not db or db._is_offline_fast_fail():
+        return {"synced": False}
+
+    try:
+        # Flush pending offline sync items first so cloud has latest data before we compare
+        if db._count_pending_sync() > 0:
+            db.sync_offline_results()
+
+        cloud_results = db.get_game_results(filter_reset=True, force_refresh=force_cloud_refresh)
+        if cloud_results is None or db._is_offline_fast_fail():
+            return {"synced": False}
+
+        sid_str = str(student_id or "")
+        db_id = student_db_id
+        if not db_id and sid_str:
+            st_list = db.get_students() or []
+            for s in st_list:
+                if str(s.get("studentId") or s.get("student_id") or "") == sid_str:
+                    db_id = s.get("id")
+                    break
+
+        ass_to_q = db._build_assessment_to_quarter_lookup() if hasattr(db, "_build_assessment_to_quarter_lookup") else {}
+        cloud_stages = {}
+        for r in cloud_results:
+            r_sid = r.get("studentId") if r.get("studentId") is not None else r.get("student_id")
+            match = False
+            if db_id is not None and db._same_student_id(r_sid, db_id):
+                match = True
+            elif sid_str and db._same_student_id(r_sid, sid_str):
+                match = True
+            elif sid_str and str(r.get("studentCode") or "") == sid_str:
+                match = True
+
+            if match:
+                q_num = db._resolve_record_quarter(r, ass_to_q) if hasattr(db, "_resolve_record_quarter") else 1
+                if q_num in (1, 2, 3, 4):
+                    prev = cloud_stages.get(q_num)
+                    score = int(r.get("score") or 0)
+                    pct = float(r.get("percentage") if r.get("percentage") is not None else score)
+                    tot = int(r.get("totalQuestions") or r.get("total_questions") or 5)
+                    if prev is None or score >= int(prev.get("score", -1)):
+                        cloud_stages[q_num] = {
+                            "completed": True,
+                            "score": score,
+                            "percentage": round(pct, 1),
+                            "total_questions": tot,
+                            "timestamp": time.time(),
+                        }
+
+        target_sid = sid_str or str(db_id)
+        save_path = get_save_path(target_sid)
+        local_save = load_student_progress(target_sid)
+
+        # Cloud has data, but local save is missing -> hydrate local save from cloud!
+        if not local_save and cloud_stages:
+            sel_obj = getattr(main_menu, 'selected_student', None) or {}
+            first_n = sel_obj.get("first_name") or "Student"
+            cum_s = sum(c["score"] for c in cloud_stages.values())
+            cum_p = int((len(cloud_stages) / 4.0) * 100)
+            local_save = {
+                "student_id": target_sid,
+                "selected_student": {
+                    "id": db_id,
+                    "student_id": target_sid,
+                    "first_name": first_n,
+                    "last_name": sel_obj.get("last_name") or "",
+                    "score": cum_s,
+                    "progress": cum_p,
+                    "level": sel_obj.get("level") or "Grade 2",
+                    "gender": sel_obj.get("gender") or "male",
+                    "section": sel_obj.get("section") or "A",
+                    "avatarColor": sel_obj.get("avatarColor") or ""
+                },
+                "current_screen": "menu",
+                "tutorial_completed": True,
+                "completed_quarters": {f"quarter{qn}": dict(info) for qn, info in cloud_stages.items()},
+                "timestamp": time.time()
+            }
+            atomic_save_json(save_path, local_save)
+            invalidate_save_cache(target_sid)
+            return {"synced": True, "action": "hydrated", "stages": list(cloud_stages.keys())}
+
+        if not local_save:
+            return {"synced": True, "action": "none"}
+
+        comp_dict = local_save.get("completed_quarters", {})
+        local_q_nums = set()
+        for k, v in comp_dict.items():
+            if isinstance(v, dict) and v.get("completed"):
+                qn = db.normalize_quarter_number(k) or db.infer_quarter_from_text(k) or 1
+                local_q_nums.add(qn)
+
+        cloud_q_nums = set(cloud_stages.keys())
+        deleted_q_nums = local_q_nums - cloud_q_nums
+
+        # CASE 1: Cloud has ZERO records for this student, but local has completed stages
+        # -> Student's progress was wiped / deleted on the webapp!
+        if len(cloud_q_nums) == 0 and len(local_q_nums) > 0:
+            if os.path.exists(save_path):
+                try:
+                    os.remove(save_path)
+                except Exception:
+                    pass
+            bak = f"{save_path}.bak"
+            if os.path.exists(bak):
+                try:
+                    os.remove(bak)
+                except Exception:
+                    pass
+            invalidate_save_cache(target_sid)
+
+            if main_menu:
+                if getattr(main_menu, 'selected_student', None):
+                    main_menu.selected_student["score"] = 0
+                    main_menu.selected_student["progress"] = 0
+                if hasattr(main_menu, 'completed_quarters'):
+                    main_menu.completed_quarters = {}
+                if hasattr(main_menu, 'create_buttons'):
+                    main_menu.create_buttons()
+
+            print(f"[CLOUD SYNC] Web app deleted all data for student {target_sid}. Local save reset to 0.")
+            return {"synced": True, "action": "reset_all", "deleted_stages": list(local_q_nums)}
+
+        # CASE 2: Specific stage(s) deleted on webapp, or higher scores present on cloud
+        updated = False
+        deleted_keys = []
+        if deleted_q_nums:
+            for qn in deleted_q_nums:
+                k = f"quarter{qn}"
+                if k in comp_dict:
+                    comp_dict.pop(k, None)
+                    deleted_keys.append(k)
+            updated = True
+
+        for qn, qinfo in cloud_stages.items():
+            k = f"quarter{qn}"
+            prev = comp_dict.get(k)
+            if not isinstance(prev, dict) or not prev.get("completed") or int(qinfo["score"]) != int(prev.get("score", -1)):
+                comp_dict[k] = dict(qinfo)
+                updated = True
+
+        if updated:
+            new_score = sum(int(d.get("score", 0)) for d in comp_dict.values() if isinstance(d, dict))
+            new_prog = int((len([d for d in comp_dict.values() if isinstance(d, dict) and d.get("completed")]) / 4.0) * 100)
+            local_save["completed_quarters"] = comp_dict
+            local_save["timestamp"] = time.time()
+            if isinstance(local_save.get("selected_student"), dict):
+                local_save["selected_student"]["score"] = new_score
+                local_save["selected_student"]["progress"] = new_prog
+            atomic_save_json(save_path, local_save)
+            invalidate_save_cache(target_sid)
+
+            if main_menu:
+                if getattr(main_menu, 'selected_student', None):
+                    main_menu.selected_student["score"] = new_score
+                    main_menu.selected_student["progress"] = new_prog
+                if hasattr(main_menu, 'create_buttons'):
+                    main_menu.create_buttons()
+
+            print(f"[CLOUD SYNC] Synced student {target_sid} with web app: {len(deleted_keys)} deleted stage(s), score={new_score}, progress={new_prog}%.")
+            return {"synced": True, "action": "updated", "deleted_stages": deleted_keys, "total_score": new_score, "progress": new_prog}
+
+        return {"synced": True, "action": "in_sync"}
+    except Exception as e:
+        print(f"[CLOUD SYNC ERROR] {e}")
+        return {"synced": False, "error": str(e)}
+
 def apply_student_progress(main_menu, save_data):
     if not save_data:
         return
@@ -632,6 +818,22 @@ def apply_student_progress(main_menu, save_data):
         main_menu.selected_student = save_data["selected_student"]
         if save_data["selected_student"].get("id"):
             main_menu.student_db_id = save_data["selected_student"]["id"]
+
+    # Reconcile student_db_id with true database primary key if available
+    try:
+        from db.connect_db import db
+        if db:
+            cached_students = db.get_students() or []
+            target_code = str(main_menu.student_id or (main_menu.selected_student and (main_menu.selected_student.get("student_id") or main_menu.selected_student.get("studentId"))))
+            for s in cached_students:
+                s_code = str(s.get("studentId") or s.get("student_id") or "")
+                if s_code == target_code and s.get("id"):
+                    main_menu.student_db_id = s.get("id")
+                    if isinstance(main_menu.selected_student, dict):
+                        main_menu.selected_student["id"] = s.get("id")
+                    break
+    except Exception:
+        pass
         
     current_screen = save_data.get("current_screen")
     main_menu.current_screen = current_screen

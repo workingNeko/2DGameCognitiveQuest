@@ -1299,6 +1299,19 @@ class Quarter4:
                             queue.append(path + [nxt])
         return []
 
+    def _advance_to_next_unanswered_station(self):
+        """Advances active station pointer to the next unanswered station in non-linear order."""
+        tot_st = getattr(self, 'active_station_count', len(self.quiz_stations))
+        unanswered = [s for s in sorted(self.quiz_stations.keys()) if s not in self.answered_stations]
+        if unanswered:
+            self.quiz_station_index = unanswered[0]
+            self.current_question_index = self.quiz_station_index - 1
+            print(f"[OK] Next active Quiz Station: {self.quiz_station_index}")
+        else:
+            self.quiz_station_index = tot_st + 1
+            self.current_question_index = tot_st
+            print(f"[OK] All {tot_st} Quiz Station(s) cleared!")
+
     def load_database_questions(self):
         """Sync Quarter 4 questions strictly from the cloud / cloud cache (0..N stations)."""
         if not getattr(self, 'is_quiz_map', True):
@@ -1309,7 +1322,7 @@ class Quarter4:
         mapped_questions = []
         try:
             if db:
-                questions_result = db.get_questions(quarter=4)
+                questions_result = db.get_questions(quarter=4, force_refresh=True)
                 mapped_questions = map_cloud_questions(
                     questions_result,
                     default_hint="Examine the choices carefully and select the best answer below!"
@@ -1317,8 +1330,76 @@ class Quarter4:
         except Exception as e:
             print(f"[WARN] Exception loading cloud questions for Quarter 4: {e}")
 
+        # Enforce maximum 10 questions ceiling for Summative Assessment
+        from core.dynamic_quiz_manager import MAX_QUESTIONS_PER_QUARTER
+        if len(mapped_questions) > MAX_QUESTIONS_PER_QUARTER:
+            print(f"[CLOUD SYNC] Webapp provided {len(mapped_questions)} questions; capping at maximum allowed {MAX_QUESTIONS_PER_QUARTER} questions for Summative Assessment.")
+            mapped_questions = mapped_questions[:MAX_QUESTIONS_PER_QUARTER]
+
+        tot_questions = len(mapped_questions)
+        if tot_questions == 0:
+            self.quiz_questions = []
+            self.active_station_count = 0
+            self.quiz_stations = {}
+            self.station_npcs = {}
+            self.quiz_station_index = 1
+            self.current_question_index = 0
+            self.show_bridge_warning("No Cloud Questions Set — Approach Guardian Bromen to unlock the Exit!")
+            print("[CLOUD SYNC] Quarter 4 synced 0 active cloud questions — station NPCs skipped, Guardian Bromen unlocked.")
+            return
+
+        # If more questions exist in cloud than default stations on the map, dynamically allocate stations
+        if tot_questions > len(self.quiz_stations):
+            from core.dynamic_quiz_manager import allocate_dynamic_stations
+            forbidden = set()
+            if hasattr(self, 'player_x') and hasattr(self, 'player_y'):
+                px = int(self.player_x // TILE_SIZE)
+                py = int(self.player_y // TILE_SIZE)
+                for dx in range(-2, 3):
+                    for dy in range(-2, 3):
+                        forbidden.add((px + dx, py + dy))
+            if hasattr(self, 'npc_bromen_x') and hasattr(self, 'npc_bromen_y'):
+                bx = int(self.npc_bromen_x // TILE_SIZE)
+                by = int(self.npc_bromen_y // TILE_SIZE)
+                for dx in range(-2, 3):
+                    for dy in range(-2, 3):
+                        forbidden.add((bx + dx, by + dy))
+
+            walkables = set(self.WALKABLE_TILES) if hasattr(self, 'WALKABLE_TILES') else {"G", "#"}
+            self.quiz_stations = allocate_dynamic_stations(
+                self.game_map,
+                self.quiz_stations,
+                tot_questions,
+                forbidden_tiles=forbidden,
+                walkable_chars=walkables
+            )
+
+            GUARDIAN_NAMES = [
+                ("Hydro Sage Kai", "Keeper of the Torrent"),
+                ("Abyssal Warden Nereus", "Guardian of the Deep Sluice"),
+                ("Current Herald Lyra", "Watcher of the Cascades"),
+                ("Mist Weaver Thalassa", "Elder of the Morning Vapor"),
+                ("Triton Guardian Nicos", "Sentry of the Coral Reef"),
+                ("Undine Mystic Sirena", "Scholar of the Deep Wells")
+            ]
+            for next_id in sorted(self.quiz_stations.keys()):
+                if next_id not in self.station_npcs:
+                    name_idx = (next_id - 7) % len(GUARDIAN_NAMES)
+                    g_name, g_title = GUARDIAN_NAMES[name_idx]
+                    donor_id = ((next_id - 1) % 6) + 1
+                    donor_npc = self.station_npcs.get(donor_id, {})
+                    self.station_npcs[next_id] = {
+                        "name": g_name,
+                        "title": g_title,
+                        "frames": donor_npc.get("frames", []),
+                        "anim_frame": 0,
+                        "anim_timer": 0
+                    }
+                    if hasattr(self, 'station_dirs'):
+                        self.station_dirs[next_id] = "left" if (next_id % 2 == 1) else "right"
+
         sorted_ids = sorted(self.quiz_stations.keys())
-        active_count = min(len(sorted_ids), len(mapped_questions))
+        active_count = min(len(sorted_ids), tot_questions)
         active_ids = sorted_ids[:active_count]
 
         self.quiz_questions = mapped_questions[:active_count]
@@ -1327,16 +1408,17 @@ class Quarter4:
         self.station_npcs = {k: self.station_npcs[k] for k in active_ids if k in self.station_npcs}
         self.first_attempt_correct = {k: True for k in active_ids}
         self.station_attempts = {k: 0 for k in active_ids}
+        if not hasattr(self, 'answered_stations') or self.answered_stations is None:
+            self.answered_stations = set()
 
-        if active_count == 0:
-            self.quiz_station_index = 1
-            self.current_question_index = 0
-            self.show_bridge_warning("No Cloud Questions Set — Approach Guardian Bromen to unlock the Exit!")
-            print("[CLOUD SYNC] Quarter 4 synced 0 active cloud questions — station NPCs skipped, Guardian Bromen unlocked.")
+        unanswered = [k for k in active_ids if k not in self.answered_stations]
+        if unanswered:
+            self.quiz_station_index = unanswered[0]
+            self.current_question_index = self.quiz_station_index - 1
         else:
-            self.quiz_station_index = active_ids[0]
-            self.current_question_index = 0
-            print(f"[CLOUD SYNC] Quarter 4 synced {active_count} cloud question(s) across {active_count} station(s).")
+            self.quiz_station_index = active_count + 1
+            self.current_question_index = active_count
+        print(f"[CLOUD SYNC] Quarter 4 synced {active_count} cloud question(s) across {len(self.quiz_stations)} dynamic station(s).")
 
     def save_quarter4_game_result(self):
         if getattr(self, '_results_saved_to_db', False):
@@ -1370,6 +1452,7 @@ class Quarter4:
             feedback_msg = f"Completed Summative Assessment (Water Temple). Answered {correct_answers} of {total_questions} questions correctly on first attempt."
             sel_student = getattr(self.main_menu, 'selected_student', None) or {}
             grade_level = sel_student.get('level') or sel_student.get('gradeLevel') or sel_student.get('grade_level') or 'Grade 2'
+            student_code = sel_student.get('student_id') or sel_student.get('studentId') or getattr(self.main_menu, 'student_id', None)
 
             success = db.save_game_result(
                 student_id=student_db_id,
@@ -1379,7 +1462,9 @@ class Quarter4:
                 percentage=percentage,
                 feedback=feedback_msg,
                 grade_level=grade_level,
-                assessment_id=assessment_id
+                assessment_id=assessment_id,
+                quarter=4,
+                student_code=student_code
             )
             if success:
                 print(f"[WIN] Successfully saved Quarter 4 Game Result to Database for Student DB ID {student_db_id}!")
@@ -1753,12 +1838,7 @@ class Quarter4:
                 self.speed_boost_timer = 3.0
                 self.quiz_state = 0
                 self.trigger_award_animation(self.quiz_station_index)
-                if self.quiz_station_index < len(self.quiz_stations):
-                    self.quiz_station_index += 1
-                    print(f"[OK] Advanced to Station {self.quiz_station_index}")
-                else:
-                    self.quiz_station_index = len(self.quiz_stations) + 1
-                    print(f"[OK] All Stations cleared!")
+                self._advance_to_next_unanswered_station()
                 save_student_progress(self.main_menu)
 
         # State 4: Out of tries reveal screen click (Recorded as wrong; player gets key and continues without retrying)
@@ -1783,12 +1863,7 @@ class Quarter4:
                 self.quiz_state = 0
                 self.answered_stations.add(self.quiz_station_index)
                 self.trigger_award_animation(self.quiz_station_index)
-                if self.quiz_station_index < len(self.quiz_stations):
-                    self.quiz_station_index += 1
-                    print(f"[OK] Advanced to Station {self.quiz_station_index}")
-                else:
-                    self.quiz_station_index = len(self.quiz_stations) + 1
-                    print(f"[OK] All Stations cleared!")
+                self._advance_to_next_unanswered_station()
                 save_student_progress(self.main_menu)
                 
         # State 5: Final speech click
@@ -2090,22 +2165,24 @@ class Quarter4:
             self.greeting_dialog.update(dt, self.cursor_pos, fist_pct)
             return
 
-        # Proximity interaction check for currently active sequential station NPC (1 to 5 hierarchy)
-        if self.quiz_state == 0 and hasattr(self, 'quiz_stations') and self.quiz_station_index in self.quiz_stations:
-            pos = self.quiz_stations[self.quiz_station_index]
-            is_answered = self.quiz_station_index in self.answered_stations
-            if not is_answered:
-                player_center_x = self.player_x + TILE_SIZE // 2
-                player_center_y = self.player_y + TILE_SIZE // 2
+        # Proximity interaction check for any unanswered Station NPC (supports non-linear progression)
+        if self.quiz_state == 0 and hasattr(self, 'quiz_stations'):
+            player_center_x = self.player_x + TILE_SIZE // 2
+            player_center_y = self.player_y + TILE_SIZE // 2
+            for st_idx, pos in sorted(self.quiz_stations.items()):
+                if st_idx in self.answered_stations:
+                    continue
                 npc_center_x = pos[0] * TILE_SIZE + TILE_SIZE // 2
                 npc_center_y = pos[1] * TILE_SIZE + TILE_SIZE // 2
                 dist = math.hypot(player_center_x - npc_center_x, player_center_y - npc_center_y)
                 if dist < TILE_SIZE * 1.8:
                     if not self.greeting_dialog.is_visible and not self.instruction_modal.is_visible:
-                        script = get_station_script(self.map_name, self.quiz_station_index)
-                        data = self.station_npcs.get(self.quiz_station_index, {})
-                        speaker_name = script.get("npc_name", data.get("name", f"Guardian {self.quiz_station_index}"))
-                        speaker_title = script.get("npc_title", data.get("title", f"Station {self.quiz_station_index}"))
+                        self.quiz_station_index = st_idx
+                        self.current_question_index = st_idx - 1
+                        script = get_station_script(self.map_name, st_idx)
+                        data = self.station_npcs.get(st_idx, {})
+                        speaker_name = script.get("npc_name", data.get("name", f"Guardian {st_idx}"))
+                        speaker_title = script.get("npc_title", data.get("title", f"Station {st_idx}"))
                         greeting_text = script.get("greeting", "Greetings, seeker of the deep!").replace("[Player Name]", self.player_name)
                         
                         sprite_frame = None
@@ -2117,6 +2194,7 @@ class Quarter4:
                             sprite_frame = data["image"]
                             
                         self.greeting_dialog.show(speaker_name, speaker_title, greeting_text, sprite_frame=sprite_frame)
+                    break
 
         # Map 12: Lotus Raft sailing logic
         if getattr(self, 'is_map12', False):
@@ -3443,10 +3521,7 @@ class Quarter4:
                     self.quiz_state = 0
                     self.answered_stations.add(self.quiz_station_index)
                     self.trigger_award_animation(self.quiz_station_index)
-                    if self.quiz_station_index < len(self.quiz_stations):
-                        self.quiz_station_index += 1
-                    else:
-                        self.quiz_station_index = len(self.quiz_stations) + 1
+                    self._advance_to_next_unanswered_station()
                     save_student_progress(self.main_menu)
                     return "handled"
                 elif self.bromen_dialogue_state == 2:
@@ -4980,13 +5055,17 @@ class Quarter4:
 
     def draw_offscreen_compass_pointer(self):
         """Draw Active Objective NPC Indicator and Off-Screen Compass Pointer for Quarter 4"""
+        from core.settings_manager import is_objective_finder_enabled
+        if not is_objective_finder_enabled():
+            return
+
         target_info = None
 
         # 1. Target Determination
         if self.quiz_state == 0:
             active_target_idx = None
-            for s_idx in range(1, 7):
-                if s_idx in self.quiz_stations and s_idx not in self.answered_stations:
+            for s_idx in sorted(self.quiz_stations.keys()):
+                if s_idx not in self.answered_stations:
                     active_target_idx = s_idx
                     break
             if active_target_idx is not None:

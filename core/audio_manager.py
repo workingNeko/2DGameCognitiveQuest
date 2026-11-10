@@ -62,6 +62,7 @@ class AudioManager:
         self.sfx_volume = 0.7     # 0.0 to 1.0
         self.music_muted = False
         self.sfx_muted = False
+        self.objective_finder_enabled = False
 
         # SFX Cache
         self.sfx_cache = {}
@@ -103,6 +104,7 @@ class AudioManager:
                 self.sfx_volume = float(data.get("sfx_volume", 0.7))
                 self.music_muted = bool(data.get("music_muted", False))
                 self.sfx_muted = bool(data.get("sfx_muted", False))
+                self.objective_finder_enabled = bool(data.get("objective_finder", False))
 
                 # Clamp values
                 self.music_volume = max(0.0, min(1.0, self.music_volume))
@@ -113,19 +115,44 @@ class AudioManager:
             print(f"[WARN] AudioManager: Error reading audio settings: {e}")
 
     def save_settings(self):
-        """Persists current volume and mute settings to disk."""
+        """Persists current volume, mute, and objective finder settings to disk."""
         try:
             os.makedirs(os.path.dirname(self.settings_file), exist_ok=True)
-            data = {
-                "music_volume": round(self.music_volume, 2),
-                "sfx_volume": round(self.sfx_volume, 2),
-                "music_muted": self.music_muted,
-                "sfx_muted": self.sfx_muted
-            }
-            with open(self.settings_file, "w", encoding="utf-8") as f:
+            data = {}
+            if os.path.exists(self.settings_file):
+                try:
+                    with open(self.settings_file, "r", encoding="utf-8") as f:
+                        data = json.load(f)
+                except Exception:
+                    pass
+            data["music_volume"] = round(self.music_volume, 2)
+            data["sfx_volume"] = round(self.sfx_volume, 2)
+            data["music_muted"] = self.music_muted
+            data["sfx_muted"] = self.sfx_muted
+            data["objective_finder"] = self.objective_finder_enabled
+
+            temp_path = f"{self.settings_file}.tmp_{os.getpid()}"
+            with open(temp_path, "w", encoding="utf-8") as f:
                 json.dump(data, f, indent=4)
+            os.replace(temp_path, self.settings_file)
         except Exception as e:
             print(f"[WARN] AudioManager: Error saving audio settings: {e}")
+
+    def is_objective_finder_enabled(self):
+        return getattr(self, 'objective_finder_enabled', False)
+
+    def set_objective_finder_enabled(self, enabled):
+        self.objective_finder_enabled = bool(enabled)
+        self.save_settings()
+        try:
+            from .settings_manager import set_objective_finder_enabled as sm_set
+            sm_set(self.objective_finder_enabled)
+        except Exception:
+            pass
+        return self.objective_finder_enabled
+
+    def toggle_objective_finder(self):
+        return self.set_objective_finder_enabled(not self.is_objective_finder_enabled())
 
     # ============================================================
     # BACKGROUND MUSIC (BGM)

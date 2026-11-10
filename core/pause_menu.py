@@ -233,7 +233,7 @@ class InGamePauseMenu:
         s_bg = (59, 130, 246) if s_hov else (37, 99, 235)
         pygame.draw.rect(self.screen, s_bg, self.audio_rect, border_radius=10)
         pygame.draw.rect(self.screen, (191, 219, 254), self.audio_rect, 2, border_radius=10)
-        s_txt = btn_font.render("Audio & Sound Settings", True, (255, 255, 255))
+        s_txt = btn_font.render("Game & Audio Settings", True, (255, 255, 255))
         self.screen.blit(s_txt, s_txt.get_rect(center=self.audio_rect.center))
 
         # 5. Return to Stage Select Button (Red)

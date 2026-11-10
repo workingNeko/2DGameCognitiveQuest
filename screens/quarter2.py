@@ -689,7 +689,7 @@ class Quarter2:
         mapped_questions = []
         try:
             if db:
-                questions_result = db.get_questions(quarter=2)
+                questions_result = db.get_questions(quarter=2, force_refresh=True)
                 mapped_questions = map_cloud_questions(
                     questions_result,
                     default_hint="Count and compare the barrio quantities carefully!"
@@ -697,9 +697,56 @@ class Quarter2:
         except Exception as e:
             print(f"[WARN] Exception loading cloud questions for Quarter 2: {e}")
 
+        # Enforce maximum 10 questions ceiling per quarter
+        from core.dynamic_quiz_manager import MAX_QUESTIONS_PER_QUARTER
+        if len(mapped_questions) > MAX_QUESTIONS_PER_QUARTER:
+            print(f"[CLOUD SYNC] Webapp provided {len(mapped_questions)} questions; capping at maximum allowed {MAX_QUESTIONS_PER_QUARTER} questions.")
+            mapped_questions = mapped_questions[:MAX_QUESTIONS_PER_QUARTER]
+
+        # Dynamically allocate extra stations if webapp provides more questions
+        if mapped_questions and len(mapped_questions) > len(self.quiz_stations):
+            from core.dynamic_quiz_manager import allocate_dynamic_stations
+            forbidden = set()
+            if hasattr(self, 'player_x') and hasattr(self, 'player_y'):
+                forbidden.add((int(self.player_x // TILE_SIZE), int(self.player_y // TILE_SIZE)))
+            if hasattr(self, 'npc_knight_tile_x') and hasattr(self, 'npc_knight_tile_y'):
+                forbidden.add((self.npc_knight_tile_x, self.npc_knight_tile_y))
+            if hasattr(self, 'portals'):
+                for p in self.portals:
+                    tx = getattr(p, 'tile_x', getattr(p, 'x', 0))
+                    ty = getattr(p, 'tile_y', getattr(p, 'y', 0))
+                    forbidden.add((tx, ty))
+            self.quiz_stations = allocate_dynamic_stations(
+                self.game_map,
+                self.quiz_stations,
+                len(mapped_questions),
+                forbidden_tiles=forbidden
+            )
+
         sorted_ids = sorted(self.quiz_stations.keys())
         active_count = min(len(sorted_ids), len(mapped_questions))
         active_ids = sorted_ids[:active_count]
+
+        vendor_names_pool = ["Sari-Sari Vendor", "Sorbetes Cart", "Jeepney Terminal", "Fruit Stand", "Parol Workshop", "Kakanin Seller", "Bibingka Stand", "Buko Juice Vendor", "Fish Vendor", "Rice Merchant"]
+        for num in active_ids:
+            if num not in self.station_npc_info:
+                vname = vendor_names_pool[(num - 1) % len(vendor_names_pool)]
+                self.station_npc_info[num] = {
+                    "name": f"Station {num}",
+                    "title": f"Station {num}: {vname}",
+                    "dialog_title": f"Barrio Challenge {num}",
+                    "wrong_encouragement": f"{vname} - Try Again",
+                    "correct_praise": f"{vname} Challenge Cleared! - Well Done",
+                    "target_math": f"Resolving Barrio {vname} Challenge",
+                    "frames": [],
+                    "anim_frame": 0,
+                    "anim_timer": 0,
+                    "cleared": False
+                }
+                for existing_k in sorted(self.station_npc_info.keys()):
+                    if self.station_npc_info[existing_k].get("frames"):
+                        self.station_npc_info[num]["frames"] = list(self.station_npc_info[existing_k]["frames"])
+                        break
 
         for idx, q_item in enumerate(mapped_questions[:active_count], start=1):
             q_item.setdefault("station", idx)
@@ -768,6 +815,7 @@ class Quarter2:
             feedback_msg = f"Completed Quarter 2 (Barangay Geometry). Answered {correct_answers} of {total_questions} questions correctly on the first attempt."
             sel_student = getattr(self.main_menu, 'selected_student', None) or {}
             grade_level = sel_student.get('level') or sel_student.get('gradeLevel') or sel_student.get('grade_level') or 'Grade 2'
+            student_code = sel_student.get('student_id') or sel_student.get('studentId') or getattr(self.main_menu, 'student_id', None)
 
             success = db.save_game_result(
                 student_id=student_db_id,
@@ -777,7 +825,9 @@ class Quarter2:
                 percentage=percentage,
                 feedback=feedback_msg,
                 grade_level=grade_level,
-                assessment_id=assessment_id
+                assessment_id=assessment_id,
+                quarter=2,
+                student_code=student_code
             )
             if success:
                 print(f"[WIN] Successfully saved Quarter 2 Game Result to Database for Student DB ID {student_db_id}!")
@@ -2757,25 +2807,27 @@ class Quarter2:
                 # Award 3-second Festive Sprint Speed Boost!
                 self.speed_boost_timer = 3.0
                 cleared_info = self.station_npc_info.get(self.quiz_station_index, {})
+                cleared_info["cleared"] = True
                 cleared_name = cleared_info.get("name", f"Station {self.quiz_station_index}")
                 self.banner_text = f"STALL CLEARED: {cleared_name.upper()}!"
                 self.banner_sub = "Festive Sprint active! Proceed to the next barrio stall!"
                 self.banner_timer = 3.0
 
                 tot_st = getattr(self, 'active_station_count', len(self.quiz_questions))
-                current_st = self.quiz_station_index
+                cleared_count = sum(1 for s in self.station_npc_info.values() if s.get("cleared", False))
                 if self.map_name == "map5.txt" and tot_st > 0:
-                    target_kubo = max(1, min(5, int(round(current_st * 5.0 / float(tot_st)))))
+                    target_kubo = max(1, min(5, int(round(cleared_count * 5.0 / float(tot_st)))))
                     self.kubo_pieces_collected = target_kubo
                     self.trigger_kubo_pan_sequence(target_kubo)
 
-                if self.quiz_station_index < tot_st:
-                    self.quiz_station_index += 1
+                unanswered = [sid for sid in sorted(self.quiz_stations.keys()) if not self.station_npc_info.get(sid, {}).get('cleared', False)]
+                if unanswered:
+                    self.quiz_station_index = unanswered[0]
                     self.current_question_index = self.quiz_station_index - 1
                     self.quiz_state = 0  # Immediate return to exploration!
                     print(f"[TARGET] Proceeding to Station {self.quiz_station_index}")
                 else:
-                    self.quiz_station_index = 6
+                    self.quiz_station_index = tot_st + 1
                     self.current_question_index = tot_st
                     self.quiz_state = 0
                     self.guardian_knight_state = 1
@@ -2798,25 +2850,27 @@ class Quarter2:
                 self.speed_boost_timer = 3.0
                 self.station_attempts[self.quiz_station_index] = 0
                 cleared_info = self.station_npc_info.get(self.quiz_station_index, {})
+                cleared_info["cleared"] = True
                 cleared_name = cleared_info.get("name", f"Station {self.quiz_station_index}")
                 self.banner_text = f"STALL CLEARED: {cleared_name.upper()}!"
                 self.banner_sub = "Recorded as incorrect. Festive Sprint active! Proceed forward!"
                 self.banner_timer = 3.0
 
                 tot_st = getattr(self, 'active_station_count', len(self.quiz_questions))
-                current_st = self.quiz_station_index
+                cleared_count = sum(1 for s in self.station_npc_info.values() if s.get("cleared", False))
                 if self.map_name == "map5.txt" and tot_st > 0:
-                    target_kubo = max(1, min(5, int(round(current_st * 5.0 / float(tot_st)))))
+                    target_kubo = max(1, min(5, int(round(cleared_count * 5.0 / float(tot_st)))))
                     self.kubo_pieces_collected = target_kubo
                     self.trigger_kubo_pan_sequence(target_kubo)
 
-                if self.quiz_station_index < tot_st:
-                    self.quiz_station_index += 1
+                unanswered = [sid for sid in sorted(self.quiz_stations.keys()) if not self.station_npc_info.get(sid, {}).get('cleared', False)]
+                if unanswered:
+                    self.quiz_station_index = unanswered[0]
                     self.current_question_index = self.quiz_station_index - 1
                     self.quiz_state = 0
                     print(f"[TARGET] Proceeding to Station {self.quiz_station_index}")
                 else:
-                    self.quiz_station_index = 6
+                    self.quiz_station_index = tot_st + 1
                     self.current_question_index = tot_st
                     self.quiz_state = 0
                     self.guardian_knight_state = 1
@@ -2996,36 +3050,44 @@ class Quarter2:
             self.greeting_dialog.update(dt, self.cursor_pos, fist_pct)
             return
 
-        # Proximity interaction check for current active station Guardian NPC (with Line-of-Sight wall check)
-        if self.quiz_state == 0 and self.quiz_station_index in self.quiz_stations:
-            st_x, st_y = self.quiz_stations[self.quiz_station_index]
+        # Proximity interaction check for station Guardian NPCs (Dynamic & Non-Linear)
+        if self.quiz_state == 0 and hasattr(self, 'quiz_stations'):
             player_center_x = self.player_x + TILE_SIZE // 2
             player_center_y = self.player_y + TILE_SIZE // 2
             p_tile_x = int(player_center_x // TILE_SIZE)
             p_tile_y = int(player_center_y // TILE_SIZE)
-            npc_center_x = st_x * TILE_SIZE + TILE_SIZE // 2
-            npc_center_y = st_y * TILE_SIZE + TILE_SIZE // 2
-            dist = math.hypot(player_center_x - npc_center_x, player_center_y - npc_center_y)
             
-            # Require close proximity (within 1.8 tiles) AND unobstructed line of sight
-            if dist < TILE_SIZE * 1.8 and self.has_line_of_sight(p_tile_x, p_tile_y, st_x, st_y):
-                if not self.greeting_dialog.is_visible:
-                    script = get_station_script(self.map_name, self.quiz_station_index)
-                    info = self.station_npc_info.get(self.quiz_station_index, {})
-                    speaker_name = script.get("npc_name", info.get("name", "Guardian"))
-                    speaker_title = script.get("npc_title", info.get("title", f"Station {self.quiz_station_index}"))
-                    greeting_text = script.get("greeting", "Halika, magsimula tayo!").replace("[Player Name]", self.player_name)
-                    
-                    sprite_frame = None
-                    if info.get("frames"):
-                        frames = info["frames"]
-                        anim_idx = info.get("anim_frame", 0) % len(frames)
-                        sprite_frame = frames[anim_idx]
+            for st_idx, (st_x, st_y) in sorted(self.quiz_stations.items()):
+                info = self.station_npc_info.get(st_idx, {})
+                if info.get("cleared", False):
+                    continue
+                npc_center_x = st_x * TILE_SIZE + TILE_SIZE // 2
+                npc_center_y = st_y * TILE_SIZE + TILE_SIZE // 2
+                dist = math.hypot(player_center_x - npc_center_x, player_center_y - npc_center_y)
+                
+                # Require close proximity (within 1.8 tiles) AND unobstructed line of sight
+                if dist < TILE_SIZE * 1.8 and self.has_line_of_sight(p_tile_x, p_tile_y, st_x, st_y):
+                    self.quiz_station_index = st_idx
+                    self.current_question_index = st_idx - 1
+                    if not self.greeting_dialog.is_visible:
+                        script = get_station_script(self.map_name, st_idx)
+                        speaker_name = script.get("npc_name", info.get("name", "Guardian"))
+                        speaker_title = script.get("npc_title", info.get("title", f"Station {st_idx}"))
+                        greeting_text = script.get("greeting", "Halika, magsimula tayo!").replace("[Player Name]", self.player_name)
                         
-                    self.greeting_dialog.show(speaker_name, speaker_title, greeting_text, sprite_frame=sprite_frame)
+                        sprite_frame = None
+                        if info.get("frames"):
+                            frames = info["frames"]
+                            anim_idx = info.get("anim_frame", 0) % len(frames)
+                            sprite_frame = frames[anim_idx]
+                            
+                        self.greeting_dialog.show(speaker_name, speaker_title, greeting_text, sprite_frame=sprite_frame)
+                    break
 
-        # Proximity interaction check for Knight Portal Guardian (after Stations 1-5 cleared)
-        if self.quiz_station_index > 5 and not self.currency_puzzle_solved:
+        # Proximity interaction check for Knight Portal Guardian (after all challenges cleared)
+        tot_st = getattr(self, 'active_station_count', len(self.quiz_stations))
+        cleared_count = sum(1 for s in self.station_npc_info.values() if s.get('cleared', False))
+        if cleared_count >= tot_st and not self.currency_puzzle_solved:
             if self.guardian_knight_state == 0:
                 self.guardian_knight_state = 1
             if getattr(self, 'npc_knight_found', False) and not self.currency_puzzle_active:
@@ -4552,7 +4614,8 @@ class Quarter2:
         self.draw_player()
 
         # Draw Active Objective NPC Indicator and Off-Screen Compass Pointer
-        if self.quiz_state == 0 and self.quiz_station_index in self.quiz_stations:
+        from core.settings_manager import is_objective_finder_enabled
+        if is_objective_finder_enabled() and self.quiz_state == 0 and self.quiz_station_index in self.quiz_stations:
             st_x, st_y = self.quiz_stations[self.quiz_station_index]
             npc_center_x = st_x * TILE_SIZE + TILE_SIZE // 2
             npc_center_y = st_y * TILE_SIZE + TILE_SIZE // 2
@@ -4650,7 +4713,7 @@ class Quarter2:
                 self.screen.blit(ptr_surf, (ptr_rect.x + 8, ptr_rect.y + 4))
 
         # 3. Off-Screen Directional Pointer for Exit Portal (When all 5 challenges cleared)
-        if self.quiz_state == 6 and self.portals:
+        if is_objective_finder_enabled() and self.quiz_state == 6 and self.portals:
             exit_p = self.portals[0]
             portal_cx = exit_p.get_center_x()
             portal_cy = exit_p.get_center_y()

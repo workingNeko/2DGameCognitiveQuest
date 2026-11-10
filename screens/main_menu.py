@@ -360,6 +360,9 @@ class MainMenu:
                 self.cloud_online = health.get("online", False)
                 self.cloud_pending_sync = health.get("pending_sync", 0)
                 self.cloud_last_checked = health.get("last_checked", time.time())
+                if self.cloud_online and getattr(self, 'selected_student', None) and getattr(self, 'student_id', None):
+                    from db.save_system import sync_student_with_cloud
+                    sync_student_with_cloud(self.student_id, student_db_id=getattr(self, 'student_db_id', None), main_menu=self)
         except Exception:
             self.cloud_online = False
         finally:
@@ -1087,7 +1090,7 @@ class MainMenu:
     def handle_popup_click(self, pos):
         """Handle clicking inside confirmation and settings pop-ups"""
         if self.popup_state == "audio_settings":
-            box_w, box_h = 620, 520
+            box_w, box_h = 620, 580
             box_x = (self.w - box_w) // 2
             box_y = (self.h - box_h) // 2
             dialog_rect = pygame.Rect(box_x, box_y, box_w, box_h)
@@ -1102,7 +1105,8 @@ class MainMenu:
             s_plus_rect = pygame.Rect(box_x + 342, box_y + 162, 42, 34)
             s_mute_rect = pygame.Rect(box_x + 398, box_y + 162, 180, 34)
 
-            autostart_toggle_rect = pygame.Rect(box_x + box_w - 180, box_y + 222, 140, 36)
+            obj_toggle_rect = pygame.Rect(box_x + box_w - 180, box_y + 214, 140, 36)
+            autostart_toggle_rect = pygame.Rect(box_x + box_w - 180, box_y + 272, 140, 36)
 
             if m_minus_rect.collidepoint(pos):
                 self.audio_manager.set_music_volume(self.audio_manager.music_volume - 0.1)
@@ -1131,6 +1135,13 @@ class MainMenu:
             elif s_mute_rect.collidepoint(pos):
                 self.audio_manager.toggle_sfx_mute()
                 self.audio_manager.play_sfx("click")
+
+            elif obj_toggle_rect.collidepoint(pos):
+                from core.settings_manager import toggle_objective_finder
+                new_state = toggle_objective_finder()
+                if hasattr(self, 'audio_manager'):
+                    self.audio_manager.set_objective_finder_enabled(new_state)
+                    self.audio_manager.play_sfx("click")
 
             elif autostart_toggle_rect.collidepoint(pos):
                 from core.autostart_manager import toggle_autostart
@@ -1260,8 +1271,8 @@ class MainMenu:
             self._popup_dim_overlay.set_alpha(180)
         self.screen.blit(self._popup_dim_overlay, (0, 0))
 
-        # 2. Centered dialog box (height 520px for updates & system options)
-        box_w, box_h = 620, 520
+        # 2. Centered dialog box (height 580px for updates & system options)
+        box_w, box_h = 620, 580
         box_x = (self.w - box_w) // 2
         box_y = (self.h - box_h) // 2
         dialog_rect = pygame.Rect(box_x, box_y, box_w, box_h)
@@ -1361,7 +1372,36 @@ class MainMenu:
         self.screen.blit(txt, (s_mute_rect.centerx - txt.get_width() // 2, s_mute_rect.centery - txt.get_height() // 2))
 
         # Divider 2
-        pygame.draw.line(self.screen, (51, 65, 85), (box_x + 35, box_y + 206), (box_x + box_w - 35, box_y + 206), 1)
+        pygame.draw.line(self.screen, (51, 65, 85), (box_x + 35, box_y + 202), (box_x + box_w - 35, box_y + 202), 1)
+
+        # ---------------- Objective Finder Guide Row ----------------
+        from core.settings_manager import is_objective_finder_enabled
+        is_obj_enabled = is_objective_finder_enabled()
+
+        self.screen.blit(label_font.render("Objective Finder Guide", True, (241, 245, 249)), (box_x + 40, box_y + 212))
+        obj_sub_text = "Display visual path trail and directional compass to targets"
+        self.screen.blit(small_font.render(obj_sub_text, True, (148, 163, 184)), (box_x + 40, box_y + 236))
+
+        obj_toggle_rect = pygame.Rect(box_x + box_w - 180, box_y + 214, 140, 36)
+        self.objective_toggle_rect = obj_toggle_rect
+        hover_obj = obj_toggle_rect.collidepoint(self.cursor_pos)
+
+        if is_obj_enabled:
+            btn_bg = (16, 185, 129) if not hover_obj else (5, 150, 105)
+            border_col = (110, 231, 183)
+            btn_label = "[ON] ENABLED"
+        else:
+            btn_bg = (51, 65, 85) if not hover_obj else (71, 85, 105)
+            border_col = (148, 163, 184)
+            btn_label = "[OFF] DISABLED"
+
+        pygame.draw.rect(self.screen, btn_bg, obj_toggle_rect, border_radius=8)
+        pygame.draw.rect(self.screen, border_col, obj_toggle_rect, 2, border_radius=8)
+        t_surf = btn_font.render(btn_label, True, (255, 255, 255))
+        self.screen.blit(t_surf, (obj_toggle_rect.centerx - t_surf.get_width() // 2, obj_toggle_rect.centery - t_surf.get_height() // 2))
+
+        # Divider 3
+        pygame.draw.line(self.screen, (51, 65, 85), (box_x + 35, box_y + 260), (box_x + box_w - 35, box_y + 260), 1)
 
         # ---------------- Windows Startup Row ----------------
         if not hasattr(self, '_cached_autostart_supported'):
@@ -1371,11 +1411,11 @@ class MainMenu:
         is_supported = self._cached_autostart_supported
         is_enabled = getattr(self, '_cached_autostart_enabled', False) if is_supported else False
 
-        self.screen.blit(label_font.render("Run on Windows Startup", True, (241, 245, 249)), (box_x + 40, box_y + 218))
+        self.screen.blit(label_font.render("Run on Windows Startup", True, (241, 245, 249)), (box_x + 40, box_y + 270))
         sub_text = "Launch Cognitive Play automatically on boot" if is_supported else "Supported only on Windows"
-        self.screen.blit(small_font.render(sub_text, True, (148, 163, 184)), (box_x + 40, box_y + 242))
+        self.screen.blit(small_font.render(sub_text, True, (148, 163, 184)), (box_x + 40, box_y + 294))
 
-        autostart_toggle_rect = pygame.Rect(box_x + box_w - 180, box_y + 222, 140, 36)
+        autostart_toggle_rect = pygame.Rect(box_x + box_w - 180, box_y + 272, 140, 36)
         hover_toggle = autostart_toggle_rect.collidepoint(self.cursor_pos)
 
         if not is_supported:
@@ -1396,13 +1436,13 @@ class MainMenu:
         t_surf = btn_font.render(btn_label, True, (255, 255, 255))
         self.screen.blit(t_surf, (autostart_toggle_rect.centerx - t_surf.get_width() // 2, autostart_toggle_rect.centery - t_surf.get_height() // 2))
 
-        # Divider 3
-        pygame.draw.line(self.screen, (51, 65, 85), (box_x + 35, box_y + 274), (box_x + box_w - 35, box_y + 274), 1)
+        # Divider 4
+        pygame.draw.line(self.screen, (51, 65, 85), (box_x + 35, box_y + 318), (box_x + box_w - 35, box_y + 318), 1)
 
         # ---------------- Game Version & Updates Row ----------------
-        self.screen.blit(label_font.render("Game Version & Updates", True, (241, 245, 249)), (box_x + 40, box_y + 286))
+        self.screen.blit(label_font.render("Game Version & Updates", True, (241, 245, 249)), (box_x + 40, box_y + 328))
         ver_sub_text = f"Installed: v{APP_VERSION}"
-        self.screen.blit(small_font.render(ver_sub_text, True, (148, 163, 184)), (box_x + 40, box_y + 310))
+        self.screen.blit(small_font.render(ver_sub_text, True, (148, 163, 184)), (box_x + 40, box_y + 352))
 
         # Reset frame interactive update button rects
         self.update_check_btn_rect = None
@@ -1413,7 +1453,7 @@ class MainMenu:
         self.update_retry_btn_rect = None
 
         # Check for Updates Button
-        update_btn_rect = pygame.Rect(box_x + box_w - 180, box_y + 288, 140, 36)
+        update_btn_rect = pygame.Rect(box_x + box_w - 180, box_y + 330, 140, 36)
         self.update_check_btn_rect = update_btn_rect
         hover_update = update_btn_rect.collidepoint(self.cursor_pos)
         is_chk = self.update_manager.is_checking()
@@ -1438,28 +1478,28 @@ class MainMenu:
         if st == UpdateState.IDLE:
             st_text = "Click to verify if a newer game version is available online."
             st_col = (148, 163, 184)
-            self.screen.blit(small_font.render(st_text, True, st_col), (box_x + 40, box_y + 338))
+            self.screen.blit(small_font.render(st_text, True, st_col), (box_x + 40, box_y + 378))
 
         elif st == UpdateState.CHECKING:
             dots = "." * ((pygame.time.get_ticks() // 350) % 4)
             st_text = f"Connecting to update server{dots}"
             st_col = (250, 204, 21)
-            self.screen.blit(small_font.render(st_text, True, st_col), (box_x + 40, box_y + 338))
+            self.screen.blit(small_font.render(st_text, True, st_col), (box_x + 40, box_y + 378))
 
         elif st == UpdateState.UP_TO_DATE:
             st_text = f"✓ You are running the latest version (v{APP_VERSION})!"
             st_col = (34, 197, 94)
-            self.screen.blit(small_font.render(st_text, True, st_col), (box_x + 40, box_y + 338))
+            self.screen.blit(small_font.render(st_text, True, st_col), (box_x + 40, box_y + 378))
 
         elif st == UpdateState.UPDATE_AVAILABLE:
             ver_clean = self.update_manager.get_clean_latest_version() or "New"
             st_text = f"★ New Version Available: v{ver_clean}!"
-            self.screen.blit(label_font.render(st_text, True, (250, 204, 21)), (box_x + 40, box_y + 332))
+            self.screen.blit(label_font.render(st_text, True, (250, 204, 21)), (box_x + 40, box_y + 372))
             sub_text = "One-click automatic update inside the app:"
-            self.screen.blit(small_font.render(sub_text, True, (148, 163, 184)), (box_x + 40, box_y + 354))
+            self.screen.blit(small_font.render(sub_text, True, (148, 163, 184)), (box_x + 40, box_y + 394))
 
             # Single In-App Auto-Update Button (no manual browser redirect)
-            inapp_rect = pygame.Rect(box_x + box_w - 235, box_y + 331, 195, 36)
+            inapp_rect = pygame.Rect(box_x + box_w - 235, box_y + 371, 195, 36)
             self.update_download_btn_rect = inapp_rect
             hover_inapp = inapp_rect.collidepoint(self.cursor_pos)
             inapp_bg = (16, 185, 129) if hover_inapp else (5, 150, 105)
@@ -1474,10 +1514,10 @@ class MainMenu:
                 st_text = f"Updating in-app: {stats['pct']}% ({stats['mb_done']:.1f} / {stats['mb_total']:.1f} MB) • {stats['speed_str']}"
             else:
                 st_text = f"Updating in-app: {stats['mb_done']:.1f} MB • {stats['speed_str']}"
-            self.screen.blit(small_font.render(st_text, True, (56, 189, 248)), (box_x + 40, box_y + 330))
+            self.screen.blit(small_font.render(st_text, True, (56, 189, 248)), (box_x + 40, box_y + 370))
 
             # Progress Bar
-            bar_rect = pygame.Rect(box_x + 40, box_y + 352, box_w - 170, 16)
+            bar_rect = pygame.Rect(box_x + 40, box_y + 392, box_w - 170, 16)
             pygame.draw.rect(self.screen, (30, 41, 59), bar_rect, border_radius=8)
             fill_w = max(4, int(bar_rect.width * stats['progress'])) if stats['progress'] > 0 else 0
             if fill_w > 0:
@@ -1485,7 +1525,7 @@ class MainMenu:
             pygame.draw.rect(self.screen, (56, 189, 248), bar_rect, 2, border_radius=8)
 
             # Cancel Button
-            cancel_rect = pygame.Rect(box_x + box_w - 115, box_y + 344, 75, 28)
+            cancel_rect = pygame.Rect(box_x + box_w - 115, box_y + 384, 75, 28)
             self.update_cancel_btn_rect = cancel_rect
             hover_cancel = cancel_rect.collidepoint(self.cursor_pos)
             c_bg = (185, 28, 28) if hover_cancel else (127, 29, 29)
@@ -1497,11 +1537,11 @@ class MainMenu:
         elif st == UpdateState.READY_TO_INSTALL:
             ver_clean = self.update_manager.get_clean_latest_version() or "New"
             st_text = f"✓ Update v{ver_clean} ready to install!"
-            self.screen.blit(label_font.render(st_text, True, (34, 197, 94)), (box_x + 40, box_y + 330))
+            self.screen.blit(label_font.render(st_text, True, (34, 197, 94)), (box_x + 40, box_y + 370))
             sub_text = "Installs silently in-place and restarts automatically:"
-            self.screen.blit(small_font.render(sub_text, True, (148, 163, 184)), (box_x + 40, box_y + 354))
+            self.screen.blit(small_font.render(sub_text, True, (148, 163, 184)), (box_x + 40, box_y + 394))
 
-            install_rect = pygame.Rect(box_x + box_w - 240, box_y + 330, 200, 38)
+            install_rect = pygame.Rect(box_x + box_w - 240, box_y + 370, 200, 38)
             self.update_install_btn_rect = install_rect
             hover_install = install_rect.collidepoint(self.cursor_pos)
             inst_bg = (16, 185, 129) if hover_install else (5, 150, 105)
@@ -1513,12 +1553,12 @@ class MainMenu:
         elif st == UpdateState.ERROR:
             err_reason = self.update_manager.download_error or self.update_manager.error_message or "Offline"
             st_text = f"Update error: {err_reason}"
-            self.screen.blit(small_font.render(st_text, True, (244, 63, 94)), (box_x + 40, box_y + 330))
+            self.screen.blit(small_font.render(st_text, True, (244, 63, 94)), (box_x + 40, box_y + 370))
             sub_text = "Check your internet connection and retry in-app:"
-            self.screen.blit(small_font.render(sub_text, True, (148, 163, 184)), (box_x + 40, box_y + 354))
+            self.screen.blit(small_font.render(sub_text, True, (148, 163, 184)), (box_x + 40, box_y + 394))
 
             # Retry Button (in-app only)
-            retry_rect = pygame.Rect(box_x + box_w - 195, box_y + 332, 155, 34)
+            retry_rect = pygame.Rect(box_x + box_w - 195, box_y + 372, 155, 34)
             self.update_retry_btn_rect = retry_rect
             hover_retry = retry_rect.collidepoint(self.cursor_pos)
             ret_bg = (14, 116, 144) if hover_retry else (8, 145, 178)
@@ -1531,14 +1571,14 @@ class MainMenu:
         now = pygame.time.get_ticks()
         if hasattr(self, 'autostart_status_msg') and getattr(self, 'autostart_msg_timer', 0) > now:
             fb_surf = small_font.render(self.autostart_status_msg, True, (250, 204, 21))
-            self.screen.blit(fb_surf, (box_x + (box_w - fb_surf.get_width()) // 2, box_y + 400))
+            self.screen.blit(fb_surf, (box_x + (box_w - fb_surf.get_width()) // 2, box_y + 448))
         else:
             hint_surf = small_font.render("Hotkey: [M] Mute  |  [ [ ] / [ ] ] Volume  |  [F] Fullscreen  |  [F12 / PrtScn] Screenshot", True, (148, 163, 184))
-            self.screen.blit(hint_surf, (box_x + (box_w - hint_surf.get_width()) // 2, box_y + 400))
+            self.screen.blit(hint_surf, (box_x + (box_w - hint_surf.get_width()) // 2, box_y + 448))
 
         # ---------------- Bottom Action Buttons ----------------
-        test_rect = pygame.Rect(box_x + 40, box_y + 445, 240, 46)
-        done_rect = pygame.Rect(box_x + box_w - 280, box_y + 445, 240, 46)
+        test_rect = pygame.Rect(box_x + 40, box_y + 495, 240, 46)
+        done_rect = pygame.Rect(box_x + box_w - 280, box_y + 495, 240, 46)
         self.audio_test_rect = test_rect
         self.audio_done_rect = done_rect
 
@@ -1912,7 +1952,14 @@ class MainMenu:
         if hasattr(self, 'audio_manager') and self.audio_manager:
             self.audio_manager.play_sfx("click")
             
-        from db.save_system import load_student_progress, apply_student_progress
+        from db.save_system import sync_student_with_cloud, load_student_progress, apply_student_progress, check_save_exists
+        # Check cloud synchronization before continuing in case data was deleted on the webapp
+        sync_student_with_cloud(self.student_id, student_db_id=getattr(self, 'student_db_id', None), main_menu=self)
+        if not check_save_exists(self.student_id):
+            print("[WARN] Save progress wiped from cloud, starting new activity instead.")
+            self.start_activity()
+            return
+
         save_data = load_student_progress(self.student_id)
         if save_data:
             apply_student_progress(self, save_data)

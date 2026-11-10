@@ -24,6 +24,15 @@ from .state_machine import State, UIStateMachine
 from .version import APP_VERSION, APP_NAME, compare_versions
 from .update_manager import UpdateManager, UpdateState
 from .screenshot_manager import capture_screenshot, get_screenshots_directory
+from .settings_manager import (
+    is_objective_finder_enabled,
+    set_objective_finder_enabled,
+    toggle_objective_finder
+)
+from .dynamic_quiz_manager import (
+    allocate_dynamic_stations,
+    MAX_QUESTIONS_PER_QUARTER
+)
 
 __all__ = [
     "APP_VERSION",
@@ -48,6 +57,9 @@ __all__ = [
     "draw_vector_replay",
     "draw_vector_gem",
     "DustParticleSystem",
+    "is_objective_finder_enabled",
+    "set_objective_finder_enabled",
+    "toggle_objective_finder",
     "SparkleParticleSystem",
     "ScreenShake",
     "SceneTransition",
