@@ -4,7 +4,7 @@ import sys
 import types
 
 # Lightweight matplotlib stub so mediapipe.tasks.python.vision.drawing_utils
-# never drags ~40 MB of matplotlib.pyplot into RAM or frozen builds on AMD A4-6300.
+# never drags ~40 MB of matplotlib.pyplot into RAM or frozen builds on target hardware.
 if "matplotlib" not in sys.modules:
     _mpl_stub = types.ModuleType("matplotlib")
     _mpl_stub.__path__ = []
@@ -16,7 +16,7 @@ if "matplotlib" not in sys.modules:
 # Ensure matplotlib uses headless Agg backend to prevent Tk/GUI backend dependencies
 os.environ["MPLBACKEND"] = "Agg"
 
-# Low-overhead CPU thread scheduling optimized for AMD A4-6300 (Dual Core / Dual Thread):
+# Low-overhead CPU thread scheduling optimized for target hardware (Dual Core / Dual Thread):
 # Prevents libraries (OpenMP, BLAS, NumPy, OpenCV, XNNPACK) from spawning competing thread pools
 # that starve the Pygame main game loop and cause micro-stutters.
 os.environ["OMP_NUM_THREADS"] = "1"
@@ -37,7 +37,7 @@ except Exception:
     pass
 
 # Force Windows kernel timer granularity to 1ms (standard is 15.625ms).
-# Eliminates thread sleep jitter and scheduling latency on AMD A4-6300 dual-core APU.
+# Eliminates thread sleep jitter and scheduling latency on target hardware dual-core APU.
 if sys.platform == "win32":
     try:
         import ctypes

@@ -6,7 +6,7 @@ Extracted and generalized from Solar Array / Fraction Bakery mini-puzzles.
 Focuses on Numerical Multiplication, Visual Array Representation, and Fractional Partitioning.
 
 Target Hardware Constraint:
-- AMD A4-6300 APU: Cell geometry is pre-calculated into a list of pygame.Rect.
+- Target Hardware: Cell geometry is pre-calculated into a list of pygame.Rect.
 - Zero per-frame allocations during interactive cell toggling.
 """
 

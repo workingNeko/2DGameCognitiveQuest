@@ -6,7 +6,7 @@ Decouples cognitive minigame logic, UI interaction, event handling, and renderin
 from scene scripts into a clean, modular, lifecycle-driven system.
 
 Target Hardware Constraint:
-- AMD A4-6300 APU (Dual-Core, 1MB L2 cache, 0MB L3 cache, Radeon HD 8370D).
+- Dual-Core Low-Spec Target Hardware.
 - Zero per-frame memory allocations in update() and draw() hot loops.
 - All surface transformations cached / memoized.
 - Input strictly isolated from player overworld walking.

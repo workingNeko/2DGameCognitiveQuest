@@ -7,7 +7,7 @@ Handles grid decomposition, piece shuffling, drag-and-drop mechanics, snap toler
 and completion validation.
 
 Target Hardware Constraint:
-- AMD A4-6300 APU: Piece surfaces are sliced and memoized once during load_config().
+- Target Hardware: Piece surfaces are sliced and memoized once during load_config().
 - No dynamic surface allocations during dragging or rendering loops.
 """
 

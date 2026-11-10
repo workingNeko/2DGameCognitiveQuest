@@ -665,7 +665,7 @@ class Quarter3:
         # Backwards-compatible cognitive puzzle lock flag
         self.mini_puzzle_active = False
 
-        # Initialize High-Performance Surface & Sprite Cache for AMD A4-6300 APU (60 FPS)
+        # Initialize High-Performance Surface & Sprite Cache for target hardware (60 FPS)
         self.init_cached_surfaces()
 
         print(f"[OK] Quarter3 initialized with map: {self.map_name}")

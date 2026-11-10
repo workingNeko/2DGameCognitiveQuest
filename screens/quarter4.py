@@ -509,7 +509,7 @@ class Quarter4:
         )
         self.title_total_width = sum(l["width"] for l in self.title_letters) + self.title_spacing * (len(self.title_text) - 1)
 
-        # Pre-allocate reusable HUD/dialog caches & pre-render map layers for 60 FPS on AMD A4-6300
+        # Pre-allocate reusable HUD/dialog caches & pre-render map layers for 60 FPS on target hardware
         has_disp = pygame.display.get_surface() is not None
         self._ring_surf_cache = {}
         self._station_aura_cache = {}

@@ -5,7 +5,7 @@ Provides periodic and event-triggered background autosaving to protect student p
 against unexpected power interruptions, brownouts, or sudden system shutdowns.
 
 Target Hardware Constraint:
-- AMD A4-6300 APU (Dual-Core, 2 Threads, 3.7 GHz, 1MB L2 cache, 0MB L3 cache, Radeon HD 8370D).
+- Dual-Core Low-Spec Hardware (2 Threads, 1MB L2 Cache).
 - Zero per-frame allocations during hot game loop (60 FPS maintained).
 - Pre-baked surfaces with hardware alpha-blending for the autosave badge.
 - Atomic filesystem sync (fsync) guarantees valid files on physical media.

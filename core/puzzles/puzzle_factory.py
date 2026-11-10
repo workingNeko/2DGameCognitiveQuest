@@ -9,7 +9,7 @@ Enables data-driven puzzle instantiation:
 - Caches parsed configuration payloads to avoid disk I/O in the game loop
 
 Target Hardware Constraint:
-- AMD A4-6300 APU: Zero disk hits during gameplay; configs cached on first load.
+- Target Hardware: Zero disk hits during gameplay; configs cached on first load.
 """
 
 import os

@@ -73,7 +73,7 @@ class MainMenu:
                     print(f"[OK] MediaPipe HandLandmarker Tasks API initialized from {model_path} (single hand optimized)!")
                 elif hasattr(mp, 'solutions') and hasattr(mp.solutions, 'hands'):
                     self.mp_hands = mp.solutions.hands
-                    # Optimized for AMD A4-6300 (Dual Core): use lightweight model_complexity=0 and single hand
+                    # Optimized for target hardware (Dual Core): use lightweight model_complexity=0 and single hand
                     self.hands = self.mp_hands.Hands(
                         max_num_hands=1,
                         min_detection_confidence=0.45,
@@ -584,7 +584,7 @@ class MainMenu:
                     ret, test_frame = cap.read()
                     if ret and test_frame is not None and test_frame.size > 0:
                         cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
-                        # Request 320x240 native capture FIRST for AMD A4-6300 dual-core hardware
+                        # Request 320x240 native capture FIRST for target hardware dual-core hardware
                         # (Windows DirectShow resets FOURCC/FPS back to slow YUY2 if resolution is set afterward)
                         cap.set(cv2.CAP_PROP_FRAME_WIDTH, 320)
                         cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 240)
@@ -615,7 +615,7 @@ class MainMenu:
     def _camera_worker(self):
         """
         Asynchronous background worker for camera frame grabbing and MediaPipe ML inference.
-        Specially optimized for AMD A4-6300 dual-core CPU desktop:
+        Specially optimized for target hardware dual-core CPU desktop:
         - Limits OpenCV internal thread pool to 1 thread to avoid thread starvation on dual-core CPU.
         - Downscales camera frame directly to 320x240 for 75% memory/cache reduction and 4x faster MediaPipe inference (~10-12ms).
         - Hardware capture pacing prevents CPU burning when waiting for 30 FPS camera frames.
@@ -663,7 +663,7 @@ class MainMenu:
                 now = time.time()
 
                 # Zero-copy optimization: If native capture is 320x240, bypass resize entirely.
-                # Fits comfortably inside AMD A4-6300's 1MB shared L2 cache and avoids 921KB frame copies.
+                # Fits comfortably inside target hardware's 1MB shared L2 cache and avoids 921KB frame copies.
                 h, w = img.shape[:2]
                 if w == 320 and h == 240:
                     cv2.flip(img, 1, dst=flipped_small)

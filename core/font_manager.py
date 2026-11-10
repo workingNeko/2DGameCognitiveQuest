@@ -232,7 +232,7 @@ def sanitize_text(text):
     """
     Strips unrenderable emojis, symbols, control chars, and non-ASCII characters that cause
     'missing character boxes' (tofu boxes) in Pygame fonts.
-    Uses a precompiled C-level translation table for O(N) zero-loop speed on AMD A4-6300.
+    Uses a precompiled C-level translation table for O(N) zero-loop speed on target hardware.
     """
     if text is None:
         return ""
@@ -367,7 +367,7 @@ class SafeFont(_ORIG_FONT):
     Drop-in subclass of pygame.font.Font that sanitizes unrenderable glyphs
     before rendering or size calculation, preventing missing character tofu boxes.
     Features high-performance text surface and metric caching to eliminate repeated TrueType
-    vector glyph rasterization at 60 FPS on dual-core CPUs (AMD A4-6300).
+    vector glyph rasterization at 60 FPS on dual-core CPUs (target hardware).
     """
     def __init__(self, filename_or_fileobj=None, size=16, bold=False, italic=False):
         super().__init__(filename_or_fileobj, size)

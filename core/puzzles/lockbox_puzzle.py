@@ -6,7 +6,7 @@ Extracted from monolithic Quarter 4 scene script.
 Focuses on Algebraic Reasoning, Deductive Logic, and Symbol Manipulation.
 
 Target Hardware Constraint:
-- AMD A4-6300 APU: Dials and keys rendered via cached vector primitives.
+- Target Hardware: Dials and keys rendered via cached vector primitives.
 - Zero allocations during interaction.
 """
 

@@ -499,7 +499,7 @@ class StudentSelect:
         except Exception as e:
             print(f"Student progress sync error: {e}")
 
-        # Non-blocking background sync with live cloud game_results & grades (0ms UI stall on AMD A4-6300)
+        # Non-blocking background sync with live cloud game_results & grades (0ms UI stall on target hardware)
         if db and self.students and not str(self.students[0].get("student_id", "")).startswith("MOCK-"):
             import threading
             threading.Thread(target=self._sync_cloud_progress_worker, daemon=True).start()

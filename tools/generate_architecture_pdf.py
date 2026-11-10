@@ -286,7 +286,7 @@ def build_pdf(output_filename="Cognitive_Maze_Game_Architecture_and_Dataset_Inte
     # Metadata Grid Table
     meta_data = [
         [
-            Paragraph("<b>Target System:</b> AMD A4-6300 APU (2 Threads @ 3.7 GHz)", styles["TableCell"]),
+            Paragraph("<b>Target System:</b> Dual-Core Target Hardware (2 Threads)", styles["TableCell"]),
             Paragraph("<b>Engine:</b> Pygame 2.6.1 + MediaPipe 0.10", styles["TableCell"]),
             Paragraph("<b>Target Audience:</b> DepEd Grade 2 Pupils (Ages 7-8)", styles["TableCell"]),
         ],
@@ -535,15 +535,15 @@ def build_pdf(output_filename="Cognitive_Maze_Game_Architecture_and_Dataset_Inte
     ))
 
     # =========================================================================
-    # SECTION 4: LOW-SPEC HARDWARE OPTIMIZATIONS (AMD A4-6300 APU)
+    # SECTION 4: LOW-SPEC HARDWARE OPTIMIZATIONS
     # =========================================================================
     story.append(Spacer(1, 10))
     story.append(Paragraph("4. Low-Spec Hardware Optimization Strategy", styles["Heading1"]))
     story.append(HRFlowable(width="100%", thickness=1, color=colors.HexColor("#0F172A"), spaceAfter=8))
 
     callout_hw = create_callout(
-        "Strict Target Hardware Constraint: AMD A4-6300 APU",
-        "Primary Target System: AMD A4-6300 APU (Dual-Core, 2 Threads @ 3.7 GHz, 1MB L2 Cache, 0MB L3 Cache, Radeon HD 8370D).<br/>"
+        "Strict Target Hardware Constraint: Low-Spec Dual-Core Hardware",
+        "Primary Target System: Dual-Core Low-Spec Target Hardware.<br/>"
         "All features, camera tracking, rendering, audio mixing, and background AI threads must strictly maintain solid 60 FPS "
         "without frame drops or audio stuttering on this low-spec hardware.",
         styles,
@@ -560,7 +560,7 @@ def build_pdf(output_filename="Cognitive_Maze_Game_Architecture_and_Dataset_Inte
 
     story.append(Paragraph("<b>1. Two-Thread CPU Budget & Thread-Pool Isolation:</b>", styles["BodyBold"]))
     story.append(Paragraph(
-        "Because the AMD A4-6300 has only 2 physical CPU threads and 0MB L3 cache, background libraries (OpenMP, BLAS, NumPy, OpenCV, MKL) "
+        "Because target hardware has only 2 physical CPU threads and limited cache, background libraries (OpenMP, BLAS, NumPy, OpenCV, MKL) "
         "could easily spawn competing worker pools and starve the Pygame main game loop. In <code>main.py</code>, strict environment variables "
         "force all underlying libraries to single-threaded mode:<br/>"
         "<code>os.environ['OMP_NUM_THREADS'] = '1'</code> | <code>os.environ['OPENBLAS_NUM_THREADS'] = '1'</code> | <code>cv2.setNumThreads(1)</code><br/>"
@@ -794,7 +794,7 @@ def build_pdf(output_filename="Cognitive_Maze_Game_Architecture_and_Dataset_Inte
         [Paragraph("Category", styles["TableHead"]), Paragraph("Specification Parameter", styles["TableHead"]), Paragraph("Implementation Details & Guarantees", styles["TableHead"])],
         [
             Paragraph("<b>Target Hardware</b>", styles["TableCellBold"]),
-            Paragraph("AMD A4-6300 APU", styles["TableCellBold"]),
+            Paragraph("Dual-Core Low-Spec System", styles["TableCellBold"]),
             Paragraph("Dual-Core, 2 Threads @ 3.7 GHz, 1MB L2 Cache, Radeon HD 8370D Integrated Graphics.", styles["TableCell"]),
         ],
         [
@@ -840,7 +840,7 @@ def build_pdf(output_filename="Cognitive_Maze_Game_Architecture_and_Dataset_Inte
     concl = create_callout(
         "Deployment Ready - Cognitive Maze v1.3",
         "This document certifies that the Cognitive Maze codebase adheres strictly to Philippine DepEd Grade 2 Mathematics "
-        "curriculum benchmarks, guarantees 60 FPS performance on target AMD A4-6300 school laboratory hardware, and maintains complete "
+        "curriculum benchmarks, guarantees 60 FPS performance on target school laboratory hardware, and maintains complete "
         "data integrity across online and offline classroom environments.",
         styles,
         border_color="#0284C7",

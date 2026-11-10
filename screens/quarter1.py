@@ -3220,7 +3220,7 @@ class Quarter1:
                     self.screen.blit(scaled_image, (screen_x, screen_y))
 
     def build_prerendered_map(self):
-        """Pre-renders Quarter 1 ground and obstacle layers for 60 FPS on AMD A4-6300."""
+        """Pre-renders Quarter 1 ground and obstacle layers for 60 FPS on target hardware."""
         scaled_size = int(TILE_SIZE * ZOOM)
         map_w = max(1, self.COLS * scaled_size)
         map_h = max(1, self.ROWS * scaled_size)

@@ -1504,7 +1504,7 @@ class StageSelect:
     def _preload_quarter_worker(self, qid):
         """
         Pre-warms database questions & assessment IDs off-thread during the 3s portal transition.
-        Avoids thread-unsafe SDL2 surface/font creation and dual-core CPU starvation on AMD A4-6300;
+        Avoids thread-unsafe SDL2 surface/font creation and dual-core CPU starvation on target hardware;
         the Quarter screen itself is constructed cleanly once on the main thread in _finish_portal_transition().
         """
         try:

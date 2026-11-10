@@ -7,7 +7,7 @@ Eliminates input bleeding between:
 2. State.CognitivePuzzle - World paused/dimmed, input rerouted entirely to the minigame UI, menus blocked
 3. State.Dialogue      - Cinematic/text state locked, overworld movement blocked, menus blocked
 
-Optimized for AMD A4-6300 (Dual-Core, 1MB L2 cache, no per-frame allocations).
+Optimized for target hardware (Dual-Core, 1MB L2 cache, no per-frame allocations).
 """
 
 from enum import Enum
@@ -385,7 +385,7 @@ class UIStateMachine:
         """
         Renders a memoized semi-transparent dimming overlay over the screen.
         Zero per-frame allocations: re-uses a cached Surface matching the dimensions,
-        strictly complying with the AMD A4-6300 L2 cache constraint.
+        strictly complying with the target hardware L2 cache constraint.
         """
         w, h = screen.get_size()
         key = (w, h, alpha, color)

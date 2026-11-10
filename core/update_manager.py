@@ -80,7 +80,7 @@ class UpdateState:
 class UpdateManager:
     """Manages update checks and in-app streaming downloads asynchronously on a
     background daemon thread, ensuring the Pygame 60 FPS main thread never stalls
-    on the primary AMD A4-6300 dual-core target hardware.
+    on the primary target hardware dual-core target hardware.
     """
     def __init__(self, local_version=None):
         self.local_version = local_version or APP_VERSION
@@ -417,7 +417,7 @@ class UpdateManager:
 
     def _run_download_worker(self, target_path, tmp_path, on_progress=None, on_complete=None):
         """Streaming network I/O worker with HTTP Range resume, integrity checks,
-        and 2ms per-chunk CPU yields to preserve 60 FPS on AMD A4-6300 APU.
+        and 2ms per-chunk CPU yields to preserve 60 FPS on target hardware.
         """
         CHUNK_SIZE = 64 * 1024  # 64 KB chunk size
         MAX_ATTEMPTS = 3

@@ -6,7 +6,7 @@ Extracted from monolithic Quarter 2 scene script into a standalone data-driven m
 Focuses on Numerical Reasoning, Working Memory, and Philippine Currency literacy (BSP NGC).
 
 Target Hardware Constraint:
-- AMD A4-6300 APU: Vector-rendered banknotes and coins are generated once and cached.
+- Target Hardware: Vector-rendered banknotes and coins are generated once and cached.
 - Dragging uses simple point-in-rect without re-allocating textures.
 """
 

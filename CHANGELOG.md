@@ -10,7 +10,7 @@ All notable **Changes & Improvements** and **Bug Fixes** for each version of **C
 - **Universal NPC Question Mark (`?`) Beacons**: Removed cluttered overhead text badges (`Station X: Name`, `Elder Sage`, etc.) across all quarters. Every unanswered station NPC now features a clean floating question mark beacon (`?`), with gold highlighting for the active target and amber for remaining stations.
 - **Answer Status Beacons (`✓` & `✗`)**: Correctly answered stations display a green checkmark beacon (`✓`), while stations answered incorrectly on first try display a red cross beacon (`✗`).
 - **Wrong Answer Indicators in Objectives HUD**: Added a prominent crimson indicator pill `[ ✗ {wrong_count} Wrong ]` in the Objectives window header, red status pills with embedded `✗` in the question progress track, and live `{correct_count}✓ {wrong_count}✗` breakdown in the top-left completion status card.
-- **Clean Static Corridor Barricades in Stage Select**: Replaced animated sci-fi plasma forcefields, scrolling scanlines, and pulsating crystals with clean, top-down wooden/slate barricades featuring anchor posts and a golden padlock icon (`🔒`). Surfaces are pre-rendered and cached with zero per-frame allocation for smooth 60 FPS performance on target AMD A4-6300 APU hardware.
+- **Clean Static Corridor Barricades in Stage Select**: Replaced animated sci-fi plasma forcefields, scrolling scanlines, and pulsating crystals with clean, top-down wooden/slate barricades featuring anchor posts and a golden padlock icon (`🔒`). Surfaces are pre-rendered and cached with zero per-frame allocation for smooth 60 FPS performance.
 - **Quarter 2 Dialog Anti-Overlap Layout**: Restructured Filipino character stall dialogs and interaction windows in Quarter 2 with non-overlapping bounds, dedicated margins, and a single-dialog controller ensuring NPC greeting boxes and station questions never collide.
 - **Strict Background Layering**: Enforced map terrain and wall blocks strictly in background passes, guaranteeing floating beacons, checkmarks, question marks, and HUD elements render seamlessly on the top layer without collision or occlusion.
 
@@ -34,7 +34,7 @@ All notable **Changes & Improvements** and **Bug Fixes** for each version of **C
 ## [v1.2.5] — 2026-11-09
 ### Changes & Improvements
 - **Ergonomic 1.4x Camera Cursor Gain**: Tightened active hand-tracking bounds to the center lens sweet-spot (`cam_x = 0.25..0.75`, `cam_y = 0.24..0.76`) so small, comfortable wrist and forearm movements sweep the entire `1280x720` screen effortlessly like a hardware mouse.
-- **Zero-Lag Hand Tracking Response**: Retuned `OneEuroFilter` (`min_cutoff=1.15`, `beta=0.075`) and raised 60 FPS inter-frame exponential interpolation rates (`38–60`) for crisp, mouse-speed cursor movement on Dual-Core AMD A4-6300 APUs while maintaining sub-pixel resting stillness.
+- **Zero-Lag Hand Tracking Response**: Retuned `OneEuroFilter` (`min_cutoff=1.15`, `beta=0.075`) and raised 60 FPS inter-frame exponential interpolation rates (`38–60`) for crisp, mouse-speed cursor movement while maintaining sub-pixel resting stillness.
 - **Smooth Camera Exploration Walk Speed Ramp**: Replaced the binary `> 160 px` walk-speed threshold with a continuous zero-allocation speed ramp (`1.0x` at `45 px` deadzone scaling smoothly to `1.35x` at `105 px`) across Tutorial, Stage Select, Quarter 1, Quarter 2, Quarter 3, and Quarter 4.
 - **Faster Intentional Fist-Drag Breakaway**: Reduced fist-drag breakaway radius from `28 px` to `18 px` for snappier drag interactions in visual puzzles while keeping stationary fist-hold clicks locked cleanly.
 
@@ -53,7 +53,7 @@ All notable **Changes & Improvements** and **Bug Fixes** for each version of **C
 
 ### Bug Fixes
 - **Interrupted Wi-Fi Download Recovery & Integrity Validation**: Added HTTP `Range` byte-resume retries (up to 3 attempts), exact `Content-Length` verification, and HTML captive-portal rejection (`_is_valid_installer_file`) so dropped school Wi-Fi connections never execute truncated installers.
-- **Version Badge Formatting & Font Memoization**: Fixed duplicate `vv` version prefix rendering (`vv1.2.3` -> `v1.2.4`) in Settings and Main Menu footer pills, and cached footer pill font instances to avoid per-frame `SysFont` overhead on AMD A4-6300 hardware.
+- **Version Badge Formatting & Font Memoization**: Fixed duplicate `vv` version prefix rendering (`vv1.2.3` -> `v1.2.4`) in Settings and Main Menu footer pills, and cached footer pill font instances to avoid per-frame `SysFont` overhead.
 - **Clean Webcam & Save Shutdown Handoff**: Ensured student progress saves are flushed and DirectShow camera handles (`cap.release()`) are closed prior to update installation so the relaunched game acquires the camera immediately.
 - **User Save & Audio Settings Preservation**: Protected `db\saves\*` (`onlyifdoesntexist`) in `installer.iss` so custom volume settings and local student progress are never overwritten during upgrades.
 
@@ -63,13 +63,13 @@ All notable **Changes & Improvements** and **Bug Fixes** for each version of **C
 ### Changes & Improvements
 - **Quarter 3 Sun Temple Fraction Match Mini-Game**: Replaced multi-step Quarter 3 guardian puzzles with a streamlined single-round, 4-card visual fraction matching mini-game (`1/2`, `1/3`, `2/3`, `1/4`, `3/4`) across `map7`, `map8`, and `map9`, supporting closed-fist drag, mouse drag, and two-tap matching.
 - **Vercel Grading Portal Sync & Summative Assessment Mapping**: Solidified 100-point assessment mapping across Quarter 1, Quarter 2, Quarter 3, and Summative Assessment with idempotent stage saving and automatic high-score replacement.
-- **AMD A4-6300 APU Build & Rendering Optimization**: Eliminated ~96 MB of duplicate bundled assets (reducing installer size from ~151 MB to ~109 MB) and pre-baked `.convert_alpha()` puzzle/UI surfaces for locked 60 FPS performance.
+- **Build & Rendering Performance Optimization**: Eliminated ~96 MB of duplicate bundled assets (reducing installer size from ~151 MB to ~109 MB) and pre-baked `.convert_alpha()` puzzle/UI surfaces for locked 60 FPS performance.
 - **UI Cleanup**: Simplified Settings version label display.
 
 ### Bug Fixes
 - **Crash-Safe Student Reset Recovery**: Added Write-Ahead Log (`pending_student_restore.json`) protection so power or network interruptions during new-activity resets never strand student records.
 - **Cloud Question LaTeX Sanitization**: Fixed raw LaTeX expressions (`\frac`, `\times`, escaped currency symbols) appearing unformatted in live cloud-synced quiz prompts.
-- **Autosave Frame-Time Stalls**: Offloaded synchronous disk `fsync` writes from the 60 FPS Pygame main loop to prevent micro-stutters on Dual-Core Radeon HD 8370D systems.
+- **Autosave Frame-Time Stalls**: Offloaded synchronous disk `fsync` writes from the 60 FPS Pygame main loop to prevent micro-stutters.
 
 ---
 
@@ -87,7 +87,7 @@ All notable **Changes & Improvements** and **Bug Fixes** for each version of **C
 
 ## [v1.2.1] — 2026-11-07
 ### Changes & Improvements
-- **Streaming In-App Update Downloader**: Introduced background chunked installer streaming inside `UpdateManager` with CPU slice yielding for Dual-Core AMD A4-6300 APUs.
+- **Streaming In-App Update Downloader**: Introduced background chunked installer streaming inside `UpdateManager` with CPU slice yielding for smooth background downloads.
 - **Low-Latency Camera Pipeline**: Enforced single-hand (`num_hands=1`) 320x240 MediaPipe inference and 1.0ms Windows kernel timer granularity (`timeBeginPeriod(1)`).
 
 ### Bug Fixes
@@ -110,7 +110,7 @@ All notable **Changes & Improvements** and **Bug Fixes** for each version of **C
 
 ## [v1.0.0] — 2026-11-04
 ### Changes & Improvements
-- **Initial Standalone Release**: Complete 4-stage interactive 2D mathematics adventure covering Quarter 1, Quarter 2, Quarter 3, and Summative Assessment with MediaPipe webcam hand-gesture controls, keyboard/mouse support, universal pause menu, offline-resilient cloud question/grade synchronization, and AMD A4-6300 APU 60 FPS optimizations.
+- **Initial Standalone Release**: Complete 4-stage interactive 2D mathematics adventure covering Quarter 1, Quarter 2, Quarter 3, and Summative Assessment with MediaPipe webcam hand-gesture controls, keyboard/mouse support, universal pause menu, offline-resilient cloud question/grade synchronization, and 60 FPS performance optimizations.
 
 ### Bug Fixes
 - **Multi-Hand Background Interference**: Added palm-span proximity filtering and multi-hand HUD warnings so background bystanders do not hijack cursor tracking.

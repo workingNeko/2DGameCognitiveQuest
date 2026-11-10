@@ -629,7 +629,7 @@ def draw_npc_overhead_badge(surface, cx, top_y, text, is_active=False, badge_col
 def build_composite_title_letters(title_text, title_font, main_color, outline_color, glow_color, pad=6):
     """
     Pre-bakes each letter's glow + outline + main glyph onto a single padded SRCALPHA surface once at load time.
-    Eliminates 3 .copy() heap allocations and 9-26 blits per letter per frame on AMD A4-6300.
+    Eliminates 3 .copy() heap allocations and 9-26 blits per letter per frame on target hardware.
     """
     letters = []
     for ch in title_text:
