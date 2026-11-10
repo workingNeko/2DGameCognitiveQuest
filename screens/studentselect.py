@@ -2,6 +2,7 @@ import pygame
 import os
 import json
 import time
+from core.paths import get_asset_path
 
 # Import db - make sure this exists in your project
 try:
@@ -35,7 +36,9 @@ class StudentSelect:
         # =====================================================
         # BACKGROUND
         # =====================================================
-        bg_path = os.path.join("assets", "images", "menu_background.png")
+        bg_path = get_asset_path("images", "menu_background.png")
+        if not os.path.exists(bg_path):
+            bg_path = os.path.join("assets", "images", "menu_background.png")
 
         if os.path.exists(bg_path):
             self.bg_image = pygame.image.load(bg_path).convert()
@@ -264,8 +267,12 @@ class StudentSelect:
     # =========================================================
     def load_gender_icons(self):
         try:
-            boy_path = os.path.join("assets", "images", "boy.png")
-            girl_path = os.path.join("assets", "images", "girl.png")
+            boy_path = get_asset_path("images", "boy.png")
+            if not os.path.exists(boy_path):
+                boy_path = os.path.join("assets", "images", "boy.png")
+            girl_path = get_asset_path("images", "girl.png")
+            if not os.path.exists(girl_path):
+                girl_path = os.path.join("assets", "images", "girl.png")
 
             if os.path.exists(boy_path):
                 self.boy_icon = pygame.image.load(boy_path).convert_alpha()

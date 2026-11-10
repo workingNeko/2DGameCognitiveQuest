@@ -17,6 +17,7 @@ from typing import Optional, Dict, Any, Tuple, List
 import pygame
 from core.puzzles.base_puzzle import BaseCognitivePuzzle
 from core.font_manager import get_font
+from core.paths import resolve_path
 
 
 class JigsawPiece:
@@ -88,8 +89,9 @@ class JigsawPuzzle(BaseCognitivePuzzle):
 
         # Generate or load image
         image_path = config.get("image_path")
-        if image_path and os.path.exists(image_path):
-            loaded = pygame.image.load(image_path).convert_alpha()
+        resolved_img = resolve_path(image_path) if image_path else None
+        if resolved_img and os.path.exists(resolved_img):
+            loaded = pygame.image.load(resolved_img).convert_alpha()
             self.source_image = pygame.transform.smoothscale(loaded, (board_w, board_h))
         else:
             # Procedural fallback pattern (geometric gradients)

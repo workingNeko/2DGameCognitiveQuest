@@ -14,12 +14,13 @@ import math
 import time
 import pygame
 from .font_manager import get_font, sanitize_text
+from core.paths import get_base_dir
 
 # Cached portrait surfaces
 _PORTRAIT_CACHE = {}
 _BOX_SURFACE_CACHE = {}
 
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+BASE_DIR = get_base_dir()
 
 def _safe_load_image(path):
     """Safely loads an image handling display initialized or uninitialized states."""

@@ -16,9 +16,13 @@ import random
 
 
 class MapLoader:
-    def __init__(self, base_dir):
-        self.base_dir = base_dir
-        self.maps_dir = os.path.join(base_dir, "assets", "map")
+    def __init__(self, base_dir=None):
+        from core.paths import get_base_dir
+        resolved_base = base_dir
+        if not resolved_base or not os.path.exists(os.path.join(resolved_base, "assets", "map")):
+            resolved_base = get_base_dir()
+        self.base_dir = resolved_base
+        self.maps_dir = os.path.join(resolved_base, "assets", "map")
         self.quarter_maps_dir = os.path.join(self.maps_dir, "Quarter1Maps")
 
         # Map data

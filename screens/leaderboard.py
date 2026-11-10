@@ -5,6 +5,7 @@ import time
 import math
 import threading
 from db.connect_db import db
+from core.paths import get_asset_path
 
 
 class LeaderboardScreen:
@@ -20,7 +21,7 @@ class LeaderboardScreen:
         self.CLICK_HOLD_TIME = 0.9
 
         # Background Image or Gradient
-        bg_path = os.path.join("assets", "images", "menu_background.png")
+        bg_path = get_asset_path("images", "menu_background.png")
         if os.path.exists(bg_path):
             self.bg_image = pygame.image.load(bg_path).convert()
             self.bg_image = pygame.transform.scale(self.bg_image, (self.width, self.height))

@@ -4,6 +4,7 @@ import sys
 import json
 import pygame
 import numpy as np
+from core.paths import get_base_dir
 
 # Safe stdout for Windows console
 if sys.stdout is not None:
@@ -37,7 +38,7 @@ class AudioManager:
             return
         self._initialized = True
 
-        self.BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        self.BASE_DIR = get_base_dir()
         self.settings_file = os.path.join(self.BASE_DIR, "db", "saves", "audio_settings.json")
         self.default_music_path = os.path.join(self.BASE_DIR, "assets", "sounds", "backgroundgamesoundloop.wav")
 

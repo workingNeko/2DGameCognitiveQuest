@@ -1,6 +1,7 @@
 import os
 import sys
 import pygame
+from core.paths import resolve_path
 
 class Button:
     def __init__(self, rect, text=None, font=None, bg_color=None, text_color=(0,0,0), action=None, image_path=None):
@@ -15,7 +16,7 @@ class Button:
 
         # Load image if provided with robust resolution and safe fallback
         if image_path:
-            resolved_path = image_path
+            resolved_path = resolve_path(image_path)
             if not os.path.exists(resolved_path):
                 candidates = []
                 if getattr(sys, "frozen", False):

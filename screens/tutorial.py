@@ -17,6 +17,7 @@ import time
 import cv2
 import numpy as np
 from core.camera_system import LoLCamera
+from core.paths import get_base_dir
 
 TILE_SIZE = 32
 ZOOM = 1.50
@@ -37,7 +38,7 @@ class TutorialScreen:
         self.hand_detected = False
 
         # Paths
-        self.BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        self.BASE_DIR = get_base_dir()
         self.PLAYER_PATH = os.path.join(self.BASE_DIR, "assets", "images", "sprites", "objects", "player")
         self.OBJECTS_PATH = os.path.join(self.BASE_DIR, "assets", "images", "sprites", "objects", "tiles")
         self.NPC_PATH_OLDMAN = os.path.join(self.BASE_DIR, "assets", "images", "sprites", "objects", "NPC", "oldman")

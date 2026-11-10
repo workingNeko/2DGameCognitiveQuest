@@ -20,6 +20,7 @@ from core.puzzles.jigsaw_puzzle import JigsawPuzzle
 from core.puzzles.currency_puzzle import CurrencyPuzzle
 from core.puzzles.array_matrix_puzzle import ArrayMatrixPuzzle
 from core.puzzles.lockbox_puzzle import LockboxPuzzle
+from core.paths import resolve_path
 
 
 class PuzzleRegistry:
@@ -61,7 +62,7 @@ class PuzzleFactory:
     @classmethod
     def load_json_config(cls, file_path: str) -> Dict[str, Any]:
         """Loads and caches a JSON configuration from disk."""
-        abs_path = os.path.abspath(file_path)
+        abs_path = resolve_path(file_path)
         if abs_path in cls._config_cache:
             return cls._config_cache[abs_path]
 

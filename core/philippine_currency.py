@@ -215,7 +215,8 @@ def get_randomized_quarter2_currency_pool(map_name="map4.txt", count=5, num_item
 
 def load_real_currency_surface(currency_id, width=None, height=None):
     """Loads and scales authentic Philippine currency image from assets/images/currency/."""
-    base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    from core.paths import get_base_dir
+    base_dir = get_base_dir()
     img_path = os.path.join(base_dir, "assets", "images", "currency", f"{currency_id}.png")
     if not os.path.exists(img_path):
         img_path = os.path.join("assets", "images", "currency", f"{currency_id}.png")

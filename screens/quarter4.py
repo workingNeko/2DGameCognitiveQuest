@@ -9,6 +9,7 @@ import time
 import random
 import math
 from .map_loader import MapLoader
+from core.paths import get_base_dir
 from core.camera_system import LoLCamera
 from core.font_manager import get_font
 from core.visual_effects import (
@@ -146,7 +147,7 @@ class Quarter4:
         # ============================================================
         # PATHS
         # ============================================================
-        self.BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        self.BASE_DIR = get_base_dir()
 
         self.PLAYER_PATH = os.path.join(
             self.BASE_DIR,
@@ -480,7 +481,7 @@ class Quarter4:
         self.title_active = True
 
         # Load Pixelfont
-        self.pixel_font_path = "assets/fonts/Pixelfont.otf"
+        self.pixel_font_path = os.path.join(self.BASE_DIR, "assets", "fonts", "Pixelfont.otf")
         self.pixel_font_size = 72
         try:
             self.title_font = pygame.font.Font(self.pixel_font_path, self.pixel_font_size)

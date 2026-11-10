@@ -33,6 +33,7 @@ from core.cursor_system import OneEuroFilter, game_cursor
 from ui.button import Button
 from core.version import APP_VERSION, APP_NAME, GITHUB_RELEASES_URL
 from core.update_manager import UpdateManager, UpdateState
+from core.paths import get_asset_path
 
 
 class MainMenu:
@@ -54,7 +55,7 @@ class MainMenu:
         if enable_camera:
             try:
                 # Priority 1: Modern MediaPipe Tasks API (MediaPipe >= 0.10.x) in robust IMAGE detection mode
-                model_path = os.path.join("assets", "models", "hand_landmarker.task")
+                model_path = get_asset_path("models", "hand_landmarker.task")
                 if os.path.exists(model_path) and hasattr(mp, 'tasks') and hasattr(mp.tasks, 'vision'):
                     from mediapipe.tasks import python as mp_python
                     from mediapipe.tasks.python import vision as mp_vision
@@ -187,7 +188,9 @@ class MainMenu:
         # BACKGROUND
         # ==========================================
 
-        bg_path = os.path.join("assets", "images", "menu_background.png")
+        bg_path = get_asset_path("images", "menu_background.png")
+        if not os.path.exists(bg_path):
+            bg_path = os.path.join("assets", "images", "menu_background.png")
 
         if os.path.exists(bg_path):
             self.bg_image = pygame.image.load(bg_path).convert()
@@ -214,12 +217,25 @@ class MainMenu:
         self.boy_avatar = None
         self.girl_avatar = None
 
-        boy_path = os.path.join("assets", "images", "boy_in_uniform.png")
-        girl_path = os.path.join("assets", "images", "girl_in_uniform.png")
-        exit_btn_path = os.path.join("assets", "images", "exitbutton.png")
+        boy_path = get_asset_path("images", "boy_in_uniform.png")
+        if not os.path.exists(boy_path):
+            boy_path = os.path.join("assets", "images", "boy_in_uniform.png")
 
-        boy_avatar_path = os.path.join("assets", "images", "boy.png")
-        girl_avatar_path = os.path.join("assets", "images", "girl.png")
+        girl_path = get_asset_path("images", "girl_in_uniform.png")
+        if not os.path.exists(girl_path):
+            girl_path = os.path.join("assets", "images", "girl_in_uniform.png")
+
+        exit_btn_path = get_asset_path("images", "exitbutton.png")
+        if not os.path.exists(exit_btn_path):
+            exit_btn_path = os.path.join("assets", "images", "exitbutton.png")
+
+        boy_avatar_path = get_asset_path("images", "boy.png")
+        if not os.path.exists(boy_avatar_path):
+            boy_avatar_path = os.path.join("assets", "images", "boy.png")
+
+        girl_avatar_path = get_asset_path("images", "girl.png")
+        if not os.path.exists(girl_avatar_path):
+            girl_avatar_path = os.path.join("assets", "images", "girl.png")
 
         # BOY IMAGE
         if os.path.exists(boy_path):
@@ -1649,7 +1665,7 @@ class MainMenu:
         bw = 440
         bh = 58
         gap = 14
-        exit_btn_path = os.path.join("assets", "images", "exitbutton.png")
+        exit_btn_path = get_asset_path("images", "exitbutton.png")
         
         has_save = False
         if self.selected_student and self.student_id:
