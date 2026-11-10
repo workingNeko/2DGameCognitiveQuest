@@ -955,19 +955,42 @@ class Quarter3:
         active_count = min(len(sorted_ids), len(mapped_questions))
         active_ids = sorted_ids[:active_count]
 
+        guardian_titles = {
+            1: "Number 1 Guardian",
+            2: "Number 2 Guardian",
+            3: "Number 3 Guardian",
+            4: "Number 4 Guardian",
+            5: "Number 5 Guardian",
+            6: "Astral Guardian 6",
+            7: "Prismatic Guardian 7",
+            8: "Celestial Guardian 8",
+            9: "Solar Guardian 9",
+            10: "Lunar Guardian 10",
+            11: "Aether Guardian 11",
+            12: "Nova Guardian 12",
+            13: "Cosmo Guardian 13",
+            14: "Eclipse Guardian 14",
+            15: "Zenith Guardian 15"
+        }
         for num in active_ids:
             if num not in self.station_npcs:
+                donor_k = ((num - 1) % 5) + 1
+                donor_frames = []
+                if donor_k in self.station_npcs and self.station_npcs[donor_k].get("frames"):
+                    donor_frames = list(self.station_npcs[donor_k]["frames"])
+                elif self.station_npcs:
+                    for existing_k in sorted(self.station_npcs.keys()):
+                        if self.station_npcs[existing_k].get("frames"):
+                            donor_frames = list(self.station_npcs[existing_k]["frames"])
+                            break
+
                 self.station_npcs[num] = {
-                    "name": f"Number {num} Guardian",
-                    "frames": [],
+                    "name": guardian_titles.get(num, f"Number {num} Guardian"),
+                    "frames": donor_frames,
                     "anim_frame": 0,
                     "anim_timer": 0,
                     "answered": False
                 }
-                for existing_k in sorted(self.station_npcs.keys()):
-                    if self.station_npcs[existing_k].get("frames"):
-                        self.station_npcs[num]["frames"] = list(self.station_npcs[existing_k]["frames"])
-                        break
 
         for idx, q_item in enumerate(mapped_questions[:active_count], start=1):
             q_item.setdefault("station", idx)

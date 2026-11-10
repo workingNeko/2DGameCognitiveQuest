@@ -725,10 +725,24 @@ class Quarter2:
         active_count = min(len(sorted_ids), len(mapped_questions))
         active_ids = sorted_ids[:active_count]
 
-        vendor_names_pool = ["Sari-Sari Vendor", "Sorbetes Cart", "Jeepney Terminal", "Fruit Stand", "Parol Workshop", "Kakanin Seller", "Bibingka Stand", "Buko Juice Vendor", "Fish Vendor", "Rice Merchant"]
+        vendor_names_pool = [
+            "Sari-Sari Vendor", "Sorbetes Cart", "Jeepney Terminal", "Fruit Stand", "Parol Workshop",
+            "Kakanin Seller", "Bibingka Stand", "Buko Juice Vendor", "Fish Merchant", "Rice Merchant",
+            "Puto Bumbong Chef", "Taho Vendor", "Capiz Artisan", "Pandesal Baker", "Barrio Kapitan"
+        ]
         for num in active_ids:
             if num not in self.station_npc_info:
                 vname = vendor_names_pool[(num - 1) % len(vendor_names_pool)]
+                donor_k = ((num - 1) % 5) + 1
+                donor_frames = []
+                if donor_k in self.station_npc_info and self.station_npc_info[donor_k].get("frames"):
+                    donor_frames = list(self.station_npc_info[donor_k]["frames"])
+                elif self.station_npc_info:
+                    for k in sorted(self.station_npc_info.keys()):
+                        if self.station_npc_info[k].get("frames"):
+                            donor_frames = list(self.station_npc_info[k]["frames"])
+                            break
+
                 self.station_npc_info[num] = {
                     "name": f"Station {num}",
                     "title": f"Station {num}: {vname}",
@@ -736,15 +750,11 @@ class Quarter2:
                     "wrong_encouragement": f"{vname} - Try Again",
                     "correct_praise": f"{vname} Challenge Cleared! - Well Done",
                     "target_math": f"Resolving Barrio {vname} Challenge",
-                    "frames": [],
+                    "frames": donor_frames,
                     "anim_frame": 0,
                     "anim_timer": 0,
                     "cleared": False
                 }
-                for existing_k in sorted(self.station_npc_info.keys()):
-                    if self.station_npc_info[existing_k].get("frames"):
-                        self.station_npc_info[num]["frames"] = list(self.station_npc_info[existing_k]["frames"])
-                        break
 
         for idx, q_item in enumerate(mapped_questions[:active_count], start=1):
             q_item.setdefault("station", idx)

@@ -849,7 +849,11 @@ class Quarter1:
         active_ids = sorted_ids[:active_count]
 
         # Ensure shape_npcs is populated for all active IDs
-        shape_names_pool = ["circle", "heart", "square", "star", "diamond", "hexagon", "triangle", "pentagon", "oval", "octagon"]
+        shape_names_pool = [
+            "circle", "heart", "square", "star", "diamond",
+            "hexagon", "triangle", "pentagon", "oval", "octagon",
+            "crescent", "rhombus", "trapezoid", "cross", "gem"
+        ]
         for num in active_ids:
             if num not in self.shape_npcs:
                 pos = self.quiz_stations[num]
