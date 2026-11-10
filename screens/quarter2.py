@@ -4895,86 +4895,117 @@ class Quarter2:
             g_text = g_font.render("[?] Guide", True, (251, 191, 36) if hov else (255, 255, 255))
             self.screen.blit(g_text, g_text.get_rect(center=self.guide_btn_rect.center))
 
-        # HUD Objectives Box (Top/Bottom Center)
+        # HUD Objectives Box (Bottom Center)
         if self.quiz_state in [0, 6]:
-            box_w = 460
-            box_h = 78
+            box_w = 640
+            box_h = 96
             box_x = (self.width - box_w) // 2
-            box_y = self.height - box_h - 18
+            box_y = self.height - box_h - 12
 
-            # Translucent dark slate background (cached)
-            if not hasattr(self, '_hud_obj_bg_surf'):
+            # Translucent dark slate background (alpha = 225, cached)
+            if not hasattr(self, '_hud_obj_bg_surf') or self._hud_obj_bg_surf.get_size() != (box_w, box_h):
                 self._hud_obj_bg_surf = pygame.Surface((box_w, box_h), pygame.SRCALPHA)
-                self._hud_obj_bg_surf.fill((15, 23, 42, 220))
+                self._hud_obj_bg_surf.fill((15, 23, 42, 225))
+                if pygame.display.get_surface() is not None:
+                    try:
+                        self._hud_obj_bg_surf = self._hud_obj_bg_surf.convert_alpha()
+                    except Exception:
+                        pass
+
+            # Drop shadow for depth and map separation
+            pygame.draw.rect(self.screen, (0, 0, 0, 110), (box_x, box_y + 3, box_w, box_h), border_radius=12)
             self.screen.blit(self._hud_obj_bg_surf, (box_x, box_y))
 
-            # Border: Gold when in progress, Emerald Green when complete
-            border_color = (218, 165, 32) if self.quiz_state < 6 else (34, 197, 94)
-            pygame.draw.rect(self.screen, border_color, (box_x, box_y, box_w, box_h), 2, border_radius=10)
-            pygame.draw.rect(self.screen, (0, 0, 0, 120), (box_x + 2, box_y + 2, box_w - 4, box_h - 4), 1, border_radius=8)
+            tot_st = getattr(self, 'active_station_count', len(self.quiz_questions))
+            cleared_count = max(0, self.quiz_station_index - 1) if self.quiz_state < 6 else tot_st
+            is_complete = (cleared_count >= tot_st and tot_st > 0) or (self.quiz_state >= 6)
+
+            # Border: Radiant Gold when in progress, Emerald Green when complete
+            border_color = (34, 197, 94) if is_complete else (251, 191, 36)
+            pygame.draw.rect(self.screen, border_color, (box_x, box_y, box_w, box_h), 2, border_radius=12)
+            pygame.draw.rect(self.screen, (255, 255, 255, 25), (box_x + 2, box_y + 2, box_w - 4, box_h - 4), 1, border_radius=10)
 
             # Header title in Gold
             title_font = self.get_ui_font(13, bold=True)
-            title_surf = title_font.render("BARANGAY KALYE OBJECTIVES", True, (255, 215, 0))
+            title_surf = title_font.render("★ BARANGAY KALYE OBJECTIVES", True, (255, 215, 0))
             self.screen.blit(title_surf, (box_x + 16, box_y + 8))
 
-            # Details font
-            item_font = self.get_ui_font(12, bold=True)
+            # Progress badge pill on top right
+            pill_font = self.get_ui_font(11, bold=True)
+            pill_text = f"{min(cleared_count, tot_st)}/{tot_st} Cleared" if tot_st > 0 else "0/0"
+            pill_text_color = (74, 222, 128) if is_complete else (254, 240, 138)
+            pill_surf = pill_font.render(pill_text, True, pill_text_color)
+            pw = pill_surf.get_width() + 18
+            ph = 22
+            px_pill = box_x + box_w - pw - 14
+            py_pill = box_y + 7
+            pygame.draw.rect(self.screen, (30, 41, 59), (px_pill, py_pill, pw, ph), border_radius=11)
+            pygame.draw.rect(self.screen, border_color, (px_pill, py_pill, pw, ph), 1, border_radius=11)
+            self.screen.blit(pill_surf, pill_surf.get_rect(center=(px_pill + pw // 2, py_pill + ph // 2)))
 
-            tot_st = getattr(self, 'active_station_count', len(self.quiz_questions))
-            if self.quiz_state < 6:
-                if tot_st > 0 and self.quiz_station_index <= tot_st:
-                    cur_target_str = self.station_npc_info.get(self.quiz_station_index, {}).get("title", f"Station {self.quiz_station_index}")
-                    obj1 = f"Target: {cur_target_str}"
-                    obj1_surf = item_font.render(obj1, True, (255, 220, 80))
-                    self.screen.blit(obj1_surf, (box_x + 16, box_y + 32))
+            # Row 2: Dedicated Question / Stall Status Track Row (supports up to 15 stations cleanly)
+            item_font = self.get_ui_font(11, bold=True)
+            st_lbl = item_font.render("Stalls:", True, (203, 213, 225))
+            self.screen.blit(st_lbl, (box_x + 16, box_y + 36))
 
-                    for i in range(tot_st):
-                        st_num = i + 1
-                        is_ans = st_num < self.quiz_station_index or self.station_npc_info.get(st_num, {}).get("cleared", False)
-                        is_1st = self.first_attempt_correct.get(st_num, True)
+            if tot_st > 0:
+                p_font = self.get_ui_font(9, bold=True)
+                pill_w = 23 if tot_st > 10 else 26
+                pill_h = 20
+                pill_gap = 4 if tot_st > 10 else 6
+                start_x = box_x + 95
+
+                for i in range(tot_st):
+                    st_num = i + 1
+                    is_ans = (st_num < self.quiz_station_index) or self.station_npc_info.get(st_num, {}).get("cleared", False) or (self.quiz_state >= 6)
+                    is_1st = self.first_attempt_correct.get(st_num, True)
+                    is_cur = (st_num == self.quiz_station_index and not is_ans and self.quiz_state < 6)
+
+                    ix = start_x + i * (pill_w + pill_gap)
+                    iy = box_y + 36
+                    if ix + pill_w <= box_x + box_w - 14:
                         if is_ans:
-                            ind_col = (34, 197, 94) if is_1st else (20, 184, 166)
-                        elif st_num == self.quiz_station_index:
-                            ind_col = (251, 191, 36)
+                            bg_c = (16, 185, 129) if is_1st else (20, 184, 166)
+                            brd_c = (52, 211, 153)
+                            pygame.draw.rect(self.screen, bg_c, (ix, iy, pill_w, pill_h), border_radius=4)
+                            pygame.draw.rect(self.screen, brd_c, (ix, iy, pill_w, pill_h), 1, border_radius=4)
+                            # Embedded white checkmark
+                            pygame.draw.line(self.screen, (255, 255, 255), (ix + 4, iy + 10), (ix + 9, iy + 15), 2)
+                            pygame.draw.line(self.screen, (255, 255, 255), (ix + 9, iy + 15), (ix + 18, iy + 5), 2)
+                        elif is_cur:
+                            pygame.draw.rect(self.screen, (245, 158, 11), (ix, iy, pill_w, pill_h), border_radius=4)
+                            pygame.draw.rect(self.screen, (253, 224, 71), (ix, iy, pill_w, pill_h), 1, border_radius=4)
+                            cur_surf = p_font.render(str(st_num), True, (15, 23, 42))
+                            self.screen.blit(cur_surf, cur_surf.get_rect(center=(ix + pill_w // 2, iy + pill_h // 2)))
                         else:
-                            ind_col = (71, 85, 105)
-                        ix = box_x + 330 + i * 15
-                        iy = box_y + 32
-                        if ix + 12 < box_x + box_w - 10:
-                            pygame.draw.rect(self.screen, ind_col, (ix, iy, 12, 12), border_radius=3)
-                            if is_ans:
-                                pygame.draw.line(self.screen, (255, 255, 255), (ix + 2, iy + 6), (ix + 5, iy + 9), 2)
-                                pygame.draw.line(self.screen, (255, 255, 255), (ix + 5, iy + 9), (ix + 10, iy + 3), 2)
-
-                    if self.map_name == "map5.txt":
-                        obj2 = f"Bahay Kubo: {self.kubo_pieces_collected}/5 Pieces Built (Portal Locked)"
-                        obj2_surf = item_font.render(obj2, True, (254, 240, 138) if self.kubo_pieces_collected > 0 else (148, 163, 184))
-                    else:
-                        cleared_count = max(0, self.quiz_station_index - 1)
-                        obj2 = f"Progress: {cleared_count}/{tot_st} Stalls Cleared (Portal Locked)"
-                        obj2_surf = item_font.render(obj2, True, (148, 163, 184) if cleared_count == 0 else (74, 222, 128))
-                    self.screen.blit(obj2_surf, (box_x + 16, box_y + 54))
-                else:
-                    if tot_st == 0:
-                        obj1 = "Cloud Questions: None Set — Visit Knight Guardian!"
-                        obj1_surf = item_font.render(obj1, True, (56, 189, 248))
-                    else:
-                        obj1 = "PORTAL TRIAL: Knight Guardian (Philippine Currency)"
-                        obj1_surf = item_font.render(obj1, True, (255, 215, 0))
-                    self.screen.blit(obj1_surf, (box_x + 16, box_y + 32))
-
-                    obj2 = "Match Philippine Banknotes & Coins to Unlock Portal!"
-                    obj2_surf = item_font.render(obj2, True, (254, 240, 138))
-                    self.screen.blit(obj2_surf, (box_x + 16, box_y + 54))
+                            pygame.draw.rect(self.screen, (30, 41, 59), (ix, iy, pill_w, pill_h), border_radius=4)
+                            pygame.draw.rect(self.screen, (71, 85, 105), (ix, iy, pill_w, pill_h), 1, border_radius=4)
+                            num_surf = p_font.render(str(st_num), True, (148, 163, 184))
+                            self.screen.blit(num_surf, num_surf.get_rect(center=(ix + pill_w // 2, iy + pill_h // 2)))
             else:
-                obj1 = "BAHAY KUBO FULLY CONSTRUCTED!" if self.map_name == "map5.txt" else "ALL BARANGAY CHALLENGES & CURRENCY TRIAL CLEARED!"
-                obj1_surf = item_font.render(obj1, True, (74, 222, 128))
-                self.screen.blit(obj1_surf, (box_x + 16, box_y + 32))
+                none_surf = item_font.render("No stalls assigned (0 in Cloud)", True, (148, 163, 184))
+                self.screen.blit(none_surf, (box_x + 95, box_y + 36))
 
-                obj2 = ">> Exit Portal Status: OPEN - Enter portal to return!"
-                obj2_surf = item_font.render(obj2, True, (255, 215, 0))
-                self.screen.blit(obj2_surf, (box_x + 16, box_y + 54))
+            # Row 3: Actionable Mission / Portal Status line
+            if self.quiz_state >= 6:
+                obj_line = "Barangay Kalye Completed! Step into the portal to proceed!"
+                obj_col = (34, 197, 94)
+            elif tot_st == 0:
+                obj_line = "Cloud Questions: None Set — Visit Knight Guardian!"
+                obj_col = (56, 189, 248)
+            elif self.quiz_station_index <= tot_st:
+                cur_target_str = self.station_npc_info.get(self.quiz_station_index, {}).get("title", f"Station {self.quiz_station_index}")
+                rem = max(0, tot_st - cleared_count)
+                if self.map_name == "map5.txt":
+                    obj_line = f"Mission: Reach {cur_target_str} | Bahay Kubo: {self.kubo_pieces_collected}/5 Pieces"
+                else:
+                    obj_line = f"Mission: Reach {cur_target_str} | Portal: LOCKED ({rem} left)"
+                obj_col = (254, 240, 138)
+            else:
+                obj_line = "PORTAL TRIAL: Knight Guardian (Match Banknotes & Coins to Unlock Portal!)"
+                obj_col = (250, 204, 21)
+            obj_surf = item_font.render(obj_line, True, obj_col)
+            self.screen.blit(obj_surf, (box_x + 16, box_y + 66))
 
 
         if self.show_info:

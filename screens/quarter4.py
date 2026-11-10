@@ -3150,114 +3150,133 @@ class Quarter4:
 
         # Draw Objectives HUD Box at the bottom center of the screen
         if self.is_quiz_map:
-            box_w, box_h = 480, 85
+            box_w, box_h = 640, 96
             box_x = (self.width - box_w) // 2
-            box_y = self.height - box_h - 15
+            box_y = self.height - box_h - 12
             
-            # Translucent slate blue background (cached)
-            self.screen.blit(self._hud_obj_bg, (box_x, box_y))
-            
-            # Border: Cyan/Gold when exploring, Emerald Green when complete
-            border_color = (0, 210, 230) if self.quiz_state < 6 else (34, 197, 94)
-            pygame.draw.rect(self.screen, border_color, (box_x, box_y, box_w, box_h), 2, border_radius=10)
-            
-            # Header title in Gold
-            title_font = get_font("Comic Sans MS", 12, bold=True)
-            header_title = "TEMPLE AQUEDUCT & LOTUS RAFT" if getattr(self, 'is_map12', False) else "SUMMATIVE ASSESSMENT OBJECTIVES"
-            title_surf = title_font.render(header_title, True, (255, 215, 0))
-            self.screen.blit(title_surf, (box_x + 15, box_y + 8))
+            # Translucent slate blue background (alpha = 225, cached)
+            if getattr(self, '_objectives_bg_surf', None) is None or self._objectives_bg_surf.get_size() != (box_w, box_h):
+                bg_surf = pygame.Surface((box_w, box_h), pygame.SRCALPHA)
+                bg_surf.fill((15, 23, 42, 225))
+                if pygame.display.get_surface() is not None:
+                    try:
+                        bg_surf = bg_surf.convert_alpha()
+                    except Exception:
+                        pass
+                self._objectives_bg_surf = bg_surf
+
+            # Drop shadow for depth and map separation
+            pygame.draw.rect(self.screen, (0, 0, 0, 110), (box_x, box_y + 3, box_w, box_h), border_radius=12)
+            self.screen.blit(self._objectives_bg_surf, (box_x, box_y))
             
             tot_st = getattr(self, 'active_station_count', len(self.quiz_stations))
-            if tot_st > 0:
-                if getattr(self, 'is_map12', False):
-                    pip_r = 6
-                    pip_spacing = 8
-                    start_pip_x = box_x + box_w - 20 - (tot_st * (pip_r * 2 + pip_spacing) - pip_spacing)
-                    for s_idx in range(1, tot_st + 1):
-                        px = start_pip_x + (s_idx - 1) * (pip_r * 2 + pip_spacing) + pip_r
-                        py = box_y + 15
-                        is_done = s_idx in self.answered_stations
-                        color = self.valve_colors[(s_idx - 1) % len(self.valve_colors)]
-                        if is_done:
-                            pygame.draw.circle(self.screen, (*color, 90), (px, py), pip_r + 3)
-                            pygame.draw.circle(self.screen, color, (px, py), pip_r)
-                            pygame.draw.circle(self.screen, (255, 255, 255), (px - 2, py - 2), 2)
-                        else:
-                            pygame.draw.circle(self.screen, (30, 45, 60), (px, py), pip_r)
-                            pygame.draw.circle(self.screen, (70, 90, 110), (px, py), pip_r, 1)
-                else:
-                    pip_w, pip_h = 16, 8
-                    pip_spacing = 5
-                    start_pip_x = box_x + box_w - 15 - (tot_st * (pip_w + pip_spacing) - pip_spacing)
-                    for s_idx in range(1, tot_st + 1):
-                        px = start_pip_x + (s_idx - 1) * (pip_w + pip_spacing)
-                        py = box_y + 11
-                        is_done = s_idx in self.answered_stations
-                        is_1st = self.first_attempt_correct.get(s_idx, True)
-                        if is_done:
-                            pip_color = (34, 197, 94) if is_1st else (20, 184, 166)
-                        elif s_idx == self.quiz_station_index:
-                            pip_color = (251, 191, 36)
-                        else:
-                            pip_color = (40, 60, 75)
-                        pygame.draw.rect(self.screen, pip_color, (px, py, pip_w, pip_h), border_radius=3)
-                        pygame.draw.rect(self.screen, (255, 255, 255) if is_done else (20, 35, 45), (px, py, pip_w, pip_h), 1, border_radius=3)
-                        if is_done:
-                            pygame.draw.line(self.screen, (255, 255, 255), (px + 3, py + 4), (px + 6, py + 7), 2)
-                            pygame.draw.line(self.screen, (255, 255, 255), (px + 6, py + 7), (px + 12, py + 2), 2)
-            
-            # Details font
-            item_font = get_font("Comic Sans MS", 12)
-            
             q_count = len(self.answered_stations)
+            is_complete = (q_count >= tot_st and tot_st > 0)
+            
+            # Border: Cyan/Gold when exploring, Emerald Green when complete
+            border_color = (34, 197, 94) if is_complete else ((0, 210, 230) if getattr(self, 'is_map12', False) else (251, 191, 36))
+            pygame.draw.rect(self.screen, border_color, (box_x, box_y, box_w, box_h), 2, border_radius=12)
+            pygame.draw.rect(self.screen, (255, 255, 255, 25), (box_x + 2, box_y + 2, box_w - 4, box_h - 4), 1, border_radius=10)
+            
+            # Header title in Gold
+            title_font = get_font("Comic Sans MS", 13, bold=True)
+            header_title = "★ TEMPLE AQUEDUCT & LOTUS RAFT" if getattr(self, 'is_map12', False) else "★ SUMMATIVE ASSESSMENT OBJECTIVES"
+            title_surf = title_font.render(header_title, True, (255, 215, 0))
+            self.screen.blit(title_surf, (box_x + 16, box_y + 8))
+
+            # Progress badge pill on top right
+            pill_font = get_font("Comic Sans MS", 11, bold=True)
+            pill_text = f"{min(q_count, tot_st)}/{tot_st} Cleared" if tot_st > 0 else "0/0"
+            pill_text_color = (74, 222, 128) if is_complete else (254, 240, 138)
+            pill_surf = pill_font.render(pill_text, True, pill_text_color)
+            pw = pill_surf.get_width() + 18
+            ph = 22
+            px_pill = box_x + box_w - pw - 14
+            py_pill = box_y + 7
+            pygame.draw.rect(self.screen, (30, 41, 59), (px_pill, py_pill, pw, ph), border_radius=11)
+            pygame.draw.rect(self.screen, border_color, (px_pill, py_pill, pw, ph), 1, border_radius=11)
+            self.screen.blit(pill_surf, pill_surf.get_rect(center=(px_pill + pw // 2, py_pill + ph // 2)))
+            
+            # Row 2: Dedicated Question / Sluice Status Track Row (supports up to 15 stations cleanly)
+            item_font = get_font("Comic Sans MS", 11, bold=True)
+            st_lbl_text = "Sluices:" if getattr(self, 'is_map12', False) else "Keys:"
+            st_lbl = item_font.render(st_lbl_text, True, (203, 213, 225))
+            self.screen.blit(st_lbl, (box_x + 16, box_y + 36))
+
+            if tot_st > 0:
+                p_font = get_font("Comic Sans MS", 9, bold=True)
+                pill_w = 23 if tot_st > 10 else 26
+                pill_h = 20
+                pill_gap = 4 if tot_st > 10 else 6
+                start_x = box_x + 95
+
+                for s_idx in range(1, tot_st + 1):
+                    is_done = s_idx in self.answered_stations
+                    is_1st = self.first_attempt_correct.get(s_idx, True)
+                    is_cur = (s_idx == self.quiz_station_index and not is_done)
+
+                    ix = start_x + (s_idx - 1) * (pill_w + pill_gap)
+                    iy = box_y + 36
+                    if ix + pill_w <= box_x + box_w - 14:
+                        if is_done:
+                            bg_c = (16, 185, 129) if is_1st else (20, 184, 166)
+                            brd_c = (52, 211, 153)
+                            pygame.draw.rect(self.screen, bg_c, (ix, iy, pill_w, pill_h), border_radius=4)
+                            pygame.draw.rect(self.screen, brd_c, (ix, iy, pill_w, pill_h), 1, border_radius=4)
+                            # Embedded white checkmark
+                            pygame.draw.line(self.screen, (255, 255, 255), (ix + 4, iy + 10), (ix + 9, iy + 15), 2)
+                            pygame.draw.line(self.screen, (255, 255, 255), (ix + 9, iy + 15), (ix + 18, iy + 5), 2)
+                        elif is_cur:
+                            pygame.draw.rect(self.screen, (245, 158, 11), (ix, iy, pill_w, pill_h), border_radius=4)
+                            pygame.draw.rect(self.screen, (253, 224, 71), (ix, iy, pill_w, pill_h), 1, border_radius=4)
+                            cur_surf = p_font.render(str(s_idx), True, (15, 23, 42))
+                            self.screen.blit(cur_surf, cur_surf.get_rect(center=(ix + pill_w // 2, iy + pill_h // 2)))
+                        else:
+                            pygame.draw.rect(self.screen, (30, 41, 59), (ix, iy, pill_w, pill_h), border_radius=4)
+                            pygame.draw.rect(self.screen, (71, 85, 105), (ix, iy, pill_w, pill_h), 1, border_radius=4)
+                            num_surf = p_font.render(str(s_idx), True, (148, 163, 184))
+                            self.screen.blit(num_surf, num_surf.get_rect(center=(ix + pill_w // 2, iy + pill_h // 2)))
+            else:
+                none_surf = item_font.render("No stations assigned (0 in Cloud)", True, (148, 163, 184))
+                self.screen.blit(none_surf, (box_x + 95, box_y + 36))
+            
+            # Row 3: Actionable Mission / Canal / Portal state
             if getattr(self, 'is_map12', False):
                 if tot_st == 0:
-                    obj1 = "- Cloud Questions: None Assigned (0 in Cloud)"
-                    obj1_color = (56, 189, 248)
-                else:
-                    obj1 = f"- Canal Water Sluices: {q_count}/{tot_st} Opened"
-                    obj1_color = (255, 255, 255) if q_count < tot_st else (34, 197, 94)
-                obj1_surf = item_font.render(obj1, True, obj1_color)
-                self.screen.blit(obj1_surf, (box_x + 15, box_y + 30))
-                
-                if q_count < tot_st:
-                    obj2 = f"- Water Canal: {q_count}/{tot_st} Full (Open all {tot_st} to fill canal)"
-                    obj2_color = (244, 63, 94)
+                    obj2 = "Cloud Questions: None Assigned (0 in Cloud)"
+                    obj2_color = (56, 189, 248)
+                elif q_count < tot_st:
+                    rem = max(0, tot_st - q_count)
+                    obj2 = f"Mission: Open Sluice Valve {self.quiz_station_index} | Canal: {q_count}/{tot_st} Full ({rem} left)"
+                    obj2_color = (254, 240, 138)
                 elif not self.key_puzzle_solved and self.npc_bromen_found and self.raft_state == "docked_west":
-                    obj2 = "- Talk to Guardian Bromen at dock to unlock raft!"
+                    obj2 = "All Sluices Open! Talk to Guardian Bromen at dock to unlock raft!"
                     obj2_color = (250, 204, 21)
                 elif self.raft_state in ("ready_to_sail", "docked_west"):
-                    obj2 = "- Raft Untethered! Walk onto Lotus Raft to sail!"
+                    obj2 = "Raft Untethered! Walk onto Lotus Raft to sail across rapids!"
                     obj2_color = (34, 197, 94)
                 elif self.raft_state == "sailing":
-                    obj2 = "- Sailing across rapids to Portal Island!"
+                    obj2 = "Sailing across rapids to Portal Island..."
                     obj2_color = (56, 189, 248)
                 else:
-                    obj2 = "- Arrived! Step into the Portal to finish the Summative Assessment!"
+                    obj2 = "Arrived! Step into the Portal to finish the Summative Assessment!"
                     obj2_color = (34, 197, 94)
-                obj2_surf = item_font.render(obj2, True, obj2_color)
-                self.screen.blit(obj2_surf, (box_x + 15, box_y + 52))
             else:
                 if tot_st == 0:
-                    obj1 = "- Cloud Questions: None Assigned (0 in Cloud)"
-                    obj1_color = (56, 189, 248)
-                else:
-                    obj1 = f"- Golden Keys: {q_count}/{tot_st} collected"
-                    obj1_color = (255, 255, 255) if q_count < tot_st else (34, 197, 94)
-                obj1_surf = item_font.render(obj1, True, obj1_color)
-                self.screen.blit(obj1_surf, (box_x + 15, box_y + 30))
-                
-                if q_count < tot_st:
-                    obj2 = f"- Doors & Portal: LOCKED (Collect all {tot_st} Golden Key(s))"
-                    obj2_color = (244, 63, 94)
+                    obj2 = "Cloud Questions: None Assigned (0 in Cloud)"
+                    obj2_color = (56, 189, 248)
+                elif q_count < tot_st:
+                    rem = max(0, tot_st - q_count)
+                    obj2 = f"Mission: Answer Station {self.quiz_station_index} for Golden Key | Doors: LOCKED ({rem} left)"
+                    obj2_color = (254, 240, 138)
                 elif self.quiz_state < 6:
-                    obj2 = "- Approach Guardian Bromen to open double doors" if self.npc_bromen_found else "- Step into portal to finish"
+                    obj2 = "All Keys Collected! Approach Guardian Bromen to open double doors" if self.npc_bromen_found else "All Keys Collected! Step into portal to finish"
                     obj2_color = (250, 204, 21)
                 else:
-                    obj2 = "- Double Doors Open! Step into portal to finish" if self.npc_bromen_found else "- Portal Unlocked! Step into portal to finish"
+                    obj2 = "Double Doors Open! Step into portal to finish Summative Assessment!"
                     obj2_color = (34, 197, 94)
-                obj2_surf = item_font.render(obj2, True, obj2_color)
-                self.screen.blit(obj2_surf, (box_x + 15, box_y + 52))
+            obj2_surf = item_font.render(obj2, True, obj2_color)
+            self.screen.blit(obj2_surf, (box_x + 16, box_y + 66))
 
         if self.show_info:
             npc_status = []

@@ -4426,90 +4426,118 @@ class Quarter1:
 
         # Draw Objectives HUD Box at the bottom center of the screen
         if self.is_quiz_map:
-            box_w, box_h = 480, 80
+            box_w, box_h = 640, 96
             box_x = (self.width - box_w) // 2
-            box_y = self.height - box_h - 20
+            box_y = self.height - box_h - 12
             
-            # Translucent slate blue background (alpha = 190, cached once)
+            # Translucent slate blue background (alpha = 225, cached once)
             if getattr(self, '_objectives_bg_surf', None) is None or self._objectives_bg_surf.get_size() != (box_w, box_h):
                 bg_surf = pygame.Surface((box_w, box_h), pygame.SRCALPHA)
-                bg_surf.fill((15, 23, 42, 190))
+                bg_surf.fill((15, 23, 42, 225))
                 if pygame.display.get_surface() is not None:
                     try:
                         bg_surf = bg_surf.convert_alpha()
                     except Exception:
                         pass
                 self._objectives_bg_surf = bg_surf
+
+            # Drop shadow for depth and map separation
+            pygame.draw.rect(self.screen, (0, 0, 0, 110), (box_x, box_y + 3, box_w, box_h), border_radius=12)
             self.screen.blit(self._objectives_bg_surf, (box_x, box_y))
             
-            # Border: Gold when locked, Green when complete
-            border_color = (218, 165, 32) if self.quiz_state < 6 else (34, 197, 94)
-            pygame.draw.rect(self.screen, border_color, (box_x, box_y, box_w, box_h), 2, border_radius=8)
+            tot_st = getattr(self, 'active_station_count', len(self.shape_npcs))
+            q_count = sum(1 for s in self.shape_npcs.values() if s.get('answered', False))
+            is_complete = (q_count >= tot_st and tot_st > 0)
+            
+            # Border: Radiant Gold when in progress, Emerald Green when complete
+            border_color = (34, 197, 94) if is_complete else (251, 191, 36)
+            pygame.draw.rect(self.screen, border_color, (box_x, box_y, box_w, box_h), 2, border_radius=12)
+            pygame.draw.rect(self.screen, (255, 255, 255, 25), (box_x + 2, box_y + 2, box_w - 4, box_h - 4), 1, border_radius=10)
             
             # Header title in Gold
-            title_font = get_font("Comic Sans MS", 12, bold=True)
-            title_surf = title_font.render("CURRENT OBJECTIVES", True, (255, 215, 0))
-            self.screen.blit(title_surf, (box_x + 15, box_y + 8))
-            
-            # Details font
-            item_font = get_font("Comic Sans MS", 12)
-            
-            tot_st = getattr(self, 'active_station_count', len(self.shape_npcs))
-            if self.is_quiz_map:
-                q_count = sum(1 for s in self.shape_npcs.values() if s['answered'])
-            else:
-                q_count = min(self.current_question_index, tot_st)
+            title_font = get_font("Comic Sans MS", 13, bold=True)
+            title_surf = title_font.render("★ CURRENT OBJECTIVES", True, (255, 215, 0))
+            self.screen.blit(title_surf, (box_x + 16, box_y + 8))
 
-            if tot_st <= 0:
-                obj1 = "- Cloud Questions: None Assigned (0 in Cloud)"
-                obj1_surf = item_font.render(obj1, True, (56, 189, 248))
-                self.screen.blit(obj1_surf, (box_x + 15, box_y + 28))
-            elif self.map_name.lower() in ['map1.txt', 'map2.txt', 'map3.txt']:
-                if self.map_name.lower() == 'map2.txt':
-                    obj1 = f"- Shape Pieces: {q_count}/{tot_st} collected"
-                else:
-                    obj1 = f"- Jigsaw Pieces: {q_count}/{tot_st} collected"
-                obj1_color = (255, 255, 255) if q_count < tot_st else (34, 197, 94)
-                obj1_surf = item_font.render(obj1, True, obj1_color)
-                self.screen.blit(obj1_surf, (box_x + 15, box_y + 28))
-                
+            # Progress badge pill on top right
+            pill_font = get_font("Comic Sans MS", 11, bold=True)
+            pill_text = f"{q_count}/{tot_st} Cleared" if tot_st > 0 else "0/0"
+            pill_text_color = (74, 222, 128) if is_complete else (254, 240, 138)
+            pill_surf = pill_font.render(pill_text, True, pill_text_color)
+            pw = pill_surf.get_width() + 18
+            ph = 22
+            px_pill = box_x + box_w - pw - 14
+            py_pill = box_y + 7
+            pygame.draw.rect(self.screen, (30, 41, 59), (px_pill, py_pill, pw, ph), border_radius=11)
+            pygame.draw.rect(self.screen, border_color, (px_pill, py_pill, pw, ph), 1, border_radius=11)
+            self.screen.blit(pill_surf, pill_surf.get_rect(center=(px_pill + pw // 2, py_pill + ph // 2)))
+            
+            # Row 2: Dedicated Question Status Track Row (supports up to 15 stations cleanly)
+            item_font = get_font("Comic Sans MS", 11, bold=True)
+            st_lbl = item_font.render("Questions:", True, (203, 213, 225))
+            self.screen.blit(st_lbl, (box_x + 16, box_y + 36))
+
+            if tot_st > 0:
+                p_font = get_font("Comic Sans MS", 9, bold=True)
+                pill_w = 23 if tot_st > 10 else 26
+                pill_h = 20
+                pill_gap = 4 if tot_st > 10 else 6
+                start_x = box_x + 95
+
                 for i in range(tot_st):
                     st_num = i + 1
                     is_ans = (st_num in self.shape_npcs and self.shape_npcs[st_num].get('answered', False)) or (st_num <= q_count)
                     is_1st = self.first_attempt_correct.get(st_num, True)
-                    if is_ans:
-                        ind_col = (34, 197, 94) if is_1st else (20, 184, 166)
-                    elif st_num == self.quiz_station_index:
-                        ind_col = (251, 191, 36)
-                    else:
-                        ind_col = (71, 85, 105)
-                    ix = box_x + 220 + i * 16
-                    iy = box_y + 30
-                    pygame.draw.rect(self.screen, ind_col, (ix, iy, 12, 12), border_radius=3)
-                    if is_ans:
-                        pygame.draw.line(self.screen, (255, 255, 255), (ix + 2, iy + 6), (ix + 5, iy + 9), 2)
-                        pygame.draw.line(self.screen, (255, 255, 255), (ix + 5, iy + 9), (ix + 10, iy + 3), 2)
+                    is_cur = (st_num == self.quiz_station_index and not is_ans)
+
+                    ix = start_x + i * (pill_w + pill_gap)
+                    iy = box_y + 36
+                    if ix + pill_w <= box_x + box_w - 14:
+                        if is_ans:
+                            bg_c = (16, 185, 129) if is_1st else (20, 184, 166)
+                            brd_c = (52, 211, 153)
+                            pygame.draw.rect(self.screen, bg_c, (ix, iy, pill_w, pill_h), border_radius=4)
+                            pygame.draw.rect(self.screen, brd_c, (ix, iy, pill_w, pill_h), 1, border_radius=4)
+                            # Embedded white checkmark
+                            pygame.draw.line(self.screen, (255, 255, 255), (ix + 4, iy + 10), (ix + 9, iy + 15), 2)
+                            pygame.draw.line(self.screen, (255, 255, 255), (ix + 9, iy + 15), (ix + 18, iy + 5), 2)
+                        elif is_cur:
+                            pygame.draw.rect(self.screen, (245, 158, 11), (ix, iy, pill_w, pill_h), border_radius=4)
+                            pygame.draw.rect(self.screen, (253, 224, 71), (ix, iy, pill_w, pill_h), 1, border_radius=4)
+                            cur_surf = p_font.render(str(st_num), True, (15, 23, 42))
+                            self.screen.blit(cur_surf, cur_surf.get_rect(center=(ix + pill_w // 2, iy + pill_h // 2)))
+                        else:
+                            pygame.draw.rect(self.screen, (30, 41, 59), (ix, iy, pill_w, pill_h), border_radius=4)
+                            pygame.draw.rect(self.screen, (71, 85, 105), (ix, iy, pill_w, pill_h), 1, border_radius=4)
+                            num_surf = p_font.render(str(st_num), True, (148, 163, 184))
+                            self.screen.blit(num_surf, num_surf.get_rect(center=(ix + pill_w // 2, iy + pill_h // 2)))
             else:
-                obj1 = f"- Quiz Progress: {q_count}/{tot_st} questions answered"
-                obj1_color = (255, 255, 255) if q_count < tot_st else (34, 197, 94)
-                obj1_surf = item_font.render(obj1, True, obj1_color)
-                self.screen.blit(obj1_surf, (box_x + 15, box_y + 28))
-            
-            answered_count = sum(1 for s in self.shape_npcs.values() if s['answered']) if self.is_quiz_map else tot_st
-            if answered_count < tot_st:
-                obj2 = "- Portal Status: LOCKED"
-                obj2_color = (244, 63, 94)
+                none_surf = item_font.render("No questions assigned (0 in Cloud)", True, (148, 163, 184))
+                self.screen.blit(none_surf, (box_x + 95, box_y + 36))
+
+            # Row 3: Actionable Mission / Portal Status line
+            if tot_st <= 0:
+                obj2 = "Cloud Questions: None Assigned (0 in Cloud)"
+                obj2_color = (56, 189, 248)
+            elif not is_complete:
+                cur_npc_name = f"Station {self.quiz_station_index}"
+                if hasattr(self, 'shape_npcs') and self.quiz_station_index in self.shape_npcs:
+                    cur_npc_name = self.shape_npcs[self.quiz_station_index].get('name', cur_npc_name)
+                piece_label = "Shape Piece" if self.map_name.lower() == 'map2.txt' else "Jigsaw Piece"
+                rem = max(0, tot_st - q_count)
+                obj2 = f"Mission: Find {cur_npc_name} for {piece_label} | Portal: LOCKED ({rem} left)"
+                obj2_color = (254, 240, 138)
             elif not self.puzzle_solved:
-                obj2 = "- Speak to the Old Man to unlock Exit Portal!"
+                obj2 = "All Questions Cleared! Speak to the Old Man to unlock Exit Portal!"
                 obj2_color = (250, 204, 21)
             elif len(self.portals) == 0:
-                obj2 = "- Portal Status: LOCKED"
+                obj2 = "Exit Portal Status: LOCKED"
                 obj2_color = (244, 63, 94)
             else:
-                obj2 = "- Portal Status: OPEN (Enter the portal to exit!)"
+                obj2 = "Portal Status: OPEN! Step into the radiant portal to exit!"
                 obj2_color = (34, 197, 94)
             obj2_surf = item_font.render(obj2, True, obj2_color)
-            self.screen.blit(obj2_surf, (box_x + 15, box_y + 48))
+            self.screen.blit(obj2_surf, (box_x + 16, box_y + 66))
 
         if self.show_info:
             npc_status = []
