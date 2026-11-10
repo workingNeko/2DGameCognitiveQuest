@@ -3043,12 +3043,7 @@ class Quarter3:
 
         self.draw_player()
 
-        # Pass 4: Floating Graphics, Overhead Badges & Beacon Checkmarks (ALWAYS ON TOP)
-        if self.npc_oldman_found:
-            om_cx = (self.npc_oldman_x + TILE_SIZE // 2 - self.camera_x) * ZOOM
-            om_top = (self.npc_oldman_y - self.camera_y) * ZOOM
-            draw_npc_overhead_badge(self.screen, om_cx, om_top, "Desert Hermit", is_active=False, badge_color=(59, 130, 246), offset_y=int(-10 * ZOOM))
-
+        # Pass 4: Floating Graphics & Quest Beacons (ALWAYS ON TOP)
         if hasattr(self, 'quiz_stations') and hasattr(self, 'station_npcs'):
             for num, pos in self.quiz_stations.items():
                 if num in self.station_npcs:
@@ -3060,22 +3055,15 @@ class Quarter3:
                     is_active = (num == self.quiz_station_index and self.quiz_state == 0)
                     is_first_correct = self.first_attempt_correct.get(num, True)
 
-                    # Overhead badge and beacon
-                    g_name = data.get("name", f"Station {num}")
                     if is_answered:
                         if is_first_correct:
                             draw_beacon_marker(self.screen, cx, top_y, color=(34, 197, 94), beacon_type="check", offset_y=int(-30 * ZOOM))
-                            status_text = f"Q{num}: ✓ Correct"
-                            draw_npc_overhead_badge(self.screen, cx, top_y, status_text, is_active=False, badge_color=(34, 197, 94), offset_y=int(-10 * ZOOM))
                         else:
                             draw_beacon_marker(self.screen, cx, top_y, color=(239, 68, 68), beacon_type="cross", offset_y=int(-30 * ZOOM))
-                            status_text = f"Q{num}: ✗ Wrong"
-                            draw_npc_overhead_badge(self.screen, cx, top_y, status_text, is_active=False, badge_color=(239, 68, 68), offset_y=int(-10 * ZOOM))
-                    elif is_active:
-                        draw_beacon_marker(self.screen, cx, top_y, color=(251, 191, 36), beacon_type="question", offset_y=int(-32 * ZOOM))
-                        draw_npc_overhead_badge(self.screen, cx, top_y, g_name, is_active=True, badge_color=(251, 191, 36), offset_y=int(-10 * ZOOM))
                     else:
-                        draw_npc_overhead_badge(self.screen, cx, top_y, g_name, is_active=False, badge_color=(203, 213, 225), offset_y=int(-8 * ZOOM))
+                        # Every single unanswered station NPC displays a floating question mark (no names overhead)
+                        q_col = (251, 191, 36) if is_active else (226, 180, 20)
+                        draw_beacon_marker(self.screen, cx, top_y, color=q_col, beacon_type="question", offset_y=int(-32 * ZOOM))
 
         if getattr(self, 'npc_skeleton_found', False):
             sk_cx = (self.npc_skeleton_x + TILE_SIZE // 2 - self.camera_x) * ZOOM
@@ -3083,12 +3071,9 @@ class Quarter3:
             is_sk_active = getattr(self, 'guardian_skeleton_state', 0) in [1, 2, 3] and getattr(self, 'skeleton_guardian_active', True)
             if is_sk_active:
                 draw_beacon_marker(self.screen, sk_cx, sk_top, color=(168, 85, 247), beacon_type="exclamation", offset_y=int(-35 * ZOOM))
-            draw_npc_overhead_badge(self.screen, sk_cx, sk_top, "Skeleton Guardian", is_active=is_sk_active, badge_color=(168, 85, 247), offset_y=int(-10 * ZOOM))
 
         if self.npc_knight_found:
-            kn_cx = (self.npc_knight_x + TILE_SIZE // 2 - self.camera_x) * ZOOM
-            kn_top = (self.npc_knight_y - self.camera_y) * ZOOM
-            draw_npc_overhead_badge(self.screen, kn_cx, kn_top, "Desert Knight", is_active=False, badge_color=(59, 130, 246), offset_y=int(-10 * ZOOM))
+            pass
 
         # Draw Click-to-Move Target Beacon
         if getattr(self, 'click_dest', None) is not None:
@@ -3252,7 +3237,14 @@ class Quarter3:
 
         # Questions Completed Line
         q_font = self.get_ui_font(10, bold=True)
-        q_text = f"Questions Completed: {completed}/{tot_st}"
+        answered_set = getattr(self, 'answered_stations', set())
+        fac = getattr(self, 'first_attempt_correct', {})
+        correct_count = sum(1 for sid in range(1, tot_st + 1) if (sid < self.quiz_station_index or sid in answered_set or getattr(self, 'quiz_state', 0) >= 6) and fac.get(sid, True))
+        wrong_count = sum(1 for sid in range(1, tot_st + 1) if (sid < self.quiz_station_index or sid in answered_set or getattr(self, 'quiz_state', 0) >= 6) and not fac.get(sid, True))
+        if wrong_count > 0:
+            q_text = f"Questions: {completed}/{tot_st} ({correct_count}✓, {wrong_count}✗)"
+        else:
+            q_text = f"Questions Completed: {completed}/{tot_st}"
         q_surf = q_font.render(q_text, True, (203, 213, 225))
         self.screen.blit(q_surf, (card_x + 12, card_y + 30))
 
@@ -3316,6 +3308,9 @@ class Quarter3:
             tot_st = getattr(self, 'active_station_count', len(self.quiz_questions))
             answered_set = getattr(self, 'answered_stations', set())
             q_count = len(answered_set) if answered_set else (tot_st if self.quiz_station_index >= 6 else min(self.current_question_index, tot_st))
+            fac = getattr(self, 'first_attempt_correct', {})
+            correct_count = sum(1 for sid in range(1, tot_st + 1) if (sid < self.quiz_station_index or sid in answered_set or self.quiz_state >= 6) and fac.get(sid, True))
+            wrong_count = sum(1 for sid in range(1, tot_st + 1) if (sid < self.quiz_station_index or sid in answered_set or self.quiz_state >= 6) and not fac.get(sid, True))
             is_complete = (q_count >= tot_st and tot_st > 0) or (self.quiz_state >= 6)
 
             # Border: Radiant Gold when in progress, Emerald Green when complete
@@ -3328,18 +3323,34 @@ class Quarter3:
             title_surf = title_font.render("★ DESERT EXPEDITION OBJECTIVES", True, (255, 215, 0))
             self.screen.blit(title_surf, (box_x + 16, box_y + 8))
 
-            # Progress badge pill on top right
+            # Progress badge pills on top right (with prominent Wrong indicator if wrong answers exist)
             pill_font = get_font("Comic Sans MS", 11, bold=True)
-            pill_text = f"{min(q_count, tot_st)}/{tot_st} Cleared" if tot_st > 0 else "0/0"
-            pill_text_color = (74, 222, 128) if is_complete else (254, 240, 138)
-            pill_surf = pill_font.render(pill_text, True, pill_text_color)
-            pw = pill_surf.get_width() + 18
             ph = 22
-            px_pill = box_x + box_w - pw - 14
             py_pill = box_y + 7
-            pygame.draw.rect(self.screen, (30, 41, 59), (px_pill, py_pill, pw, ph), border_radius=11)
-            pygame.draw.rect(self.screen, border_color, (px_pill, py_pill, pw, ph), 1, border_radius=11)
-            self.screen.blit(pill_surf, pill_surf.get_rect(center=(px_pill + pw // 2, py_pill + ph // 2)))
+            if wrong_count > 0:
+                wrong_surf = pill_font.render(f"✗ {wrong_count} Wrong", True, (254, 202, 202))
+                pw_w = wrong_surf.get_width() + 16
+                px_w = box_x + box_w - pw_w - 14
+                pygame.draw.rect(self.screen, (185, 28, 28), (px_w, py_pill, pw_w, ph), border_radius=11)
+                pygame.draw.rect(self.screen, (248, 113, 113), (px_w, py_pill, pw_w, ph), 1, border_radius=11)
+                self.screen.blit(wrong_surf, wrong_surf.get_rect(center=(px_w + pw_w // 2, py_pill + ph // 2)))
+
+                pill_text = f"✓ {correct_count}/{tot_st}" if tot_st > 0 else "0/0"
+                pill_surf = pill_font.render(pill_text, True, (74, 222, 128))
+                pw = pill_surf.get_width() + 16
+                px_pill = px_w - pw - 8
+                pygame.draw.rect(self.screen, (30, 41, 59), (px_pill, py_pill, pw, ph), border_radius=11)
+                pygame.draw.rect(self.screen, (52, 211, 153), (px_pill, py_pill, pw, ph), 1, border_radius=11)
+                self.screen.blit(pill_surf, pill_surf.get_rect(center=(px_pill + pw // 2, py_pill + ph // 2)))
+            else:
+                pill_text = f"{min(q_count, tot_st)}/{tot_st} Cleared" if tot_st > 0 else "0/0"
+                pill_text_color = (74, 222, 128) if is_complete else (254, 240, 138)
+                pill_surf = pill_font.render(pill_text, True, pill_text_color)
+                pw = pill_surf.get_width() + 18
+                px_pill = box_x + box_w - pw - 14
+                pygame.draw.rect(self.screen, (30, 41, 59), (px_pill, py_pill, pw, ph), border_radius=11)
+                pygame.draw.rect(self.screen, border_color, (px_pill, py_pill, pw, ph), 1, border_radius=11)
+                self.screen.blit(pill_surf, pill_surf.get_rect(center=(px_pill + pw // 2, py_pill + ph // 2)))
 
             # Row 2: Dedicated Question Status Track Row (supports up to 15 stations cleanly)
             item_font = get_font("Comic Sans MS", 11, bold=True)
@@ -3356,7 +3367,7 @@ class Quarter3:
                 for i in range(tot_st):
                     st_num = i + 1
                     is_ans = st_num < self.quiz_station_index or st_num in answered_set or self.quiz_state >= 6
-                    is_1st = self.first_attempt_correct.get(st_num, True)
+                    is_1st = fac.get(st_num, True)
                     is_cur = (st_num == self.quiz_station_index and not is_ans and self.quiz_state < 6)
 
                     ix = start_x + i * (pill_w + pill_gap)
@@ -3399,17 +3410,25 @@ class Quarter3:
                 obj2_color = (56, 189, 248)
             elif self.quiz_state < 6:
                 if self.quiz_station_index >= 6 or is_complete:
-                    obj2 = "All Questions Answered! Visit Skeleton Guardian for Sun Fraction Match!"
-                    obj2_color = (250, 204, 21)
+                    if wrong_count > 0:
+                        obj2 = f"All Questions Answered ({correct_count} Correct, {wrong_count} Wrong)! Visit Skeleton Guardian!"
+                        obj2_color = (251, 146, 60)
+                    else:
+                        obj2 = "All Questions Answered (100% Correct)! Visit Skeleton Guardian for Sun Fraction Match!"
+                        obj2_color = (250, 204, 21)
                 else:
                     cur_npc_name = f"Station {self.quiz_station_index}"
-                    if hasattr(self, 'station_npcs') and self.quiz_station_index in self.station_npcs:
-                        cur_npc_name = self.station_npcs[self.quiz_station_index].get('name', cur_npc_name)
                     rem = max(0, tot_st - q_count)
-                    obj2 = f"Mission: Find {cur_npc_name} | Portal: LOCKED ({rem} left)"
+                    if wrong_count > 0:
+                        obj2 = f"Mission: Find {cur_npc_name} (?) | Progress: {correct_count}✓ {wrong_count}✗ | Portal: LOCKED ({rem} left)"
+                    else:
+                        obj2 = f"Mission: Find {cur_npc_name} (?) | Portal: LOCKED ({rem} left)"
                     obj2_color = (254, 240, 138)
             else:
-                obj2 = "Expedition Trial Complete! Portal Status: OPEN - Step in to return!"
+                if wrong_count > 0:
+                    obj2 = f"Expedition Trial Complete ({correct_count} Correct, {wrong_count} Wrong)! Portal: OPEN!"
+                else:
+                    obj2 = "Expedition Trial Complete! Portal Status: OPEN - Step in to return!"
                 obj2_color = (34, 197, 94)
             obj2_surf = item_font.render(obj2, True, obj2_color)
             self.screen.blit(obj2_surf, (box_x + 16, box_y + 66))
@@ -6214,40 +6233,7 @@ class Quarter3:
             screen_npc_x = (st_x * TILE_SIZE - self.camera_x) * ZOOM
             screen_npc_y = (st_y * TILE_SIZE - self.camera_y) * ZOOM
 
-            # On-Screen Floating Objective Badge (Always visible over active target NPC)
-            bob = math.sin(self.frame_counter * 0.15) * 3 * ZOOM
-            badge_x = screen_npc_x + (TILE_SIZE * ZOOM) / 2 - 8 * ZOOM
-            badge_y = screen_npc_y - 20 * ZOOM + bob
-
-            badge_rect = pygame.Rect(badge_x, badge_y, 16 * ZOOM, 16 * ZOOM)
-            pygame.draw.rect(self.screen, (255, 215, 0), badge_rect, border_radius=4)
-            pygame.draw.rect(self.screen, (0, 0, 0), badge_rect, 1, border_radius=4)
-
-            excl_font = get_font("Comic Sans MS", int(14 * ZOOM), bold=True)
-            excl_surf = excl_font.render("!", True, (0, 0, 0))
-            excl_rect = excl_surf.get_rect(center=badge_rect.center)
-            self.screen.blit(excl_surf, excl_rect)
-
-            # Small pill name tag over active NPC
-            name_font = self.get_ui_font(int(10 * ZOOM), bold=True)
-            name_surf = name_font.render(f"{npc_name}", True, (255, 235, 120))
-            tag_w = name_surf.get_width() + 10
-            tag_h = name_surf.get_height() + 4
-            tag_x = screen_npc_x + (TILE_SIZE * ZOOM) / 2 - tag_w / 2
-            tag_y = badge_y - tag_h - 2
-
-            tag_bg = self._npc_tag_bg_cache.get((tag_w, tag_h))
-            if tag_bg is None:
-                tag_bg = pygame.Surface((tag_w, tag_h), pygame.SRCALPHA)
-                tag_bg.fill((15, 23, 42, 210))
-                if pygame.display.get_surface() is not None:
-                    tag_bg = tag_bg.convert_alpha()
-                self._npc_tag_bg_cache[(tag_w, tag_h)] = tag_bg
-            self.screen.blit(tag_bg, (tag_x, tag_y))
-            pygame.draw.rect(self.screen, (255, 215, 0), (tag_x, tag_y, tag_w, tag_h), 1, border_radius=4)
-            self.screen.blit(name_surf, (tag_x + 5, tag_y + 2))
-
-            # Off-Screen Directional Compass Pointer
+            # Off-Screen Directional Compass Pointer (Guides Grade 2 student when NPC is off-screen)
             is_on_screen = (40 <= screen_npc_x <= self.width - 60 and 40 <= screen_npc_y <= self.height - 110)
             if not is_on_screen:
                 player_screen_x = (self.player_x - self.camera_x) * ZOOM

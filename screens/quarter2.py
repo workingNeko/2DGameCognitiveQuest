@@ -4663,21 +4663,15 @@ class Quarter2:
             is_active = (num == self.quiz_station_index and self.quiz_state == 0)
             is_first_correct = self.first_attempt_correct.get(num, True)
 
-            v_title = info.get("title", f"Station {num}")
             if is_answered:
                 if is_first_correct:
                     draw_beacon_marker(self.screen, cx, top_y, color=(34, 197, 94), beacon_type="check", offset_y=int(-30 * ZOOM))
-                    status_text = f"Q{num}: ✓ Correct"
-                    draw_npc_overhead_badge(self.screen, cx, top_y, status_text, is_active=False, badge_color=(34, 197, 94), offset_y=int(-10 * ZOOM))
                 else:
                     draw_beacon_marker(self.screen, cx, top_y, color=(239, 68, 68), beacon_type="cross", offset_y=int(-30 * ZOOM))
-                    status_text = f"Q{num}: ✗ Wrong"
-                    draw_npc_overhead_badge(self.screen, cx, top_y, status_text, is_active=False, badge_color=(239, 68, 68), offset_y=int(-10 * ZOOM))
-            elif is_active:
-                draw_beacon_marker(self.screen, cx, top_y, color=(251, 191, 36), beacon_type="question", offset_y=int(-32 * ZOOM))
-                draw_npc_overhead_badge(self.screen, cx, top_y, v_title, is_active=True, badge_color=(251, 191, 36), offset_y=int(-10 * ZOOM))
             else:
-                draw_npc_overhead_badge(self.screen, cx, top_y, v_title, is_active=False, badge_color=(203, 213, 225), offset_y=int(-8 * ZOOM))
+                # Every single unanswered station NPC displays a floating question mark (no names overhead)
+                q_col = (251, 191, 36) if is_active else (226, 180, 20)
+                draw_beacon_marker(self.screen, cx, top_y, color=q_col, beacon_type="question", offset_y=int(-32 * ZOOM))
 
         if getattr(self, 'npc_knight_found', False):
             k_cx = (self.npc_knight_x + TILE_SIZE // 2 - self.camera_x) * ZOOM
@@ -4685,7 +4679,6 @@ class Quarter2:
             is_k_active = (self.quiz_state == 6 and getattr(self, 'knight_guardian_active', True))
             if is_k_active:
                 draw_beacon_marker(self.screen, k_cx, k_top, color=(59, 130, 246), beacon_type="exclamation", offset_y=int(-35 * ZOOM))
-            draw_npc_overhead_badge(self.screen, k_cx, k_top, "Portal Knight", is_active=is_k_active, badge_color=(59, 130, 246), offset_y=int(-10 * ZOOM))
 
         # Draw Click-to-Move Target Beacon
         if getattr(self, 'click_dest', None) is not None:
@@ -4707,39 +4700,6 @@ class Quarter2:
             
             npc_name = self.station_npc_info.get(self.quiz_station_index, {}).get("name", f"Station {self.quiz_station_index}")
             
-            # 1. On-Screen Floating Objective Badge (Always visible over active target NPC)
-            bob = math.sin(self.frame_counter * 0.15) * 3 * ZOOM
-            badge_x = screen_npc_x + (TILE_SIZE * ZOOM) / 2 - 8 * ZOOM
-            badge_y = screen_npc_y - 20 * ZOOM + bob
-            
-            # Yellow Diamond Quest Badge
-            badge_rect = pygame.Rect(badge_x, badge_y, 16 * ZOOM, 16 * ZOOM)
-            pygame.draw.rect(self.screen, (255, 215, 0), badge_rect, border_radius=4)
-            pygame.draw.rect(self.screen, (0, 0, 0), badge_rect, 1, border_radius=4)
-            
-            excl_surf = self.font.render("!", True, (0, 0, 0))
-            excl_rect = excl_surf.get_rect(center=badge_rect.center)
-            self.screen.blit(excl_surf, excl_rect)
-            
-            # Small pill name tag over active NPC
-            name_font = self.get_ui_font(int(10 * ZOOM), bold=True)
-            name_surf = name_font.render(f"{npc_name}", True, (255, 235, 120))
-            tag_w = name_surf.get_width() + 10
-            tag_h = name_surf.get_height() + 4
-            tag_x = screen_npc_x + (TILE_SIZE * ZOOM) / 2 - tag_w / 2
-            tag_y = badge_y - tag_h - 2
-            
-            if not hasattr(self, '_tag_bg_cache'):
-                self._tag_bg_cache = {}
-            tag_bg = self._tag_bg_cache.get((tag_w, tag_h))
-            if tag_bg is None:
-                tag_bg = pygame.Surface((tag_w, tag_h), pygame.SRCALPHA)
-                tag_bg.fill((15, 23, 42, 210))
-                self._tag_bg_cache[(tag_w, tag_h)] = tag_bg
-            self.screen.blit(tag_bg, (tag_x, tag_y))
-            pygame.draw.rect(self.screen, (255, 215, 0), (tag_x, tag_y, tag_w, tag_h), 1, border_radius=4)
-            self.screen.blit(name_surf, (tag_x + 5, tag_y + 2))
-
             # 2. Off-Screen Directional Compass Pointer (Guides Grade 2 student when NPC is off-screen)
             is_on_screen = (40 <= screen_npc_x <= self.width - 60 and 40 <= screen_npc_y <= self.height - 110)
             if not is_on_screen:
@@ -5024,7 +4984,14 @@ class Quarter2:
 
         # Questions Completed Line
         q_font = self.get_ui_font(10, bold=True)
-        q_text = f"Questions Completed: {completed}/{tot_st}"
+        fac = getattr(self, 'first_attempt_correct', {})
+        st_info = getattr(self, 'station_npc_info', {})
+        correct_count = sum(1 for sid in range(1, tot_st + 1) if (sid < self.quiz_station_index or st_info.get(sid, {}).get("cleared", False) or getattr(self, 'quiz_state', 0) >= 6) and fac.get(sid, True))
+        wrong_count = sum(1 for sid in range(1, tot_st + 1) if (sid < self.quiz_station_index or st_info.get(sid, {}).get("cleared", False) or getattr(self, 'quiz_state', 0) >= 6) and not fac.get(sid, True))
+        if wrong_count > 0:
+            q_text = f"Questions: {completed}/{tot_st} ({correct_count}✓, {wrong_count}✗)"
+        else:
+            q_text = f"Questions Completed: {completed}/{tot_st}"
         q_surf = q_font.render(q_text, True, (203, 213, 225))
         self.screen.blit(q_surf, (card_x + 12, card_y + 30))
 
@@ -5084,6 +5051,9 @@ class Quarter2:
 
             tot_st = getattr(self, 'active_station_count', len(self.quiz_questions))
             cleared_count = max(0, self.quiz_station_index - 1) if self.quiz_state < 6 else tot_st
+            fac = getattr(self, 'first_attempt_correct', {})
+            correct_count = sum(1 for sid in range(1, tot_st + 1) if (sid < self.quiz_station_index or self.station_npc_info.get(sid, {}).get("cleared", False) or self.quiz_state >= 6) and fac.get(sid, True))
+            wrong_count = sum(1 for sid in range(1, tot_st + 1) if (sid < self.quiz_station_index or self.station_npc_info.get(sid, {}).get("cleared", False) or self.quiz_state >= 6) and not fac.get(sid, True))
             is_complete = (cleared_count >= tot_st and tot_st > 0) or (self.quiz_state >= 6)
 
             # Border: Radiant Gold when in progress, Emerald Green when complete
@@ -5096,18 +5066,34 @@ class Quarter2:
             title_surf = title_font.render("★ BARANGAY KALYE OBJECTIVES", True, (255, 215, 0))
             self.screen.blit(title_surf, (box_x + 16, box_y + 8))
 
-            # Progress badge pill on top right
+            # Progress badge pills on top right (with prominent Wrong indicator if wrong answers exist)
             pill_font = self.get_ui_font(11, bold=True)
-            pill_text = f"{min(cleared_count, tot_st)}/{tot_st} Cleared" if tot_st > 0 else "0/0"
-            pill_text_color = (74, 222, 128) if is_complete else (254, 240, 138)
-            pill_surf = pill_font.render(pill_text, True, pill_text_color)
-            pw = pill_surf.get_width() + 18
             ph = 22
-            px_pill = box_x + box_w - pw - 14
             py_pill = box_y + 7
-            pygame.draw.rect(self.screen, (30, 41, 59), (px_pill, py_pill, pw, ph), border_radius=11)
-            pygame.draw.rect(self.screen, border_color, (px_pill, py_pill, pw, ph), 1, border_radius=11)
-            self.screen.blit(pill_surf, pill_surf.get_rect(center=(px_pill + pw // 2, py_pill + ph // 2)))
+            if wrong_count > 0:
+                wrong_surf = pill_font.render(f"✗ {wrong_count} Wrong", True, (254, 202, 202))
+                pw_w = wrong_surf.get_width() + 16
+                px_w = box_x + box_w - pw_w - 14
+                pygame.draw.rect(self.screen, (185, 28, 28), (px_w, py_pill, pw_w, ph), border_radius=11)
+                pygame.draw.rect(self.screen, (248, 113, 113), (px_w, py_pill, pw_w, ph), 1, border_radius=11)
+                self.screen.blit(wrong_surf, wrong_surf.get_rect(center=(px_w + pw_w // 2, py_pill + ph // 2)))
+
+                pill_text = f"✓ {correct_count}/{tot_st}" if tot_st > 0 else "0/0"
+                pill_surf = pill_font.render(pill_text, True, (74, 222, 128))
+                pw = pill_surf.get_width() + 16
+                px_pill = px_w - pw - 8
+                pygame.draw.rect(self.screen, (30, 41, 59), (px_pill, py_pill, pw, ph), border_radius=11)
+                pygame.draw.rect(self.screen, (52, 211, 153), (px_pill, py_pill, pw, ph), 1, border_radius=11)
+                self.screen.blit(pill_surf, pill_surf.get_rect(center=(px_pill + pw // 2, py_pill + ph // 2)))
+            else:
+                pill_text = f"{min(cleared_count, tot_st)}/{tot_st} Cleared" if tot_st > 0 else "0/0"
+                pill_text_color = (74, 222, 128) if is_complete else (254, 240, 138)
+                pill_surf = pill_font.render(pill_text, True, pill_text_color)
+                pw = pill_surf.get_width() + 18
+                px_pill = box_x + box_w - pw - 14
+                pygame.draw.rect(self.screen, (30, 41, 59), (px_pill, py_pill, pw, ph), border_radius=11)
+                pygame.draw.rect(self.screen, border_color, (px_pill, py_pill, pw, ph), 1, border_radius=11)
+                self.screen.blit(pill_surf, pill_surf.get_rect(center=(px_pill + pw // 2, py_pill + ph // 2)))
 
             # Row 2: Dedicated Question / Stall Status Track Row (supports up to 15 stations cleanly)
             item_font = self.get_ui_font(11, bold=True)
@@ -5124,7 +5110,7 @@ class Quarter2:
                 for i in range(tot_st):
                     st_num = i + 1
                     is_ans = (st_num < self.quiz_station_index) or self.station_npc_info.get(st_num, {}).get("cleared", False) or (self.quiz_state >= 6)
-                    is_1st = self.first_attempt_correct.get(st_num, True)
+                    is_1st = fac.get(st_num, True)
                     is_cur = (st_num == self.quiz_station_index and not is_ans and self.quiz_state < 6)
 
                     ix = start_x + i * (pill_w + pill_gap)
@@ -5163,21 +5149,28 @@ class Quarter2:
 
             # Row 3: Actionable Mission / Portal Status line
             if self.quiz_state >= 6:
-                obj_line = "Barangay Kalye Completed! Step into the portal to proceed!"
+                if wrong_count > 0:
+                    obj_line = f"Barangay Kalye Completed ({correct_count} Correct, {wrong_count} Wrong)! Step into portal!"
+                else:
+                    obj_line = "Barangay Kalye Completed! Step into the portal to proceed!"
                 obj_col = (34, 197, 94)
             elif tot_st == 0:
                 obj_line = "Cloud Questions: None Set — Visit Knight Guardian!"
                 obj_col = (56, 189, 248)
             elif self.quiz_station_index <= tot_st:
-                cur_target_str = self.station_npc_info.get(self.quiz_station_index, {}).get("title", f"Station {self.quiz_station_index}")
                 rem = max(0, tot_st - cleared_count)
-                if self.map_name == "map5.txt":
-                    obj_line = f"Mission: Reach {cur_target_str} | Bahay Kubo: {self.kubo_pieces_collected}/5 Pieces"
+                if wrong_count > 0:
+                    obj_line = f"Mission: Reach Station {self.quiz_station_index} (?) | Progress: {correct_count}✓ {wrong_count}✗ | Portal: LOCKED ({rem} left)"
+                elif self.map_name == "map5.txt":
+                    obj_line = f"Mission: Reach Station {self.quiz_station_index} (?) | Bahay Kubo: {self.kubo_pieces_collected}/5 Pieces"
                 else:
-                    obj_line = f"Mission: Reach {cur_target_str} | Portal: LOCKED ({rem} left)"
+                    obj_line = f"Mission: Reach Station {self.quiz_station_index} (?) | Portal: LOCKED ({rem} left)"
                 obj_col = (254, 240, 138)
             else:
-                obj_line = "PORTAL TRIAL: Knight Guardian (Match Banknotes & Coins to Unlock Portal!)"
+                if wrong_count > 0:
+                    obj_line = f"PORTAL TRIAL: Knight Guardian ({correct_count} Correct, {wrong_count} Wrong — Currency Trial to Exit!)"
+                else:
+                    obj_line = "PORTAL TRIAL: Knight Guardian (Match Banknotes & Coins to Unlock Portal!)"
                 obj_col = (250, 204, 21)
             obj_surf = item_font.render(obj_line, True, obj_col)
             self.screen.blit(obj_surf, (box_x + 16, box_y + 66))
