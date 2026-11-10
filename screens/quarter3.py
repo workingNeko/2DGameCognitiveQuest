@@ -2956,23 +2956,35 @@ class Quarter3:
         src_h = max(0, self.height - dest_y)
         view_rect = pygame.Rect(src_x, src_y, src_w, src_h)
 
-        # Draw pre-rendered desert ground & walls in a single C-level blit
+        # Pass 1: Draw pre-rendered desert ground & walls in a single C-level blit (ALWAYS IN THE BACK)
         if getattr(self, '_bg_map_surface', None) is not None and src_w > 0 and src_h > 0:
             self.screen.blit(self._bg_map_surface, (dest_x, dest_y), view_rect)
+
+        # Pass 2: Draw pre-rendered tree and tumbleweed tiles in a single C-level blit (ALWAYS IN THE BACK)
+        if getattr(self, '_fg_trees_surface', None) is not None and src_w > 0 and src_h > 0:
+            self.screen.blit(self._fg_trees_surface, (dest_x, dest_y), view_rect)
 
         # Draw Hierarchy Pathfinder Visual Guide Trail
         if hasattr(self, 'path_guide'):
             self.path_guide.draw()
 
+        # Draw Caravan Companion Cart (Map 7 only)
+        if self.is_caravan_mode:
+            self.draw_caravan()
+
+        # Draw Activated Portals on top of map tiles & trees
+        if self.quiz_state == 6:
+            for portal in self.portals:
+                portal.draw(self.screen, self.camera_x, self.camera_y, ZOOM, self.width, self.height)
+
+        # Pass 3: Character & NPC Bodies + Ground Pedestals
         if self.npc_oldman_found:
             om_cx = (self.npc_oldman_x + TILE_SIZE // 2 - self.camera_x) * ZOOM
             om_cy = (self.npc_oldman_y + TILE_SIZE - self.camera_y) * ZOOM
-            om_top = (self.npc_oldman_y - self.camera_y) * ZOOM
             draw_npc_ground_pedestal(self.screen, om_cx, om_cy, rx=int(16 * ZOOM), ry=int(8 * ZOOM), is_active=False, color=(59, 130, 246))
             self.draw_npc_static(self.npc_oldman_x, self.npc_oldman_y, self.npc_oldman_sprite)
-            draw_npc_overhead_badge(self.screen, om_cx, om_top, "Desert Hermit", is_active=False, badge_color=(59, 130, 246), offset_y=int(-10 * ZOOM))
 
-        # Draw Station NPCs with prominent ground pedestals, overhead badges, and radiant beacons
+        # Draw Station NPCs (Pedestals + Sprites)
         if hasattr(self, 'quiz_stations') and hasattr(self, 'station_npcs'):
             for num, pos in self.quiz_stations.items():
                 if num in self.station_npcs:
@@ -2980,11 +2992,9 @@ class Quarter3:
                     frame = data["frames"][data["anim_frame"]]
                     cx = (pos[0] * TILE_SIZE + TILE_SIZE // 2 - self.camera_x) * ZOOM
                     cy = (pos[1] * TILE_SIZE + TILE_SIZE - self.camera_y) * ZOOM
-                    top_y = (pos[1] * TILE_SIZE - self.camera_y) * ZOOM
 
                     is_answered = (num < self.quiz_station_index or data.get("answered", False) or (hasattr(self, 'answered_stations') and num in self.answered_stations))
                     is_active = (num == self.quiz_station_index and self.quiz_state == 0)
-                    is_first_correct = self.first_attempt_correct.get(num, True)
 
                     # Ground pedestal & contact shadow
                     ped_color = (34, 197, 94) if is_answered else (251, 191, 36)
@@ -2998,34 +3008,17 @@ class Quarter3:
 
                     self.draw_npc_static(pos[0] * TILE_SIZE, pos[1] * TILE_SIZE, frame)
 
-                    # Overhead badge and beacon
-                    g_name = data.get("name", f"Station {num}")
-                    if is_answered:
-                        draw_beacon_marker(self.screen, cx, top_y, color=(34, 197, 94), beacon_type="check", offset_y=int(-30 * ZOOM))
-                        status_text = f"Q{num}: ✓ Correct" if is_first_correct else f"Q{num}: ✓ Cleared"
-                        draw_npc_overhead_badge(self.screen, cx, top_y, status_text, is_active=False, badge_color=(34, 197, 94), offset_y=int(-10 * ZOOM))
-                    elif is_active:
-                        draw_beacon_marker(self.screen, cx, top_y, color=(251, 191, 36), beacon_type="question", offset_y=int(-32 * ZOOM))
-                        draw_npc_overhead_badge(self.screen, cx, top_y, g_name, is_active=True, badge_color=(251, 191, 36), offset_y=int(-10 * ZOOM))
-                    else:
-                        draw_npc_overhead_badge(self.screen, cx, top_y, g_name, is_active=False, badge_color=(203, 213, 225), offset_y=int(-8 * ZOOM))
-
         # Draw Skeleton Portal Guardian
         if getattr(self, 'npc_skeleton_found', False):
             sk_cx = (self.npc_skeleton_x + TILE_SIZE // 2 - self.camera_x) * ZOOM
             sk_cy = (self.npc_skeleton_y + TILE_SIZE - self.camera_y) * ZOOM
-            sk_top = (self.npc_skeleton_y - self.camera_y) * ZOOM
             is_sk_active = getattr(self, 'guardian_skeleton_state', 0) in [1, 2, 3] and getattr(self, 'skeleton_guardian_active', True)
             draw_npc_ground_pedestal(self.screen, sk_cx, sk_cy, rx=int(16 * ZOOM), ry=int(8 * ZOOM), is_active=is_sk_active, color=(168, 85, 247), pulse_phase=self.frame_counter * 0.12)
             self.draw_skeleton_guardian()
-            if is_sk_active:
-                draw_beacon_marker(self.screen, sk_cx, sk_top, color=(168, 85, 247), beacon_type="exclamation", offset_y=int(-35 * ZOOM))
-            draw_npc_overhead_badge(self.screen, sk_cx, sk_top, "Skeleton Guardian", is_active=is_sk_active, badge_color=(168, 85, 247), offset_y=int(-10 * ZOOM))
 
         if self.npc_knight_found:
             kn_cx = (self.npc_knight_x + TILE_SIZE // 2 - self.camera_x) * ZOOM
             kn_cy = (self.npc_knight_y + TILE_SIZE - self.camera_y) * ZOOM
-            kn_top = (self.npc_knight_y - self.camera_y) * ZOOM
             draw_npc_ground_pedestal(self.screen, kn_cx, kn_cy, rx=int(16 * ZOOM), ry=int(8 * ZOOM), is_active=False, color=(59, 130, 246))
             sprites = None
             if self.npc_knight_dir == "left":
@@ -3041,11 +3034,50 @@ class Quarter3:
                 self.draw_npc_static(self.npc_knight_x, self.npc_knight_y, sprites[0])
             elif self.npc_knight_sprite:
                 self.draw_npc_static(self.npc_knight_x, self.npc_knight_y, self.npc_knight_sprite)
-            draw_npc_overhead_badge(self.screen, kn_cx, kn_top, "Desert Knight", is_active=False, badge_color=(59, 130, 246), offset_y=int(-10 * ZOOM))
 
-        # Draw Caravan Companion Cart (Map 7 only)
-        if self.is_caravan_mode:
-            self.draw_caravan()
+        self.draw_player()
+
+        # Pass 4: Floating Graphics, Overhead Badges & Beacon Checkmarks (ALWAYS ON TOP)
+        if self.npc_oldman_found:
+            om_cx = (self.npc_oldman_x + TILE_SIZE // 2 - self.camera_x) * ZOOM
+            om_top = (self.npc_oldman_y - self.camera_y) * ZOOM
+            draw_npc_overhead_badge(self.screen, om_cx, om_top, "Desert Hermit", is_active=False, badge_color=(59, 130, 246), offset_y=int(-10 * ZOOM))
+
+        if hasattr(self, 'quiz_stations') and hasattr(self, 'station_npcs'):
+            for num, pos in self.quiz_stations.items():
+                if num in self.station_npcs:
+                    data = self.station_npcs[num]
+                    cx = (pos[0] * TILE_SIZE + TILE_SIZE // 2 - self.camera_x) * ZOOM
+                    top_y = (pos[1] * TILE_SIZE - self.camera_y) * ZOOM
+
+                    is_answered = (num < self.quiz_station_index or data.get("answered", False) or (hasattr(self, 'answered_stations') and num in self.answered_stations))
+                    is_active = (num == self.quiz_station_index and self.quiz_state == 0)
+                    is_first_correct = self.first_attempt_correct.get(num, True)
+
+                    # Overhead badge and beacon
+                    g_name = data.get("name", f"Station {num}")
+                    if is_answered:
+                        draw_beacon_marker(self.screen, cx, top_y, color=(34, 197, 94), beacon_type="check", offset_y=int(-30 * ZOOM))
+                        status_text = f"Q{num}: ✓ Correct" if is_first_correct else f"Q{num}: ✓ Cleared"
+                        draw_npc_overhead_badge(self.screen, cx, top_y, status_text, is_active=False, badge_color=(34, 197, 94), offset_y=int(-10 * ZOOM))
+                    elif is_active:
+                        draw_beacon_marker(self.screen, cx, top_y, color=(251, 191, 36), beacon_type="question", offset_y=int(-32 * ZOOM))
+                        draw_npc_overhead_badge(self.screen, cx, top_y, g_name, is_active=True, badge_color=(251, 191, 36), offset_y=int(-10 * ZOOM))
+                    else:
+                        draw_npc_overhead_badge(self.screen, cx, top_y, g_name, is_active=False, badge_color=(203, 213, 225), offset_y=int(-8 * ZOOM))
+
+        if getattr(self, 'npc_skeleton_found', False):
+            sk_cx = (self.npc_skeleton_x + TILE_SIZE // 2 - self.camera_x) * ZOOM
+            sk_top = (self.npc_skeleton_y - self.camera_y) * ZOOM
+            is_sk_active = getattr(self, 'guardian_skeleton_state', 0) in [1, 2, 3] and getattr(self, 'skeleton_guardian_active', True)
+            if is_sk_active:
+                draw_beacon_marker(self.screen, sk_cx, sk_top, color=(168, 85, 247), beacon_type="exclamation", offset_y=int(-35 * ZOOM))
+            draw_npc_overhead_badge(self.screen, sk_cx, sk_top, "Skeleton Guardian", is_active=is_sk_active, badge_color=(168, 85, 247), offset_y=int(-10 * ZOOM))
+
+        if self.npc_knight_found:
+            kn_cx = (self.npc_knight_x + TILE_SIZE // 2 - self.camera_x) * ZOOM
+            kn_top = (self.npc_knight_y - self.camera_y) * ZOOM
+            draw_npc_overhead_badge(self.screen, kn_cx, kn_top, "Desert Knight", is_active=False, badge_color=(59, 130, 246), offset_y=int(-10 * ZOOM))
 
         # Draw Click-to-Move Target Beacon
         if getattr(self, 'click_dest', None) is not None:
@@ -3055,19 +3087,8 @@ class Quarter3:
             pygame.draw.circle(self.screen, (56, 189, 248), (cd_screen_x, cd_screen_y), int(pulse), 2)
             pygame.draw.circle(self.screen, (255, 255, 255), (cd_screen_x, cd_screen_y), 3)
 
-        # Draw pre-rendered tree and tumbleweed tiles in a single C-level blit
-        if getattr(self, '_fg_trees_surface', None) is not None and src_w > 0 and src_h > 0:
-            self.screen.blit(self._fg_trees_surface, (dest_x, dest_y), view_rect)
-
-        self.draw_player()
-
         # Draw Sparkle Particles
         self.draw_caravan_sparkles()
-
-        # Draw Activated Portals on top of map tiles & trees (no brick wall overlap)
-        if self.quiz_state == 6:
-            for portal in self.portals:
-                portal.draw(self.screen, self.camera_x, self.camera_y, ZOOM, self.width, self.height)
 
         # Draw Top HUD
         if self.map_name == "map8.txt":

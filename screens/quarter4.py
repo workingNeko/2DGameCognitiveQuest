@@ -2858,9 +2858,13 @@ class Quarter4:
         src_h = max(0, self.height - dest_y)
         view_rect = pygame.Rect(src_x, src_y, src_w, src_h)
 
-        # Draw pre-rendered dungeon floor & doors in a single C-level blit
+        # Pass 1: Draw pre-rendered dungeon floor & doors in a single C-level blit (ALWAYS IN THE BACK)
         if getattr(self, '_bg_map_surface', None) is not None and src_w > 0 and src_h > 0:
             self.screen.blit(self._bg_map_surface, (dest_x, dest_y), view_rect)
+
+        # Pass 2: Draw pre-rendered tree & pillar tiles in a single C-level blit (ALWAYS IN THE BACK)
+        if getattr(self, '_fg_trees_surface', None) is not None and src_w > 0 and src_h > 0:
+            self.screen.blit(self._fg_trees_surface, (dest_x, dest_y), view_rect)
 
         # Draw pulsing glow on visible aqua braziers using pre-rendered frames
         if getattr(self, '_brazier_positions', None) and getattr(self, '_brazier_glow_frames', None):
@@ -2911,6 +2915,9 @@ class Quarter4:
                         self._ring_surf_cache[ring_key] = ring_surf
                     self.screen.blit(ring_surf, (cx - base_r - 6, cy - base_r - 6))
 
+        # Draw Lotus Raft before drawing the player (so player stands on deck)
+        self.draw_lotus_raft()
+
         # Only draw portals when quiz is complete
         if self.quiz_state == 6:
             for portal in self.portals:
@@ -2920,15 +2927,7 @@ class Quarter4:
         if hasattr(self, 'path_guide'):
             self.path_guide.draw()
 
-        # Draw Click-to-Move Target Beacon
-        if getattr(self, 'click_dest', None) is not None:
-            cd_screen_x = int((self.click_dest[0] - self.camera_x + TILE_SIZE // 2) * ZOOM)
-            cd_screen_y = int((self.click_dest[1] - self.camera_y + TILE_SIZE // 2) * ZOOM)
-            pulse = math.sin(self.frame_counter * 0.2) * 3 + 8
-            pygame.draw.circle(self.screen, (56, 189, 248), (cd_screen_x, cd_screen_y), int(pulse), 2)
-            pygame.draw.circle(self.screen, (255, 255, 255), (cd_screen_x, cd_screen_y), 3)
-
-        # Draw Station NPCs at coordinates 1, 2, 3, 4, 5, 6
+        # Pass 3: Character & NPC Bodies + Ground Pedestals
         if hasattr(self, 'quiz_stations') and hasattr(self, 'station_npcs'):
             for num, pos in self.quiz_stations.items():
                 is_answered = num in self.answered_stations
@@ -2940,9 +2939,7 @@ class Quarter4:
                     frame = data["frames"][data["anim_frame"]]
                     cx = (pos[0] * TILE_SIZE + TILE_SIZE // 2 - self.camera_x) * ZOOM
                     cy = (pos[1] * TILE_SIZE + TILE_SIZE - self.camera_y) * ZOOM
-                    top_y = (pos[1] * TILE_SIZE - self.camera_y) * ZOOM
                     is_active = (num == self.quiz_station_index and self.quiz_state == 0 and not is_answered)
-                    is_first_correct = self.first_attempt_correct.get(num, True)
 
                     # Ground pedestal & contact shadow
                     ped_color = (34, 197, 94) if is_answered else (56, 189, 248)
@@ -2973,9 +2970,33 @@ class Quarter4:
                         ax = int((pos[0] * TILE_SIZE - self.camera_x) * ZOOM + (TILE_SIZE * ZOOM - aura_w) / 2)
                         ay = int((pos[1] * TILE_SIZE - self.camera_y) * ZOOM + TILE_SIZE * ZOOM * 0.65)
                         self.screen.blit(aura_surf, (ax, ay))
-                        draw_beacon_marker(self.screen, cx, top_y, color=(56, 189, 248), beacon_type="question", offset_y=int(-32 * ZOOM))
 
                     self.draw_npc_static(pos[0] * TILE_SIZE, pos[1] * TILE_SIZE, frame)
+
+        # Draw Bromen
+        if self.npc_bromen_found and self.npc_bromen_sprites:
+            frame = self.npc_bromen_sprites[self.npc_bromen_anim_frame]
+            b_cx = (self.npc_bromen_x + TILE_SIZE // 2 - self.camera_x) * ZOOM
+            b_cy = (self.npc_bromen_y + TILE_SIZE - self.camera_y) * ZOOM
+            is_b_active = not getattr(self, 'bromen_puzzle_solved', False)
+            draw_npc_ground_pedestal(self.screen, b_cx, b_cy, rx=int(16 * ZOOM), ry=int(8 * ZOOM), is_active=is_b_active, color=(20, 184, 166), pulse_phase=self.frame_counter * 0.12)
+            self.draw_npc_static(self.npc_bromen_x, self.npc_bromen_y, frame)
+
+        self.draw_player()
+
+        # Pass 4: Floating Graphics, Overhead Badges & Beacon Checkmarks (ALWAYS ON TOP)
+        if hasattr(self, 'quiz_stations') and hasattr(self, 'station_npcs'):
+            for num, pos in self.quiz_stations.items():
+                is_answered = num in self.answered_stations
+                if num == 5 and (6 not in self.quiz_stations):
+                    is_answered = (5 in self.answered_stations) and (6 in self.answered_stations)
+
+                if num in self.station_npcs:
+                    data = self.station_npcs[num]
+                    cx = (pos[0] * TILE_SIZE + TILE_SIZE // 2 - self.camera_x) * ZOOM
+                    top_y = (pos[1] * TILE_SIZE - self.camera_y) * ZOOM
+                    is_active = (num == self.quiz_station_index and self.quiz_state == 0 and not is_answered)
+                    is_first_correct = self.first_attempt_correct.get(num, True)
 
                     # Overhead badge and question marker status
                     g_name = data.get("name", f"Station {num}")
@@ -2984,31 +3005,27 @@ class Quarter4:
                         status_text = f"Q{num}: ✓ Correct" if is_first_correct else f"Q{num}: ✓ Cleared"
                         draw_npc_overhead_badge(self.screen, cx, top_y, status_text, is_active=False, badge_color=(34, 197, 94), offset_y=int(-10 * ZOOM))
                     elif is_active:
+                        draw_beacon_marker(self.screen, cx, top_y, color=(56, 189, 248), beacon_type="question", offset_y=int(-32 * ZOOM))
                         draw_npc_overhead_badge(self.screen, cx, top_y, g_name, is_active=True, badge_color=(56, 189, 248), offset_y=int(-10 * ZOOM))
                     else:
                         draw_npc_overhead_badge(self.screen, cx, top_y, g_name, is_active=False, badge_color=(203, 213, 225), offset_y=int(-8 * ZOOM))
 
-        # Draw Bromen
         if self.npc_bromen_found and self.npc_bromen_sprites:
-            frame = self.npc_bromen_sprites[self.npc_bromen_anim_frame]
             b_cx = (self.npc_bromen_x + TILE_SIZE // 2 - self.camera_x) * ZOOM
-            b_cy = (self.npc_bromen_y + TILE_SIZE - self.camera_y) * ZOOM
             b_top = (self.npc_bromen_y - self.camera_y) * ZOOM
             is_b_active = not getattr(self, 'bromen_puzzle_solved', False)
-            draw_npc_ground_pedestal(self.screen, b_cx, b_cy, rx=int(16 * ZOOM), ry=int(8 * ZOOM), is_active=is_b_active, color=(20, 184, 166), pulse_phase=self.frame_counter * 0.12)
-            self.draw_npc_static(self.npc_bromen_x, self.npc_bromen_y, frame)
             if is_b_active:
                 draw_beacon_marker(self.screen, b_cx, b_top, color=(20, 184, 166), beacon_type="exclamation", offset_y=int(-35 * ZOOM))
             draw_npc_overhead_badge(self.screen, b_cx, b_top, "Water Sage Bromen", is_active=is_b_active, badge_color=(20, 184, 166), offset_y=int(-10 * ZOOM))
 
-        # Draw Lotus Raft before drawing the player (so player stands on deck)
-        self.draw_lotus_raft()
+        # Draw Click-to-Move Target Beacon
+        if getattr(self, 'click_dest', None) is not None:
+            cd_screen_x = int((self.click_dest[0] - self.camera_x + TILE_SIZE // 2) * ZOOM)
+            cd_screen_y = int((self.click_dest[1] - self.camera_y + TILE_SIZE // 2) * ZOOM)
+            pulse = math.sin(self.frame_counter * 0.2) * 3 + 8
+            pygame.draw.circle(self.screen, (56, 189, 248), (cd_screen_x, cd_screen_y), int(pulse), 2)
+            pygame.draw.circle(self.screen, (255, 255, 255), (cd_screen_x, cd_screen_y), 3)
 
-        # Draw pre-rendered tree tiles in a single C-level blit
-        if getattr(self, '_fg_trees_surface', None) is not None and src_w > 0 and src_h > 0:
-            self.screen.blit(self._fg_trees_surface, (dest_x, dest_y), view_rect)
-
-        self.draw_player()
         self.draw_water_particles()
 
         # Draw speed boost sprint sparkles

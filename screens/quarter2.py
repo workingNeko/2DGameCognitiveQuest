@@ -4482,7 +4482,7 @@ class Quarter2:
         cam_px = int(self.camera_x * ZOOM)
         cam_py = int(self.camera_y * ZOOM)
 
-        # First pass: Pre-rendered ground & low obstacles + animated chests
+        # Pass 1: Pre-rendered ground & low obstacles + animated chests (ALWAYS IN THE BACK)
         if getattr(self, '_bg_map_surface', None) is not None:
             self.screen.blit(self._bg_map_surface, (-cam_px, -cam_py))
             for tc, wx, wy in getattr(self, '_anim_bg_tiles', ()):
@@ -4501,6 +4501,19 @@ class Quarter2:
                                 self.draw_tile('G', col * TILE_SIZE, row * TILE_SIZE)
                             if tile_char not in {'1', '2', '3', '4', '5'}:
                                 self.draw_tile(tile_char, col * TILE_SIZE, row * TILE_SIZE)
+
+        # Pass 2: Pre-rendered tall walls + animated hanging flags (ALWAYS IN THE BACK - Never overlaps floating graphics)
+        if getattr(self, '_fg_walls_surface', None) is not None:
+            self.screen.blit(self._fg_walls_surface, (-cam_px, -cam_py))
+            for tc, wx, wy in getattr(self, '_anim_fg_tiles', ()):
+                self.draw_tile(tc, wx, wy)
+        else:
+            for row in range(start_row, end_row):
+                for col in range(start_col, end_col):
+                    if row < len(self.render_map) and col < len(self.render_map[row]):
+                        tile_char = self.render_map[row][col]
+                        if tile_char in {'T', 'o', 'p', 'k', 'Z', 'M', 'n', 's', 't', 'J', 'Q', 'V', 'X', 'Y'}:
+                            self.draw_tile(tile_char, col * TILE_SIZE, row * TILE_SIZE)
 
         # Draw Piko (Hopscotch) Chalk Court on pavement near Station 4 (Ate Maya) if not cleared
         if 4 in self.quiz_stations and self.quiz_station_index <= 4 and self.quiz_state < 6:
@@ -4522,97 +4535,26 @@ class Quarter2:
         if hasattr(self, 'path_guide'):
             self.path_guide.draw()
 
-        # Draw Filipino Street Character NPCs and their Landmark Props (With Question Marker Status)
-        sq_prop_sz = int(TILE_SIZE * ZOOM)
-        for num, (st_x, st_y) in self.quiz_stations.items():
-            info = self.station_npc_info.get(num, {})
-            frames = info.get("frames", [])
-            anim_frame = info.get("anim_frame", 0)
-            world_x = st_x * TILE_SIZE
-            world_y = st_y * TILE_SIZE
-
-            cx = (world_x + TILE_SIZE // 2 - self.camera_x) * ZOOM
-            cy = (world_y + TILE_SIZE - self.camera_y) * ZOOM
-            top_y = (world_y - self.camera_y) * ZOOM
-
-            is_answered = (num < self.quiz_station_index or info.get("cleared", False))
-            is_active = (num == self.quiz_station_index and self.quiz_state == 0)
-            is_first_correct = self.first_attempt_correct.get(num, True)
-
-            # Ground pedestal & contact shadow
-            ped_color = (34, 197, 94) if is_answered else (251, 191, 36)
-            draw_npc_ground_pedestal(
-                self.screen, cx, cy,
-                rx=int(16 * ZOOM), ry=int(8 * ZOOM),
-                is_active=is_active,
-                color=ped_color,
-                pulse_phase=self.frame_counter * 0.12
-            )
-
-            if num == 2 and "prop_sorbetes_cart" in self.tile_images:
-                cart_img = self.tile_images["prop_sorbetes_cart"]
-                cx_c = (st_x + 1) * TILE_SIZE
-                cy_c = st_y * TILE_SIZE
-                scaled_cart = self._get_scaled_prop(cart_img, sq_prop_sz, sq_prop_sz)
-                self.screen.blit(scaled_cart, ((cx_c - self.camera_x) * ZOOM, (cy_c - self.camera_y) * ZOOM))
-
-            if num == 3 and "prop_jeep_sign" in self.tile_images:
-                sign_img = self.tile_images["prop_jeep_sign"]
-                sx_s = (st_x + 1) * TILE_SIZE
-                sy_s = st_y * TILE_SIZE
-                scaled_sign = self._get_scaled_prop(sign_img, sq_prop_sz, sq_prop_sz)
-                self.screen.blit(scaled_sign, ((sx_s - self.camera_x) * ZOOM, (sy_s - self.camera_y) * ZOOM))
-
-            if frames:
-                self.draw_npc_animated(world_x, world_y, frames, anim_frame)
-
-            # Overhead badge & question marker status
-            v_title = info.get("title", f"Station {num}")
-            if is_answered:
-                draw_beacon_marker(self.screen, cx, top_y, color=(34, 197, 94), beacon_type="check", offset_y=int(-30 * ZOOM))
-                status_text = f"Q{num}: ✓ Correct" if is_first_correct else f"Q{num}: ✓ Cleared"
-                draw_npc_overhead_badge(self.screen, cx, top_y, status_text, is_active=False, badge_color=(34, 197, 94), offset_y=int(-10 * ZOOM))
-            elif is_active:
-                draw_beacon_marker(self.screen, cx, top_y, color=(251, 191, 36), beacon_type="question", offset_y=int(-32 * ZOOM))
-                draw_npc_overhead_badge(self.screen, cx, top_y, v_title, is_active=True, badge_color=(251, 191, 36), offset_y=int(-10 * ZOOM))
-            else:
-                draw_npc_overhead_badge(self.screen, cx, top_y, v_title, is_active=False, badge_color=(203, 213, 225), offset_y=int(-8 * ZOOM))
-
-        # Draw Knight Portal Guardian
-        if getattr(self, 'npc_knight_found', False):
-            k_cx = (self.npc_knight_x + TILE_SIZE // 2 - self.camera_x) * ZOOM
-            k_cy = (self.npc_knight_y + TILE_SIZE - self.camera_y) * ZOOM
-            k_top = (self.npc_knight_y - self.camera_y) * ZOOM
-            is_k_active = (self.quiz_state == 6 and getattr(self, 'knight_guardian_active', True))
-            draw_npc_ground_pedestal(self.screen, k_cx, k_cy, rx=int(16 * ZOOM), ry=int(8 * ZOOM), is_active=is_k_active, color=(59, 130, 246), pulse_phase=self.frame_counter * 0.12)
-            self.draw_knight_guardian()
-            if is_k_active:
-                draw_beacon_marker(self.screen, k_cx, k_top, color=(59, 130, 246), beacon_type="exclamation", offset_y=int(-35 * ZOOM))
-            draw_npc_overhead_badge(self.screen, k_cx, k_top, "Portal Knight", is_active=is_k_active, badge_color=(59, 130, 246), offset_y=int(-10 * ZOOM))
-
-        # Draw Click-to-Move Target Beacon
-        if getattr(self, 'click_dest', None) is not None:
-            cd_screen_x = int((self.click_dest[0] - self.camera_x + TILE_SIZE // 2) * ZOOM)
-            cd_screen_y = int((self.click_dest[1] - self.camera_y + TILE_SIZE // 2) * ZOOM)
-            pulse = math.sin(self.frame_counter * 0.2) * 3 + 8
-            pygame.draw.circle(self.screen, (56, 189, 248), (cd_screen_x, cd_screen_y), int(pulse), 2)
-            pygame.draw.circle(self.screen, (255, 255, 255), (cd_screen_x, cd_screen_y), 3)
-
-        # Second pass: Pre-rendered tall walls + animated hanging flags
-        if getattr(self, '_fg_walls_surface', None) is not None:
-            self.screen.blit(self._fg_walls_surface, (-cam_px, -cam_py))
-            for tc, wx, wy in getattr(self, '_anim_fg_tiles', ()):
-                self.draw_tile(tc, wx, wy)
-        else:
-            for row in range(start_row, end_row):
-                for col in range(start_col, end_col):
-                    if row < len(self.render_map) and col < len(self.render_map[row]):
-                        tile_char = self.render_map[row][col]
-                        if tile_char in {'T', 'o', 'p', 'k', 'Z', 'M', 'n', 's', 't', 'J', 'Q', 'V', 'X', 'Y'}:
-                            self.draw_tile(tile_char, col * TILE_SIZE, row * TILE_SIZE)
-
         # Draw Progressive Traditional Bahay Kubo on Barrio Plaza in Map 5
         self.draw_bahay_kubo()
+
+        # Landmark Props
+        sq_prop_sz = int(TILE_SIZE * ZOOM)
+        if 2 in self.quiz_stations and "prop_sorbetes_cart" in self.tile_images:
+            st_x, st_y = self.quiz_stations[2]
+            cart_img = self.tile_images["prop_sorbetes_cart"]
+            cx_c = (st_x + 1) * TILE_SIZE
+            cy_c = st_y * TILE_SIZE
+            scaled_cart = self._get_scaled_prop(cart_img, sq_prop_sz, sq_prop_sz)
+            self.screen.blit(scaled_cart, ((cx_c - self.camera_x) * ZOOM, (cy_c - self.camera_y) * ZOOM))
+
+        if 3 in self.quiz_stations and "prop_jeep_sign" in self.tile_images:
+            st_x, st_y = self.quiz_stations[3]
+            sign_img = self.tile_images["prop_jeep_sign"]
+            sx_s = (st_x + 1) * TILE_SIZE
+            sy_s = st_y * TILE_SIZE
+            scaled_sign = self._get_scaled_prop(sign_img, sq_prop_sz, sq_prop_sz)
+            self.screen.blit(scaled_sign, ((sx_s - self.camera_x) * ZOOM, (sy_s - self.camera_y) * ZOOM))
 
         # Station 1 Prop: Sari-Sari Store Awning above Tomas (if not cleared)
         if 1 in self.quiz_stations and self.quiz_station_index <= 1 and self.quiz_state < 6 and "prop_sari_awning" in self.tile_images:
@@ -4641,7 +4583,81 @@ class Quarter2:
                 pts = [(fx, y_px), (fx + step - 2, y_px), (fx + step // 2, y_px + int(8 * ZOOM))]
                 pygame.draw.polygon(self.screen, fcol, pts)
 
+        # Pass 3: Character & NPC Bodies + Ground Pedestals
+        for num, (st_x, st_y) in self.quiz_stations.items():
+            info = self.station_npc_info.get(num, {})
+            frames = info.get("frames", [])
+            anim_frame = info.get("anim_frame", 0)
+            world_x = st_x * TILE_SIZE
+            world_y = st_y * TILE_SIZE
+
+            cx = (world_x + TILE_SIZE // 2 - self.camera_x) * ZOOM
+            cy = (world_y + TILE_SIZE - self.camera_y) * ZOOM
+            is_answered = (num < self.quiz_station_index or info.get("cleared", False))
+            is_active = (num == self.quiz_station_index and self.quiz_state == 0)
+
+            # Ground pedestal & contact shadow
+            ped_color = (34, 197, 94) if is_answered else (251, 191, 36)
+            draw_npc_ground_pedestal(
+                self.screen, cx, cy,
+                rx=int(16 * ZOOM), ry=int(8 * ZOOM),
+                is_active=is_active,
+                color=ped_color,
+                pulse_phase=self.frame_counter * 0.12
+            )
+
+            if frames:
+                self.draw_npc_animated(world_x, world_y, frames, anim_frame)
+
+        # Draw Knight Portal Guardian
+        if getattr(self, 'npc_knight_found', False):
+            k_cx = (self.npc_knight_x + TILE_SIZE // 2 - self.camera_x) * ZOOM
+            k_cy = (self.npc_knight_y + TILE_SIZE - self.camera_y) * ZOOM
+            is_k_active = (self.quiz_state == 6 and getattr(self, 'knight_guardian_active', True))
+            draw_npc_ground_pedestal(self.screen, k_cx, k_cy, rx=int(16 * ZOOM), ry=int(8 * ZOOM), is_active=is_k_active, color=(59, 130, 246), pulse_phase=self.frame_counter * 0.12)
+            self.draw_knight_guardian()
+
         self.draw_player()
+
+        # Pass 4: Floating Graphics, Overhead Badges & Beacon Checkmarks (ALWAYS ON TOP)
+        for num, (st_x, st_y) in self.quiz_stations.items():
+            info = self.station_npc_info.get(num, {})
+            world_x = st_x * TILE_SIZE
+            world_y = st_y * TILE_SIZE
+
+            cx = (world_x + TILE_SIZE // 2 - self.camera_x) * ZOOM
+            top_y = (world_y - self.camera_y) * ZOOM
+
+            is_answered = (num < self.quiz_station_index or info.get("cleared", False))
+            is_active = (num == self.quiz_station_index and self.quiz_state == 0)
+            is_first_correct = self.first_attempt_correct.get(num, True)
+
+            v_title = info.get("title", f"Station {num}")
+            if is_answered:
+                draw_beacon_marker(self.screen, cx, top_y, color=(34, 197, 94), beacon_type="check", offset_y=int(-30 * ZOOM))
+                status_text = f"Q{num}: ✓ Correct" if is_first_correct else f"Q{num}: ✓ Cleared"
+                draw_npc_overhead_badge(self.screen, cx, top_y, status_text, is_active=False, badge_color=(34, 197, 94), offset_y=int(-10 * ZOOM))
+            elif is_active:
+                draw_beacon_marker(self.screen, cx, top_y, color=(251, 191, 36), beacon_type="question", offset_y=int(-32 * ZOOM))
+                draw_npc_overhead_badge(self.screen, cx, top_y, v_title, is_active=True, badge_color=(251, 191, 36), offset_y=int(-10 * ZOOM))
+            else:
+                draw_npc_overhead_badge(self.screen, cx, top_y, v_title, is_active=False, badge_color=(203, 213, 225), offset_y=int(-8 * ZOOM))
+
+        if getattr(self, 'npc_knight_found', False):
+            k_cx = (self.npc_knight_x + TILE_SIZE // 2 - self.camera_x) * ZOOM
+            k_top = (self.npc_knight_y - self.camera_y) * ZOOM
+            is_k_active = (self.quiz_state == 6 and getattr(self, 'knight_guardian_active', True))
+            if is_k_active:
+                draw_beacon_marker(self.screen, k_cx, k_top, color=(59, 130, 246), beacon_type="exclamation", offset_y=int(-35 * ZOOM))
+            draw_npc_overhead_badge(self.screen, k_cx, k_top, "Portal Knight", is_active=is_k_active, badge_color=(59, 130, 246), offset_y=int(-10 * ZOOM))
+
+        # Draw Click-to-Move Target Beacon
+        if getattr(self, 'click_dest', None) is not None:
+            cd_screen_x = int((self.click_dest[0] - self.camera_x + TILE_SIZE // 2) * ZOOM)
+            cd_screen_y = int((self.click_dest[1] - self.camera_y + TILE_SIZE // 2) * ZOOM)
+            pulse = math.sin(self.frame_counter * 0.2) * 3 + 8
+            pygame.draw.circle(self.screen, (56, 189, 248), (cd_screen_x, cd_screen_y), int(pulse), 2)
+            pygame.draw.circle(self.screen, (255, 255, 255), (cd_screen_x, cd_screen_y), 3)
 
         # Draw Active Objective NPC Indicator and Off-Screen Compass Pointer
         from core.settings_manager import is_objective_finder_enabled
