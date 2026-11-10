@@ -168,27 +168,42 @@ class MockVercelBackend:
                 ass_obj = next((a for a in self.assessments if a.get("id") == ass_id), {})
                 unit_obj = next((u for u in self.units if u.get("id") == ass_obj.get("unitId")), {})
 
-                gr_row = dict(body)
-                gr_row["id"] = self._alloc_id()
-                gr_row["studentName"] = st_match.get("fullName")
-                gr_row["createdAt"] = "2026-11-08T15:00:10.000Z"
-                self.game_results.append(gr_row)
+                # Mirror real Vercel backend: best-score upsert into game_results
+                existing_gr = next((gr for gr in self.game_results if gr.get("studentId") == sid and gr.get("assessmentId") == ass_id), None)
+                new_score = int(body.get("score", 0))
+                if existing_gr:
+                    if new_score >= int(existing_gr.get("score", 0)):
+                        existing_gr.update(body)
+                    gr_row = existing_gr
+                else:
+                    gr_row = dict(body)
+                    gr_row["id"] = self._alloc_id()
+                    gr_row["studentName"] = st_match.get("fullName")
+                    gr_row["createdAt"] = "2026-11-08T15:00:10.000Z"
+                    self.game_results.append(gr_row)
 
-                # Mirror Vercel side effect: POST /api/game-results also inserts a row into grades!
-                g_row = {
-                    "id": self._alloc_id(),
-                    "studentId": sid,
-                    "studentName": st_match.get("fullName"),
-                    "studentNumber": st_match.get("studentId"),
-                    "assessmentId": ass_id,
-                    "score": body.get("score", 0),
-                    "pointsEarned": body.get("score", 0),
-                    "feedback": body.get("feedback", ""),
-                    "assessmentTitle": ass_obj.get("title", "Assessment"),
-                    "quarter": unit_obj.get("quarter", "Quarter 1"),
-                    "createdAt": "2026-11-08T15:00:10.000Z",
-                }
-                self.grades.append(g_row)
+                # Mirror real Vercel backend: best-score upsert into grades
+                existing_g = next((g for g in self.grades if g.get("studentId") == sid and g.get("assessmentId") == ass_id), None)
+                if existing_g:
+                    if new_score >= int(existing_g.get("score", 0)):
+                        existing_g["score"] = new_score
+                        existing_g["pointsEarned"] = new_score
+                        existing_g["feedback"] = body.get("feedback", existing_g.get("feedback"))
+                else:
+                    g_row = {
+                        "id": self._alloc_id(),
+                        "studentId": sid,
+                        "studentName": st_match.get("fullName"),
+                        "studentNumber": st_match.get("studentId"),
+                        "assessmentId": ass_id,
+                        "score": new_score,
+                        "pointsEarned": new_score,
+                        "feedback": body.get("feedback", ""),
+                        "assessmentTitle": ass_obj.get("title", "Assessment"),
+                        "quarter": unit_obj.get("quarter", "Quarter 1"),
+                        "createdAt": "2026-11-08T15:00:10.000Z",
+                    }
+                    self.grades.append(g_row)
                 return FakeHTTPResponse(gr_row)
 
         raise AssertionError(f"Unhandled mock endpoint: {method} {path}")
@@ -196,7 +211,10 @@ class MockVercelBackend:
 
 class TestVercelConnectionSolidified(unittest.TestCase):
     def setUp(self):
-        self.temp_dir = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
+        try:
+            self.temp_dir = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
+        except TypeError:
+            self.temp_dir = tempfile.TemporaryDirectory()
         self.backend = MockVercelBackend()
         self.db = Database(api_base_url="https://mock-vercel.test/api", data_dir=self.temp_dir.name)
 
@@ -424,7 +442,7 @@ class TestVercelConnectionSolidified(unittest.TestCase):
         dummy_self.portal_loading_done = False
 
         mock_resp = FakeHTTPResponse(self.backend.questions)
-        with patch("db.connect_db.db", self.db), patch("urllib.request.urlopen", return_value=mock_resp) as m_open:
+        with patch.object(sys.modules["db.connect_db"], "db", self.db), patch("urllib.request.urlopen", return_value=mock_resp) as m_open:
             StageSelect._preload_quarter_worker(dummy_self, "quarter4")
             self.assertTrue(dummy_self.portal_loading_done)
             calls_after_preload = m_open.call_count

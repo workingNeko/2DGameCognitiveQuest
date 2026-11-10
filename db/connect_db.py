@@ -12,7 +12,21 @@ from datetime import datetime, timezone
 # =====================================================
 # VERCEL WEB API CONFIGURATION & RESILIENT SSL LAYER
 # =====================================================
-BASE_URL = os.environ.get("COGNITIVE_API_URL", "https://gamified-math-grading-system.vercel.app/api")
+def _detect_default_base_url():
+    env_url = os.environ.get("COGNITIVE_API_URL")
+    if env_url:
+        return env_url.rstrip("/")
+    try:
+        req = urllib.request.Request("http://127.0.0.1:3000/api/assessments", headers={"User-Agent": "Mozilla/5.0"})
+        with urllib.request.urlopen(req, timeout=0.35) as resp:
+            if resp.status == 200:
+                print("[API INFO] Auto-detected local webapp running at http://127.0.0.1:3000/api")
+                return "http://127.0.0.1:3000/api"
+    except Exception:
+        pass
+    return "https://gamified-math-grading-system.vercel.app/api"
+
+BASE_URL = _detect_default_base_url()
 
 def _create_ssl_context():
     """Builds a resilient SSL context using certifi bundle, system store, or unverified fallback."""
@@ -195,8 +209,10 @@ def sanitize_cloud_math_text(text):
     return s
 
 
-def map_cloud_questions(raw_rows, default_hint="Examine the choices carefully and select the best answer below!", allow_ident=False):
-    """Normalize Vercel API question rows (or pre-mapped dicts) into in-game question dicts."""
+def map_cloud_questions(raw_rows, default_hint="Examine the choices carefully and select the best answer below!", allow_ident=False, max_questions=10):
+    """Normalize Vercel API question rows (or pre-mapped dicts) into in-game question dicts.
+    Caps questions to max_questions (default: 10 per quarter / summative assessment).
+    """
     if not raw_rows or not isinstance(raw_rows, list):
         return []
 
@@ -311,6 +327,8 @@ def map_cloud_questions(raw_rows, default_hint="Examine the choices carefully an
             "hint": hint_text,
         })
 
+    if max_questions is not None and max_questions > 0:
+        mapped = mapped[:max_questions]
     return mapped
 
 
@@ -348,6 +366,15 @@ class Database:
 
     def _get_base_url(self):
         return (self._custom_base_url or BASE_URL).rstrip("/")
+
+    def _get_api_headers(self, content_type=None):
+        headers = {
+            "User-Agent": "Mozilla/5.0",
+            "X-Game-Key": os.environ.get("GAME_API_KEY", "COGNITIVE-QUEST-MATATAG-2026"),
+        }
+        if content_type:
+            headers["Content-Type"] = content_type
+        return headers
 
     def _pending_sync_path(self):
         return os.path.join(self.data_dir, "pending_sync.json")
@@ -505,7 +532,7 @@ class Database:
         req = urllib.request.Request(
             url,
             data=json.dumps(clean_payload).encode("utf-8"),
-            headers={"Content-Type": "application/json", "User-Agent": "Mozilla/5.0"},
+            headers=self._get_api_headers(content_type="application/json"),
             method="POST",
         )
         with _urlopen_resilient(req, timeout=timeout) as resp:
@@ -522,7 +549,7 @@ class Database:
                 post_req = urllib.request.Request(
                     post_url,
                     data=post_data,
-                    headers={"User-Agent": "Mozilla/5.0", "Content-Type": "application/json"},
+                    headers=self._get_api_headers(content_type="application/json"),
                     method="POST",
                 )
                 with _urlopen_resilient(post_req, timeout=8) as post_resp:
@@ -646,7 +673,7 @@ class Database:
             del_req = urllib.request.Request(
                 f"{self._get_base_url()}/students",
                 data=json.dumps({"id": pk_id}).encode("utf-8"),
-                headers={"User-Agent": "Mozilla/5.0", "Content-Type": "application/json"},
+                headers=self._get_api_headers(content_type="application/json"),
                 method="DELETE",
             )
             with _urlopen_resilient(del_req, timeout=8) as del_resp:
@@ -695,7 +722,7 @@ class Database:
                     g_req = urllib.request.Request(
                         f"{self._get_base_url()}/grades",
                         data=json.dumps(g_item).encode("utf-8"),
-                        headers={"Content-Type": "application/json", "User-Agent": "Mozilla/5.0"},
+                        headers=self._get_api_headers(content_type="application/json"),
                         method="POST",
                     )
                     with _urlopen_resilient(g_req, timeout=8) as g_resp:
@@ -726,7 +753,7 @@ class Database:
 
         url = f"{base_url}/assessments"
         try:
-            req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+            req = urllib.request.Request(url, headers=self._get_api_headers())
             with _urlopen_resilient(req, timeout=timeout) as resp:
                 is_online = resp.status in [200, 204]
                 if is_online:
@@ -783,7 +810,7 @@ class Database:
         if not self._is_offline_fast_fail() or force_refresh:
             self._recover_pending_restores()
             try:
-                req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+                req = urllib.request.Request(url, headers=self._get_api_headers())
                 with _urlopen_resilient(req, timeout=8) as response:
                     self._mark_online(response)
                     data = json.loads(response.read().decode('utf-8'))
@@ -824,7 +851,7 @@ class Database:
             mem_u, hit = self._mem_get("units", "all", ttl=12.0)
             if hit and isinstance(mem_u, list):
                 return mem_u
-        req_units = urllib.request.Request(f"{self._get_base_url()}/units", headers={'User-Agent': 'Mozilla/5.0'})
+        req_units = urllib.request.Request(f"{self._get_base_url()}/units", headers=self._get_api_headers())
         with _urlopen_resilient(req_units, timeout=8) as resp:
             self._mark_online(resp)
             units = json.loads(resp.read().decode('utf-8'))
@@ -869,7 +896,7 @@ class Database:
 
                 # 2. Fetch all questions and filter by normalized quarter field or unit_id
                 questions_url = f"{self._get_base_url()}/questions"
-                req_qs = urllib.request.Request(questions_url, headers={'User-Agent': 'Mozilla/5.0'})
+                req_qs = urllib.request.Request(questions_url, headers=self._get_api_headers())
                 with _urlopen_resilient(req_qs, timeout=8) as resp:
                     self._mark_online(resp)
                     all_questions = json.loads(resp.read().decode('utf-8'))
@@ -1053,7 +1080,7 @@ class Database:
 
             assessments, hit = self._mem_get("assessments", "all", ttl=12.0)
             if not hit or not isinstance(assessments, list):
-                req = urllib.request.Request(f"{self._get_base_url()}/assessments", headers={'User-Agent': 'Mozilla/5.0'})
+                req = urllib.request.Request(f"{self._get_base_url()}/assessments", headers=self._get_api_headers())
                 with _urlopen_resilient(req, timeout=8) as resp:
                     self._mark_online(resp)
                     assessments = json.loads(resp.read().decode('utf-8'))
@@ -1338,12 +1365,6 @@ class Database:
 
     def _resolve_updated_student_pk(self, numeric_student_id):
         """If teacher deleted & re-added a student on Vercel (changing numeric PK), find their new PK via unambiguous local save."""
-        try:
-            if isinstance(numeric_student_id, int) and numeric_student_id < 10:
-                return None
-        except Exception:
-            pass
-
         saves_dir = self._saves_dir_path()
         matched_saves = []
         if os.path.exists(saves_dir):
@@ -1384,7 +1405,7 @@ class Database:
         title = str((grade_row or {}).get("assessmentTitle") or "").strip().lower()
         return fb.startswith("completed quarter") or fb.startswith("completed summative") or "cognitive maze" in title
 
-    def save_game_result(self, student_id, score, total_questions, correct_answers, percentage, feedback, grade_level, assessment_id=None, quarter=None):
+    def save_game_result(self, student_id, score, total_questions, correct_answers, percentage, feedback, grade_level, assessment_id=None, quarter=None, student_code=None):
         """Post game result to Vercel API with zero duplicate inflation, or queue offline if disconnected."""
         numeric_student_id = student_id
         if isinstance(student_id, str) and student_id.isdigit():
@@ -1407,6 +1428,7 @@ class Database:
         clean_payload = {
             "studentId": numeric_student_id,
             "student_id": numeric_student_id,
+            "studentCode": str(student_code or ""),
             "assessmentId": ass_id,
             "assessment_id": ass_id,
             "gradeLevel": grade_level,
@@ -1465,59 +1487,7 @@ class Database:
                     if int(score) <= max_existing and len(student_stage_matches) == 1:
                         print(f"[API INFO] Stage result (assessment {ass_id}) already recorded with score {max_existing} >= {score}. Skipping duplicate submission.")
                         return True
-
-                    # Score improved (e.g. 60 -> 100) OR legacy duplicate rows exist:
-                    # Replace cleanly via crash-safe student cascade + replay so total points never inflate!
-                    live_students = self.get_students(force_refresh=True) or []
-                    matched_student = next(
-                        (s for s in live_students if self._same_student_id(s.get("id"), numeric_student_id)),
-                        None,
-                    )
-                    if matched_student and matched_student.get("id"):
-                        replay_results = []
-                        for prev in other_best_by_stage.values():
-                            replay_results.append({
-                                "studentId": matched_student["id"],
-                                "assessmentId": prev.get("assessmentId") or prev.get("assessment_id") or 1,
-                                "gradeLevel": prev.get("gradeLevel") or matched_student.get("gradeLevel") or grade_level,
-                                "score": int(prev.get("score") or 0),
-                                "totalQuestions": int(prev.get("totalQuestions") or 5),
-                                "correctAnswers": int(prev.get("correctAnswers") or 0),
-                                "percentage": float(prev.get("percentage") or 0.0),
-                                "feedback": prev.get("feedback") or "",
-                            })
-                        best_new_payload = dict(clean_payload)
-                        if int(score) < max_existing:
-                            best_row = max(student_stage_matches, key=lambda m: int(m.get("score") or 0))
-                            best_new_payload.update({
-                                "score": int(best_row.get("score") or score),
-                                "totalQuestions": int(best_row.get("totalQuestions") or total_questions),
-                                "correctAnswers": int(best_row.get("correctAnswers") or correct_answers),
-                                "percentage": float(best_row.get("percentage") or percentage),
-                                "feedback": best_row.get("feedback") or feedback,
-                            })
-                        replay_results.append(best_new_payload)
-
-                        # Preserve any manual teacher classroom grades (non-game grades) for this student
-                        manual_grades = []
-                        for g in self.get_grades(filter_reset=True, force_refresh=True):
-                            if self._same_student_id(g.get("studentId"), matched_student["id"]) and not self._is_game_generated_grade(g):
-                                manual_grades.append({
-                                    "studentId": matched_student["id"],
-                                    "assessmentId": g.get("assessmentId") or 1,
-                                    "score": g.get("score") or 0,
-                                    "pointsEarned": g.get("pointsEarned") or g.get("score") or 0,
-                                    "feedback": g.get("feedback") or "",
-                                })
-
-                        recreate_payload = self._build_recreate_payload(matched_student)
-                        if self._cascade_reset_student_online(
-                            recreate_payload,
-                            replay_results=replay_results,
-                            replay_grades=manual_grades,
-                        ):
-                            print(f"[API IMPROVEMENT] Upgraded stage score ({max_existing} -> {best_new_payload['score']}) for student #{matched_student['id']} with zero duplicate inflation!")
-                            return True
+                    print(f"[API IMPROVEMENT] Submitting upgraded stage score ({max_existing} -> {score}) for student #{numeric_student_id}.")
             except Exception as check_err:
                 print(f"[API WARN] Pre-save duplicate check encountered an issue: {check_err}")
 
@@ -1717,7 +1687,7 @@ class Database:
         if data is None:
             url = f"{self._get_base_url()}/grades"
             try:
-                req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+                req = urllib.request.Request(url, headers=self._get_api_headers())
                 with _urlopen_resilient(req, timeout=8) as response:
                     self._mark_online(response)
                     parsed = json.loads(response.read().decode('utf-8'))
@@ -1767,7 +1737,7 @@ class Database:
         if data is None:
             url = f"{self._get_base_url()}/game-results"
             try:
-                req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+                req = urllib.request.Request(url, headers=self._get_api_headers())
                 with _urlopen_resilient(req, timeout=8) as response:
                     self._mark_online(response)
                     parsed = json.loads(response.read().decode('utf-8'))
@@ -1869,17 +1839,19 @@ class Database:
                 student_details[c_id] = s
 
         highest = None
-        max_score = -1.0
+        max_score = 0.0
 
         # 1. Process Live Grades table ("recent grades") — g['score'] is percentage 0..100 on Vercel
         for g in grades:
             s_id = g.get("studentId")
-            s_name = g.get("studentName") or student_names.get(s_id) or student_names.get(str(s_id)) or f"Student #{s_id}"
+            if students and (s_id not in student_details and str(s_id) not in student_details):
+                continue
+            details = student_details.get(s_id) or student_details.get(str(s_id)) or {}
+            s_name = details.get("fullName") or g.get("studentName") or student_names.get(s_id) or student_names.get(str(s_id)) or f"Student #{s_id}"
             score = float(g.get("score") if g.get("score") is not None else (g.get("pointsEarned") or 0.0))
             ass_title = g.get("assessmentTitle") or "Math Assessment"
             created = g.get("createdAt", "")
 
-            details = student_details.get(s_id) or student_details.get(str(s_id)) or {}
             grade_lvl = details.get("gradeLevel") or "Grade 2"
             section = details.get("section") or "A"
             av_col = details.get("avatarColor") or "#6366f1"
@@ -1901,12 +1873,14 @@ class Database:
         # 2. Check Game Results if higher score or no grades
         for gr in game_results:
             s_id = gr.get("studentId")
-            s_name = gr.get("studentName") or student_names.get(s_id) or student_names.get(str(s_id)) or f"Student #{s_id}"
+            if students and (s_id not in student_details and str(s_id) not in student_details):
+                continue
+            details = student_details.get(s_id) or student_details.get(str(s_id)) or {}
+            s_name = details.get("fullName") or gr.get("studentName") or student_names.get(s_id) or student_names.get(str(s_id)) or f"Student #{s_id}"
             pct = float(gr.get("percentage") if gr.get("percentage") is not None else (gr.get("score") or 0.0))
             fb = gr.get("feedback") or "Quarter Quiz"
             created = gr.get("createdAt", "")
 
-            details = student_details.get(s_id) or student_details.get(str(s_id)) or {}
             grade_lvl = gr.get("gradeLevel") or details.get("gradeLevel") or "Grade 2"
             section = details.get("section") or "A"
             av_col = details.get("avatarColor") or "#6366f1"
@@ -1936,6 +1910,8 @@ class Database:
                                 sdata = json.load(f)
                             sel = sdata.get("selected_student") or {}
                             sid_check = sel.get("id") or sdata.get("student_id")
+                            if students and (sid_check not in student_details and str(sid_check) not in student_details):
+                                continue
                             reset_ts = self._get_student_reset_timestamp(sid_check) or self._get_student_reset_timestamp(sdata.get("student_id"))
                             if reset_ts and sdata.get("timestamp") and float(sdata["timestamp"]) < reset_ts - 1.0:
                                 continue
@@ -1954,7 +1930,7 @@ class Database:
                                             "score": pct,
                                             "percentage": pct,
                                             "assessment_title": f"{label} Quiz",
-                                            "grade_level": sel.get("level") or "Grade 2",
+                                            "grade_level": sel.get("level") or sel.get("grade_level") or "Grade 2",
                                             "section": sel.get("section") or "A",
                                             "avatar_color": sel.get("avatarColor") or "#38bdf8",
                                             "created_at": "",
