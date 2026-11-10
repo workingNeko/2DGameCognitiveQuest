@@ -16,6 +16,8 @@ from core.visual_effects import (
     DustParticleSystem,
     draw_beacon_marker,
     draw_aura_glow,
+    draw_npc_ground_pedestal,
+    draw_npc_overhead_badge,
     build_composite_title_letters,
     draw_composite_title_wave,
 )
@@ -2936,9 +2938,22 @@ class Quarter4:
                 if num in self.station_npcs and not is_answered and self.quiz_state < 6:
                     data = self.station_npcs[num]
                     frame = data["frames"][data["anim_frame"]]
+                    cx = (pos[0] * TILE_SIZE + TILE_SIZE // 2 - self.camera_x) * ZOOM
+                    cy = (pos[1] * TILE_SIZE + TILE_SIZE - self.camera_y) * ZOOM
+                    top_y = (pos[1] * TILE_SIZE - self.camera_y) * ZOOM
+                    is_active = (num == self.quiz_station_index and self.quiz_state == 0)
+
+                    # Ground pedestal & contact shadow
+                    draw_npc_ground_pedestal(
+                        self.screen, cx, cy,
+                        rx=int(16 * ZOOM), ry=int(8 * ZOOM),
+                        is_active=is_active,
+                        color=(56, 189, 248),
+                        pulse_phase=self.frame_counter * 0.12
+                    )
 
                     # Shimmering water pedestal aura under currently active water guardian
-                    if num == self.quiz_station_index and self.quiz_state == 0:
+                    if is_active:
                         aura_w = int(TILE_SIZE * ZOOM * 1.3)
                         aura_h = int(TILE_SIZE * ZOOM * 0.6)
                         pulse_step = int((math.sin(self.frame_counter * 0.1 + num) * 0.25 + 0.75) * 8)
@@ -2956,16 +2971,29 @@ class Quarter4:
                         ax = int((pos[0] * TILE_SIZE - self.camera_x) * ZOOM + (TILE_SIZE * ZOOM - aura_w) / 2)
                         ay = int((pos[1] * TILE_SIZE - self.camera_y) * ZOOM + TILE_SIZE * ZOOM * 0.65)
                         self.screen.blit(aura_surf, (ax, ay))
-                        draw_beacon_marker(self.screen, (pos[0] * TILE_SIZE + TILE_SIZE // 2 - self.camera_x) * ZOOM, (pos[1] * TILE_SIZE - self.camera_y) * ZOOM, color=(56, 189, 248), beacon_type="question", offset_y=int(-30 * ZOOM))
+                        draw_beacon_marker(self.screen, cx, top_y, color=(56, 189, 248), beacon_type="question", offset_y=int(-32 * ZOOM))
 
                     self.draw_npc_static(pos[0] * TILE_SIZE, pos[1] * TILE_SIZE, frame)
+
+                    # Overhead badge
+                    g_name = data.get("name", f"Station {num}")
+                    if is_active:
+                        draw_npc_overhead_badge(self.screen, cx, top_y, g_name, is_active=True, badge_color=(56, 189, 248), offset_y=int(-10 * ZOOM))
+                    elif num > self.quiz_station_index:
+                        draw_npc_overhead_badge(self.screen, cx, top_y, g_name, is_active=False, badge_color=(203, 213, 225), offset_y=int(-8 * ZOOM))
 
         # Draw Bromen
         if self.npc_bromen_found and self.npc_bromen_sprites:
             frame = self.npc_bromen_sprites[self.npc_bromen_anim_frame]
+            b_cx = (self.npc_bromen_x + TILE_SIZE // 2 - self.camera_x) * ZOOM
+            b_cy = (self.npc_bromen_y + TILE_SIZE - self.camera_y) * ZOOM
+            b_top = (self.npc_bromen_y - self.camera_y) * ZOOM
+            is_b_active = not getattr(self, 'bromen_puzzle_solved', False)
+            draw_npc_ground_pedestal(self.screen, b_cx, b_cy, rx=int(16 * ZOOM), ry=int(8 * ZOOM), is_active=is_b_active, color=(20, 184, 166), pulse_phase=self.frame_counter * 0.12)
             self.draw_npc_static(self.npc_bromen_x, self.npc_bromen_y, frame)
-            if not getattr(self, 'bromen_puzzle_solved', False):
-                draw_beacon_marker(self.screen, (self.npc_bromen_x + TILE_SIZE // 2 - self.camera_x) * ZOOM, (self.npc_bromen_y - self.camera_y) * ZOOM, color=(20, 184, 166), beacon_type="exclamation", offset_y=int(-35 * ZOOM))
+            if is_b_active:
+                draw_beacon_marker(self.screen, b_cx, b_top, color=(20, 184, 166), beacon_type="exclamation", offset_y=int(-35 * ZOOM))
+            draw_npc_overhead_badge(self.screen, b_cx, b_top, "Water Sage Bromen", is_active=is_b_active, badge_color=(20, 184, 166), offset_y=int(-10 * ZOOM))
 
         # Draw Lotus Raft before drawing the player (so player stands on deck)
         self.draw_lotus_raft()

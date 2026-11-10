@@ -19,6 +19,8 @@ _DUST_CACHE = {}
 _SPARKLE_CACHE = {}
 _AURA_CACHE = {}
 _BEACON_CACHE = {}
+_PEDESTAL_CACHE = {}
+_NPC_BADGE_CACHE = {}
 
 
 def _maybe_convert_alpha(surf):
@@ -413,39 +415,189 @@ def draw_aura_glow(surface, center, radius=24, color=(255, 215, 0), pulse=True, 
 def draw_beacon_marker(surface, cx, cy, color=(255, 215, 0), beacon_type="exclamation", offset_y=-35):
     """
     Renders an animated floating quest marker / beacon above an NPC or interactive station.
+    Features high-contrast dual border, pointer arrow chevron, and radiant pulsing aura.
     """
-    float_y = cy + offset_y + int(math.sin(time.time() * 3.5) * 4)
-    draw_aura_glow(surface, (cx, float_y), radius=14, color=color, pulse=True, pulse_speed=3.0)
+    cx, cy = int(cx), int(cy)
+    float_y = cy + offset_y + int(math.sin(time.time() * 4.2) * 5)
+    # Multi-tier radiant glow halo
+    draw_aura_glow(surface, (cx, float_y), radius=18, color=color, pulse=True, pulse_speed=3.6)
 
-    # Draw marker diamond badge (cached)
-    sz = 16
-    bcx, bcy = sz, sz
+    sz = 19
+    pad = 4
+    pw, ph = (sz + pad) * 2, (sz + pad) * 2 + 6
+    bcx, bcy = pw // 2, sz + pad
     has_disp = pygame.display.get_surface() is not None
     c_rgb = (color[0], color[1], color[2])
     key = (c_rgb, beacon_type, has_disp)
     badge_surf = _BEACON_CACHE.get(key)
     if badge_surf is None:
-        badge_surf = pygame.Surface((sz * 2, sz * 2), pygame.SRCALPHA)
+        badge_surf = pygame.Surface((pw, ph), pygame.SRCALPHA)
+        # 1. Drop shadow offset
+        shadow_pts = [
+            (bcx, bcy - sz + 2),
+            (bcx + sz, bcy + 2),
+            (bcx, bcy + sz + 6),
+            (bcx - sz, bcy + 2)
+        ]
+        pygame.draw.polygon(badge_surf, (0, 0, 0, 95), shadow_pts)
+
+        # 2. Main diamond badge points + bottom pointer arrow
         diamond_pts = [
+            (bcx, bcy - sz),
+            (bcx + sz, bcy),
+            (bcx, bcy + sz),
+            (bcx - sz, bcy)
+        ]
+        # Outer dark high-contrast contour
+        pygame.draw.polygon(badge_surf, (15, 23, 42, 240), diamond_pts)
+        # Vibrant core fill
+        pygame.draw.polygon(badge_surf, (*c_rgb, 245), [
             (bcx, bcy - sz + 2),
             (bcx + sz - 2, bcy),
             (bcx, bcy + sz - 2),
             (bcx - sz + 2, bcy)
-        ]
-        pygame.draw.polygon(badge_surf, (*c_rgb, 230), diamond_pts)
-        pygame.draw.polygon(badge_surf, (255, 255, 255, 255), diamond_pts, 2)
+        ])
+        # Inner white highlight border
+        pygame.draw.polygon(badge_surf, (255, 255, 255, 230), [
+            (bcx, bcy - sz + 2),
+            (bcx + sz - 2, bcy),
+            (bcx, bcy + sz - 2),
+            (bcx - sz + 2, bcy)
+        ], 2)
 
+        # 3. Downward pointer chevron tip at bottom
+        pointer_pts = [
+            (bcx - 5, bcy + sz - 2),
+            (bcx + 5, bcy + sz - 2),
+            (bcx, bcy + sz + 6)
+        ]
+        pygame.draw.polygon(badge_surf, (15, 23, 42, 240), pointer_pts)
+        pygame.draw.polygon(badge_surf, (*c_rgb, 245), [
+            (bcx - 3, bcy + sz - 2),
+            (bcx + 3, bcy + sz - 2),
+            (bcx, bcy + sz + 4)
+        ])
+
+        # 4. Bold, crisp iconography
+        dark_ink = (20, 20, 30)
         if beacon_type == "exclamation":
-            pygame.draw.line(badge_surf, (20, 20, 25), (bcx, bcy - 6), (bcx, bcy + 1), 2)
-            pygame.draw.circle(badge_surf, (20, 20, 25), (bcx, bcy + 5), 1)
+            pygame.draw.line(badge_surf, dark_ink, (bcx, bcy - 8), (bcx, bcy + 1), 3)
+            pygame.draw.circle(badge_surf, dark_ink, (bcx, bcy + 6), 2)
         elif beacon_type == "question":
-            pygame.draw.circle(badge_surf, (20, 20, 25), (bcx, bcy + 5), 1)
-            pygame.draw.arc(badge_surf, (20, 20, 25), pygame.Rect(bcx - 4, bcy - 7, 8, 8), 0, math.pi, 2)
-            pygame.draw.line(badge_surf, (20, 20, 25), (bcx, bcy - 3), (bcx, bcy + 2), 2)
+            pygame.draw.circle(badge_surf, dark_ink, (bcx, bcy + 6), 2)
+            pygame.draw.arc(badge_surf, dark_ink, pygame.Rect(bcx - 5, bcy - 9, 10, 10), 0, math.pi, 3)
+            pygame.draw.line(badge_surf, dark_ink, (bcx, bcy - 4), (bcx, bcy + 2), 3)
+
         badge_surf = _maybe_convert_alpha(badge_surf)
         _BEACON_CACHE[key] = badge_surf
 
     surface.blit(badge_surf, (cx - bcx, float_y - bcy))
+
+
+def draw_npc_ground_pedestal(surface, cx, cy, rx=18, ry=8, is_active=False, color=(255, 215, 0), pulse_phase=0.0):
+    """
+    Renders an optimized, memoized grounding shadow and interactive pedestal ring beneath an NPC.
+    Separates pixel art characters from background floor tiles and highlights quest targets.
+    """
+    cx, cy = int(cx), int(cy)
+    sw, sh = surface.get_size()
+    if cx + rx + 10 < 0 or cx - rx - 10 > sw or cy + ry + 10 < 0 or cy - ry - 10 > sh:
+        return
+
+    has_disp = pygame.display.get_surface() is not None
+    c_rgb = (color[0], color[1], color[2])
+
+    if is_active:
+        # Pre-cache 8 discrete pulse phases to eliminate runtime surface creation on low-spec hardware
+        pulse_idx = int((((math.sin(pulse_phase) + 1.0) * 0.5) * 7.99))
+        key = ("active", rx, ry, c_rgb, pulse_idx, has_disp)
+        pedestal_surf = _PEDESTAL_CACHE.get(key)
+        if pedestal_surf is None:
+            pad = 8
+            pw, ph = (rx + pad) * 2, (ry + pad) * 2
+            pedestal_surf = pygame.Surface((pw, ph), pygame.SRCALPHA)
+            pcx, pcy = pw // 2, ph // 2
+            # 1. Base dark ground contact shadow
+            pygame.draw.ellipse(pedestal_surf, (0, 0, 0, 110), (pcx - rx, pcy - ry, rx * 2, ry * 2))
+            # 2. Glowing pulse outer ring
+            scale = 0.9 + 0.25 * (pulse_idx / 7.0)
+            p_alpha = int(75 + 115 * (pulse_idx / 7.0))
+            prx, pry = max(2, int(rx * scale)), max(2, int(ry * scale))
+            pygame.draw.ellipse(pedestal_surf, (*c_rgb, p_alpha // 2), (pcx - prx - 2, pcy - pry - 2, (prx + 2) * 2, (pry + 2) * 2))
+            pygame.draw.ellipse(pedestal_surf, (*c_rgb, p_alpha), (pcx - prx, pcy - pry, prx * 2, pry * 2), 2)
+            # 3. Bright inner accent ring
+            pygame.draw.ellipse(pedestal_surf, (255, 255, 255, min(255, p_alpha + 40)), (pcx - rx + 3, pcy - ry + 2, (rx - 3) * 2, (ry - 2) * 2), 1)
+            pedestal_surf = _maybe_convert_alpha(pedestal_surf)
+            if len(_PEDESTAL_CACHE) > 256:
+                _PEDESTAL_CACHE.pop(next(iter(_PEDESTAL_CACHE)))
+            _PEDESTAL_CACHE[key] = pedestal_surf
+        surface.blit(pedestal_surf, (cx - pedestal_surf.get_width() // 2, cy - pedestal_surf.get_height() // 2))
+    else:
+        # Muted ambient ground pedestal for upcoming / idle interactive NPCs
+        key = ("ambient", rx, ry, c_rgb, has_disp)
+        pedestal_surf = _PEDESTAL_CACHE.get(key)
+        if pedestal_surf is None:
+            pad = 4
+            pw, ph = (rx + pad) * 2, (ry + pad) * 2
+            pedestal_surf = pygame.Surface((pw, ph), pygame.SRCALPHA)
+            pcx, pcy = pw // 2, ph // 2
+            # Base dark ground shadow
+            pygame.draw.ellipse(pedestal_surf, (0, 0, 0, 95), (pcx - rx, pcy - ry, rx * 2, ry * 2))
+            # Soft subtle ambient interactive ring
+            pygame.draw.ellipse(pedestal_surf, (*c_rgb, 60), (pcx - rx + 1, pcy - ry + 1, (rx - 1) * 2, (ry - 1) * 2), 1)
+            pedestal_surf = _maybe_convert_alpha(pedestal_surf)
+            if len(_PEDESTAL_CACHE) > 256:
+                _PEDESTAL_CACHE.pop(next(iter(_PEDESTAL_CACHE)))
+            _PEDESTAL_CACHE[key] = pedestal_surf
+        surface.blit(pedestal_surf, (cx - pedestal_surf.get_width() // 2, cy - pedestal_surf.get_height() // 2))
+
+
+def draw_npc_overhead_badge(surface, cx, top_y, text, is_active=False, badge_color=(255, 215, 0), offset_y=-12):
+    """
+    Renders a crisp, pre-cached floating name / station pill tag above an NPC.
+    """
+    if not text:
+        return
+    cx, top_y = int(cx), int(top_y)
+    sw, sh = surface.get_size()
+    if cx + 120 < 0 or cx - 120 > sw or top_y + 40 < 0 or top_y - 60 > sh:
+        return
+
+    has_disp = pygame.display.get_surface() is not None
+    clean_text = str(text).strip()
+    if len(clean_text) > 24:
+        clean_text = clean_text[:22] + ".."
+    c_rgb = (badge_color[0], badge_color[1], badge_color[2])
+    key = (clean_text, is_active, c_rgb, has_disp)
+
+    badge_surf = _NPC_BADGE_CACHE.get(key)
+    if badge_surf is None:
+        from .font_manager import get_font
+        font = get_font("Comic Sans MS", 11, bold=True)
+        display_str = f"★ {clean_text}" if is_active else clean_text
+        text_color = (254, 240, 138) if is_active else (241, 245, 249)
+        t_surf = font.render(display_str, True, text_color)
+        tw, th = t_surf.get_size()
+        pw, ph = tw + 14, th + 6
+        badge_surf = pygame.Surface((pw, ph), pygame.SRCALPHA)
+        # Background pill
+        bg_color = (15, 23, 42, 215) if is_active else (15, 23, 42, 160)
+        pygame.draw.rect(badge_surf, bg_color, (0, 0, pw, ph), border_radius=ph // 2)
+        # Border
+        if is_active:
+            pygame.draw.rect(badge_surf, (*c_rgb, 240), (0, 0, pw, ph), width=2, border_radius=ph // 2)
+        else:
+            pygame.draw.rect(badge_surf, (148, 163, 184, 140), (0, 0, pw, ph), width=1, border_radius=ph // 2)
+        # Text
+        badge_surf.blit(t_surf, (7, 3))
+        badge_surf = _maybe_convert_alpha(badge_surf)
+        if len(_NPC_BADGE_CACHE) > 256:
+            _NPC_BADGE_CACHE.pop(next(iter(_NPC_BADGE_CACHE)))
+        _NPC_BADGE_CACHE[key] = badge_surf
+
+    bw = badge_surf.get_width()
+    bh = badge_surf.get_height()
+    surface.blit(badge_surf, (cx - bw // 2, top_y + offset_y - bh))
 
 
 def build_composite_title_letters(title_text, title_font, main_color, outline_color, glow_color, pad=6):

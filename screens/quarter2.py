@@ -15,6 +15,8 @@ from core.visual_effects import (
     DustParticleSystem,
     draw_beacon_marker,
     draw_aura_glow,
+    draw_npc_ground_pedestal,
+    draw_npc_overhead_badge,
     build_composite_title_letters,
     draw_composite_title_wave,
 )
@@ -4532,41 +4534,56 @@ class Quarter2:
             world_x = st_x * TILE_SIZE
             world_y = st_y * TILE_SIZE
 
+            cx = (world_x + TILE_SIZE // 2 - self.camera_x) * ZOOM
+            cy = (world_y + TILE_SIZE - self.camera_y) * ZOOM
+            top_y = (world_y - self.camera_y) * ZOOM
+            is_active = (num == self.quiz_station_index and self.quiz_state == 0)
+
+            # Ground pedestal & contact shadow
+            draw_npc_ground_pedestal(
+                self.screen, cx, cy,
+                rx=int(16 * ZOOM), ry=int(8 * ZOOM),
+                is_active=is_active,
+                color=(251, 191, 36),
+                pulse_phase=self.frame_counter * 0.12
+            )
+
             if num == 2 and "prop_sorbetes_cart" in self.tile_images:
                 cart_img = self.tile_images["prop_sorbetes_cart"]
-                cx = (st_x + 1) * TILE_SIZE
-                cy = st_y * TILE_SIZE
+                cx_c = (st_x + 1) * TILE_SIZE
+                cy_c = st_y * TILE_SIZE
                 scaled_cart = self._get_scaled_prop(cart_img, sq_prop_sz, sq_prop_sz)
-                self.screen.blit(scaled_cart, ((cx - self.camera_x) * ZOOM, (cy - self.camera_y) * ZOOM))
+                self.screen.blit(scaled_cart, ((cx_c - self.camera_x) * ZOOM, (cy_c - self.camera_y) * ZOOM))
 
             if num == 3 and "prop_jeep_sign" in self.tile_images:
                 sign_img = self.tile_images["prop_jeep_sign"]
-                sx = (st_x + 1) * TILE_SIZE
-                sy = st_y * TILE_SIZE
+                sx_s = (st_x + 1) * TILE_SIZE
+                sy_s = st_y * TILE_SIZE
                 scaled_sign = self._get_scaled_prop(sign_img, sq_prop_sz, sq_prop_sz)
-                self.screen.blit(scaled_sign, ((sx - self.camera_x) * ZOOM, (sy - self.camera_y) * ZOOM))
-
-            if num == self.quiz_station_index and self.quiz_state == 0:
-                sx = (world_x - self.camera_x) * ZOOM
-                sy = (world_y - self.camera_y) * ZOOM
-                pulse_step = int(((math.sin(self.frame_counter * 0.12) + 1) * 0.5) * 8)
-                if not hasattr(self, '_station_aura_cache'):
-                    self._station_aura_cache = {}
-                aura_surf = self._station_aura_cache.get(pulse_step)
-                if aura_surf is None:
-                    aura_surf = pygame.Surface((int(36 * ZOOM), int(16 * ZOOM)), pygame.SRCALPHA)
-                    pygame.draw.ellipse(aura_surf, (255, 215, 0, int(80 + 80 * (pulse_step / 8.0))), (0, 0, int(36 * ZOOM), int(16 * ZOOM)))
-                    self._station_aura_cache[pulse_step] = aura_surf
-                self.screen.blit(aura_surf, (sx - int(2 * ZOOM), sy + int(22 * ZOOM)))
-                draw_beacon_marker(self.screen, sx + int(TILE_SIZE // 2 * ZOOM), sy, color=(251, 191, 36), beacon_type="question", offset_y=int(-30 * ZOOM))
+                self.screen.blit(scaled_sign, ((sx_s - self.camera_x) * ZOOM, (sy_s - self.camera_y) * ZOOM))
 
             if frames:
                 self.draw_npc_animated(world_x, world_y, frames, anim_frame)
 
+            # Overhead badge & beacon
+            v_title = info.get("title", f"Station {num}")
+            if is_active:
+                draw_beacon_marker(self.screen, cx, top_y, color=(251, 191, 36), beacon_type="question", offset_y=int(-32 * ZOOM))
+                draw_npc_overhead_badge(self.screen, cx, top_y, v_title, is_active=True, badge_color=(251, 191, 36), offset_y=int(-10 * ZOOM))
+            elif num > self.quiz_station_index:
+                draw_npc_overhead_badge(self.screen, cx, top_y, v_title, is_active=False, badge_color=(203, 213, 225), offset_y=int(-8 * ZOOM))
+
         # Draw Knight Portal Guardian
-        self.draw_knight_guardian()
-        if self.quiz_state == 6 and getattr(self, 'knight_guardian_active', True) and getattr(self, 'npc_knight_found', False):
-            draw_beacon_marker(self.screen, (self.npc_knight_x + TILE_SIZE // 2 - self.camera_x) * ZOOM, (self.npc_knight_y - self.camera_y) * ZOOM, color=(59, 130, 246), beacon_type="exclamation", offset_y=int(-35 * ZOOM))
+        if getattr(self, 'npc_knight_found', False):
+            k_cx = (self.npc_knight_x + TILE_SIZE // 2 - self.camera_x) * ZOOM
+            k_cy = (self.npc_knight_y + TILE_SIZE - self.camera_y) * ZOOM
+            k_top = (self.npc_knight_y - self.camera_y) * ZOOM
+            is_k_active = (self.quiz_state == 6 and getattr(self, 'knight_guardian_active', True))
+            draw_npc_ground_pedestal(self.screen, k_cx, k_cy, rx=int(16 * ZOOM), ry=int(8 * ZOOM), is_active=is_k_active, color=(59, 130, 246), pulse_phase=self.frame_counter * 0.12)
+            self.draw_knight_guardian()
+            if is_k_active:
+                draw_beacon_marker(self.screen, k_cx, k_top, color=(59, 130, 246), beacon_type="exclamation", offset_y=int(-35 * ZOOM))
+            draw_npc_overhead_badge(self.screen, k_cx, k_top, "Portal Knight", is_active=is_k_active, badge_color=(59, 130, 246), offset_y=int(-10 * ZOOM))
 
         # Draw Click-to-Move Target Beacon
         if getattr(self, 'click_dest', None) is not None:

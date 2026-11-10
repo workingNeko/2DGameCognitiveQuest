@@ -21,6 +21,8 @@ from core.visual_effects import (
     DustParticleSystem,
     draw_beacon_marker,
     draw_aura_glow,
+    draw_npc_ground_pedestal,
+    draw_npc_overhead_badge,
     build_composite_title_letters,
     draw_composite_title_wave,
 )
@@ -3478,6 +3480,9 @@ class StageSelect:
 
         # 5. Draw NPC Sprites (Bromen, Oldman, Skeleton, Knight)
         if self.npc_bromen_found:
+            b_cx = (self.npc_bromen_x - self.camera_x + TILE_SIZE // 2) * ZOOM
+            b_cy = (self.npc_bromen_y - self.camera_y + TILE_SIZE) * ZOOM
+            draw_npc_ground_pedestal(self.screen, b_cx, b_cy, rx=int(16 * ZOOM), ry=int(8 * ZOOM), is_active=True, color=(20, 184, 166), pulse_phase=self.frame_counter * 0.12)
             if self.bromen_dialogue_state == 2:
                 if self.npc_bromen_up_sprites:
                     self.draw_npc_animated(self.npc_bromen_x, self.npc_bromen_y,
@@ -3491,6 +3496,9 @@ class StageSelect:
                                            self.npc_bromen_sprites, self.npc_bromen_anim_frame)
 
         if self.npc_oldman_found:
+            om_cx = (self.npc_oldman_x - self.camera_x + TILE_SIZE // 2) * ZOOM
+            om_cy = (self.npc_oldman_y - self.camera_y + TILE_SIZE) * ZOOM
+            draw_npc_ground_pedestal(self.screen, om_cx, om_cy, rx=int(16 * ZOOM), ry=int(8 * ZOOM), is_active=True, color=(251, 191, 36), pulse_phase=self.frame_counter * 0.12)
             if self.oldman_dialogue_state == 2:
                 target_y = (self.npc_oldman_tile_y + 1) * TILE_SIZE
                 if self.npc_oldman_y < target_y and self.npc_oldman_down_sprites:
@@ -3521,6 +3529,9 @@ class StageSelect:
                                          self.npc_oldman_sprite)
 
         if self.npc_skeleton_found:
+            sk_cx = (self.npc_skeleton_x - self.camera_x + TILE_SIZE // 2) * ZOOM
+            sk_cy = (self.npc_skeleton_y - self.camera_y + TILE_SIZE) * ZOOM
+            draw_npc_ground_pedestal(self.screen, sk_cx, sk_cy, rx=int(16 * ZOOM), ry=int(8 * ZOOM), is_active=True, color=(168, 85, 247), pulse_phase=self.frame_counter * 0.12)
             if self.skeleton_dialogue_state == 2:
                 target_y = (self.npc_skeleton_tile_y + 1) * TILE_SIZE
                 if self.npc_skeleton_y < target_y and self.npc_skeleton_down_sprites:
@@ -3551,6 +3562,9 @@ class StageSelect:
                                          self.npc_skeleton_sprite)
 
         if self.npc_knight_found:
+            kn_cx = (self.npc_knight_x - self.camera_x + TILE_SIZE // 2) * ZOOM
+            kn_cy = (self.npc_knight_y - self.camera_y + TILE_SIZE) * ZOOM
+            draw_npc_ground_pedestal(self.screen, kn_cx, kn_cy, rx=int(16 * ZOOM), ry=int(8 * ZOOM), is_active=True, color=(59, 130, 246), pulse_phase=self.frame_counter * 0.12)
             if self.knight_dialogue_state == 2:
                 if self.npc_knight_down_sprites:
                     self.draw_npc_animated(self.npc_knight_x, self.npc_knight_y,
@@ -3576,16 +3590,28 @@ class StageSelect:
                     self.draw_npc_static(self.npc_knight_x, self.npc_knight_y,
                                          self.npc_knight_sprite)
 
-        # Draw Animated Quest Beacons above Sanctuary NPCs
+        # Draw Animated Quest Beacons and Badges above Sanctuary NPCs
         if not self.is_dialogue_active():
             if self.npc_oldman_found:
-                draw_beacon_marker(self.screen, (self.npc_oldman_x - self.camera_x + TILE_SIZE // 2) * ZOOM, (self.npc_oldman_y - self.camera_y) * ZOOM, color=(251, 191, 36), beacon_type="exclamation", offset_y=int(-30 * ZOOM))
+                cx = (self.npc_oldman_x - self.camera_x + TILE_SIZE // 2) * ZOOM
+                cy = (self.npc_oldman_y - self.camera_y) * ZOOM
+                draw_beacon_marker(self.screen, cx, cy, color=(251, 191, 36), beacon_type="exclamation", offset_y=int(-30 * ZOOM))
+                draw_npc_overhead_badge(self.screen, cx, cy, "Elder Mentor", is_active=True, badge_color=(251, 191, 36), offset_y=int(-10 * ZOOM))
             if self.npc_skeleton_found:
-                draw_beacon_marker(self.screen, (self.npc_skeleton_x - self.camera_x + TILE_SIZE // 2) * ZOOM, (self.npc_skeleton_y - self.camera_y) * ZOOM, color=(168, 85, 247), beacon_type="exclamation", offset_y=int(-30 * ZOOM))
+                cx = (self.npc_skeleton_x - self.camera_x + TILE_SIZE // 2) * ZOOM
+                cy = (self.npc_skeleton_y - self.camera_y) * ZOOM
+                draw_beacon_marker(self.screen, cx, cy, color=(168, 85, 247), beacon_type="exclamation", offset_y=int(-30 * ZOOM))
+                draw_npc_overhead_badge(self.screen, cx, cy, "Portal Sentry", is_active=True, badge_color=(168, 85, 247), offset_y=int(-10 * ZOOM))
             if self.npc_knight_found:
-                draw_beacon_marker(self.screen, (self.npc_knight_x - self.camera_x + TILE_SIZE // 2) * ZOOM, (self.npc_knight_y - self.camera_y) * ZOOM, color=(59, 130, 246), beacon_type="exclamation", offset_y=int(-30 * ZOOM))
+                cx = (self.npc_knight_x - self.camera_x + TILE_SIZE // 2) * ZOOM
+                cy = (self.npc_knight_y - self.camera_y) * ZOOM
+                draw_beacon_marker(self.screen, cx, cy, color=(59, 130, 246), beacon_type="exclamation", offset_y=int(-30 * ZOOM))
+                draw_npc_overhead_badge(self.screen, cx, cy, "Grand Knight", is_active=True, badge_color=(59, 130, 246), offset_y=int(-10 * ZOOM))
             if self.npc_bromen_found:
-                draw_beacon_marker(self.screen, (self.npc_bromen_x - self.camera_x + TILE_SIZE // 2) * ZOOM, (self.npc_bromen_y - self.camera_y) * ZOOM, color=(20, 184, 166), beacon_type="exclamation", offset_y=int(-30 * ZOOM))
+                cx = (self.npc_bromen_x - self.camera_x + TILE_SIZE // 2) * ZOOM
+                cy = (self.npc_bromen_y - self.camera_y) * ZOOM
+                draw_beacon_marker(self.screen, cx, cy, color=(20, 184, 166), beacon_type="exclamation", offset_y=int(-30 * ZOOM))
+                draw_npc_overhead_badge(self.screen, cx, cy, "Sage Bromen", is_active=True, badge_color=(20, 184, 166), offset_y=int(-10 * ZOOM))
 
         # 6. Draw Corridor Energy Forcefields for Locked Quarters
         self.draw_corridor_barriers()

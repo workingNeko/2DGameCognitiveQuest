@@ -16,6 +16,8 @@ from core.visual_effects import (
     DustParticleSystem,
     draw_beacon_marker,
     draw_aura_glow,
+    draw_npc_ground_pedestal,
+    draw_npc_overhead_badge,
     build_composite_title_letters,
     draw_composite_title_wave,
 )
@@ -3404,30 +3406,25 @@ class Quarter1:
             pygame.draw.circle(self.screen, (56, 189, 248), (cd_screen_x, cd_screen_y), int(pulse), 2)
             pygame.draw.circle(self.screen, (255, 255, 255), (cd_screen_x, cd_screen_y), 3)
 
-        # Draw Shape NPCs (1 to 5 hierarchy with glowing active station ring)
+        # Draw Shape NPCs with high-visibility ground pedestals, overhead badges, and beacons
         if self.is_quiz_map:
-            if not hasattr(self, '_station_aura_cache'):
-                self._station_aura_cache = {}
+            pulse_phase = self.frame_counter * 0.15
             for num, npc in self.shape_npcs.items():
-                # Shimmering green interaction aura ring and animated question beacon above active station
-                if num == self.quiz_station_index and not npc["answered"] and self.quiz_state == 0:
-                    cx = (npc["x"] + TILE_SIZE // 2 - self.camera_x) * ZOOM
-                    cy = (npc["y"] + TILE_SIZE - self.camera_y) * ZOOM
-                    pulse_h = max(8, int((math.sin(self.frame_counter * 0.15) * 3 * ZOOM + 16 * ZOOM) // 2) * 2)
-                    aura_surf = self._station_aura_cache.get(pulse_h)
-                    if aura_surf is None:
-                        aura_surf = pygame.Surface((pulse_h * 2, pulse_h), pygame.SRCALPHA)
-                        pygame.draw.ellipse(aura_surf, (34, 197, 94, 90), aura_surf.get_rect())
-                        pygame.draw.ellipse(aura_surf, (250, 204, 21, 140), aura_surf.get_rect(), 2)
-                        if pygame.display.get_surface() is not None:
-                            try:
-                                aura_surf = aura_surf.convert_alpha()
-                            except Exception:
-                                pass
-                        self._station_aura_cache[pulse_h] = aura_surf
-                    self.screen.blit(aura_surf, (cx - aura_surf.get_width() // 2, cy - aura_surf.get_height() // 2))
-                    draw_beacon_marker(self.screen, cx, (npc["y"] - self.camera_y) * ZOOM, color=(250, 204, 21), beacon_type="question", offset_y=int(-30 * ZOOM))
+                cx = (npc["x"] + TILE_SIZE // 2 - self.camera_x) * ZOOM
+                cy = (npc["y"] + TILE_SIZE - self.camera_y) * ZOOM
+                top_y = (npc["y"] - self.camera_y) * ZOOM
+                is_active = (num == self.quiz_station_index and not npc["answered"] and self.quiz_state == 0)
 
+                # 1. Ground pedestal & contact shadow
+                draw_npc_ground_pedestal(
+                    self.screen, cx, cy,
+                    rx=int(16 * ZOOM), ry=int(8 * ZOOM),
+                    is_active=is_active,
+                    color=(250, 204, 21),
+                    pulse_phase=pulse_phase
+                )
+
+                # 2. Draw Sprite
                 sprite_data = self.shape_sprites.get(num)
                 if sprite_data:
                     if isinstance(sprite_data, list) and len(sprite_data) > 0:
@@ -3435,19 +3432,43 @@ class Quarter1:
                         self.draw_npc_static(npc["x"], npc["y"], current_frame)
                     else:
                         self.draw_npc_static(npc["x"], npc["y"], sprite_data)
-                
-                # Draw checkmark above NPC if answered
-                if npc["answered"]:
+
+                # 3. Overhead badge, beacon, and status
+                s_name = npc.get("name", f"Station {num}").capitalize()
+                badge_title = f"Station {num}: {s_name}"
+                if is_active:
+                    draw_beacon_marker(self.screen, cx, top_y, color=(250, 204, 21), beacon_type="question", offset_y=int(-32 * ZOOM))
+                    draw_npc_overhead_badge(self.screen, cx, top_y, badge_title, is_active=True, badge_color=(250, 204, 21), offset_y=int(-10 * ZOOM))
+                elif not npc["answered"]:
+                    draw_npc_overhead_badge(self.screen, cx, top_y, badge_title, is_active=False, badge_color=(203, 213, 225), offset_y=int(-8 * ZOOM))
+                elif npc["answered"]:
                     self.draw_answered_checkmark(npc["x"], npc["y"])
 
         if self.npc_oldman_found:
+            om_cx = (self.npc_oldman_x + TILE_SIZE // 2 - self.camera_x) * ZOOM
+            om_cy = (self.npc_oldman_y + TILE_SIZE - self.camera_y) * ZOOM
+            om_top = (self.npc_oldman_y - self.camera_y) * ZOOM
+            is_om_active = not self.puzzle_solved and self.quiz_state == 0
+            draw_npc_ground_pedestal(self.screen, om_cx, om_cy, rx=int(16 * ZOOM), ry=int(8 * ZOOM), is_active=is_om_active, color=(59, 130, 246), pulse_phase=self.frame_counter * 0.12)
             self.draw_npc_static(self.npc_oldman_x, self.npc_oldman_y, self.npc_oldman_sprite)
+            if is_om_active:
+                draw_beacon_marker(self.screen, om_cx, om_top, color=(59, 130, 246), beacon_type="exclamation", offset_y=int(-32 * ZOOM))
+            draw_npc_overhead_badge(self.screen, om_cx, om_top, "Elder Sage", is_active=is_om_active, badge_color=(59, 130, 246), offset_y=int(-10 * ZOOM))
 
         if self.npc_skeleton_found:
-            self.draw_npc_static(self.npc_skeleton_x, self.npc_skeleton_y,
-                                 self.npc_skeleton_sprite)
+            sk_cx = (self.npc_skeleton_x + TILE_SIZE // 2 - self.camera_x) * ZOOM
+            sk_cy = (self.npc_skeleton_y + TILE_SIZE - self.camera_y) * ZOOM
+            sk_top = (self.npc_skeleton_y - self.camera_y) * ZOOM
+            draw_npc_ground_pedestal(self.screen, sk_cx, sk_cy, rx=int(16 * ZOOM), ry=int(8 * ZOOM), is_active=False, color=(168, 85, 247))
+            self.draw_npc_static(self.npc_skeleton_x, self.npc_skeleton_y, self.npc_skeleton_sprite)
+            draw_npc_overhead_badge(self.screen, sk_cx, sk_top, "Portal Sentry", is_active=False, badge_color=(168, 85, 247), offset_y=int(-10 * ZOOM))
 
         if self.npc_knight_found:
+            kn_cx = (self.npc_knight_x + TILE_SIZE // 2 - self.camera_x) * ZOOM
+            kn_cy = (self.npc_knight_y + TILE_SIZE - self.camera_y) * ZOOM
+            kn_top = (self.npc_knight_y - self.camera_y) * ZOOM
+            is_kn_active = (self.quiz_state == 6)
+            draw_npc_ground_pedestal(self.screen, kn_cx, kn_cy, rx=int(16 * ZOOM), ry=int(8 * ZOOM), is_active=is_kn_active, color=(59, 130, 246), pulse_phase=self.frame_counter * 0.12)
             sprites = None
             if self.npc_knight_dir == "left":
                 sprites = self.npc_knight_left_sprites
@@ -3459,11 +3480,13 @@ class Quarter1:
                 sprites = self.npc_knight_down_sprites
 
             if sprites:
-                self.draw_npc_static(self.npc_knight_x, self.npc_knight_y,
-                                     sprites[0])
+                self.draw_npc_static(self.npc_knight_x, self.npc_knight_y, sprites[0])
             elif self.npc_knight_sprite:
-                self.draw_npc_static(self.npc_knight_x, self.npc_knight_y,
-                                     self.npc_knight_sprite)
+                self.draw_npc_static(self.npc_knight_x, self.npc_knight_y, self.npc_knight_sprite)
+
+            if is_kn_active:
+                draw_beacon_marker(self.screen, kn_cx, kn_top, color=(59, 130, 246), beacon_type="exclamation", offset_y=int(-32 * ZOOM))
+            draw_npc_overhead_badge(self.screen, kn_cx, kn_top, "Portal Knight", is_active=is_kn_active, badge_color=(59, 130, 246), offset_y=int(-10 * ZOOM))
 
         # Pass 3 & 4: Pre-rendered T and XYZ Obstacles (single C-level blit)
         if getattr(self, '_fg_obstacles_surface', None) is not None:

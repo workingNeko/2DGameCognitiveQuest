@@ -15,6 +15,8 @@ from core.visual_effects import (
     DustParticleSystem,
     draw_beacon_marker,
     draw_aura_glow,
+    draw_npc_ground_pedestal,
+    draw_npc_overhead_badge,
     build_composite_title_letters,
     draw_composite_title_wave,
 )
@@ -2963,34 +2965,60 @@ class Quarter3:
             self.path_guide.draw()
 
         if self.npc_oldman_found:
-            self.draw_npc_static(self.npc_oldman_x, self.npc_oldman_y,
-                                 self.npc_oldman_sprite)
+            om_cx = (self.npc_oldman_x + TILE_SIZE // 2 - self.camera_x) * ZOOM
+            om_cy = (self.npc_oldman_y + TILE_SIZE - self.camera_y) * ZOOM
+            om_top = (self.npc_oldman_y - self.camera_y) * ZOOM
+            draw_npc_ground_pedestal(self.screen, om_cx, om_cy, rx=int(16 * ZOOM), ry=int(8 * ZOOM), is_active=False, color=(59, 130, 246))
+            self.draw_npc_static(self.npc_oldman_x, self.npc_oldman_y, self.npc_oldman_sprite)
+            draw_npc_overhead_badge(self.screen, om_cx, om_top, "Desert Hermit", is_active=False, badge_color=(59, 130, 246), offset_y=int(-10 * ZOOM))
 
-        # Draw Station NPCs at coordinates 1, 2, 3, 4, 5 (disappear when question is completed)
+        # Draw Station NPCs with prominent ground pedestals, overhead badges, and radiant beacons
         if hasattr(self, 'quiz_stations') and hasattr(self, 'station_npcs'):
             for num, pos in self.quiz_stations.items():
-                # Only draw NPCs for stations that have not been completed yet
                 if num in self.station_npcs and num >= self.quiz_station_index and self.quiz_state < 6:
                     data = self.station_npcs[num]
                     frame = data["frames"][data["anim_frame"]]
-                    
-                    # If this is the currently active station, draw pre-cached glowing interaction aura and beacon
-                    if num == self.quiz_station_index and self.quiz_state == 0:
-                        aura_idx = (self.frame_counter // 4) % len(self.cached_station_auras)
-                        aura_surf = self.cached_station_auras[aura_idx]
-                        cx = (pos[0] * TILE_SIZE + TILE_SIZE // 2 - self.camera_x) * ZOOM
-                        cy = (pos[1] * TILE_SIZE + TILE_SIZE - self.camera_y) * ZOOM
-                        self.screen.blit(aura_surf, (cx - aura_surf.get_width() // 2, cy - aura_surf.get_height() // 2))
-                        draw_beacon_marker(self.screen, cx, (pos[1] * TILE_SIZE - self.camera_y) * ZOOM, color=(251, 191, 36), beacon_type="question", offset_y=int(-30 * ZOOM))
+                    cx = (pos[0] * TILE_SIZE + TILE_SIZE // 2 - self.camera_x) * ZOOM
+                    cy = (pos[1] * TILE_SIZE + TILE_SIZE - self.camera_y) * ZOOM
+                    top_y = (pos[1] * TILE_SIZE - self.camera_y) * ZOOM
+                    is_active = (num == self.quiz_station_index and self.quiz_state == 0)
+
+                    # Ground pedestal & contact shadow
+                    draw_npc_ground_pedestal(
+                        self.screen, cx, cy,
+                        rx=int(16 * ZOOM), ry=int(8 * ZOOM),
+                        is_active=is_active,
+                        color=(251, 191, 36),
+                        pulse_phase=self.frame_counter * 0.12
+                    )
 
                     self.draw_npc_static(pos[0] * TILE_SIZE, pos[1] * TILE_SIZE, frame)
 
+                    # Overhead badge and beacon
+                    g_name = data.get("name", f"Station {num}")
+                    if is_active:
+                        draw_beacon_marker(self.screen, cx, top_y, color=(251, 191, 36), beacon_type="question", offset_y=int(-32 * ZOOM))
+                        draw_npc_overhead_badge(self.screen, cx, top_y, g_name, is_active=True, badge_color=(251, 191, 36), offset_y=int(-10 * ZOOM))
+                    elif num > self.quiz_station_index:
+                        draw_npc_overhead_badge(self.screen, cx, top_y, g_name, is_active=False, badge_color=(203, 213, 225), offset_y=int(-8 * ZOOM))
+
         # Draw Skeleton Portal Guardian
-        self.draw_skeleton_guardian()
-        if getattr(self, 'guardian_skeleton_state', 0) in [1, 2, 3] and getattr(self, 'skeleton_guardian_active', True) and getattr(self, 'npc_skeleton_found', False):
-            draw_beacon_marker(self.screen, (self.npc_skeleton_x + TILE_SIZE // 2 - self.camera_x) * ZOOM, (self.npc_skeleton_y - self.camera_y) * ZOOM, color=(168, 85, 247), beacon_type="exclamation", offset_y=int(-35 * ZOOM))
+        if getattr(self, 'npc_skeleton_found', False):
+            sk_cx = (self.npc_skeleton_x + TILE_SIZE // 2 - self.camera_x) * ZOOM
+            sk_cy = (self.npc_skeleton_y + TILE_SIZE - self.camera_y) * ZOOM
+            sk_top = (self.npc_skeleton_y - self.camera_y) * ZOOM
+            is_sk_active = getattr(self, 'guardian_skeleton_state', 0) in [1, 2, 3] and getattr(self, 'skeleton_guardian_active', True)
+            draw_npc_ground_pedestal(self.screen, sk_cx, sk_cy, rx=int(16 * ZOOM), ry=int(8 * ZOOM), is_active=is_sk_active, color=(168, 85, 247), pulse_phase=self.frame_counter * 0.12)
+            self.draw_skeleton_guardian()
+            if is_sk_active:
+                draw_beacon_marker(self.screen, sk_cx, sk_top, color=(168, 85, 247), beacon_type="exclamation", offset_y=int(-35 * ZOOM))
+            draw_npc_overhead_badge(self.screen, sk_cx, sk_top, "Skeleton Guardian", is_active=is_sk_active, badge_color=(168, 85, 247), offset_y=int(-10 * ZOOM))
 
         if self.npc_knight_found:
+            kn_cx = (self.npc_knight_x + TILE_SIZE // 2 - self.camera_x) * ZOOM
+            kn_cy = (self.npc_knight_y + TILE_SIZE - self.camera_y) * ZOOM
+            kn_top = (self.npc_knight_y - self.camera_y) * ZOOM
+            draw_npc_ground_pedestal(self.screen, kn_cx, kn_cy, rx=int(16 * ZOOM), ry=int(8 * ZOOM), is_active=False, color=(59, 130, 246))
             sprites = None
             if self.npc_knight_dir == "left":
                 sprites = self.npc_knight_left_sprites
@@ -3002,11 +3030,10 @@ class Quarter3:
                 sprites = self.npc_knight_down_sprites
 
             if sprites:
-                self.draw_npc_static(self.npc_knight_x, self.npc_knight_y,
-                                     sprites[0])
+                self.draw_npc_static(self.npc_knight_x, self.npc_knight_y, sprites[0])
             elif self.npc_knight_sprite:
-                self.draw_npc_static(self.npc_knight_x, self.npc_knight_y,
-                                     self.npc_knight_sprite)
+                self.draw_npc_static(self.npc_knight_x, self.npc_knight_y, self.npc_knight_sprite)
+            draw_npc_overhead_badge(self.screen, kn_cx, kn_top, "Desert Knight", is_active=False, badge_color=(59, 130, 246), offset_y=int(-10 * ZOOM))
 
         # Draw Caravan Companion Cart (Map 7 only)
         if self.is_caravan_mode:

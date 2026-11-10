@@ -17,7 +17,9 @@ from .visual_effects import (
     SceneTransition,
     get_pulse_value,
     draw_aura_glow,
-    draw_beacon_marker
+    draw_beacon_marker,
+    draw_npc_ground_pedestal,
+    draw_npc_overhead_badge
 )
 
 from .state_machine import State, UIStateMachine
@@ -66,7 +68,9 @@ __all__ = [
     "SceneTransition",
     "get_pulse_value",
     "draw_aura_glow",
-    "draw_beacon_marker"
+    "draw_beacon_marker",
+    "draw_npc_ground_pedestal",
+    "draw_npc_overhead_badge"
 ]
 
 
