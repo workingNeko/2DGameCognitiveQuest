@@ -1,7 +1,7 @@
 {
-  "version": "1.2.5",
-  "name": "Cognitive Maze v1.2.5 - High-Speed Camera Tracking & Responsiveness Release",
-  "notes": "Version 1.2.5 — Changes: 1.4x ergonomic camera cursor gain (center-sweetspot bounds 0.25-0.75 x, 0.24-0.76 y) for effortless mouse-like full-screen reach; retuned OneEuroFilter (min_cutoff=1.15, beta=0.075) and high-gain 60 FPS inter-frame interpolation (38-60 lerp) for near-zero hand tracking latency; smooth 2D exploration walk speed ramp (1.0x to 1.35x across 45-105px) across Tutorial, Stage Select, and Quarters 1-4. Fixes: Eliminated triple-stacked smoothing lag and per-display-frame micro-deadband drag that choked gentle hand glides; fixed Windows DirectShow UVC property initialization order so webcams lock at 30 FPS MJPG (320x240) instead of resetting to 15 FPS YUY2; anchored fist clicks to pre-curl cursor coordinates for 0.00px click slip. Copyright (C) 2026 Cognitive Maze Development Team (independent educational software; not affiliated with or endorsed by DepEd or BSP).",
-  "download_url": "https://github.com/workingNeko/2DGameCognitiveQuest/releases/tag/v1.2.5",
-  "date": "2026-11-09"
+  "version": "1.2.6",
+  "name": "Cognitive Maze v1.2.6 - Universal Standalone Asset Loading & Installer Polish",
+  "notes": "Version 1.2.6 — Fix: Resolved critical asset-resolution failure on newly installed PCs where PyInstaller onedir modules in _internal evaluated directory levels above application root, causing game tiles, character sprites, and map portals to fall back to solid colored boxes; updated Inno Setup shortcuts to strictly set WorkingDir to the installation directory and granted full user permissions for db/saves and db/cache so school lab student accounts can save progress without admin privileges. Changes: Introduced core.paths universal path resolver supporting frozen binaries and development workspaces; redundant dual-sync build pipeline ensuring assets exist in both root and _internal directories; automated frozen build validation test suite. Copyright (C) 2026 Cognitive Maze Development Team. Independent educational software; not affiliated with or endorsed by DepEd or BSP.",
+  "download_url": "https://github.com/workingNeko/2DGameCognitiveQuest/releases/tag/v1.2.6",
+  "date": "2026-11-10"
 }

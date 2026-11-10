@@ -4,6 +4,21 @@ All notable **Changes & Improvements** and **Bug Fixes** for each version of **C
 
 ---
 
+## [v1.2.6] — 2026-11-10
+### Changes & Improvements
+- **Universal Frozen & Dev Path Resolution (`core.paths`)**: Introduced a centralized path resolution module providing `get_base_dir()`, `get_asset_path()`, `get_db_path()`, `get_dataset_path()`, and `resolve_path()`. Dynamically inspects `sys.frozen`, `sys.executable`, and source trees to reliably anchor the game root across standalone executables, Windows installer paths, and development environments.
+- **Redundant Dual-Sync Distribution Pipeline**: Updated `CognitivePlay.spec` and `deploy_desktop.ps1` to mirror `assets`, `db`, and `datasets` to both the application root (`dist/CognitiveMaze/`) and `dist/CognitiveMaze/_internal/`, ensuring fail-safe asset lookups across all execution patterns.
+- **Inno Setup Working Directory & Permission Hardening**: Configured `WorkingDir: "{app}"` for all Start Menu and Desktop shortcuts and added full user permissions (`Permissions: users-full`) for `{app}\db`, `{app}\db\saves`, and `{app}\db\cache`, enabling non-admin student accounts in school computer labs to save progress without elevation errors.
+- **Automated Standalone Path Resolution Tests**: Added `tests/test_frozen_build_paths.py` to continuously validate path resolution, map parsing, font verification, and frozen binary simulation under CI and local test runs.
+- **Copyright & Compliance Notice**: Re-verified application metadata and repository documentation to maintain clear independent educational software status (`Copyright (C) 2026 Cognitive Maze Development Team`).
+
+### Bug Fixes
+- **Missing Game Assets & Solid Colored Box Fallbacks**: Fixed a critical issue on other PCs where compiled PyInstaller `onedir` modules in `_internal` used `dirname(dirname(__file__))`, incorrectly resolving to `...\_internal` rather than the game root. This caused tiles, character sprites, map files, and portals to fail existence checks and fall back to solid colored boxes.
+- **Shortcut Launch Directory Drift**: Fixed Windows launching installed executables with working directory set to `C:\Windows\System32` or Desktop when launched via `.lnk` shortcuts without an explicit `WorkingDir`.
+- **Indentation in Font Helper**: Cleaned up unindented helper import in `Quarter1.get_ui_font()`.
+
+---
+
 ## [v1.2.5] — 2026-11-09
 ### Changes & Improvements
 - **Ergonomic 1.4x Camera Cursor Gain**: Tightened active hand-tracking bounds to the center lens sweet-spot (`cam_x = 0.25..0.75`, `cam_y = 0.24..0.76`) so small, comfortable wrist and forearm movements sweep the entire `1280x720` screen effortlessly like a hardware mouse.
