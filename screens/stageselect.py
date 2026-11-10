@@ -3164,14 +3164,109 @@ class StageSelect:
             self.anim_frame = 0
 
     # ============================================================
-    # DRAW CORRIDOR FORCEFIELDS / BARRIERS FOR LOCKED QUARTERS
+    # DRAW CORRIDOR BARRIERS FOR LOCKED QUARTERS (Simple & Static)
     # ============================================================
-    def draw_corridor_barriers(self):
-        """Renders animated glowing magical plasma forcefields, dual crystal pylons, and sleek badges across locked corridors."""
-        t = pygame.time.get_ticks() * 0.001
-        pulse = 0.5 + 0.5 * math.sin(t * 4.0)
-        font = get_font("Comic Sans MS", max(13, int(13 * ZOOM)), bold=True)
+    def _create_simple_barrier_surface(self, bw, bh, axis):
+        """Creates a clean, static, non-animated simple barrier surface cached for 60 FPS performance."""
+        surf = pygame.Surface((bw, bh), pygame.SRCALPHA)
+        if axis == 'horizontal':
+            pygame.draw.rect(surf, (0, 0, 0, 80), (4, bh // 2 + 4, bw - 8, 12), border_radius=6)
+            post_w = int(12 * ZOOM)
+            post_h = int(24 * ZOOM)
+            post_y = (bh - post_h) // 2
+            rail_top_y = post_y + int(4 * ZOOM)
+            rail_bot_y = post_y + post_h - int(8 * ZOOM)
+            rail_h = int(5 * ZOOM)
+            rail_x = post_w // 2
+            rail_w = bw - post_w
+            # Main rails (top and bottom)
+            pygame.draw.rect(surf, (185, 28, 28), (rail_x, rail_top_y, rail_w, rail_h), border_radius=2)
+            pygame.draw.rect(surf, (239, 68, 68), (rail_x, rail_top_y, rail_w, rail_h), 1, border_radius=2)
+            pygame.draw.rect(surf, (185, 28, 28), (rail_x, rail_bot_y, rail_w, rail_h), border_radius=2)
+            pygame.draw.rect(surf, (239, 68, 68), (rail_x, rail_bot_y, rail_w, rail_h), 1, border_radius=2)
+            sec_w = rail_w / 3.0
+            for i in range(3):
+                sx = int(rail_x + i * sec_w)
+                ex = int(sx + sec_w)
+                pygame.draw.line(surf, (220, 38, 38), (sx + 2, rail_top_y + 2), (ex - 2, rail_bot_y + rail_h - 2), 2)
+                pygame.draw.line(surf, (220, 38, 38), (sx + 2, rail_bot_y + rail_h - 2), (ex - 2, rail_top_y + 2), 2)
+            for px in (0, bw - post_w):
+                post_rect = pygame.Rect(px, post_y, post_w, post_h)
+                pygame.draw.rect(surf, (30, 41, 59), post_rect, border_radius=4)
+                pygame.draw.rect(surf, (100, 116, 139), post_rect, 2, border_radius=4)
+                pygame.draw.circle(surf, (251, 191, 36), (px + post_w // 2, post_y + int(5 * ZOOM)), int(3 * ZOOM))
+            badge_w = int(24 * ZOOM)
+            badge_h = int(24 * ZOOM)
+            badge_x = (bw - badge_w) // 2
+            badge_y = (bh - badge_h) // 2
+            badge_rect = pygame.Rect(badge_x, badge_y, badge_w, badge_h)
+            pygame.draw.rect(surf, (15, 23, 42), badge_rect, border_radius=6)
+            pygame.draw.rect(surf, (251, 191, 36), badge_rect, 2, border_radius=6)
+            shackle_w = int(10 * ZOOM)
+            shackle_h = int(9 * ZOOM)
+            shackle_x = badge_x + (badge_w - shackle_w) // 2
+            shackle_y = badge_y + int(3 * ZOOM)
+            pygame.draw.rect(surf, (226, 232, 240), (shackle_x, shackle_y, shackle_w, shackle_h), 2, border_top_left_radius=int(5 * ZOOM), border_top_right_radius=int(5 * ZOOM))
+            body_w = int(14 * ZOOM)
+            body_h = int(10 * ZOOM)
+            body_x = badge_x + (badge_w - body_w) // 2
+            body_y = badge_y + int(9 * ZOOM)
+            pygame.draw.rect(surf, (245, 158, 11), (body_x, body_y, body_w, body_h), border_radius=3)
+            pygame.draw.rect(surf, (217, 119, 6), (body_x, body_y, body_w, body_h), 1, border_radius=3)
+            pygame.draw.circle(surf, (15, 23, 42), (body_x + body_w // 2, body_y + body_h // 2), int(1.5 * ZOOM))
+        else:
+            pygame.draw.rect(surf, (0, 0, 0, 80), (bw // 2 + 4, 4, 12, bh - 8), border_radius=6)
+            post_w = int(24 * ZOOM)
+            post_h = int(12 * ZOOM)
+            post_x = (bw - post_w) // 2
+            rail_left_x = post_x + int(4 * ZOOM)
+            rail_right_x = post_x + post_w - int(8 * ZOOM)
+            rail_w = int(5 * ZOOM)
+            rail_y = post_h // 2
+            rail_h = bh - post_h
+            pygame.draw.rect(surf, (185, 28, 28), (rail_left_x, rail_y, rail_w, rail_h), border_radius=2)
+            pygame.draw.rect(surf, (239, 68, 68), (rail_left_x, rail_y, rail_w, rail_h), 1, border_radius=2)
+            pygame.draw.rect(surf, (185, 28, 28), (rail_right_x, rail_y, rail_w, rail_h), border_radius=2)
+            pygame.draw.rect(surf, (239, 68, 68), (rail_right_x, rail_y, rail_w, rail_h), 1, border_radius=2)
+            sec_h = rail_h / 3.0
+            for i in range(3):
+                sy = int(rail_y + i * sec_h)
+                ey = int(sy + sec_h)
+                pygame.draw.line(surf, (220, 38, 38), (rail_left_x + 2, sy + 2), (rail_right_x + rail_w - 2, ey - 2), 2)
+                pygame.draw.line(surf, (220, 38, 38), (rail_left_x + 2, ey - 2), (rail_right_x + rail_w - 2, sy + 2), 2)
+            for py in (0, bh - post_h):
+                post_rect = pygame.Rect(post_x, py, post_w, post_h)
+                pygame.draw.rect(surf, (30, 41, 59), post_rect, border_radius=4)
+                pygame.draw.rect(surf, (100, 116, 139), post_rect, 2, border_radius=4)
+                pygame.draw.circle(surf, (251, 191, 36), (post_x + int(5 * ZOOM), py + post_h // 2), int(3 * ZOOM))
+            badge_w = int(24 * ZOOM)
+            badge_h = int(24 * ZOOM)
+            badge_x = (bw - badge_w) // 2
+            badge_y = (bh - badge_h) // 2
+            badge_rect = pygame.Rect(badge_x, badge_y, badge_w, badge_h)
+            pygame.draw.rect(surf, (15, 23, 42), badge_rect, border_radius=6)
+            pygame.draw.rect(surf, (251, 191, 36), badge_rect, 2, border_radius=6)
+            shackle_w = int(10 * ZOOM)
+            shackle_h = int(9 * ZOOM)
+            shackle_x = badge_x + (badge_w - shackle_w) // 2
+            shackle_y = badge_y + int(3 * ZOOM)
+            pygame.draw.rect(surf, (226, 232, 240), (shackle_x, shackle_y, shackle_w, shackle_h), 2, border_top_left_radius=int(5 * ZOOM), border_top_right_radius=int(5 * ZOOM))
+            body_w = int(14 * ZOOM)
+            body_h = int(10 * ZOOM)
+            body_x = badge_x + (badge_w - body_w) // 2
+            body_y = badge_y + int(9 * ZOOM)
+            pygame.draw.rect(surf, (245, 158, 11), (body_x, body_y, body_w, body_h), border_radius=3)
+            pygame.draw.rect(surf, (217, 119, 6), (body_x, body_y, body_w, body_h), 1, border_radius=3)
+            pygame.draw.circle(surf, (15, 23, 42), (body_x + body_w // 2, body_y + body_h // 2), int(1.5 * ZOOM))
+        if pygame.display.get_surface() is not None:
+            try:
+                surf = surf.convert_alpha()
+            except Exception:
+                pass
+        return surf
 
+    def draw_corridor_barriers(self):
+        """Renders simple static barricades across locked corridors (no animations)."""
         barriers = []
         # Quarter 2 (South corridor): row 16, cols 25, 26, 27
         if not self.is_quarter_unlocked('quarter2'):
@@ -3180,8 +3275,6 @@ class StageSelect:
                 'world_y': 16 * TILE_SIZE,
                 'width_tiles': 3,
                 'height_tiles': 1,
-                'label': "COMPLETE Q1 TO UNLOCK",
-                'color': (239, 68, 68),
                 'pylon_axis': 'horizontal'
             })
 
@@ -3192,8 +3285,6 @@ class StageSelect:
                 'world_y': 12 * TILE_SIZE,
                 'width_tiles': 1,
                 'height_tiles': 3,
-                'label': "COMPLETE Q2 TO UNLOCK",
-                'color': (239, 68, 68),
                 'pylon_axis': 'vertical'
             })
 
@@ -3204,8 +3295,6 @@ class StageSelect:
                 'world_y': 11 * TILE_SIZE,
                 'width_tiles': 3,
                 'height_tiles': 1,
-                'label': "COMPLETE Q3 TO UNLOCK",
-                'color': (239, 68, 68),
                 'pylon_axis': 'horizontal'
             })
 
@@ -3217,63 +3306,10 @@ class StageSelect:
 
             # Only draw if on screen
             if -bw <= bx <= self.width + bw and -bh <= by <= self.height + bh:
-                # 1. Outer Radiant Ambient Forcefield Glow (cached surfaces)
-                cache_key = (bw, bh)
-                glow_pad = int(8 * ZOOM)
+                cache_key = (bw, bh, b['pylon_axis'])
                 if cache_key not in self._barrier_cache:
-                    g_surf = pygame.Surface((bw + glow_pad * 2, bh + glow_pad * 2), pygame.SRCALPHA)
-                    p_surf = pygame.Surface((bw, bh), pygame.SRCALPHA)
-                    self._barrier_cache[cache_key] = (g_surf, p_surf)
-                glow_surf, plasma_surf = self._barrier_cache[cache_key]
-
-                glow_surf.fill((0, 0, 0, 0))
-                glow_alpha = int(45 + 30 * pulse)
-                pygame.draw.rect(glow_surf, (239, 68, 68, glow_alpha), (0, 0, bw + glow_pad * 2, bh + glow_pad * 2), border_radius=10)
-                self.screen.blit(glow_surf, (bx - glow_pad, by - glow_pad))
-
-                # 2. Main High-Energy Plasma Surface
-                plasma_surf.fill((0, 0, 0, 0))
-                plasma_alpha = int(140 + 70 * pulse)
-                pygame.draw.rect(plasma_surf, (220, 38, 38, plasma_alpha), (0, 0, bw, bh), border_radius=6)
-
-                # 3. Dynamic Moving Laser Grid Scanlines
-                if b['pylon_axis'] == 'horizontal':
-                    laser_y = int(bh * (0.5 + 0.35 * math.sin(t * 6.0)))
-                    pygame.draw.line(plasma_surf, (255, 255, 255, 240), (0, laser_y), (bw, laser_y), 3)
-                    for i in range(4):
-                        scan_x = int((t * 60 + i * (bw / 3.0)) % bw)
-                        pygame.draw.line(plasma_surf, (254, 202, 202, 160), (scan_x, 0), (min(bw, scan_x + int(14 * ZOOM)), bh), 2)
-                else:
-                    laser_x = int(bw * (0.5 + 0.35 * math.sin(t * 6.0)))
-                    pygame.draw.line(plasma_surf, (255, 255, 255, 240), (laser_x, 0), (laser_x, bh), 3)
-                    for i in range(4):
-                        scan_y = int((t * 60 + i * (bh / 3.0)) % bh)
-                        pygame.draw.line(plasma_surf, (254, 202, 202, 160), (0, scan_y), (bw, min(bh, scan_y + int(14 * ZOOM))), 2)
-
-                self.screen.blit(plasma_surf, (bx, by))
-
-                # 4. Vibrant Neon Electric Border
-                pygame.draw.rect(self.screen, (254, 202, 202), (bx, by, bw, bh), 2, border_radius=6)
-
-                # 5. Dual Energy Emitter Pylons on Corridor Walls
-                pylon_size = int(9 * ZOOM)
-                if b['pylon_axis'] == 'horizontal':
-                    pylons = [
-                        (bx - pylon_size // 2, by + bh // 2),
-                        (bx + bw - pylon_size // 2, by + bh // 2)
-                    ]
-                else:
-                    pylons = [
-                        (bx + bw // 2, by - pylon_size // 2),
-                        (bx + bw // 2, by + bh - pylon_size // 2)
-                    ]
-
-                for px, py in pylons:
-                    pygame.draw.circle(self.screen, (30, 41, 59), (int(px), int(py)), pylon_size)
-                    pygame.draw.circle(self.screen, (251, 191, 36), (int(px), int(py)), pylon_size, 2)
-                    crystal_r = int((pylon_size - 3) * (0.8 + 0.3 * pulse))
-                    pygame.draw.circle(self.screen, (239, 68, 68), (int(px), int(py)), crystal_r)
-                    pygame.draw.circle(self.screen, (255, 255, 255), (int(px), int(py)), max(1, crystal_r // 2))
+                    self._barrier_cache[cache_key] = self._create_simple_barrier_surface(bw, bh, b['pylon_axis'])
+                self.screen.blit(self._barrier_cache[cache_key], (bx, by))
 
     def is_dialogue_active(self):
         """Returns True if any NPC, lore object, or modal dialogue is currently active."""
