@@ -206,7 +206,8 @@ class StudentSelect:
             print("[REFRESH] Refresh students")
             if hasattr(self.main_menu, 'audio_manager') and self.main_menu.audio_manager:
                 self.main_menu.audio_manager.play_sfx("click")
-            self.load_students()
+            self.load_students(force_refresh=True)
+            self.show_message(f"Refreshed! Found {len(self.students)} student(s)", 2500)
             return "refresh"
 
         # Check student list items and scrollbar
@@ -307,10 +308,10 @@ class StudentSelect:
     # =========================================================
     # LOAD STUDENTS
     # =========================================================
-    def load_students(self):
+    def load_students(self, force_refresh=True):
         try:
             if db:
-                results = db.get_students()
+                results = db.get_students(force_refresh=force_refresh)
                 if results is not None and len(results) > 0:
                     self.students = []
                     for student in results:
@@ -330,6 +331,14 @@ class StudentSelect:
                             "section": student.get("section", ""),
                             "avatarColor": student.get("avatarColor", "")
                         })
+
+                    # Predictable ordering: Grade 2 first, then alphabetically by full name
+                    self.students.sort(
+                        key=lambda s: (
+                            0 if "2" in str(s.get("level", "")) else 1,
+                            f"{s.get('first_name', '')} {s.get('last_name', '')}".strip().lower()
+                        )
+                    )
                     print(f"[OK] Loaded {len(self.students)} students from Vercel API")
                 else:
                     self.load_mock_students()
@@ -680,19 +689,19 @@ class StudentSelect:
         self.max_scroll_y = max(0.0, float(total_content_h - list_rect.height))
 
         if self.max_scroll_y > 0:
-            track_rect = pygame.Rect(list_rect.right - 18, list_rect.y + 12, 10, list_rect.height - 24)
+            track_rect = pygame.Rect(list_rect.right - 20, list_rect.y + 10, 14, list_rect.height - 20)
             # Track pill background
-            pygame.draw.rect(self.screen, (215, 225, 240, 160), track_rect, border_radius=6)
+            pygame.draw.rect(self.screen, (215, 225, 240, 180), track_rect, border_radius=7)
 
-            thumb_h = max(36, int(track_rect.height * (list_rect.height / float(total_content_h))))
+            thumb_h = max(42, int(track_rect.height * (list_rect.height / float(total_content_h))))
             ratio = self.scroll_y / self.max_scroll_y if self.max_scroll_y > 0 else 0.0
             thumb_y = track_rect.y + ratio * (track_rect.height - thumb_h)
             thumb_rect = pygame.Rect(track_rect.x, thumb_y, track_rect.width, thumb_h)
 
             thumb_hover = (self.is_cursor_active() and thumb_rect.collidepoint(self.cursor_pos)) or self.is_scrollbar_dragging
-            thumb_col = (90, 130, 220) if thumb_hover else (130, 155, 195)
-            pygame.draw.rect(self.screen, thumb_col, thumb_rect, border_radius=6)
-            pygame.draw.rect(self.screen, (255, 255, 255, 180), thumb_rect, 1, border_radius=6)
+            thumb_col = (70, 110, 210) if thumb_hover else (110, 140, 195)
+            pygame.draw.rect(self.screen, thumb_col, thumb_rect, border_radius=7)
+            pygame.draw.rect(self.screen, (255, 255, 255, 220), thumb_rect, 2, border_radius=7)
 
     # =========================================================
     # DRAW GESTURE CURSOR
@@ -723,7 +732,13 @@ class StudentSelect:
 
         # TITLE
         title = self.title_font.render("Select Student", True, (255, 255, 255))
-        self.screen.blit(title, title.get_rect(center=(self.width // 2, 70)))
+        self.screen.blit(title, title.get_rect(center=(self.width // 2, 58)))
+
+        # ROSTER STATUS / OVERFLOW INDICATOR
+        scroll_indicator = "  •  Scroll down for more ▼" if self.max_scroll_y > 0 else ""
+        roster_text = f"{len(self.students)} Student{'s' if len(self.students) != 1 else ''} Registered{scroll_indicator}"
+        status_surf = self.small_font.render(roster_text, True, (225, 240, 255))
+        self.screen.blit(status_surf, status_surf.get_rect(center=(self.width // 2, 98)))
 
         # STUDENT LIST
         self.draw_student_list()
@@ -820,8 +835,17 @@ class StudentSelect:
             return "scroll"
 
         elif event.type == pygame.KEYDOWN:
+            # Refresh shortcut (F5 or R)
+            if event.key in (pygame.K_F5, pygame.K_r):
+                print("[REFRESH] Refresh students via keyboard shortcut")
+                if hasattr(self.main_menu, 'audio_manager') and self.main_menu.audio_manager:
+                    self.main_menu.audio_manager.play_sfx("click")
+                self.load_students(force_refresh=True)
+                self.show_message(f"Refreshed! Found {len(self.students)} student(s)", 2500)
+                return "refresh"
+
             # DOWN
-            if event.key == pygame.K_DOWN:
+            elif event.key == pygame.K_DOWN:
                 if self.selected_index < len(self.students) - 1:
                     self.selected_index += 1
                     visible_count = max(1, (self.height - 220) // self.item_height)
