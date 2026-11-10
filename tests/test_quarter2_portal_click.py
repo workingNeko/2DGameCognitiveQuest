@@ -42,6 +42,9 @@ class TestQuarter2PortalClick(unittest.TestCase):
         self.assertEqual(q2.kubo_pieces_collected, 0)
 
         # Simulate completing all 5 stations
+        for sid in range(1, 5):
+            if sid in q2.station_npc_info:
+                q2.station_npc_info[sid]["cleared"] = True
         q2.quiz_station_index = 5
         q2.current_question_index = 4
         q2.quiz_state = 3  # Correct dialog for station 5
@@ -128,6 +131,8 @@ class TestQuarter2PortalClick(unittest.TestCase):
         self.assertEqual(q2.quiz_state, 1)
 
         # Test State 4 (Out of tries reveal)
+        if 1 in q2.station_npc_info:
+            q2.station_npc_info[1]["cleared"] = True
         q2.quiz_station_index = 2
         q2.current_question_index = 1
         q2.quiz_state = 4

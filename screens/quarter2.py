@@ -160,6 +160,8 @@ class Quarter2:
         self.path_guide = QuestPathfinderGuide(self, quarter_id="quarter2", theme="fiesta")
 
         # Show Initial Map Instructions Popup
+        if getattr(self, 'greeting_dialog', None):
+            self.greeting_dialog.hide()
         map_instr = get_map_instructions(self.map_name, self.player_name)
         self.instruction_modal.show(map_instr)
 
@@ -791,6 +793,8 @@ class Quarter2:
         """Displays the map instructions modal with student context."""
         map_instr = get_map_instructions(self.map_name, self.player_name)
         if hasattr(self, 'instruction_modal'):
+            if getattr(self, 'greeting_dialog', None):
+                self.greeting_dialog.hide()
             self.instruction_modal.show(map_instr)
 
     def save_results_to_database(self):
@@ -2580,6 +2584,17 @@ class Quarter2:
         """Returns True if the Philippine currency matching trial is active."""
         return getattr(self, 'currency_puzzle_active', False)
 
+    def is_modal_active(self):
+        """Returns True if any full-screen or centered modal/dialog is currently open."""
+        return (
+            self.is_dialogue_active()
+            or self.is_cognitive_puzzle_active()
+            or getattr(self, 'guardian_knight_state', 0) in [2, 3, 4]
+            or getattr(self, 'time_up_dialog_active', False)
+            or (hasattr(self, 'pause_menu') and self.pause_menu.is_paused)
+            or (hasattr(self, 'victory_card') and self.victory_card.active)
+        )
+
     def sync_ui_state(self):
         """Maintains strict synchronization between gameplay flags and the Pushdown Automata."""
         if self.is_cognitive_puzzle_active():
@@ -2636,6 +2651,8 @@ class Quarter2:
         # Check HUD Guide Button click to re-open instructions (strictly exploration)
         if self.state_machine.allows_menus() and getattr(self, 'guide_btn_rect', None) and self.guide_btn_rect.collidepoint(pos):
             map_instr = get_map_instructions(self.map_name, self.player_name)
+            if getattr(self, 'greeting_dialog', None):
+                self.greeting_dialog.hide()
             self.instruction_modal.show(map_instr)
             self.sync_ui_state()
             return
@@ -3081,7 +3098,7 @@ class Quarter2:
                 if dist < TILE_SIZE * 1.8 and self.has_line_of_sight(p_tile_x, p_tile_y, st_x, st_y):
                     self.quiz_station_index = st_idx
                     self.current_question_index = st_idx - 1
-                    if not self.greeting_dialog.is_visible:
+                    if not self.greeting_dialog.is_visible and not (getattr(self, 'instruction_modal', None) and self.instruction_modal.is_visible):
                         script = get_station_script(self.map_name, st_idx)
                         speaker_name = script.get("npc_name", info.get("name", "Guardian"))
                         speaker_title = script.get("npc_title", info.get("title", f"Station {st_idx}"))
@@ -3294,8 +3311,12 @@ class Quarter2:
             self.screen.blit(self.dialog_q_font.render(l, True, (255, 255, 255)), (box_x + 28, y_off))
             y_off += 28
 
-        reward_surf = self.dialog_hint_font.render(f"Acquired: {item_name}! Recorded as incorrect, but your quest continues!", True, (254, 240, 138))
-        self.screen.blit(reward_surf, (box_x + 28, y_off + 10))
+        reward_msg = f"Acquired: {item_name}! Recorded as incorrect, but your quest continues!"
+        reward_lines = self.wrap_text(reward_msg, self.dialog_hint_font, box_w - 56)
+        r_y = y_off + 10
+        for rl in reward_lines[:2]:
+            self.screen.blit(self.dialog_hint_font.render(rl, True, (254, 240, 138)), (box_x + 28, r_y))
+            r_y += 20
 
         button_w, button_h = 260, 50
         button_x = box_x + (box_w - button_w) // 2
@@ -3342,8 +3363,12 @@ class Quarter2:
             self.screen.blit(self.dialog_q_font.render(l, True, (255, 255, 255)), (box_x + 28, y_off))
             y_off += 30
 
-        reward_surf = self.dialog_hint_font.render(f"Awarded: {item_name}!", True, (253, 230, 138))
-        self.screen.blit(reward_surf, (box_x + 28, y_off + 10))
+        reward_msg = f"Awarded: {item_name}!"
+        reward_lines = self.wrap_text(reward_msg, self.dialog_hint_font, box_w - 56)
+        r_y = y_off + 10
+        for rl in reward_lines[:2]:
+            self.screen.blit(self.dialog_hint_font.render(rl, True, (253, 230, 138)), (box_x + 28, r_y))
+            r_y += 20
 
         button_w, button_h = 260, 50
         button_x = box_x + (box_w - button_w) // 2
@@ -4804,8 +4829,12 @@ class Quarter2:
                 r = max(1, int(base_r * life_pct))
                 pygame.draw.circle(self.screen, sp.get("color", (255, 215, 0)), (int(sx), int(sy)), r)
 
+        # Check whether any modal dialog, minigame, speech, or menu is active
+        modal_open = self.is_modal_active()
+
         # Draw In-World Floating Barrio Banner Alert (During Sprint or Portal Unlock)
-        if self.banner_timer > 0 and self.banner_text:
+        # Suppressed during modals or during Bahay Kubo cinematic award card to prevent overlapping text windows
+        if self.banner_timer > 0 and self.banner_text and not modal_open and not (self.award_anim_active and self.map_name == "map5.txt"):
             b_w, b_h = 680, 64
             b_x = (self.width - b_w) // 2
             b_y = 70
@@ -4822,25 +4851,20 @@ class Quarter2:
             s_surf = self.dialog_hint_font.render(self.banner_sub, True, (254, 240, 138))
             self.screen.blit(s_surf, (b_x + (b_w - s_surf.get_width()) // 2, b_y + 36))
 
-        # Draw UI overlay
-        if self.quiz_state == 1:
-            self.draw_quiz_dialog()
-        elif self.quiz_state == 2:
-            self.draw_wrong_dialog()
-        elif self.quiz_state == 3:
-            self.draw_correct_dialog()
-        elif self.quiz_state == 4:
-            self.draw_out_of_tries_dialog()
-        elif self.quiz_state == 5:
-            self.draw_victory_speech()
+        # Draw Cinematic Bahay Kubo Award Card Overlay in Map 5 (Suppressed during modal dialogs)
+        if not modal_open:
+            self.draw_kubo_award_animation()
 
-        # Draw Knight Guardian Trial Prompt & Currency Matching Trial UI
-        if getattr(self, 'guardian_knight_state', 0) == 2:
-            self.draw_knight_guardian_prompt()
-        elif self.state_machine.is_cognitive_puzzle() or getattr(self, 'currency_puzzle_active', False):
-            if self.state_machine.should_dim_world():
-                self.state_machine.render_dim_overlay(self.screen, alpha=160)
-            self.draw_currency_matching_puzzle()
+        # In-Game Universal Pause Button (Top-Right, always accessible)
+        self.pause_menu.draw_button(self.cursor_pos)
+
+        # Draw Exploration HUD UI (Status Card, Guide Button, Objectives Box)
+        # Always drawn BEFORE modal dialogs; suppresses inner widgets when modal_open
+        self.draw_ui()
+
+        # Draw 10-Minute Stage Timer HUD (Top Center) - Suppressed during modals to avoid header collision
+        if not modal_open:
+            self.draw_stage_timer_hud()
 
         # Draw Area Title Animation
         if self.title_active:
@@ -4853,17 +4877,75 @@ class Quarter2:
                 self.title_elapsed,
             )
 
-        # Draw Cinematic Bahay Kubo Award Card Overlay in Map 5
-        self.draw_kubo_award_animation()
+        # ----------------------------------------------------
+        # MODAL OVERLAYS (Centered Dialogs with dim backdrops)
+        # ----------------------------------------------------
+        # Quiz Question & Feedback Dialogs
+        if self.quiz_state == 1:
+            if getattr(self, 'greeting_dialog', None):
+                self.greeting_dialog.hide()
+            self.draw_quiz_dialog()
+        elif self.quiz_state == 2:
+            if getattr(self, 'greeting_dialog', None):
+                self.greeting_dialog.hide()
+            self.draw_wrong_dialog()
+        elif self.quiz_state == 3:
+            if getattr(self, 'greeting_dialog', None):
+                self.greeting_dialog.hide()
+            self.draw_correct_dialog()
+        elif self.quiz_state == 4:
+            if getattr(self, 'greeting_dialog', None):
+                self.greeting_dialog.hide()
+            self.draw_out_of_tries_dialog()
+        elif self.quiz_state == 5:
+            if getattr(self, 'greeting_dialog', None):
+                self.greeting_dialog.hide()
+            self.draw_victory_speech()
 
-        self.draw_ui()
+        # Knight Guardian Trial Prompt & Currency Matching Trial UI
+        if getattr(self, 'guardian_knight_state', 0) == 2:
+            if getattr(self, 'greeting_dialog', None):
+                self.greeting_dialog.hide()
+            self.draw_knight_guardian_prompt()
+        elif self.state_machine.is_cognitive_puzzle() or getattr(self, 'currency_puzzle_active', False):
+            if getattr(self, 'greeting_dialog', None):
+                self.greeting_dialog.hide()
+            if self.state_machine.should_dim_world():
+                self.state_machine.render_dim_overlay(self.screen, alpha=160)
+            self.draw_currency_matching_puzzle()
 
-        # Draw 10-Minute Stage Timer HUD
-        self.draw_stage_timer_hud()
+        # Proximity NPC Greeting Dialog (MUTUALLY EXCLUSIVE: only during exploration when no modal/dialog is open)
+        instr_visible = getattr(self, 'instruction_modal', None) and self.instruction_modal.is_visible
+        if getattr(self, 'greeting_dialog', None) and self.greeting_dialog.is_visible:
+            if (self.quiz_state != 0
+                or getattr(self, 'currency_puzzle_active', False)
+                or getattr(self, 'guardian_knight_state', 0) in [2, 3, 4]
+                or instr_visible
+                or self.time_up_dialog_active
+                or self.pause_menu.is_paused):
+                self.greeting_dialog.hide()
+            else:
+                self.greeting_dialog.draw(self.cursor_pos)
 
-        # Draw Time's Up modal dialog if timer expired
+        # Instruction Modal overlay (Top priority learning modal)
+        if getattr(self, 'instruction_modal', None) and self.instruction_modal.is_visible:
+            self.instruction_modal.draw(self.cursor_pos)
+
+        # Time's Up modal dialog if timer expired
         if self.time_up_dialog_active:
             self.draw_time_up_dialog()
+
+        # In-Game Universal Pause Modal
+        if self.pause_menu.is_paused:
+            self.pause_menu.draw_modal(self.cursor_pos)
+
+        # Draw Celebration Particles
+        if hasattr(self, 'celebration_particles'):
+            self.celebration_particles.draw(self.screen)
+
+        # Draw 3-Star Victory Report Card Modal
+        if hasattr(self, 'victory_card') and self.victory_card.active:
+            self.victory_card.draw(self.cursor_pos)
 
         # Draw smooth seamless warp-out transition overlay
         if self.warp_out_active:
@@ -4877,27 +4959,6 @@ class Quarter2:
             if r > 0:
                 pygame.draw.circle(self._warp_overlay_surf, (255, 215, 0, int((1.0 - progress) * 230)), center, r, max(3, int(10 * ZOOM)))
             self.screen.blit(self._warp_overlay_surf, (0, 0))
-
-        # In-Game Universal Pause Button & Modal
-        self.pause_menu.draw_button(self.cursor_pos)
-        if self.pause_menu.is_paused:
-            self.pause_menu.draw_modal(self.cursor_pos)
-
-        # Draw Celebration Particles
-        if hasattr(self, 'celebration_particles'):
-            self.celebration_particles.draw(self.screen)
-
-        # Draw 3-Star Victory Report Card Modal
-        if hasattr(self, 'victory_card') and self.victory_card.active:
-            self.victory_card.draw(self.cursor_pos)
-
-        # Draw Greeting Dialog overlay
-        if getattr(self, 'greeting_dialog', None):
-            self.greeting_dialog.draw(self.cursor_pos)
-
-        # Draw Instruction Modal overlay
-        if getattr(self, 'instruction_modal', None):
-            self.instruction_modal.draw(self.cursor_pos)
 
     def draw_character_completion_status_hud(self):
         """Draws character question completion status card at top-left of the game interface."""
@@ -4974,6 +5035,10 @@ class Quarter2:
     # DRAW UI
     # ============================================================
     def draw_ui(self):
+        # Do not draw exploration HUD widgets during modal overlays to prevent overlapping text windows
+        if self.is_modal_active():
+            return
+
         # Character Question Completion Status HUD Card (Top-Left)
         self.draw_character_completion_status_hud()
 
