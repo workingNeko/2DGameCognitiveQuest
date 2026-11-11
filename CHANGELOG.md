@@ -4,6 +4,17 @@ All notable **Changes & Improvements** and **Bug Fixes** for each version of **C
 
 ---
 
+## [v2.0.1] — 2026-11-11
+### Changes & Improvements
+- **Instant Non-Blocking Student Loading**: Re-engineered student selection screen to read local cached save data instantaneously while initiating authoritative cloud synchronization asynchronously in the background. Completely eliminates main-thread frame drops, stalls, or freezes when browsing the student roster.
+- **Accurate Completion Timestamp Cloud Sync**: Ensured quarter grade records retain their exact recorded completion timestamps when synchronizing with cloud endpoints.
+
+### Bug Fixes
+- **Ghost Grade & Multi-Alias Save Resolution**: Fixed recurring ghost grades (e.g., student code vs numeric primary key mismatch) by auditing and purging all identifier formats (`18.json`, `2026-001.json`, etc.) across local save files and cloud database sync.
+- **Headless Test Guard**: Added environment safeguards preventing automated test suites (`SDL_VIDEODRIVER=dummy`) from inadvertently submitting dummy 100% test scores to production cloud database.
+
+---
+
 ## [v2.0.0] — 2026-11-11
 ### Changes & Improvements
 - **Dynamic 15-Question Scaling & Capacity**: Expanded question loading from static 5/6 stations to dynamically support up to 15 questions per quarter/assessment. Integrated a question overflow handler safely clamping inputs exceeding 15, while dynamically adjusting scoring, percentage calculations, 3-star report card evaluations, and `/api/game-results` submissions.
