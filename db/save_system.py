@@ -1,6 +1,7 @@
 import os
 import json
 import time
+import datetime
 import copy
 import threading
 import pygame
@@ -351,14 +352,17 @@ def mark_quarter_completed(main_menu, quarter_name, score=100, percentage=100.0,
         best_pct = round(float(percentage), 1)
         best_tot = int(total_questions)
 
+    now_str = datetime.datetime.now().strftime("%b %d, %Y %I:%M %p")
     save_data["completed_quarters"][quarter_name] = {
         "completed": True,
         "score": best_score,
         "percentage": best_pct,
         "total_questions": best_tot,
-        "timestamp": time.time()
+        "timestamp": time.time(),
+        "recorded_date": now_str,
     }
     save_data["timestamp"] = time.time()
+    save_data["last_recorded_date"] = now_str
     
     # Calculate cumulative score and progress percentage across all quarters
     comp_qs = save_data["completed_quarters"]
@@ -681,12 +685,14 @@ def sync_student_with_cloud(student_id, student_db_id=None, main_menu=None, forc
                     pct = float(r.get("percentage") if r.get("percentage") is not None else score)
                     tot = int(r.get("totalQuestions") or r.get("total_questions") or 5)
                     if prev is None or score >= int(prev.get("score", -1)):
+                        cloud_date = r.get("createdAt") or r.get("created_at") or r.get("updatedAt")
                         cloud_stages[q_num] = {
                             "completed": True,
                             "score": score,
                             "percentage": round(pct, 1),
                             "total_questions": tot,
                             "timestamp": time.time(),
+                            "recorded_date": cloud_date or datetime.datetime.now().strftime("%b %d, %Y %I:%M %p"),
                         }
 
         target_sid = sid_str or str(db_id)
