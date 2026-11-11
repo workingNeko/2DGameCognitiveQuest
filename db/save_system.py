@@ -665,6 +665,52 @@ def sync_student_with_cloud(student_id, student_db_id=None, main_menu=None, forc
                     db_id = s.get("id")
                     break
 
+        # Collect all student aliases (code, database ID, and variations)
+        target_sids = set()
+        if sid_str:
+            target_sids.add(sid_str)
+        if db_id is not None:
+            target_sids.add(str(db_id))
+
+        st_list = db.get_students() or []
+        for s in st_list:
+            s_pk = str(s.get("id") or "")
+            s_code = str(s.get("studentId") or s.get("student_id") or "")
+            if (db_id is not None and str(db_id) == s_pk) or (sid_str and sid_str in (s_pk, s_code)):
+                if s_pk:
+                    target_sids.add(s_pk)
+                if s_code:
+                    target_sids.add(s_code)
+                if not db_id and s.get("id"):
+                    db_id = s.get("id")
+
+        saves_dir = "db/saves"
+        matching_save_paths = set()
+        for tsid in target_sids:
+            p = get_save_path(tsid)
+            if os.path.exists(p) or os.path.exists(f"{p}.bak"):
+                matching_save_paths.add(p)
+
+        if os.path.exists(saves_dir):
+            for fname in os.listdir(saves_dir):
+                if (fname.endswith(".json") or fname.endswith(".bak")) and fname != "audio_settings.json":
+                    clean_name = fname.replace(".bak", "").replace(".json", "")
+                    if clean_name in target_sids:
+                        matching_save_paths.add(os.path.join(saves_dir, f"{clean_name}.json"))
+                    else:
+                        fp = os.path.join(saves_dir, fname if fname.endswith(".json") else fname.replace(".bak", ""))
+                        try:
+                            with open(fp, "r", encoding="utf-8") as f:
+                                d = json.load(f)
+                                sel = d.get("selected_student") or {}
+                                sel_pk = str(sel.get("id") or "")
+                                sel_code = str(sel.get("student_id") or sel.get("studentId") or "")
+                                d_sid = str(d.get("student_id") or "")
+                                if (db_id is not None and sel_pk == str(db_id)) or (sel_code in target_sids) or (d_sid in target_sids):
+                                    matching_save_paths.add(fp)
+                        except Exception:
+                            pass
+
         ass_to_q = db._build_assessment_to_quarter_lookup() if hasattr(db, "_build_assessment_to_quarter_lookup") else {}
         cloud_stages = {}
         for r in cloud_results:
@@ -698,6 +744,15 @@ def sync_student_with_cloud(student_id, student_db_id=None, main_menu=None, forc
         target_sid = sid_str or str(db_id)
         save_path = get_save_path(target_sid)
         local_save = load_student_progress(target_sid)
+        if not local_save and matching_save_paths:
+            for p in matching_save_paths:
+                try:
+                    with open(p, "r", encoding="utf-8") as f:
+                        local_save = json.load(f)
+                        save_path = p
+                        break
+                except Exception:
+                    pass
 
         # Cloud has data, but local save is missing -> hydrate local save from cloud!
         if not local_save and cloud_stages:
@@ -744,18 +799,20 @@ def sync_student_with_cloud(student_id, student_db_id=None, main_menu=None, forc
         # CASE 1: Cloud has ZERO records for this student, but local has completed stages
         # -> Student's progress was wiped / deleted on the webapp!
         if len(cloud_q_nums) == 0 and len(local_q_nums) > 0:
-            if os.path.exists(save_path):
-                try:
-                    os.remove(save_path)
-                except Exception:
-                    pass
-            bak = f"{save_path}.bak"
-            if os.path.exists(bak):
-                try:
-                    os.remove(bak)
-                except Exception:
-                    pass
-            invalidate_save_cache(target_sid)
+            for p in (matching_save_paths or {save_path}):
+                if os.path.exists(p):
+                    try:
+                        os.remove(p)
+                    except Exception:
+                        pass
+                bak = f"{p}.bak"
+                if os.path.exists(bak):
+                    try:
+                        os.remove(bak)
+                    except Exception:
+                        pass
+            for tsid in target_sids:
+                invalidate_save_cache(tsid)
 
             if main_menu:
                 if getattr(main_menu, 'selected_student', None):
@@ -766,7 +823,7 @@ def sync_student_with_cloud(student_id, student_db_id=None, main_menu=None, forc
                 if hasattr(main_menu, 'create_buttons'):
                     main_menu.create_buttons()
 
-            print(f"[CLOUD SYNC] Web app deleted all data for student {target_sid}. Local save reset to 0.")
+            print(f"[CLOUD SYNC] Web app deleted all data for student {target_sid}. Local saves cleared.")
             return {"synced": True, "action": "reset_all", "deleted_stages": list(local_q_nums)}
 
         # CASE 2: Specific stage(s) deleted on webapp, or higher scores present on cloud
@@ -795,8 +852,10 @@ def sync_student_with_cloud(student_id, student_db_id=None, main_menu=None, forc
             if isinstance(local_save.get("selected_student"), dict):
                 local_save["selected_student"]["score"] = new_score
                 local_save["selected_student"]["progress"] = new_prog
-            atomic_save_json(save_path, local_save)
-            invalidate_save_cache(target_sid)
+            for p in (matching_save_paths or {save_path}):
+                atomic_save_json(p, local_save)
+            for tsid in target_sids:
+                invalidate_save_cache(tsid)
 
             if main_menu:
                 if getattr(main_menu, 'selected_student', None):

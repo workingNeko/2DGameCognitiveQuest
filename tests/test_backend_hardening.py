@@ -83,23 +83,27 @@ def test_async_saving():
 
     mm = MockMainMenu()
     
-    from screens.quarter1 import Quarter1
-    q1 = Quarter1(screen, mm, "map1.txt")
-    q1.save_results_to_database()
-    
-    from screens.quarter2 import Quarter2
-    q2 = Quarter2(screen, mm, "map2.txt")
-    q2.save_results_to_database()
-    
-    from screens.quarter3 import Quarter3
-    q3 = Quarter3(screen, mm, "map3.txt")
-    q3.save_results_to_database()
-    
-    from screens.quarter4 import Quarter4
-    q4 = Quarter4(screen, mm, "map11.txt")
-    q4.save_quarter4_game_result()
-    
-    time.sleep(0.5)
+    from unittest.mock import patch
+    from db.connect_db import Database
+
+    with patch.object(Database, "save_game_result", return_value=True):
+        from screens.quarter1 import Quarter1
+        q1 = Quarter1(screen, mm, "map1.txt")
+        q1.save_results_to_database()
+        
+        from screens.quarter2 import Quarter2
+        q2 = Quarter2(screen, mm, "map2.txt")
+        q2.save_results_to_database()
+        
+        from screens.quarter3 import Quarter3
+        q3 = Quarter3(screen, mm, "map3.txt")
+        q3.save_results_to_database()
+        
+        from screens.quarter4 import Quarter4
+        q4 = Quarter4(screen, mm, "map11.txt")
+        q4.save_quarter4_game_result()
+        
+        time.sleep(0.5)
     print("PASS: Asynchronous result saving verified across Quarters 1, 2, 3, and 4 (0ms UI frame freeze).")
 
 def test_background_offline_sync():
