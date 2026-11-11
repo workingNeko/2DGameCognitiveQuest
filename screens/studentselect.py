@@ -129,7 +129,7 @@ class StudentSelect:
         # =====================================================
         # LOAD STUDENTS
         # =====================================================
-        self.load_students()
+        self.load_students(force_refresh=False)
 
     # =========================================================
     # GESTURE METHODS (ADDED)
@@ -433,7 +433,7 @@ class StudentSelect:
     # =========================================================
     # LOAD STUDENTS
     # =========================================================
-    def load_students(self, force_refresh=True):
+    def load_students(self, force_refresh=False):
         try:
             if db:
                 results = db.get_students(force_refresh=force_refresh)
