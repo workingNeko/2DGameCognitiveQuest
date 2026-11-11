@@ -473,11 +473,43 @@ class Database:
         with self._file_lock:
             parent = os.path.dirname(path)
             if parent:
-                os.makedirs(parent, exist_ok=True)
-            tmp_path = f"{path}.{threading.get_ident()}.tmp"
-            with open(tmp_path, "w", encoding="utf-8") as f:
-                json.dump(obj, f, indent=4)
-            os.replace(tmp_path, path)
+                try:
+                    os.makedirs(parent, exist_ok=True)
+                except Exception:
+                    pass
+            tmp_path = f"{path}.{os.getpid()}_{threading.get_ident()}_{int(time.time()*1000)}.tmp"
+            try:
+                payload = json.dumps(obj, indent=4, ensure_ascii=False)
+                with open(tmp_path, "w", encoding="utf-8") as f:
+                    f.write(payload)
+                    f.flush()
+                    try:
+                        os.fsync(f.fileno())
+                    except Exception:
+                        pass
+
+                replaced = False
+                for attempt in range(5):
+                    try:
+                        os.replace(tmp_path, path)
+                        replaced = True
+                        break
+                    except (PermissionError, OSError):
+                        if attempt < 4:
+                            time.sleep(0.02 * (attempt + 1))
+
+                if not replaced:
+                    with open(path, "w", encoding="utf-8") as target_f:
+                        target_f.write(payload)
+                        target_f.flush()
+            except Exception as write_err:
+                print(f"[DB WARN] Failed to write JSON file {path}: {write_err}")
+            finally:
+                if os.path.exists(tmp_path):
+                    try:
+                        os.remove(tmp_path)
+                    except Exception:
+                        pass
 
     def _read_json_file(self, path, default):
         with self._file_lock:
@@ -836,6 +868,8 @@ class Database:
                                 self.sync_offline_results()
                         return data
             except urllib.error.HTTPError as e:
+                if e.code in (429, 500, 502, 503, 504) or e.code >= 500:
+                    self._mark_offline()
                 print(f"[API ERROR] Failed to fetch students from Vercel: {e}")
             except Exception as e:
                 self._mark_offline()
@@ -943,6 +977,8 @@ class Database:
                 return filtered
 
             except urllib.error.HTTPError as e:
+                if e.code in (429, 500, 502, 503, 504) or e.code >= 500:
+                    self._mark_offline()
                 print(f"[API ERROR] Failed to fetch questions from Vercel: {e}")
             except Exception as e:
                 self._mark_offline()
@@ -1533,9 +1569,10 @@ class Database:
                     print(f"[API REJECTED] Unresolvable foreign key / schema rejection (HTTP {he.code}: {err_body}) for student #{numeric_student_id}.")
                     return False
 
-                if he.code in (429, 502, 503, 504):
+                if he.code in (429, 500, 502, 503, 504) or he.code >= 500:
                     print(f"[API TRANSIENT HTTP {he.code}] Queuing result offline...")
                     self.queue_offline_result(offline_payload)
+                    self._mark_offline()
                 else:
                     print(f"[API ERROR] Server rejected game result (HTTP {he.code}: {err_body}).")
                 return False
@@ -1706,6 +1743,8 @@ class Database:
                     data = parsed
                     self._mem_set("grades", "raw", data)
             except urllib.error.HTTPError as e:
+                if e.code in (429, 500, 502, 503, 504) or e.code >= 500:
+                    self._mark_offline()
                 print(f"[API ERROR] Failed to fetch grades from Vercel: {e}")
                 return []
             except Exception as e:
@@ -1756,6 +1795,8 @@ class Database:
                     data = parsed
                     self._mem_set("game_results", "raw", data)
             except urllib.error.HTTPError as e:
+                if e.code in (429, 500, 502, 503, 504) or e.code >= 500:
+                    self._mark_offline()
                 print(f"[API ERROR] Failed to fetch game results from Vercel: {e}")
                 return []
             except Exception as e:
@@ -1827,9 +1868,13 @@ class Database:
         if students is None:
             students = self.get_students() or []
         if grades is None:
-            grades = self.get_grades()
+            grades = self.get_grades() or []
+        else:
+            grades = grades or []
         if game_results is None:
-            game_results = self.get_game_results()
+            game_results = self.get_game_results() or []
+        else:
+            game_results = game_results or []
 
         student_names = {}
         student_details = {}
@@ -2101,7 +2146,9 @@ class Database:
         ass_to_q = self._build_assessment_to_quarter_lookup()
 
         if api_grades is None:
-            api_grades = self.get_grades()
+            api_grades = self.get_grades() or []
+        else:
+            api_grades = api_grades or []
         for g in api_grades:
             raw_id = str(g.get("studentId") or g.get("student_id") or "")
             if not raw_id:
@@ -2127,7 +2174,9 @@ class Database:
                 }
 
         if api_results is None:
-            api_results = self.get_game_results()
+            api_results = self.get_game_results() or []
+        else:
+            api_results = api_results or []
         for res in api_results:
             raw_id = str(res.get("studentId") or res.get("student_id") or "")
             if not raw_id:
