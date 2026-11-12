@@ -4,8 +4,9 @@ All notable **Changes & Improvements** and **Bug Fixes** for each version of **C
 
 ---
 
-## [v2.0.1] — 2026-11-11
+## [v2.0.1] — 2026-11-12
 ### Changes & Improvements
+- **Authentic NPC Randomization Across Stations (Quarters 2, 3 & Summative Assessment)**: Stations scaling up to 15 questions now dynamically randomize NPC guardians from authentic character rosters with no adjacent duplicates (Barrio Vendors in Quarter 2, Number Guardians in Quarter 3, and Water Guardians in Summative Assessment). Proximity greetings, dialogue scripts, portraits, and 8-frame animations resolve cleanly to the assigned guardian, while Quarter 1 retains its authentic original shape sequence.
 - **Instant Non-Blocking Student Loading**: Re-engineered student selection screen to read local cached save data instantaneously while initiating authoritative cloud synchronization asynchronously in the background. Completely eliminates main-thread frame drops, stalls, or freezes when browsing the student roster.
 - **Accurate Completion Timestamp Cloud Sync**: Ensured quarter grade records retain their exact recorded completion timestamps when synchronizing with cloud endpoints.
 

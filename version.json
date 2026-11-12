@@ -1,7 +1,7 @@
 {
   "version": "2.0.1",
-  "name": "Cognitive Maze v2.0.1 - Robust Cloud Sync, Alias Purging & Background Loading",
-  "notes": "Version 2.0.1 — Maintenance & Resilience Update: Resolves ghost grade synchronization by thoroughly purging all student identifier aliases across local caches and cloud records; introduces non-blocking background cloud synchronization on student selection for zero UI stutter; adds safeguard to prevent headless automated test suites from writing dummy scores to live cloud database; ensures recorded completion dates persist reliably across quarters.",
+  "name": "Cognitive Maze v2.0.1 - Authentic NPC Randomization & Robust Cloud Sync",
+  "notes": "Version 2.0.1 — Authentic NPC Randomization & Resilience Update: Implements non-repetitive NPC randomization across stations up to 15 questions for Quarter 2, Quarter 3, and Summative Assessment while preserving Quarter 1's authentic original shape order; resolves ghost grade synchronization by thoroughly purging all student identifier aliases across local caches and cloud records; introduces non-blocking background cloud synchronization on student selection for zero UI stutter; adds safeguard to prevent headless automated test suites from writing dummy scores to live cloud database; ensures recorded completion dates persist reliably across quarters.",
   "download_url": "https://github.com/workingNeko/2DGameCognitiveQuest/releases/tag/v2.0.1",
-  "date": "2026-11-11"
+  "date": "2026-11-12"
 }
