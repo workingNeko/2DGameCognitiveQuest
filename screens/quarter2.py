@@ -449,6 +449,16 @@ class Quarter2:
         # ============================================================
         self.load_static_npc_sprites()
 
+        # Randomize initial stations from authentic 5 Filipino characters
+        if hasattr(self, 'station_npc_info') and hasattr(self, 'base_filipino_sprites'):
+            init_chars = [1, 2, 3, 4, 5]
+            random.shuffle(init_chars)
+            for idx, num in enumerate(sorted(self.station_npc_info.keys())):
+                char_id = init_chars[idx % len(init_chars)]
+                self.station_npc_info[num]["char_id"] = char_id
+                if char_id in self.base_filipino_sprites:
+                    self.station_npc_info[num]["frames"] = list(self.base_filipino_sprites[char_id])
+
         # ============================================================
         # SPAWN PLAYER AND FIND NPCS
         # ============================================================
@@ -686,22 +696,25 @@ class Quarter2:
     # ============================================================
     # DATABASE INTEGRATION
     # ============================================================
-    def load_database_questions(self):
+    def load_database_questions(self, questions_override=None):
         if not self.is_quiz_map:
             self.active_station_count = 0
             return
 
         from db.connect_db import map_cloud_questions
         mapped_questions = []
-        try:
-            if db:
-                questions_result = db.get_questions(quarter=2, force_refresh=True)
-                mapped_questions = map_cloud_questions(
-                    questions_result,
-                    default_hint="Count and compare the barrio quantities carefully!"
-                )
-        except Exception as e:
-            print(f"[WARN] Exception loading cloud questions for Quarter 2: {e}")
+        if questions_override is not None:
+            mapped_questions = list(questions_override)
+        else:
+            try:
+                if db:
+                    questions_result = db.get_questions(quarter=2, force_refresh=True)
+                    mapped_questions = map_cloud_questions(
+                        questions_result,
+                        default_hint="Count and compare the barrio quantities carefully!"
+                    )
+            except Exception as e:
+                print(f"[WARN] Exception loading cloud questions for Quarter 2: {e}")
 
         # Strict error handler and ceiling: accepts up to 15 questions only
         from core.dynamic_quiz_manager import validate_and_clamp_questions
@@ -736,31 +749,66 @@ class Quarter2:
             "Kakanin Seller", "Bibingka Stand", "Buko Juice Vendor", "Fish Merchant", "Rice Merchant",
             "Puto Bumbong Chef", "Taho Vendor", "Capiz Artisan", "Pandesal Baker", "Barrio Kapitan"
         ]
-        for num in active_ids:
-            if num not in self.station_npc_info:
-                vname = vendor_names_pool[(num - 1) % len(vendor_names_pool)]
-                donor_k = ((num - 1) % 5) + 1
-                donor_frames = []
-                if donor_k in self.station_npc_info and self.station_npc_info[donor_k].get("frames"):
-                    donor_frames = list(self.station_npc_info[donor_k]["frames"])
-                elif self.station_npc_info:
-                    for k in sorted(self.station_npc_info.keys()):
-                        if self.station_npc_info[k].get("frames"):
-                            donor_frames = list(self.station_npc_info[k]["frames"])
-                            break
 
-                self.station_npc_info[num] = {
-                    "name": f"Station {num}",
-                    "title": f"Station {num}: {vname}",
-                    "dialog_title": f"Barrio Challenge {num}",
-                    "wrong_encouragement": f"{vname} - Try Again",
-                    "correct_praise": f"{vname} Challenge Cleared! - Well Done",
-                    "target_math": f"Resolving Barrio {vname} Challenge",
-                    "frames": donor_frames,
-                    "anim_frame": 0,
-                    "anim_timer": 0,
-                    "cleared": False
-                }
+        templates_map5 = {
+            1: {"name": "Bamboo Post Builder", "title": "Bamboo Post Builder", "dialog_title": "Bahay Kubo Bamboo Posts Challenge", "wrong_encouragement": "Bamboo Stilts - Try Again", "correct_praise": "Bamboo Posts Erected! - Well Done", "target_math": "Building Bamboo Foundation Posts"},
+            2: {"name": "Sawali Wall Weaver", "title": "Sawali Wall Weaver", "dialog_title": "Bahay Kubo Woven Walls Challenge", "wrong_encouragement": "Woven Sawali - Try Again", "correct_praise": "Sawali Walls Assembled! - Well Done", "target_math": "Weaving Traditional Sawali Bamboo Walls"},
+            3: {"name": "Window & Door Maker", "title": "Window & Door Maker", "dialog_title": "Bahay Kubo Windows & Door Challenge", "wrong_encouragement": "Window Frames - Try Again", "correct_praise": "Windows & Door Fitted! - Well Done", "target_math": "Crafting Wooden Windows and Main Door"},
+            4: {"name": "Thatched Nipa Weaver", "title": "Thatched Nipa Weaver", "dialog_title": "Bahay Kubo Thatched Roof Challenge", "wrong_encouragement": "Nipa Roof - Try Again", "correct_praise": "Nipa Roof Complete! - Well Done", "target_math": "Thatching the Sloped Nipa Palm Roof"},
+            5: {"name": "Wooden Ladder Craftsman", "title": "Wooden Ladder Craftsman", "dialog_title": "Bahay Kubo Wooden Ladder Challenge", "wrong_encouragement": "Ladder Steps - Try Again", "correct_praise": "Bahay Kubo Completed! - Well Done", "target_math": "Constructing the Entrance Bamboo Ladder"}
+        }
+
+        templates_barrio = {
+            1: {"name": "Aling Nena (Sari-Sari Store)", "title": "Aling Nena (Sari-Sari Store)", "dialog_title": "Sari-Sari Store Challenge", "wrong_encouragement": "Sari-Sari Store - Try Again", "correct_praise": "Salamat! Ang galing mo naman!", "target_math": "Sari-Sari Store Shopping Challenge"},
+            2: {"name": "Mang Pedring (Sorbetes Cart)", "title": "Mang Pedring (Sorbetes Cart)", "dialog_title": "Sorbetes Cart Challenge", "wrong_encouragement": "Sorbetes Cart - Try Again", "correct_praise": "Super! Scoop of Math Success!", "target_math": "Delicious Sorbetes Challenge"},
+            3: {"name": "Kuya Jomar (Jeepney Terminal)", "title": "Kuya Jomar (Jeepney Terminal)", "dialog_title": "Jeepney Terminal Challenge", "wrong_encouragement": "Jeepney Terminal - Try Again", "correct_praise": "Ayos! Next Stop: Math Mastery!", "target_math": "Jeepney Route & Fare Challenge"},
+            4: {"name": "Ate Maria (Market Fruit Stand)", "title": "Ate Maria (Market Fruit Stand)", "dialog_title": "Market Fruit Stand Challenge", "wrong_encouragement": "Fruit Stand - Try Again", "correct_praise": "Tumpak! Perfectly Balanced!", "target_math": "Sweet Guimaras Mangoes Challenge"},
+            5: {"name": "Mang Carding (Parol Workshop)", "title": "Mang Carding (Parol Workshop)", "dialog_title": "Fiesta Parol Workshop Challenge", "wrong_encouragement": "Parol Workshop - Try Again", "correct_praise": "Mabuhay! Lanterns Shine Bright!", "target_math": "Festive Bamboo Parol Challenge"}
+        }
+
+        # Randomize authentic Filipino NPCs across all stations (up to 15 questions)
+        # using strictly the 5 authentic Filipino character sprites
+        available_chars = [1, 2, 3, 4, 5]
+        assigned_chars = []
+        pool = list(available_chars)
+        random.shuffle(pool)
+        for i in range(active_count):
+            candidates = [c for c in pool if not assigned_chars or c != assigned_chars[-1]]
+            if not candidates:
+                candidates = [c for c in available_chars if not assigned_chars or c != assigned_chars[-1]]
+            c_chosen = random.choice(candidates) if candidates else random.choice(available_chars)
+            assigned_chars.append(c_chosen)
+            if c_chosen in pool:
+                pool.remove(c_chosen)
+            if not pool:
+                pool = list(available_chars)
+                random.shuffle(pool)
+
+        templates = templates_map5 if self.map_name == "map5.txt" else templates_barrio
+        for idx, num in enumerate(active_ids):
+            char_id = assigned_chars[idx]
+            tmpl = templates.get(char_id, templates[1])
+            vname = vendor_names_pool[(num - 1) % len(vendor_names_pool)] if num > 5 else tmpl["name"]
+            frames = []
+            if hasattr(self, 'base_filipino_sprites') and char_id in self.base_filipino_sprites:
+                frames = list(self.base_filipino_sprites[char_id])
+            elif num in self.station_npc_info and self.station_npc_info[num].get("frames"):
+                frames = list(self.station_npc_info[num]["frames"])
+
+            self.station_npc_info[num] = {
+                "name": tmpl["name"] if num <= 5 else vname,
+                "title": f"Station {num}: {tmpl['name']}" if num <= 5 else f"Station {num}: {vname}",
+                "dialog_title": tmpl["dialog_title"] if num <= 5 else f"Barrio Challenge {num}",
+                "wrong_encouragement": tmpl["wrong_encouragement"] if num <= 5 else f"{vname} - Try Again",
+                "correct_praise": tmpl["correct_praise"] if num <= 5 else f"{vname} Challenge Cleared! - Well Done",
+                "target_math": tmpl["target_math"] if num <= 5 else f"Resolving Barrio {vname} Challenge",
+                "frames": frames,
+                "anim_frame": 0,
+                "anim_timer": 0,
+                "cleared": False,
+                "char_id": char_id
+            }
+            print(f"[NPC] Station {num} assigned random Filipino NPC {char_id}: {self.station_npc_info[num]['name']}")
 
         for idx, q_item in enumerate(mapped_questions[:active_count], start=1):
             q_item.setdefault("station", idx)
@@ -772,6 +820,10 @@ class Quarter2:
         self.station_npc_info = {k: self.station_npc_info[k] for k in active_ids if k in self.station_npc_info}
         self.first_attempt_correct = {k: True for k in active_ids}
         self.station_attempts = {k: 0 for k in active_ids}
+
+    def cloud_sync_quarter2_questions(self, questions):
+        """Allows dynamic overriding/syncing of Quarter 2 questions from cloud or tests (up to 15)."""
+        return self.load_database_questions(questions_override=questions)
 
         if active_count == 0:
             self.quiz_station_index = 6
@@ -2031,6 +2083,7 @@ class Quarter2:
             placeholder = pygame.Surface((TILE_SIZE, TILE_SIZE))
             placeholder.fill((192, 192, 192))
         # Load 5 Quarter 2 Filipino Street Character NPCs (Tomas, Sorbetero, Drayber, Maya, Lola Rosa)
+        self.base_filipino_sprites = {}
         for num in range(1, 6):
             folder_name = f"Filipino{num}NPC"
             filipino_path = os.path.join(self.BASE_DIR, "assets", "images", "sprites", "objects", "NPC", folder_name)
@@ -2042,9 +2095,11 @@ class Quarter2:
                     if os.path.exists(f_path):
                         img = pygame.image.load(f_path).convert_alpha()
                         frames.append(pygame.transform.scale(img, (TILE_SIZE, TILE_SIZE)))
-                if frames and num in self.station_npc_info:
-                    self.station_npc_info[num]["frames"] = frames
-                    print(f"[OK] Loaded {len(frames)} frames for Filipino NPC {num}: {self.station_npc_info[num]['name']}")
+                if frames:
+                    self.base_filipino_sprites[num] = frames
+                    if num in self.station_npc_info:
+                        self.station_npc_info[num]["frames"] = frames
+                    print(f"[OK] Loaded {len(frames)} frames for Filipino NPC {num}: {self.station_npc_info.get(num, {}).get('name', folder_name)}")
             except Exception as e:
                 print(f"[FAIL] Error loading Filipino NPC {num}: {e}")
 
@@ -3099,9 +3154,10 @@ class Quarter2:
                     self.quiz_station_index = st_idx
                     self.current_question_index = st_idx - 1
                     if not self.greeting_dialog.is_visible and not (getattr(self, 'instruction_modal', None) and self.instruction_modal.is_visible):
-                        script = get_station_script(self.map_name, st_idx)
-                        speaker_name = script.get("npc_name", info.get("name", "Guardian"))
-                        speaker_title = script.get("npc_title", info.get("title", f"Station {st_idx}"))
+                        char_id = info.get("char_id", st_idx)
+                        script = get_station_script(self.map_name, char_id)
+                        speaker_name = info.get("name", script.get("npc_name", "Guardian"))
+                        speaker_title = info.get("title", script.get("npc_title", f"Station {st_idx}"))
                         greeting_text = script.get("greeting", "Halika, magsimula tayo!").replace("[Player Name]", self.player_name)
                         
                         sprite_frame = None

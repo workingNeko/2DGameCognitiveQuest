@@ -963,50 +963,36 @@ class Quarter4:
             p.fill((255, 100, 100))
             oldman_frames.append(p)
 
-        self.station_npcs = {
-            1: {
-                "name": "Aqua Sprite Marina",
-                "title": "Guardian of the Azure Fountain",
-                "frames": load_frames(self.NPC_PATH_AQUA_SPRITE, "aquasprite"),
-                "anim_frame": 0,
-                "anim_timer": 0
-            },
-            2: {
-                "name": "Coral Sage Sheldon",
-                "title": "Elder of the Geyser Basin",
-                "frames": load_frames(self.NPC_PATH_CORAL_SAGE, "coralsage"),
-                "anim_frame": 0,
-                "anim_timer": 0
-            },
-            3: {
-                "name": "Tide Knight Finneas",
-                "title": "Champion of the Torrent Gate",
-                "frames": load_frames(self.NPC_PATH_TIDE_KNIGHT, "tideknight"),
-                "anim_frame": 0,
-                "anim_timer": 0
-            },
-            4: {
-                "name": "Axolotl Scholar Lani",
-                "title": "Keeper of the Pearl Falls",
-                "frames": load_frames(self.NPC_PATH_AXOLOTL, "axolotl"),
-                "anim_frame": 0,
-                "anim_timer": 0
-            },
-            5: {
-                "name": "River Drake Coral",
-                "title": "Sentinel of the Grand Aqueduct",
-                "frames": load_frames(self.NPC_PATH_SEA_DRAKE, "seadrake"),
-                "anim_frame": 0,
-                "anim_timer": 0
-            },
-            6: {
-                "name": "Whirlpool Elder Glaucus",
-                "title": "Master of Oceanic Currents",
-                "frames": load_frames(self.NPC_PATH_WATER_ELDER, "waterelder"),
-                "anim_frame": 0,
-                "anim_timer": 0
-            },
+        self.base_water_sprites = {
+            1: load_frames(self.NPC_PATH_AQUA_SPRITE, "aquasprite"),
+            2: load_frames(self.NPC_PATH_CORAL_SAGE, "coralsage"),
+            3: load_frames(self.NPC_PATH_TIDE_KNIGHT, "tideknight"),
+            4: load_frames(self.NPC_PATH_AXOLOTL, "axolotl"),
+            5: load_frames(self.NPC_PATH_SEA_DRAKE, "seadrake"),
+            6: load_frames(self.NPC_PATH_WATER_ELDER, "waterelder"),
         }
+        self.base_water_guardians = {
+            1: ("Aqua Sprite Marina", "Guardian of the Azure Fountain"),
+            2: ("Coral Sage Sheldon", "Elder of the Geyser Basin"),
+            3: ("Tide Knight Finneas", "Champion of the Torrent Gate"),
+            4: ("Axolotl Scholar Lani", "Keeper of the Pearl Falls"),
+            5: ("River Drake Coral", "Sentinel of the Grand Aqueduct"),
+            6: ("Whirlpool Elder Glaucus", "Master of Oceanic Currents")
+        }
+        init_guardians = [1, 2, 3, 4, 5, 6]
+        random.shuffle(init_guardians)
+        self.station_npcs = {}
+        for i in range(1, 7):
+            g_id = init_guardians[i - 1]
+            g_name, g_title = self.base_water_guardians[g_id]
+            self.station_npcs[i] = {
+                "guardian_id": g_id,
+                "name": g_name,
+                "title": g_title,
+                "frames": list(self.base_water_sprites[g_id]),
+                "anim_frame": 0,
+                "anim_timer": 0
+            }
         print("[OK] Loaded 6 Animated Water-Themed Station NPCs for Quarter 4 Evaluation")
 
 
@@ -1316,7 +1302,7 @@ class Quarter4:
             self.current_question_index = tot_st
             print(f"[OK] All {tot_st} Quiz Station(s) cleared!")
 
-    def load_database_questions(self):
+    def load_database_questions(self, questions_override=None):
         """Sync Quarter 4 questions strictly from the cloud / cloud cache (0..N stations)."""
         if not getattr(self, 'is_quiz_map', True):
             self.active_station_count = 0
@@ -1324,15 +1310,18 @@ class Quarter4:
 
         from db.connect_db import map_cloud_questions
         mapped_questions = []
-        try:
-            if db:
-                questions_result = db.get_questions(quarter=4, force_refresh=True)
-                mapped_questions = map_cloud_questions(
-                    questions_result,
-                    default_hint="Examine the choices carefully and select the best answer below!"
-                )
-        except Exception as e:
-            print(f"[WARN] Exception loading cloud questions for Quarter 4: {e}")
+        if questions_override is not None:
+            mapped_questions = list(questions_override)
+        else:
+            try:
+                if db:
+                    questions_result = db.get_questions(quarter=4, force_refresh=True)
+                    mapped_questions = map_cloud_questions(
+                        questions_result,
+                        default_hint="Examine the choices carefully and select the best answer below!"
+                    )
+            except Exception as e:
+                print(f"[WARN] Exception loading cloud questions for Quarter 4: {e}")
 
         # Strict error handler and ceiling: accepts up to 15 questions only for Summative Assessment
         from core.dynamic_quiz_manager import validate_and_clamp_questions
@@ -1376,33 +1365,68 @@ class Quarter4:
                 walkable_chars=walkables
             )
 
-            GUARDIAN_NAMES = [
-                ("Hydro Sage Kai", "Keeper of the Torrent"),
-                ("Abyssal Warden Nereus", "Guardian of the Deep Sluice"),
-                ("Current Herald Lyra", "Watcher of the Cascades"),
-                ("Mist Weaver Thalassa", "Elder of the Morning Vapor"),
-                ("Triton Guardian Nicos", "Sentry of the Coral Reef"),
-                ("Undine Mystic Sirena", "Scholar of the Deep Wells")
-            ]
-            for next_id in sorted(self.quiz_stations.keys()):
-                if next_id not in self.station_npcs:
-                    name_idx = (next_id - 7) % len(GUARDIAN_NAMES)
-                    g_name, g_title = GUARDIAN_NAMES[name_idx]
-                    donor_id = ((next_id - 1) % 6) + 1
-                    donor_npc = self.station_npcs.get(donor_id, {})
-                    self.station_npcs[next_id] = {
-                        "name": g_name,
-                        "title": g_title,
-                        "frames": donor_npc.get("frames", []),
-                        "anim_frame": 0,
-                        "anim_timer": 0
-                    }
-                    if hasattr(self, 'station_dirs'):
-                        self.station_dirs[next_id] = "left" if (next_id % 2 == 1) else "right"
+        GUARDIAN_NAMES = [
+            ("Hydro Sage Kai", "Keeper of the Torrent"),
+            ("Abyssal Warden Nereus", "Guardian of the Deep Sluice"),
+            ("Current Herald Lyra", "Watcher of the Cascades"),
+            ("Mist Weaver Thalassa", "Elder of the Morning Vapor"),
+            ("Triton Guardian Nicos", "Sentry of the Coral Reef"),
+            ("Undine Mystic Sirena", "Scholar of the Deep Wells"),
+            ("Oceanic Sovereign Thalor", "Protector of the Abyss"),
+            ("Tidal Sentinel Nerida", "Warden of the Sunken Gates"),
+            ("Coral Queen Amphitrite", "Empress of the Submerged Sanctum")
+        ]
 
         sorted_ids = sorted(self.quiz_stations.keys())
         active_count = min(len(sorted_ids), tot_questions)
         active_ids = sorted_ids[:active_count]
+
+        # Randomize Water Guardian NPCs across all active stations (up to 15 questions)
+        # using strictly the 6 authentic Water Guardian character models
+        available_guardians = [1, 2, 3, 4, 5, 6]
+        assigned_guardians = []
+        pool = list(available_guardians)
+        random.shuffle(pool)
+        for i in range(active_count):
+            candidates = [c for c in pool if not assigned_guardians or c != assigned_guardians[-1]]
+            if not candidates:
+                candidates = [c for c in available_guardians if not assigned_guardians or c != assigned_guardians[-1]]
+            c_chosen = random.choice(candidates) if candidates else random.choice(available_guardians)
+            assigned_guardians.append(c_chosen)
+            if c_chosen in pool:
+                pool.remove(c_chosen)
+            if not pool:
+                pool = list(available_guardians)
+                random.shuffle(pool)
+
+        for idx, next_id in enumerate(active_ids):
+            guardian_id = assigned_guardians[idx]
+            base_name, base_title = getattr(self, 'base_water_guardians', {}).get(
+                guardian_id, ("Water Guardian", f"Station {next_id}")
+            )
+            if next_id <= 6:
+                g_name, g_title = base_name, base_title
+            else:
+                extra_idx = (next_id - 7) % len(GUARDIAN_NAMES)
+                g_name, g_title = GUARDIAN_NAMES[extra_idx]
+
+            frames = []
+            if hasattr(self, 'base_water_sprites') and guardian_id in self.base_water_sprites:
+                frames = list(self.base_water_sprites[guardian_id])
+            elif next_id in self.station_npcs and self.station_npcs[next_id].get("frames"):
+                frames = list(self.station_npcs[next_id]["frames"])
+
+            self.station_npcs[next_id] = {
+                "guardian_id": guardian_id,
+                "name": g_name,
+                "title": g_title,
+                "frames": frames,
+                "anim_frame": 0,
+                "anim_timer": 0
+            }
+            if hasattr(self, 'station_dirs'):
+                self.station_dirs[next_id] = "left" if (next_id % 2 == 1) else "right"
+            print(f"[NPC] Station {next_id} assigned random Water Guardian {guardian_id}: {g_name} ({g_title})")
 
         self.quiz_questions = mapped_questions[:active_count]
         self.active_station_count = active_count
@@ -1421,6 +1445,10 @@ class Quarter4:
             self.quiz_station_index = active_count + 1
             self.current_question_index = active_count
         print(f"[CLOUD SYNC] Quarter 4 synced {active_count} cloud question(s) across {len(self.quiz_stations)} dynamic station(s).")
+
+    def cloud_sync_quarter4_questions(self, questions):
+        """Allows dynamic overriding/syncing of Quarter 4 / Summative Assessment questions from cloud or tests (up to 15)."""
+        return self.load_database_questions(questions_override=questions)
 
     def save_quarter4_game_result(self):
         if getattr(self, '_results_saved_to_db', False):
@@ -2181,10 +2209,11 @@ class Quarter4:
                     if not self.greeting_dialog.is_visible and not self.instruction_modal.is_visible:
                         self.quiz_station_index = st_idx
                         self.current_question_index = st_idx - 1
-                        script = get_station_script(self.map_name, st_idx)
                         data = self.station_npcs.get(st_idx, {})
-                        speaker_name = script.get("npc_name", data.get("name", f"Guardian {st_idx}"))
-                        speaker_title = script.get("npc_title", data.get("title", f"Station {st_idx}"))
+                        guardian_id = data.get("guardian_id", st_idx)
+                        script = get_station_script(self.map_name, guardian_id)
+                        speaker_name = data.get("name", script.get("npc_name", f"Guardian {st_idx}"))
+                        speaker_title = data.get("title", script.get("npc_title", f"Station {st_idx}"))
                         greeting_text = script.get("greeting", "Greetings, seeker of the deep!").replace("[Player Name]", self.player_name)
                         
                         sprite_frame = None

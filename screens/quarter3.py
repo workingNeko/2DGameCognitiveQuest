@@ -911,23 +911,26 @@ class Quarter3:
     # ============================================================
     # DATABASE INTEGRATION
     # ============================================================
-    def load_database_questions(self):
+    def load_database_questions(self, questions_override=None):
         if not self.is_quiz_map:
             self.active_station_count = 0
             return
 
         from db.connect_db import map_cloud_questions
         mapped_questions = []
-        try:
-            if db:
-                questions_result = db.get_questions(quarter=3, force_refresh=True)
-                mapped_questions = map_cloud_questions(
-                    questions_result,
-                    default_hint="Examine the choices carefully and select the best answer below!",
-                    allow_ident=True,
-                )
-        except Exception as e:
-            print(f"[WARN] Exception loading cloud questions for Quarter 3: {e}")
+        if questions_override is not None:
+            mapped_questions = list(questions_override)
+        else:
+            try:
+                if db:
+                    questions_result = db.get_questions(quarter=3, force_refresh=True)
+                    mapped_questions = map_cloud_questions(
+                        questions_result,
+                        default_hint="Examine the choices carefully and select the best answer below!",
+                        allow_ident=True,
+                    )
+            except Exception as e:
+                print(f"[WARN] Exception loading cloud questions for Quarter 3: {e}")
 
         # Strict error handler and ceiling: accepts up to 15 questions only
         from core.dynamic_quiz_manager import validate_and_clamp_questions
@@ -976,25 +979,43 @@ class Quarter3:
             14: "Eclipse Guardian 14",
             15: "Zenith Guardian 15"
         }
-        for num in active_ids:
-            if num not in self.station_npcs:
-                donor_k = ((num - 1) % 5) + 1
-                donor_frames = []
-                if donor_k in self.station_npcs and self.station_npcs[donor_k].get("frames"):
-                    donor_frames = list(self.station_npcs[donor_k]["frames"])
-                elif self.station_npcs:
-                    for existing_k in sorted(self.station_npcs.keys()):
-                        if self.station_npcs[existing_k].get("frames"):
-                            donor_frames = list(self.station_npcs[existing_k]["frames"])
-                            break
 
-                self.station_npcs[num] = {
-                    "name": guardian_titles.get(num, f"Number {num} Guardian"),
-                    "frames": donor_frames,
-                    "anim_frame": 0,
-                    "anim_timer": 0,
-                    "answered": False
-                }
+        # Randomize Number NPCs across all active stations (up to 15 questions)
+        # using the 5 authentic Number Guardian characters
+        available_nums = [1, 2, 3, 4, 5]
+        assigned_nums = []
+        pool = list(available_nums)
+        random.shuffle(pool)
+        for i in range(active_count):
+            candidates = [c for c in pool if not assigned_nums or c != assigned_nums[-1]]
+            if not candidates:
+                candidates = [c for c in available_nums if not assigned_nums or c != assigned_nums[-1]]
+            c_chosen = random.choice(candidates) if candidates else random.choice(available_nums)
+            assigned_nums.append(c_chosen)
+            if c_chosen in pool:
+                pool.remove(c_chosen)
+            if not pool:
+                pool = list(available_nums)
+                random.shuffle(pool)
+
+        for idx, num in enumerate(active_ids):
+            char_id = assigned_nums[idx]
+            frames = []
+            if hasattr(self, 'base_number_sprites') and char_id in self.base_number_sprites:
+                frames = list(self.base_number_sprites[char_id])
+            elif num in self.station_npcs and self.station_npcs[num].get("frames"):
+                frames = list(self.station_npcs[num]["frames"])
+
+            g_title = guardian_titles.get(num, getattr(self, 'base_number_names', {}).get(char_id, f"Number {char_id} Guardian"))
+            self.station_npcs[num] = {
+                "char_id": char_id,
+                "name": g_title,
+                "frames": frames,
+                "anim_frame": 0,
+                "anim_timer": 0,
+                "answered": False
+            }
+            print(f"[NPC] Station {num} assigned random Number NPC {char_id}: {g_title}")
 
         for idx, q_item in enumerate(mapped_questions[:active_count], start=1):
             q_item.setdefault("station", idx)
@@ -1006,6 +1027,10 @@ class Quarter3:
         self.station_npcs = {k: self.station_npcs[k] for k in active_ids if k in self.station_npcs}
         self.first_attempt_correct = {k: True for k in active_ids}
         self.station_attempts = {k: 0 for k in active_ids}
+
+    def cloud_sync_quarter3_questions(self, questions):
+        """Allows dynamic overriding/syncing of Quarter 3 questions from cloud or tests (up to 15)."""
+        return self.load_database_questions(questions_override=questions)
         if not hasattr(self, 'answered_stations') or self.answered_stations is None:
             self.answered_stations = set()
 
@@ -1402,13 +1427,33 @@ class Quarter3:
                 frames.append(placeholder)
             return frames
 
-        self.station_npcs = {
-            1: {"name": "Number 1 Guardian", "frames": load_frames(self.NPC_PATH_NUM1, "number1npc"), "anim_frame": 0, "anim_timer": 0},
-            2: {"name": "Number 2 Guardian", "frames": load_frames(self.NPC_PATH_NUM2, "number2npc"), "anim_frame": 0, "anim_timer": 0},
-            3: {"name": "Number 3 Guardian", "frames": load_frames(self.NPC_PATH_NUM3, "number3npc"), "anim_frame": 0, "anim_timer": 0},
-            4: {"name": "Number 4 Guardian", "frames": load_frames(self.NPC_PATH_NUM4, "number4npc"), "anim_frame": 0, "anim_timer": 0},
-            5: {"name": "Number 5 Guardian", "frames": load_frames(self.NPC_PATH_NUM5, "number5npc"), "anim_frame": 0, "anim_timer": 0},
+        self.base_number_sprites = {
+            1: load_frames(self.NPC_PATH_NUM1, "number1npc"),
+            2: load_frames(self.NPC_PATH_NUM2, "number2npc"),
+            3: load_frames(self.NPC_PATH_NUM3, "number3npc"),
+            4: load_frames(self.NPC_PATH_NUM4, "number4npc"),
+            5: load_frames(self.NPC_PATH_NUM5, "number5npc"),
         }
+        self.base_number_names = {
+            1: "Number 1 Guardian",
+            2: "Number 2 Guardian",
+            3: "Number 3 Guardian",
+            4: "Number 4 Guardian",
+            5: "Number 5 Guardian"
+        }
+        init_nums = [1, 2, 3, 4, 5]
+        random.shuffle(init_nums)
+        self.station_npcs = {}
+        for i in range(1, 6):
+            assigned_num = init_nums[i - 1]
+            self.station_npcs[i] = {
+                "char_id": assigned_num,
+                "name": self.base_number_names[assigned_num],
+                "frames": list(self.base_number_sprites[assigned_num]),
+                "anim_frame": 0,
+                "anim_timer": 0,
+                "answered": False
+            }
         print("[OK] Loaded 5 Animated Number Character Station NPCs (Number 1-5)")
 
         # Load Knight
@@ -2513,8 +2558,10 @@ class Quarter3:
                     if not self.greeting_dialog.is_visible and not self.instruction_modal.is_visible:
                         self.quiz_station_index = st_idx
                         self.current_question_index = st_idx - 1
-                        script = get_station_script(self.map_name, st_idx)
-                        speaker_name = script.get("npc_name", f"Sage {st_idx}")
+                        st_data = self.station_npcs.get(st_idx, {}) if hasattr(self, 'station_npcs') else {}
+                        char_id = st_data.get("char_id", st_idx)
+                        script = get_station_script(self.map_name, char_id)
+                        speaker_name = st_data.get("name", script.get("npc_name", f"Sage {st_idx}"))
                         speaker_title = script.get("npc_title", f"Station {st_idx}")
                         greeting_text = script.get("greeting", "Greetings, traveler!").replace("[Player Name]", self.player_name)
                         
