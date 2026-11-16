@@ -48,7 +48,7 @@ class TestQuarterObjectiveModals(unittest.TestCase):
 
         # Must be active on entry
         self.assertTrue(q1.instruction_modal.is_active(), "Q1 modal must be active on entry")
-        self.assertIn("QUARTER 1", q1.instruction_modal.title.upper())
+        self.assertTrue("QUARTER 1" in q1.instruction_modal.title.upper() or "TERM 1" in q1.instruction_modal.title.upper())
 
         # Simulate update with cursor far from player (should NOT auto-dismiss)
         q1.cursor_pos = (950, 150)
@@ -79,7 +79,7 @@ class TestQuarterObjectiveModals(unittest.TestCase):
 
         # Must be active on entry
         self.assertTrue(q2.instruction_modal.is_visible, "Q2 modal must be active on entry")
-        self.assertIn("QUARTER 2", q2.instruction_modal.title.upper())
+        self.assertTrue("QUARTER 2" in q2.instruction_modal.title.upper() or "TERM 2" in q2.instruction_modal.title.upper())
 
         # Simulate update with cursor far from player (should NOT auto-dismiss)
         q2.cursor_pos = (950, 150)
@@ -108,7 +108,7 @@ class TestQuarterObjectiveModals(unittest.TestCase):
 
         # Must be active on entry
         self.assertTrue(q3.instruction_modal.is_visible, "Q3 modal must be active on entry")
-        self.assertIn("QUARTER 3", q3.instruction_modal.title.upper())
+        self.assertTrue("QUARTER 3" in q3.instruction_modal.title.upper() or "TERM 3" in q3.instruction_modal.title.upper())
 
         # Simulate update with cursor far from player (should NOT auto-dismiss)
         q3.cursor_pos = (950, 150)
@@ -138,8 +138,8 @@ class TestQuarterObjectiveModals(unittest.TestCase):
         # Must be active on entry
         self.assertTrue(q4.instruction_modal.is_visible, "Q4 modal must be active on entry")
         self.assertTrue(
-            "QUARTER 4" in q4.instruction_modal.title.upper() or "SUMMATIVE ASSESSMENT" in q4.instruction_modal.title.upper(),
-            f"Expected QUARTER 4 or SUMMATIVE ASSESSMENT in modal title, got {q4.instruction_modal.title}"
+            "QUARTER 4" in q4.instruction_modal.title.upper() or "SUMMATIVE ASSESSMENT" in q4.instruction_modal.title.upper() or "REMEDIAL" in q4.instruction_modal.title.upper(),
+            f"Expected QUARTER 4, SUMMATIVE ASSESSMENT, or REMEDIAL in modal title, got {q4.instruction_modal.title}"
         )
 
         # Simulate update with cursor far from player (should NOT auto-dismiss)

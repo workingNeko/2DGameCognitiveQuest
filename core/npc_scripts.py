@@ -1017,7 +1017,7 @@ def _infer_quarter_and_map(arg1, arg2=None):
     return "quarter1", a1 or "*"
 
 
-def get_map_instructions(arg1, arg2=None, arg3=None):
+def get_map_instructions(arg1, arg2=None, arg3=None, summative_num=None, total_stations=None):
     """
     Returns the instructions dict for the specified map or quarter, with {player_name} formatted.
     Supports:
@@ -1096,6 +1096,28 @@ def get_map_instructions(arg1, arg2=None, arg3=None):
             "title": step["title"],
             "bullets": list(step["bullets"])
         })
+
+    # Dynamic Term / Summative title adaptation
+    s_num = summative_num or 1
+    ord_names = {1: "1ST", 2: "2ND", 3: "3RD", 4: "4TH"}
+    s_ord = ord_names.get(s_num, f"{s_num}TH")
+
+    t_title = formatted["title"]
+    if "QUARTER 1" in t_title:
+        t_title = t_title.replace("QUARTER 1", f"TERM 1 ({s_ord} SUMMATIVE)")
+    elif "QUARTER 2" in t_title:
+        t_title = t_title.replace("QUARTER 2", f"TERM 2 ({s_ord} SUMMATIVE)")
+    elif "QUARTER 3" in t_title:
+        t_title = t_title.replace("QUARTER 3", f"TERM 3 ({s_ord} SUMMATIVE)")
+    elif "SUMMATIVE ASSESSMENT" in t_title:
+        t_title = t_title.replace("SUMMATIVE ASSESSMENT", "REMEDIAL STAGE")
+    formatted["title"] = t_title
+
+    if total_stations:
+        for step in formatted["steps"]:
+            step["title"] = step["title"].replace("5 stations", f"{total_stations} stations").replace("all 5", f"all {total_stations}")
+            step["bullets"] = [b.replace("5 stations", f"{total_stations} stations").replace("all 5", f"all {total_stations}") for b in step["bullets"]]
+
     return formatted
 
 

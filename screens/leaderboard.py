@@ -42,14 +42,14 @@ class LeaderboardScreen:
         self.badge_font = pygame.font.SysFont(["Segoe UI", "Tahoma", "Calibri", "Arial"], 13, bold=True)
         self.btn_font = pygame.font.SysFont(["Segoe UI", "Tahoma", "Calibri", "Arial"], 15, bold=True)
 
-        # Tab Selection: 0 = OVERALL, 1 = Q1, 2 = Q2, 3 = Q3, 4 = Q4
+        # Tab Selection: 0 = OVERALL, 1 = T1, 2 = T2, 3 = T3, 4 = REMEDIAL
         self.active_tab = 0
         self.tabs = [
             {"id": 0, "label": "OVERALL RANKINGS", "quarter": None},
-            {"id": 1, "label": "QUARTER 1 (Shapes)", "quarter": 1},
-            {"id": 2, "label": "QUARTER 2 (Money)", "quarter": 2},
-            {"id": 3, "label": "QUARTER 3 (Fractions)", "quarter": 3},
-            {"id": 4, "label": "SUMMATIVE ASSESSMENT", "quarter": 4}
+            {"id": 1, "label": "TERM 1 (Geometry)", "quarter": 1},
+            {"id": 2, "label": "TERM 2 (Kalye)", "quarter": 2},
+            {"id": 3, "label": "TERM 3 (Monetary)", "quarter": 3},
+            {"id": 4, "label": "REMEDIAL STAGE", "quarter": 4}
         ]
 
         # Top Action Buttons
@@ -128,14 +128,33 @@ class LeaderboardScreen:
                 entry["display_score"] = entry.get("total_score", 0)
                 entry["display_acc"] = entry.get("average_percentage", 0.0)
         else:
-            # Filter and sort by specific Quarter
+            # Filter and sort by specific Term (or Remedial)
             q_list = []
             for entry in self.leaderboard_data:
                 qd = entry.get("quarters", {}).get(target_q)
                 score = qd.get("score", 0) if qd else 0
                 pct = qd.get("percentage", 0.0) if qd else 0.0
                 completed = qd.get("completed", False) if qd else False
-                
+
+                summs = entry.get("summatives", {})
+                if target_q in (1, 2, 3):
+                    t_summs = [summs.get(f"t{target_q}_s{s}") for s in range(1, 5) if summs.get(f"t{target_q}_s{s}")]
+                    if t_summs:
+                        s_score = sum(s.get("score", 0) for s in t_summs if isinstance(s, dict))
+                        s_pct = sum(s.get("percentage", 0.0) for s in t_summs if isinstance(s, dict)) / len(t_summs)
+                        score = max(score, s_score)
+                        pct = max(pct, s_pct)
+                        completed = completed or any((s.get("completed", False) if isinstance(s, dict) else bool(s)) for s in t_summs)
+                elif target_q == 4:
+                    rem_info = summs.get("remedial")
+                    if rem_info:
+                        if isinstance(rem_info, dict):
+                            score = max(score, rem_info.get("score", 0))
+                            pct = max(pct, rem_info.get("percentage", 0.0))
+                            completed = completed or bool(rem_info.get("completed", False))
+                        else:
+                            completed = completed or bool(rem_info)
+
                 clone = dict(entry)
                 clone["display_score"] = score
                 clone["display_acc"] = pct
@@ -487,13 +506,73 @@ class LeaderboardScreen:
                 gr_surf = self.row_meta_font.render(gr_txt, True, (148, 163, 184))
                 self.screen.blit(gr_surf, (col_grade_x, row_y + 17))
 
-                # Progress Pills (Q1, Q2, Q3, Q4)
-                for qn in range(1, 5):
-                    q_box = pygame.Rect(col_prog_x + (qn - 1) * 44, row_y + 13, 38, 26)
-                    qd = entry.get("quarters", {}).get(qn)
-                    q_done = qd and (qd.get("completed", False) or qd.get("score", 0) > 0)
+                # Progress Pills: T1-T3 + REM on Overall tab, or 1st-4th Summative on Term tab
+                summs = entry.get("summatives", {})
+                target_q = self.tabs[self.active_tab]["quarter"]
 
-                    if q_done:
+                if target_q is None:
+                    # Overall tab: 4 pills for T1, T2, T3, REM
+                    pill_labels = ["T1", "T2", "T3", "REM"]
+                    for idx, plabel in enumerate(pill_labels):
+                        q_idx = idx + 1
+                        q_box = pygame.Rect(col_prog_x + idx * 44, row_y + 13, 38, 26)
+                        def _chk(d, k):
+                            if not isinstance(d, dict):
+                                return False
+                            v = d.get(k)
+                            return bool(v.get("completed", False)) if isinstance(v, dict) else bool(v)
+
+                        if q_idx in (1, 2, 3):
+                            done = any(_chk(summs, f"t{q_idx}_s{s}") for s in range(1, 5))
+                            qd = entry.get("quarters", {}).get(q_idx)
+                            done = done or (qd and (_chk(entry.get("quarters", {}), q_idx) or (isinstance(qd, dict) and qd.get("score", 0) > 0)))
+                        else:
+                            done = _chk(summs, "remedial")
+                            qd = entry.get("quarters", {}).get(4)
+                            done = done or (qd and (_chk(entry.get("quarters", {}), 4) or (isinstance(qd, dict) and qd.get("score", 0) > 0)))
+
+                        if done:
+                            pygame.draw.rect(self.screen, (22, 101, 52), q_box, border_radius=6)
+                            pygame.draw.rect(self.screen, (74, 222, 128), q_box, 1, border_radius=6)
+                            q_txt_col = (255, 255, 255)
+                        else:
+                            pygame.draw.rect(self.screen, (30, 41, 59), q_box, border_radius=6)
+                            pygame.draw.rect(self.screen, (71, 85, 105), q_box, 1, border_radius=6)
+                            q_txt_col = (100, 116, 139)
+
+                        qp_surf = self.badge_font.render(plabel, True, q_txt_col)
+                        self.screen.blit(qp_surf, qp_surf.get_rect(center=q_box.center))
+
+                elif target_q in (1, 2, 3):
+                    # Specific Term tab: 4 pills for 1st, 2nd, 3rd, 4th Summative
+                    pill_labels = ["1st", "2nd", "3rd", "4th"]
+                    for idx, plabel in enumerate(pill_labels):
+                        s_idx = idx + 1
+                        q_box = pygame.Rect(col_prog_x + idx * 44, row_y + 13, 38, 26)
+                        slot_k = f"t{target_q}_s{s_idx}"
+                        s_info = summs.get(slot_k) if isinstance(summs, dict) else None
+                        done = bool(s_info.get("completed", False)) if isinstance(s_info, dict) else bool(s_info)
+
+                        if done:
+                            pygame.draw.rect(self.screen, (22, 101, 52), q_box, border_radius=6)
+                            pygame.draw.rect(self.screen, (74, 222, 128), q_box, 1, border_radius=6)
+                            q_txt_col = (255, 255, 255)
+                        else:
+                            pygame.draw.rect(self.screen, (30, 41, 59), q_box, border_radius=6)
+                            pygame.draw.rect(self.screen, (71, 85, 105), q_box, 1, border_radius=6)
+                            q_txt_col = (100, 116, 139)
+
+                        qp_surf = self.badge_font.render(plabel, True, q_txt_col)
+                        self.screen.blit(qp_surf, qp_surf.get_rect(center=q_box.center))
+
+                else:
+                    # Remedial tab: single REMEDIAL pill
+                    q_box = pygame.Rect(col_prog_x, row_y + 13, 100, 26)
+                    r_info = summs.get("remedial") if isinstance(summs, dict) else None
+                    done = bool(r_info.get("completed", False)) if isinstance(r_info, dict) else bool(r_info)
+                    qd = entry.get("quarters", {}).get(4)
+                    done = done or (qd and ((isinstance(qd, dict) and (qd.get("completed", False) or qd.get("score", 0) > 0)) or bool(qd)))
+                    if done:
                         pygame.draw.rect(self.screen, (22, 101, 52), q_box, border_radius=6)
                         pygame.draw.rect(self.screen, (74, 222, 128), q_box, 1, border_radius=6)
                         q_txt_col = (255, 255, 255)
@@ -501,8 +580,7 @@ class LeaderboardScreen:
                         pygame.draw.rect(self.screen, (30, 41, 59), q_box, border_radius=6)
                         pygame.draw.rect(self.screen, (71, 85, 105), q_box, 1, border_radius=6)
                         q_txt_col = (100, 116, 139)
-
-                    qp_surf = self.badge_font.render("SA" if qn == 4 else f"Q{qn}", True, q_txt_col)
+                    qp_surf = self.badge_font.render("REMEDIAL", True, q_txt_col)
                     self.screen.blit(qp_surf, qp_surf.get_rect(center=q_box.center))
 
                 # Accuracy Percentage
@@ -545,3 +623,6 @@ class LeaderboardScreen:
     def cleanup(self):
         """Cleanup resources on exit."""
         pass
+
+
+Leaderboard = LeaderboardScreen

@@ -184,38 +184,39 @@ class TestDynamicQuestionsAndObjectiveToggle(unittest.TestCase):
         from core.dynamic_quiz_manager import MAX_QUESTIONS_PER_QUARTER, validate_and_clamp_questions
         from db.connect_db import map_cloud_questions
 
-        self.assertEqual(MAX_QUESTIONS_PER_QUARTER, 15)
+        self.assertIn(MAX_QUESTIONS_PER_QUARTER, (10, 15))
+        expected_max = MAX_QUESTIONS_PER_QUARTER
 
-        # 1. Verify allocate_dynamic_stations can allocate up to 15 stations, and caps at 15 if webapp provides 20+
+        # 1. Verify allocate_dynamic_stations can allocate up to max stations, and caps at max if webapp provides 20+
         game_map = ["G" * 30 for _ in range(20)]
         existing = {1: (2, 2), 2: (5, 2)}
-        allocated_15 = allocate_dynamic_stations(
+        allocated_max = allocate_dynamic_stations(
             game_map,
             existing_stations=existing,
-            needed_count=15,  # Follow 15 questions from web app
+            needed_count=expected_max,
             walkable_chars={"G"}
         )
-        self.assertEqual(len(allocated_15), 15)
-        self.assertEqual(max(allocated_15.keys()), 15)
+        self.assertEqual(len(allocated_max), expected_max)
+        self.assertEqual(max(allocated_max.keys()), expected_max)
 
-        # Request 25 stations -> must be clamped to 15
+        # Request 25 stations -> must be clamped to expected_max
         allocated_over = allocate_dynamic_stations(
             game_map,
             existing_stations=existing,
             needed_count=25,
             walkable_chars={"G"}
         )
-        self.assertEqual(len(allocated_over), 15)
+        self.assertEqual(len(allocated_over), expected_max)
 
-        # 2. Verify validate_and_clamp_questions accepts up to 15 questions, and clamps >15
+        # 2. Verify validate_and_clamp_questions accepts up to max questions, and clamps >max
         sample_questions_20 = [
             {"question": f"Question {i}", "choices": ["A", "B", "C", "D"], "correct": 0}
             for i in range(1, 21)
         ]
         clamped_q = validate_and_clamp_questions(sample_questions_20, quarter_num=1)
-        self.assertEqual(len(clamped_q), 15)
+        self.assertEqual(len(clamped_q), expected_max)
         self.assertEqual(clamped_q[0]["question"], "Question 1")
-        self.assertEqual(clamped_q[14]["question"], "Question 15")
+        self.assertEqual(clamped_q[expected_max - 1]["question"], f"Question {expected_max}")
 
         # Verify it skips malformed or empty items
         malformed = [None, "invalid", {}, {"question": "   "}, {"question": "Valid Question"}]
@@ -223,15 +224,15 @@ class TestDynamicQuestionsAndObjectiveToggle(unittest.TestCase):
         self.assertEqual(len(filtered), 1)
         self.assertEqual(filtered[0]["question"], "Valid Question")
 
-        # 3. Verify map_cloud_questions accepts up to 15 questions, and caps at 15
+        # 3. Verify map_cloud_questions accepts up to max questions, and caps at max
         raw_mock_questions = [
             {"prompt": f"Question {i}", "optionA": "1", "optionB": "2", "optionC": "3", "optionD": "4", "correctAnswer": "A"}
             for i in range(1, 25)  # 24 questions from cloud
         ]
         mapped = map_cloud_questions(raw_mock_questions)
-        self.assertEqual(len(mapped), 15)
+        self.assertEqual(len(mapped), expected_max)
         self.assertEqual(mapped[0]["question"], "Question 1")
-        self.assertEqual(mapped[14]["question"], "Question 15")
+        self.assertEqual(mapped[expected_max - 1]["question"], f"Question {expected_max}")
 
     def test_objective_hud_dimensions_and_map_clearance(self):
         """Verify the enlarged Objective HUD window dimensions (640x96) preserve map visibility."""

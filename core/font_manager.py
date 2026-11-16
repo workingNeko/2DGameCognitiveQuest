@@ -384,6 +384,10 @@ class SafeFont(_ORIG_FONT):
 
     def render(self, text, antialias, color, background=None):
         clean = sanitize_text(text)
+        if not clean:
+            h = max(1, self.get_height()) if hasattr(self, 'get_height') else 16
+            return pygame.Surface((0, h), pygame.SRCALPHA)
+
         c_key = tuple(color) if hasattr(color, '__iter__') else color
         bg_key = tuple(background) if hasattr(background, '__iter__') and background is not None else background
         has_display = pygame.display.get_surface() is not None
@@ -393,20 +397,24 @@ class SafeFont(_ORIG_FONT):
             _TEXT_SURF_CACHE.move_to_end(cache_key)
             return cached
 
-        if background is not None:
-            surf = super().render(clean, antialias, color, background)
-            if has_display:
-                try:
-                    surf = surf.convert()
-                except Exception:
-                    pass
-        else:
-            surf = super().render(clean, antialias, color)
-            if has_display:
-                try:
-                    surf = surf.convert_alpha()
-                except Exception:
-                    pass
+        try:
+            if background is not None:
+                surf = super().render(clean, antialias, color, background)
+                if has_display:
+                    try:
+                        surf = surf.convert()
+                    except Exception:
+                        pass
+            else:
+                surf = super().render(clean, antialias, color)
+                if has_display:
+                    try:
+                        surf = surf.convert_alpha()
+                    except Exception:
+                        pass
+        except pygame.error:
+            h = max(1, self.get_height()) if hasattr(self, 'get_height') else 16
+            surf = pygame.Surface((0, h), pygame.SRCALPHA)
 
         _TEXT_SURF_CACHE[cache_key] = surf
         while len(_TEXT_SURF_CACHE) > _MAX_TEXT_CACHE:
@@ -415,13 +423,22 @@ class SafeFont(_ORIG_FONT):
 
     def size(self, text):
         clean = sanitize_text(text)
+        if not clean:
+            h = max(1, self.get_height()) if hasattr(self, 'get_height') else 16
+            return (0, h)
+
         cache_key = (id(self), clean)
         cached = _TEXT_SIZE_CACHE.get(cache_key)
         if cached is not None:
             _TEXT_SIZE_CACHE.move_to_end(cache_key)
             return cached
 
-        s = super().size(clean)
+        try:
+            s = super().size(clean)
+        except pygame.error:
+            h = max(1, self.get_height()) if hasattr(self, 'get_height') else 16
+            s = (0, h)
+
         _TEXT_SIZE_CACHE[cache_key] = s
         while len(_TEXT_SIZE_CACHE) > _MAX_TEXT_CACHE:
             _TEXT_SIZE_CACHE.popitem(last=False)

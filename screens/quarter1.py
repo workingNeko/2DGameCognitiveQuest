@@ -52,11 +52,12 @@ PORTAL_SIZES = {
 
 
 class Quarter1:
-    def __init__(self, screen, main_menu, map_name):
+    def __init__(self, screen, main_menu, map_name, summative_num=1):
         self.screen = screen
         self.main_menu = main_menu
         self.width, self.height = screen.get_size()
         self.map_name = map_name  # 'map1.txt' or 'map2.txt'
+        self.summative_num = summative_num
         self.is_quiz_map = any(m in self.map_name.lower() for m in ["map1", "map2", "map3"])
 
         # Resolve Student Player Name for Character HUD
@@ -811,7 +812,7 @@ class Quarter1:
     # ============================================================
     # DATABASE INTEGRATION
     # ============================================================
-    def load_database_questions(self):
+    def load_database_questions(self, questions_override=None):
         self.database_unit_id = None
         if not self.is_quiz_map:
             self.active_station_count = 0
@@ -819,15 +820,19 @@ class Quarter1:
 
         from db.connect_db import map_cloud_questions
         mapped_questions = []
-        try:
-            if db:
-                questions_result = db.get_questions(quarter=1, force_refresh=True)
-                mapped_questions = map_cloud_questions(
-                    questions_result,
-                    default_hint="Examine the geometric shapes and properties carefully!"
-                )
-        except Exception as e:
-            print(f"[WARN] Exception loading cloud questions for Quarter 1: {e}")
+        if questions_override is not None:
+            mapped_questions = list(questions_override)
+        else:
+            try:
+                if db:
+                    s_num = getattr(self, 'summative_num', 1)
+                    questions_result = db.get_questions(quarter=1, summative=s_num, force_refresh=True)
+                    mapped_questions = map_cloud_questions(
+                        questions_result,
+                        default_hint="Examine the geometric shapes and properties carefully!"
+                    )
+            except Exception as e:
+                print(f"[WARN] Exception loading cloud questions for Quarter 1: {e}")
 
         # Strict error handler and ceiling: accepts up to 15 questions only
         from core.dynamic_quiz_manager import validate_and_clamp_questions
@@ -896,6 +901,10 @@ class Quarter1:
             self.quiz_station_index = active_ids[0]
             print(f"[CLOUD SYNC] Quarter 1 synced {active_count} cloud question(s) across {active_count} station(s).")
 
+    def cloud_sync_quarter1_questions(self, questions):
+        """Allows dynamic overriding/syncing of Quarter 1 questions from cloud or tests (up to 15)."""
+        return self.load_database_questions(questions_override=questions)
+
     def save_results_to_database(self):
         if getattr(self, '_results_saved_to_db', False):
             return
@@ -927,15 +936,22 @@ class Quarter1:
             percentage = (correct_answers / float(total_questions)) * 100.0
             score = int(round(percentage))
 
-            # Try to fetch assessment_id for Quarter 1 Quiz from Vercel
-            assessment_id = db.get_assessment_id(quarter=1)
+            s_num = getattr(self, 'summative_num', 1)
+            assessment_id = db.get_assessment_id(quarter=1, summative=s_num)
             if assessment_id:
-                print(f"[LOG] Linked result to Assessment ID: {assessment_id}")
+                print(f"[LOG] Linked Term 1 Summative {s_num} result to Assessment ID: {assessment_id}")
 
-            feedback_msg = f"Completed Quarter 1. Answered {correct_answers} of {total_questions} questions correctly on the first attempt."
+            from db.connect_db import _ORDINALS
+            s_ord = _ORDINALS.get(s_num, f"{s_num}th")
+            feedback_msg = f"Completed Term 1 - {s_ord} Summative (Geometry Forest). Answered {correct_answers} of {total_questions} questions correctly on the first attempt."
             sel_student = getattr(self.main_menu, 'selected_student', None) or {}
             grade_level = sel_student.get('level') or sel_student.get('gradeLevel') or sel_student.get('grade_level') or 'Grade 2'
             student_code = sel_student.get('student_id') or sel_student.get('studentId') or getattr(self.main_menu, 'student_id', None)
+            missed_ids = [
+                self.quiz_questions[int(k) - 1].get("id")
+                for k, v in self.first_attempt_correct.items()
+                if not v and str(k).isdigit() and 0 <= int(k) - 1 < len(self.quiz_questions) and self.quiz_questions[int(k) - 1].get("id")
+            ]
             
             success = db.save_game_result(
                 student_id=student_db_id,
@@ -947,7 +963,9 @@ class Quarter1:
                 grade_level=grade_level,
                 assessment_id=assessment_id,
                 quarter=1,
-                student_code=student_code
+                student_code=student_code,
+                summative=s_num,
+                missed_ids=missed_ids
             )
             if success:
                 print(f"[WIN] Successfully saved Quarter 1 Game Result to Vercel for Student DB ID {student_db_id}!")
@@ -1515,7 +1533,8 @@ class Quarter1:
         q_count = sum(1 for s in self.shape_npcs.values() if s['answered'])
         
         # Modify both self.game_map and self.render_map
-        # Columns 37 to 46 in Row 3 and Row 4 (5 segments scaled proportionally to 0..N cloud questions)
+        # Columns 37 to 46 in Row 3 and Row 4 (10 tiles scaled proportionally to 0..N cloud questions)
+        built_tiles = int(round((q_count / float(tot)) * 10)) if (tot > 0 and q_count < tot) else (10 if (tot <= 0 or q_count >= tot) else 0)
         for r in [3, 4]:
             if r >= len(self.game_map):
                 continue
@@ -1525,8 +1544,8 @@ class Quarter1:
             for col in range(37, 47):
                 if col >= len(game_row):
                     continue
-                segment = (col - 37) // 2 + 1  # 1 to 5
-                if tot <= 0 or q_count * 5 >= segment * tot:
+                tile_idx = col - 37  # 0 to 9
+                if tot <= 0 or tile_idx < built_tiles:
                     game_row[col] = 'B'
                     render_row[col] = 'B'
                 else:
@@ -1707,8 +1726,14 @@ class Quarter1:
                 correct_answers = sum(1 for k, v in self.first_attempt_correct.items() if k <= total_questions and v)
                 percentage = (correct_answers / float(total_questions)) * 100.0 if total_questions > 0 else 100.0
                 score = int(round(percentage)) if total_questions > 0 else 100
+                missed_ids = [
+                self.quiz_questions[int(k) - 1].get("id")
+                for k, v in self.first_attempt_correct.items()
+                if not v and str(k).isdigit() and 0 <= int(k) - 1 < len(self.quiz_questions) and self.quiz_questions[int(k) - 1].get("id")
+            ]
+                s_num = getattr(self, 'summative_num', 1)
                 from db.save_system import mark_quarter_completed
-                mark_quarter_completed(self.main_menu, "quarter1", score=score, percentage=percentage, total_questions=total_questions)
+                mark_quarter_completed(self.main_menu, "quarter1", score=score, percentage=percentage, total_questions=total_questions, summative_num=s_num, missed_ids=missed_ids)
                 if hasattr(self.main_menu, 'audio_manager'):
                     self.main_menu.audio_manager.play_sfx("victory_fanfare")
                     self.main_menu.audio_manager.play_sfx("portal_warp")
@@ -1734,10 +1759,11 @@ class Quarter1:
 
     def restart_level(self):
         """Restarts the current Quarter 1 level."""
+        s_num = getattr(self, 'summative_num', 1)
         self.main_menu.quarter1 = None
         self.cleanup()
         from screens.quarter1 import Quarter1
-        self.main_menu.quarter1 = Quarter1(self.screen, self.main_menu, self.map_name)
+        self.main_menu.quarter1 = Quarter1(self.screen, self.main_menu, self.map_name, summative_num=s_num)
 
     def finish_and_return_to_hub(self):
         """Callback invoked by Victory Report Card to transition back to stage select."""
@@ -2905,8 +2931,14 @@ class Quarter1:
                 correct_answers = sum(1 for k, v in self.first_attempt_correct.items() if k <= total_questions and v)
                 percentage = (correct_answers / float(total_questions)) * 100.0 if total_questions > 0 else 100.0
                 score = int(round(percentage)) if total_questions > 0 else 100
+                missed_ids = [
+                self.quiz_questions[int(k) - 1].get("id")
+                for k, v in self.first_attempt_correct.items()
+                if not v and str(k).isdigit() and 0 <= int(k) - 1 < len(self.quiz_questions) and self.quiz_questions[int(k) - 1].get("id")
+            ]
+                s_num = getattr(self, 'summative_num', 1)
                 from db.save_system import mark_quarter_completed
-                mark_quarter_completed(self.main_menu, "quarter1", score=score, percentage=percentage, total_questions=total_questions)
+                mark_quarter_completed(self.main_menu, "quarter1", score=score, percentage=percentage, total_questions=total_questions, summative_num=s_num, missed_ids=missed_ids)
                 self.victory_card.show(total_questions=total_questions, correct_first_try=correct_answers, score=score)
             return
 
@@ -4557,7 +4589,10 @@ class Quarter1:
             
             # Header title in Gold
             title_font = get_font("Comic Sans MS", 13, bold=True)
-            title_surf = title_font.render("★ CURRENT OBJECTIVES", True, (255, 215, 0))
+            from db.connect_db import _ORDINALS
+            s_num = getattr(self, 'summative_num', 1)
+            s_ord = _ORDINALS.get(s_num, f"{s_num}th").upper()
+            title_surf = title_font.render(f"★ TERM 1 — {s_ord} SUMMATIVE", True, (255, 215, 0))
             self.screen.blit(title_surf, (box_x + 16, box_y + 8))
 
             # Progress badge pill on top right (with prominent Wrong indicator if wrong answers exist)

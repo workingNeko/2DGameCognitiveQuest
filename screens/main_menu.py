@@ -1714,9 +1714,16 @@ class MainMenu:
                 save_data = load_student_progress(self.student_id)
                 if save_data:
                     q_data = save_data.get("completed_quarters", {})
-                    completed_count = sum(1 for q, d in q_data.items() if isinstance(d, dict) and d.get("completed"))
-                    self.selected_student["progress"] = int((completed_count / 4.0) * 100)
-                    self.selected_student["score"] = sum(d.get("score", 0) for q, d in q_data.items() if isinstance(d, dict))
+                    s_data = save_data.get("completed_summatives", {})
+                    if s_data:
+                        req_slots = [f"t{t}_s{s}" for t in range(1, 4) for s in range(1, 5)]
+                        completed_count = sum(1 for slot in req_slots if isinstance(s_data.get(slot), dict) and s_data[slot].get("completed"))
+                        self.selected_student["progress"] = min(100, int(round((completed_count / 12.0) * 100)))
+                        self.selected_student["score"] = sum(d.get("score", 0) for s, d in s_data.items() if isinstance(d, dict))
+                    else:
+                        completed_count = sum(1 for q, d in q_data.items() if isinstance(d, dict) and d.get("completed"))
+                        self.selected_student["progress"] = int((completed_count / 4.0) * 100)
+                        self.selected_student["score"] = sum(d.get("score", 0) for q, d in q_data.items() if isinstance(d, dict))
             except Exception:
                 pass
             has_save = check_save_exists(self.student_id)

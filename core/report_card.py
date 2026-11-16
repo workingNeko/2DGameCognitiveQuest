@@ -194,10 +194,10 @@ class VictoryReportCard:
             self.stage_title = stage_title
         else:
             q_names = {
-                "quarter1": "Quarter 1: Geometric Explorer",
-                "quarter2": "Quarter 2: Fractions & Values",
-                "quarter3": "Quarter 3: Master of Operations",
-                "quarter4": "Summative Assessment"
+                "quarter1": "Term 1: Geometry Forest",
+                "quarter2": "Term 2: Barangay Kalye",
+                "quarter3": "Term 3: Monetary Desert",
+                "quarter4": "Remedial Stage: Water Temple"
             }
             self.stage_title = q_names.get(self.quarter_id, "STAGE CLEAR!")
 

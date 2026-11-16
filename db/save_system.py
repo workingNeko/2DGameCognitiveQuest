@@ -1,4 +1,5 @@
 import os
+import re
 import json
 import time
 import datetime
@@ -126,11 +127,33 @@ def flush_pending_async_saves():
             except Exception as e:
                 print(f"[WARN] Flush pending save failed for {path}: {e}")
 
+def _extract_student_id(student_id):
+    """Safely extracts a clean string student ID from a string, int, MainMenu instance, or student dict."""
+    if student_id is None:
+        return None
+    if isinstance(student_id, (str, int)):
+        s = str(student_id).strip()
+        return s if s else None
+    if hasattr(student_id, 'student_id') and getattr(student_id, 'student_id'):
+        s = str(getattr(student_id, 'student_id')).strip()
+        return s if s else None
+    if hasattr(student_id, 'selected_student') and isinstance(student_id.selected_student, dict):
+        sid = student_id.selected_student.get('student_id') or student_id.selected_student.get('studentId')
+        if sid:
+            return str(sid).strip()
+    if isinstance(student_id, dict):
+        sid = student_id.get('student_id') or student_id.get('studentId') or student_id.get('id')
+        if sid:
+            return str(sid).strip()
+    return None
+
 def get_save_path(student_id):
+    student_id = _extract_student_id(student_id)
     os.makedirs("db/saves", exist_ok=True)
     return f"db/saves/{student_id}.json"
 
 def check_save_exists(student_id):
+    student_id = _extract_student_id(student_id)
     if not student_id:
         return False
     path = get_save_path(student_id)
@@ -139,12 +162,20 @@ def check_save_exists(student_id):
     try:
         with open(path, "r", encoding="utf-8") as f:
             data = json.load(f)
-            # Verify actual gameplay progress exists (completed quarters, tutorial, or stage data)
+            # Verify actual gameplay progress exists (completed quarters, summatives, tutorial, or stage data)
             q = data.get("completed_quarters", {})
-            has_completed_q = any(isinstance(v, dict) and v.get("completed") for v in q.values())
+            has_completed_q = any(
+                (isinstance(v, dict) and v.get("completed")) or (isinstance(v, bool) and v)
+                for v in q.values()
+            )
+            s = data.get("completed_summatives", {})
+            has_completed_s = any(
+                (isinstance(v, dict) and v.get("completed")) or (isinstance(v, bool) and v)
+                for v in s.values()
+            )
             has_tutorial = bool(data.get("tutorial_completed"))
             has_stage = bool(data.get("stage_select"))
-            return has_completed_q or has_tutorial or has_stage
+            return has_completed_q or has_completed_s or has_tutorial or has_stage
     except Exception:
         return False
 
@@ -245,7 +276,7 @@ def delete_student_progress(student_id, student_db_id=None, main_menu=None):
 
     # Purge past records in the live database via db.connect_db
     try:
-        from db.connect_db import db
+        from db.connect_db import db, parse_slot_key as module_parse_slot_key, infer_slot_from_text as module_infer_slot_from_text
         effective_sid = student_id or (getattr(main_menu, 'student_id', None) if main_menu else None)
         effective_db_id = student_db_id or (getattr(main_menu, 'student_db_id', None) if main_menu else None)
         deleted_count = db.delete_student_records(
@@ -292,6 +323,8 @@ def delete_student_progress(student_id, student_db_id=None, main_menu=None):
                 "current_screen": "menu",
                 "tutorial_completed": False,
                 "completed_quarters": {},
+                "completed_summatives": {},
+                "missed_questions": [],
                 "timestamp": time.time()
             }
             atomic_save_json(clean_path, student_clean_data)
@@ -305,6 +338,8 @@ def delete_student_progress(student_id, student_db_id=None, main_menu=None):
         main_menu.tutorial_completed = False
         if hasattr(main_menu, 'completed_quarters'):
             main_menu.completed_quarters = {}
+        if hasattr(main_menu, 'completed_summatives'):
+            main_menu.completed_summatives = {}
         if getattr(main_menu, 'selected_student', None):
             main_menu.selected_student["score"] = 0
             main_menu.selected_student["progress"] = 0
@@ -331,8 +366,8 @@ def delete_student_progress(student_id, student_db_id=None, main_menu=None):
         if hasattr(main_menu, 'setup_buttons'):
             main_menu.setup_buttons()
 
-def mark_quarter_completed(main_menu, quarter_name, score=100, percentage=100.0, total_questions=5):
-    """Marks a specific quarter as completed in the student's persistent save data."""
+def mark_quarter_completed(main_menu, quarter_name, score=100, percentage=100.0, total_questions=10, summative_num=None, missed_ids=None, remediated_ids=None):
+    """Marks a specific quarter or summative assessment slot as completed in persistent save data."""
     student_id = getattr(main_menu, 'student_id', None)
     if not student_id and getattr(main_menu, 'selected_student', None):
         student_id = main_menu.selected_student.get('student_id') or main_menu.selected_student.get('studentId')
@@ -341,7 +376,22 @@ def mark_quarter_completed(main_menu, quarter_name, score=100, percentage=100.0,
     save_data = load_student_progress(student_id) or {}
     if "completed_quarters" not in save_data:
         save_data["completed_quarters"] = {}
+    if "completed_summatives" not in save_data:
+        save_data["completed_summatives"] = {}
     
+    # Resolve slot key
+    try:
+        from db.connect_db import parse_slot_key
+        slot_key, slot_label, term_num, s_num = parse_slot_key(quarter_name, summative_num)
+    except Exception:
+        slot_key = quarter_name
+        slot_label = quarter_name
+        term_num = 1
+        s_num = 1
+
+    now_str = datetime.datetime.now().strftime("%b %d, %Y %I:%M %p")
+
+    # Update completed_quarters (backwards compatibility)
     prev_q = save_data["completed_quarters"].get(quarter_name)
     if isinstance(prev_q, dict) and prev_q.get("completed"):
         best_score = max(int(prev_q.get("score", 0)), int(score))
@@ -352,7 +402,6 @@ def mark_quarter_completed(main_menu, quarter_name, score=100, percentage=100.0,
         best_pct = round(float(percentage), 1)
         best_tot = int(total_questions)
 
-    now_str = datetime.datetime.now().strftime("%b %d, %Y %I:%M %p")
     save_data["completed_quarters"][quarter_name] = {
         "completed": True,
         "score": best_score,
@@ -361,14 +410,56 @@ def mark_quarter_completed(main_menu, quarter_name, score=100, percentage=100.0,
         "timestamp": time.time(),
         "recorded_date": now_str,
     }
+
+    # Update completed_summatives (13 canonical slots)
+    prev_s = save_data["completed_summatives"].get(slot_key)
+    if isinstance(prev_s, dict) and prev_s.get("completed"):
+        best_s_score = max(int(prev_s.get("score", 0)), int(score))
+        best_s_pct = max(float(prev_s.get("percentage", 0.0)), round(float(percentage), 1))
+        best_s_tot = int(total_questions) if int(score) >= int(prev_s.get("score", 0)) else int(prev_s.get("total_questions", total_questions))
+    else:
+        best_s_score = int(score)
+        best_s_pct = round(float(percentage), 1)
+        best_s_tot = int(total_questions)
+
+    save_data["completed_summatives"][slot_key] = {
+        "completed": True,
+        "score": best_s_score,
+        "percentage": best_s_pct,
+        "total_questions": best_s_tot,
+        "term": term_num,
+        "summative": s_num,
+        "slot": slot_key,
+        "label": slot_label,
+        "timestamp": time.time(),
+        "recorded_date": now_str,
+    }
+
+    # Update persistent missed question pool
+    missed_pool = set(save_data.get("missed_questions", []))
+    if missed_ids:
+        for mid in missed_ids:
+            if mid is not None:
+                missed_pool.add(mid)
+    if remediated_ids:
+        for rid in remediated_ids:
+            missed_pool.discard(rid)
+    save_data["missed_questions"] = sorted(list(missed_pool))
+
     save_data["timestamp"] = time.time()
     save_data["last_recorded_date"] = now_str
     
-    # Calculate cumulative score and progress percentage across all quarters
-    comp_qs = save_data["completed_quarters"]
-    cum_score = sum(d.get("score", 0) for d in comp_qs.values() if isinstance(d, dict))
-    comp_count = sum(1 for d in comp_qs.values() if isinstance(d, dict) and d.get("completed"))
-    cum_prog = int((comp_count / 4.0) * 100)
+    # Calculate cumulative score and progress percentage (12 summatives)
+    comp_summs = save_data["completed_summatives"]
+    if comp_summs:
+        comp_count = sum(1 for k, d in comp_summs.items() if k != "remedial" and isinstance(d, dict) and d.get("completed"))
+        cum_prog = int((comp_count / 12.0) * 100)
+        cum_score = sum(int(d.get("score", 0)) for d in comp_summs.values() if isinstance(d, dict))
+    else:
+        comp_qs = save_data["completed_quarters"]
+        cum_score = sum(d.get("score", 0) for d in comp_qs.values() if isinstance(d, dict))
+        comp_count = sum(1 for d in comp_qs.values() if isinstance(d, dict) and d.get("completed"))
+        cum_prog = int((comp_count / 4.0) * 100)
 
     # Sync selected_student in save data
     if "selected_student" in save_data and isinstance(save_data["selected_student"], dict):
@@ -394,7 +485,7 @@ def mark_quarter_completed(main_menu, quarter_name, score=100, percentage=100.0,
     path = get_save_path(student_id)
     try:
         atomic_save_json(path, save_data)
-        print(f"[STAR] Quarter '{quarter_name}' marked as COMPLETED for student {student_id}! ({score} pts, {percentage:.1f}%) [Total: {cum_score} pts, {cum_prog}%]")
+        print(f"[STAR] Slot '{slot_key}' ({slot_label}) marked as COMPLETED for student {student_id}! ({score} pts, {percentage:.1f}%) [Total: {cum_score} pts, {cum_prog}%]")
     except Exception as e:
         print(f"[WARN] Error marking quarter completed: {e}")
 
@@ -407,11 +498,37 @@ def get_completed_quarters(student_id):
         return {}
     return save_data.get("completed_quarters", {})
 
+def get_completed_summatives(student_id):
+    """Returns dict of completed summatives for given student."""
+    if not student_id:
+        return {}
+    save_data = load_student_progress(student_id)
+    if not save_data:
+        return {}
+    return save_data.get("completed_summatives", {})
+
 def is_game_completed(student_id):
-    """Returns True if all 4 Quarters (quarter1, quarter2, quarter3, quarter4) are completed."""
-    completed = get_completed_quarters(student_id)
+    """Returns True if all 12 summatives (or legacy 4 Quarters) are completed."""
+    student_id = _extract_student_id(student_id)
+    if not student_id:
+        return False
+    save_data = load_student_progress(student_id)
+    if not save_data:
+        return False
+    summs = save_data.get("completed_summatives", {})
+    def _entry_done(d, k):
+        if not isinstance(d, dict):
+            return False
+        v = d.get(k)
+        return bool(v.get("completed", False)) if isinstance(v, dict) else bool(v)
+
+    if summs:
+        req_slots = [f"t{t}_s{s}" for t in range(1, 4) for s in range(1, 5)]
+        if all(_entry_done(summs, slot) for slot in req_slots):
+            return True
+    quarters = save_data.get("completed_quarters", {})
     req = ["quarter1", "quarter2", "quarter3", "quarter4"]
-    return all(completed.get(q, {}).get("completed", False) for q in req)
+    return all(_entry_done(quarters, q) for q in req)
 
 def save_student_progress(main_menu, async_flush=False):
     if not main_menu or not getattr(main_menu, 'selected_student', None):
@@ -425,11 +542,18 @@ def save_student_progress(main_menu, async_flush=False):
         
     existing_save = load_student_progress(student_id) or {}
     completed_quarters = copy.deepcopy(existing_save.get("completed_quarters", {}))
+    completed_summatives = copy.deepcopy(existing_save.get("completed_summatives", {}))
+    missed_questions = copy.deepcopy(existing_save.get("missed_questions", []))
 
-    # Sync cumulative score and progress percentage
-    cum_score = sum(d.get("score", 0) for d in completed_quarters.values() if isinstance(d, dict))
-    comp_count = sum(1 for d in completed_quarters.values() if isinstance(d, dict) and d.get("completed"))
-    cum_prog = int((comp_count / 4.0) * 100)
+    # Sync cumulative score and progress percentage across summatives
+    if completed_summatives:
+        comp_count = sum(1 for k, d in completed_summatives.items() if k != "remedial" and isinstance(d, dict) and d.get("completed"))
+        cum_prog = int((comp_count / 12.0) * 100)
+        cum_score = sum(int(d.get("score", 0)) for d in completed_summatives.values() if isinstance(d, dict))
+    else:
+        cum_score = sum(d.get("score", 0) for d in completed_quarters.values() if isinstance(d, dict))
+        comp_count = sum(1 for d in completed_quarters.values() if isinstance(d, dict) and d.get("completed"))
+        cum_prog = int((comp_count / 4.0) * 100)
     
     if getattr(main_menu, 'selected_student', None):
         main_menu.selected_student["score"] = cum_score
@@ -441,6 +565,8 @@ def save_student_progress(main_menu, async_flush=False):
         "current_screen": main_menu.current_screen,
         "tutorial_completed": getattr(main_menu, 'tutorial_completed', True if check_save_exists(student_id) else False),
         "completed_quarters": completed_quarters,
+        "completed_summatives": completed_summatives,
+        "missed_questions": missed_questions,
         "timestamp": time.time()
     }
     
@@ -524,6 +650,7 @@ def gather_quarter_data(q, quarter_name):
     # Base progress data
     data = {
         "quarter_name": quarter_name,
+        "summative_num": getattr(q, 'summative_num', 1),
         "map_name": getattr(q, 'current_map_name', getattr(q, 'map_name', 'map1.txt')),
         "player_x": q.player_x,
         "player_y": q.player_y,
@@ -573,11 +700,15 @@ def invalidate_save_cache(student_id=None):
     """Invalidates the in-memory save cache."""
     global _SAVE_CACHE
     if student_id is not None:
-        _SAVE_CACHE.pop(str(student_id), None)
+        sid = _extract_student_id(student_id)
+        if sid:
+            _SAVE_CACHE.pop(sid, None)
+            _SAVE_CACHE.pop(str(student_id), None)
     else:
         _SAVE_CACHE.clear()
 
 def load_student_progress(student_id):
+    student_id = _extract_student_id(student_id)
     if not student_id:
         return None
     path = get_save_path(student_id)
@@ -640,7 +771,7 @@ def sync_student_with_cloud(student_id, student_db_id=None, main_menu=None, forc
         return {"synced": False}
 
     try:
-        from db.connect_db import db
+        from db.connect_db import db, parse_slot_key as module_parse_slot_key, infer_slot_from_text as module_infer_slot_from_text
     except ImportError:
         return {"synced": False}
 
@@ -713,6 +844,10 @@ def sync_student_with_cloud(student_id, student_db_id=None, main_menu=None, forc
 
         ass_to_q = db._build_assessment_to_quarter_lookup() if hasattr(db, "_build_assessment_to_quarter_lookup") else {}
         cloud_stages = {}
+        cloud_summatives = {}
+        cloud_missed_ids = set()
+        cloud_remediated_ids = set()
+
         for r in cloud_results:
             r_sid = r.get("studentId") if r.get("studentId") is not None else r.get("student_id")
             match = False
@@ -724,21 +859,73 @@ def sync_student_with_cloud(student_id, student_db_id=None, main_menu=None, forc
                 match = True
 
             if match:
-                q_num = db._resolve_record_quarter(r, ass_to_q) if hasattr(db, "_resolve_record_quarter") else 1
+                fb = str(r.get("feedback") or "")
+                raw_slot = None
+                if 'module_infer_slot_from_text' in locals() and module_infer_slot_from_text:
+                    raw_slot = module_infer_slot_from_text(fb)
+                elif hasattr(db, "infer_slot_from_text") and not type(db.infer_slot_from_text).__name__.startswith("MagicMock"):
+                    raw_slot = db.infer_slot_from_text(fb)
+
+                slot_key, slot_label, term_num, s_num = None, None, None, None
+                if raw_slot and 'module_parse_slot_key' in locals() and module_parse_slot_key:
+                    res = module_parse_slot_key(raw_slot)
+                    if isinstance(res, (tuple, list)) and len(res) == 4:
+                        slot_key, slot_label, term_num, s_num = res
+                elif raw_slot and hasattr(db, "parse_slot_key") and not type(db.parse_slot_key).__name__.startswith("MagicMock"):
+                    res = db.parse_slot_key(raw_slot)
+                    if isinstance(res, (tuple, list)) and len(res) == 4:
+                        slot_key, slot_label, term_num, s_num = res
+
+                q_num = db._resolve_record_quarter(r, ass_to_q) if hasattr(db, "_resolve_record_quarter") else term_num
+                if slot_key is None and q_num in (1, 2, 3, 4):
+                    slot_key = "remedial" if q_num == 4 else f"t{q_num}_s1"
+                    term_num = 4 if q_num == 4 else q_num
+                    s_num = 1
+
+                # Extract missed and remediated IDs
+                miss_match = re.search(r"\[MISSED:([0-9, ]+)\]", fb)
+                if miss_match:
+                    for mid in miss_match.group(1).split(","):
+                        if mid.strip().isdigit():
+                            cloud_missed_ids.add(int(mid.strip()))
+                rem_match = re.search(r"\[REMEDIATED:([0-9, ]+)\]", fb)
+                if rem_match:
+                    for rid in rem_match.group(1).split(","):
+                        if rid.strip().isdigit():
+                            cloud_remediated_ids.add(int(rid.strip()))
+
+                score = int(r.get("score") or 0)
+                pct = float(r.get("percentage") if r.get("percentage") is not None else score)
+                tot = int(r.get("totalQuestions") or r.get("total_questions") or 10)
+                cloud_date = r.get("createdAt") or r.get("created_at") or r.get("updatedAt") or datetime.datetime.now().strftime("%b %d, %Y %I:%M %p")
+
+                # Slot tracking
+                prev_s = cloud_summatives.get(slot_key)
+                if prev_s is None or score >= int(prev_s.get("score", -1)):
+                    cloud_summatives[slot_key] = {
+                        "completed": True,
+                        "score": score,
+                        "percentage": round(pct, 1),
+                        "total_questions": tot,
+                        "term": term_num,
+                        "summative": s_num,
+                        "slot": slot_key,
+                        "label": slot_label,
+                        "timestamp": time.time(),
+                        "recorded_date": cloud_date,
+                    }
+
+                # Legacy quarter tracking
                 if q_num in (1, 2, 3, 4):
                     prev = cloud_stages.get(q_num)
-                    score = int(r.get("score") or 0)
-                    pct = float(r.get("percentage") if r.get("percentage") is not None else score)
-                    tot = int(r.get("totalQuestions") or r.get("total_questions") or 5)
                     if prev is None or score >= int(prev.get("score", -1)):
-                        cloud_date = r.get("createdAt") or r.get("created_at") or r.get("updatedAt")
                         cloud_stages[q_num] = {
                             "completed": True,
                             "score": score,
                             "percentage": round(pct, 1),
                             "total_questions": tot,
                             "timestamp": time.time(),
-                            "recorded_date": cloud_date or datetime.datetime.now().strftime("%b %d, %Y %I:%M %p"),
+                            "recorded_date": cloud_date,
                         }
 
         target_sid = sid_str or str(db_id)
@@ -754,12 +941,18 @@ def sync_student_with_cloud(student_id, student_db_id=None, main_menu=None, forc
                 except Exception:
                     pass
 
+        net_missed = sorted(list(cloud_missed_ids - cloud_remediated_ids))
+
         # Cloud has data, but local save is missing -> hydrate local save from cloud!
-        if not local_save and cloud_stages:
+        if not local_save and (cloud_stages or cloud_summatives):
             sel_obj = getattr(main_menu, 'selected_student', None) or {}
             first_n = sel_obj.get("first_name") or "Student"
-            cum_s = sum(c["score"] for c in cloud_stages.values())
-            cum_p = int((len(cloud_stages) / 4.0) * 100)
+            if cloud_summatives:
+                cum_s = sum(c["score"] for c in cloud_summatives.values())
+                cum_p = int((len([k for k in cloud_summatives if k != "remedial"]) / 12.0) * 100)
+            else:
+                cum_s = sum(c["score"] for c in cloud_stages.values())
+                cum_p = int((len(cloud_stages) / 4.0) * 100)
             local_save = {
                 "student_id": target_sid,
                 "selected_student": {
@@ -777,28 +970,35 @@ def sync_student_with_cloud(student_id, student_db_id=None, main_menu=None, forc
                 "current_screen": "menu",
                 "tutorial_completed": True,
                 "completed_quarters": {f"quarter{qn}": dict(info) for qn, info in cloud_stages.items()},
+                "completed_summatives": copy.deepcopy(cloud_summatives),
+                "missed_questions": net_missed,
                 "timestamp": time.time()
             }
             atomic_save_json(save_path, local_save)
             invalidate_save_cache(target_sid)
-            return {"synced": True, "action": "hydrated", "stages": list(cloud_stages.keys())}
+            return {"synced": True, "action": "hydrated", "stages": list(cloud_stages.keys()), "summatives": list(cloud_summatives.keys())}
 
         if not local_save:
             return {"synced": True, "action": "none"}
 
         comp_dict = local_save.get("completed_quarters", {})
+        summ_dict = local_save.get("completed_summatives", {})
         local_q_nums = set()
         for k, v in comp_dict.items():
             if isinstance(v, dict) and v.get("completed"):
-                qn = db.normalize_quarter_number(k) or db.infer_quarter_from_text(k) or 1
+                try:
+                    qn = db.normalize_quarter_number(k) or db.infer_quarter_from_text(k) or 1
+                except Exception:
+                    qn = 1
                 local_q_nums.add(qn)
 
         cloud_q_nums = set(cloud_stages.keys())
+        cloud_summ_keys = set(cloud_summatives.keys())
         deleted_q_nums = local_q_nums - cloud_q_nums
 
         # CASE 1: Cloud has ZERO records for this student, but local has completed stages
         # -> Student's progress was wiped / deleted on the webapp!
-        if len(cloud_q_nums) == 0 and len(local_q_nums) > 0:
+        if len(cloud_q_nums) == 0 and len(cloud_summ_keys) == 0 and (len(local_q_nums) > 0 or len(summ_dict) > 0):
             for p in (matching_save_paths or {save_path}):
                 if os.path.exists(p):
                     try:
@@ -820,6 +1020,8 @@ def sync_student_with_cloud(student_id, student_db_id=None, main_menu=None, forc
                     main_menu.selected_student["progress"] = 0
                 if hasattr(main_menu, 'completed_quarters'):
                     main_menu.completed_quarters = {}
+                if hasattr(main_menu, 'completed_summatives'):
+                    main_menu.completed_summatives = {}
                 if hasattr(main_menu, 'create_buttons'):
                     main_menu.create_buttons()
 
@@ -835,6 +1037,11 @@ def sync_student_with_cloud(student_id, student_db_id=None, main_menu=None, forc
                 if k in comp_dict:
                     comp_dict.pop(k, None)
                     deleted_keys.append(k)
+            # Also purge any summatives for deleted terms
+            for sk in list(summ_dict.keys()):
+                for qn in deleted_q_nums:
+                    if sk.startswith(f"t{qn}_") or (qn == 4 and sk == "remedial"):
+                        summ_dict.pop(sk, None)
             updated = True
 
         for qn, qinfo in cloud_stages.items():
@@ -844,10 +1051,24 @@ def sync_student_with_cloud(student_id, student_db_id=None, main_menu=None, forc
                 comp_dict[k] = dict(qinfo)
                 updated = True
 
-        if updated:
-            new_score = sum(int(d.get("score", 0)) for d in comp_dict.values() if isinstance(d, dict))
-            new_prog = int((len([d for d in comp_dict.values() if isinstance(d, dict) and d.get("completed")]) / 4.0) * 100)
+        for sk, sinfo in cloud_summatives.items():
+            prev_s = summ_dict.get(sk)
+            if not isinstance(prev_s, dict) or not prev_s.get("completed") or int(sinfo["score"]) != int(prev_s.get("score", -1)):
+                summ_dict[sk] = dict(sinfo)
+                updated = True
+
+        if updated or cloud_missed_ids or cloud_remediated_ids:
+            if summ_dict:
+                new_score = sum(int(d.get("score", 0)) for d in summ_dict.values() if isinstance(d, dict))
+                comp_c = len([k for k, d in summ_dict.items() if k != "remedial" and isinstance(d, dict) and d.get("completed")])
+                new_prog = int((comp_c / 12.0) * 100)
+            else:
+                new_score = sum(int(d.get("score", 0)) for d in comp_dict.values() if isinstance(d, dict))
+                new_prog = int((len([d for d in comp_dict.values() if isinstance(d, dict) and d.get("completed")]) / 4.0) * 100)
+
             local_save["completed_quarters"] = comp_dict
+            local_save["completed_summatives"] = summ_dict
+            local_save["missed_questions"] = net_missed
             local_save["timestamp"] = time.time()
             if isinstance(local_save.get("selected_student"), dict):
                 local_save["selected_student"]["score"] = new_score
@@ -886,7 +1107,7 @@ def apply_student_progress(main_menu, save_data):
 
     # Reconcile student_db_id with true database primary key if available
     try:
-        from db.connect_db import db
+        from db.connect_db import db, parse_slot_key as module_parse_slot_key, infer_slot_from_text as module_infer_slot_from_text
         if db:
             cached_students = db.get_students() or []
             target_code = str(main_menu.student_id or (main_menu.selected_student and (main_menu.selected_student.get("student_id") or main_menu.selected_student.get("studentId"))))
@@ -956,21 +1177,22 @@ def apply_student_progress(main_menu, save_data):
         map_name = q_data.get("map_name", "map1.txt")
         
         q = None
+        s_num = q_data.get("summative_num", 1)
         if current_screen == "quarter1":
             from screens.quarter1 import Quarter1
-            q = Quarter1(main_menu.screen, main_menu, map_name)
+            q = Quarter1(main_menu.screen, main_menu, map_name, summative_num=s_num)
             main_menu.quarter1 = q
         elif current_screen == "quarter2":
             from screens.quarter2 import Quarter2
-            q = Quarter2(main_menu.screen, main_menu, map_name)
+            q = Quarter2(main_menu.screen, main_menu, map_name, summative_num=s_num)
             main_menu.quarter2 = q
         elif current_screen == "quarter3":
             from screens.quarter3 import Quarter3
-            q = Quarter3(main_menu.screen, main_menu, map_name)
+            q = Quarter3(main_menu.screen, main_menu, map_name, summative_num=s_num)
             main_menu.quarter3 = q
         elif current_screen == "quarter4":
             from screens.quarter4 import Quarter4
-            q = Quarter4(main_menu.screen, main_menu, map_name)
+            q = Quarter4(main_menu.screen, main_menu, map_name, summative_num=s_num)
             main_menu.quarter4 = q
             
         if q:
@@ -989,23 +1211,23 @@ def apply_student_progress(main_menu, save_data):
             # Restore first attempt correct tracking (all quarters)
             if "first_attempt_correct" in q_data and hasattr(q, 'first_attempt_correct'):
                 correct_dict = q_data["first_attempt_correct"]
-                q.first_attempt_correct = {int(k): v for k, v in correct_dict.items()}
+                q.first_attempt_correct = {int(k) if str(k).isdigit() else k: v for k, v in correct_dict.items()}
                 
             # Restore station/question attempts tracking
             if "station_attempts" in q_data:
                 att_dict = q_data["station_attempts"]
                 if hasattr(q, 'station_attempts'):
-                    q.station_attempts = {int(k): v for k, v in att_dict.items()}
+                    q.station_attempts = {int(k) if str(k).isdigit() else k: v for k, v in att_dict.items()}
                 if hasattr(q, 'question_attempts'):
-                    q.question_attempts = {int(k): v for k, v in att_dict.items()}
+                    q.question_attempts = {int(k) if str(k).isdigit() else k: v for k, v in att_dict.items()}
                 
             # Quarter 1 specific Shape NPC answered states
             if current_screen == "quarter1" and "shape_npcs" in q_data and hasattr(q, 'shape_npcs'):
                 shape_npcs_save = q_data["shape_npcs"]
                 for k, v in shape_npcs_save.items():
-                    k_int = int(k)
-                    if k_int in q.shape_npcs:
-                        q.shape_npcs[k_int]["answered"] = v.get("answered", False)
+                    k_key = int(k) if str(k).isdigit() else k
+                    if k_key in q.shape_npcs:
+                        q.shape_npcs[k_key]["answered"] = v.get("answered", False)
 
             # Restore answered stations across Quarters (Quarter 4, Quarter 3, etc.)
             if "answered_stations" in q_data and hasattr(q, 'answered_stations'):

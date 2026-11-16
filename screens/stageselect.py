@@ -90,6 +90,7 @@ class StageSelect:
         self.portal_transition_timer = 0.0
         self.portal_transition_duration = 3.0
         self.portal_transition_target = None
+        self.portal_transition_summative_num = 1
         self.portal_transition_origin = (self.width // 2, self.height // 2)
         self.portal_transition_particles = []
         self.portal_transition_stars = []
@@ -97,6 +98,22 @@ class StageSelect:
         self.portal_transition_surface = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
         self.portal_loaded_screen = None
         self.portal_loading_done = False
+
+        # Summative Selection Modal State (Term 1-3)
+        self.summative_modal_active = False
+        self.summative_modal_term = 1
+        self.summative_modal_cards = []
+        self.summative_modal_cooldown = 0.0
+        self.summative_modal_hovered_slot = None
+        self._summ_modal_overlay = None
+        self._summ_modal_back_rect = None
+
+        # Modal Fonts (Cached once at startup for 60 FPS APU rendering)
+        self.modal_title_font = pygame.font.SysFont(["Segoe UI", "Tahoma", "Calibri", "Arial"], 22, bold=True)
+        self.modal_subtitle_font = pygame.font.SysFont(["Segoe UI", "Tahoma", "Calibri", "Arial"], 14)
+        self.modal_card_title_font = pygame.font.SysFont(["Segoe UI", "Tahoma", "Calibri", "Arial"], 18, bold=True)
+        self.modal_card_info_font = pygame.font.SysFont(["Segoe UI", "Tahoma", "Calibri", "Arial"], 12)
+        self.modal_btn_font = pygame.font.SysFont(["Segoe UI", "Tahoma", "Calibri", "Arial"], 14, bold=True)
 
         # Typewriter Dialogue State
         self.dialogue_char_index = 0.0
@@ -294,35 +311,35 @@ class StageSelect:
 
         if self.is_quarter_completed('quarter4'):
             self.bromen_dialogue_lines = [
-                ("Bromen", f"Magnificent achievement, {student_name}! You have mastered the Summative Assessment (The Water Temple)!"),
+                ("Bromen", f"Magnificent achievement, {student_name}! You have mastered the Remedial Stage (The Water Temple)!"),
                 ("Bromen", "Speak with the Old Man at the central sanctuary to celebrate your Grand Champion victory!")
             ]
         else:
             self.bromen_dialogue_lines = [
                 ("Bromen", f"Greetings, voyager {student_name}! I am Bromen, guardian of the celestial Water Temple."),
-                ("Student", "Are you guarding the entrance to the Summative Assessment?"),
-                ("Bromen", "Indeed! In the sunken aqueducts, you must master fractions, solve rudder equations, and balance the elemental waterways."),
+                ("Student", "Are you guarding the entrance to the Remedial Stage?"),
+                ("Bromen", "Indeed! In the sunken aqueducts, you can review missed questions, solve rudder equations, and balance the elemental waterways."),
                 ("Student", "I will restore harmony to the temple!"),
-                ("Bromen", "Spoken like a true champion! Follow me to the north portal to enter the Summative Assessment."),
+                ("Bromen", "Spoken like a true champion! Follow me to the north portal to enter the Remedial Stage."),
                 ("Bromen", "Let us go!")
             ]
 
         if all_completed:
             self.dialogue_lines = [
                 ("Old Man", f"Hail, Master Mathematician {student_name}! Look how far you have journeyed:"),
-                ("Old Man", "You built bridges and solved geometric riddles in the Geometry Forest!"),
-                ("Old Man", "You united communities through fair trade and Bayanihan in Barangay Kalye!"),
-                ("Old Man", "You unlocked ancient treasures in the Monetary Desert!"),
-                ("Old Man", "And you brought harmony to the depths of the Water Temple!"),
+                ("Old Man", "You built bridges and solved geometric riddles in Term 1 (Geometry Forest)!"),
+                ("Old Man", "You united communities through fair trade and Bayanihan in Term 2 (Barangay Kalye)!"),
+                ("Old Man", "You unlocked ancient treasures in Term 3 (Monetary Desert)!"),
+                ("Old Man", "And you brought harmony to the depths of the Remedial Water Temple!"),
                 ("Old Man", "You have discovered the greatest truth of all:"),
                 ("Old Man", "Math is the ultimate magic, and with logic, courage, and perseverance, there is no problem in this world you cannot solve!"),
                 ("Old Man", "Congratulations on completing Cognitive Quest!")
             ]
         elif self.is_quarter_completed('quarter1'):
             self.dialogue_lines = [
-                ("Old Man", f"Well done on mastering Quarter 1, {student_name}!"),
-                ("Old Man", "The path south to Quarter 2 (Barangay Geometry) is now open!"),
-                ("Old Man", "Remember, each completed quarter brings you closer to becoming a Master Mathematician!")
+                ("Old Man", f"Well done on mastering Term 1, {student_name}!"),
+                ("Old Man", "The path south to Term 2 (Barangay Kalye) is now open!"),
+                ("Old Man", "Remember, each completed term brings you closer to becoming a Master Mathematician!")
             ]
         else:
             self.dialogue_lines = [
@@ -353,8 +370,8 @@ class StageSelect:
         self.npc_skeleton_anim_timer = 0
         if self.is_quarter_completed('quarter3'):
             self.skeleton_dialogue_lines = [
-                ("Skeleton", f"Incredible wisdom across the sands, {student_name}! You have mastered Quarter 3 (Monetary Desert)!"),
-                ("Skeleton", "Head north along the corridor to meet Bromen at the Water Temple in the Summative Assessment!")
+                ("Skeleton", f"Incredible wisdom across the sands, {student_name}! You have mastered Term 3 (Monetary Desert)!"),
+                ("Skeleton", "Head north along the corridor to meet Bromen at the Water Temple for the Remedial Stage!")
             ]
         else:
             self.skeleton_dialogue_lines = [
@@ -385,8 +402,8 @@ class StageSelect:
         self.npc_knight_anim_timer = 0
         if self.is_quarter_completed('quarter2'):
             self.knight_dialogue_lines = [
-                ("Knight", f"Outstanding valor, {student_name}! You have mastered Quarter 2 (Barangay Geometry)!"),
-                ("Knight", "Head east through the corridor to explore the Monetary Desert in Quarter 3!")
+                ("Knight", f"Outstanding valor, {student_name}! You have mastered Term 2 (Barangay Kalye)!"),
+                ("Knight", "Head east through the corridor to explore the Monetary Desert in Term 3!")
             ]
         else:
             self.knight_dialogue_lines = [
@@ -1389,16 +1406,45 @@ class StageSelect:
     # ============================================================
     # QUARTER PROGRESSION & UNLOCK STATUS
     # ============================================================
+    @staticmethod
+    def _is_dict_completed(source, key):
+        if not isinstance(source, dict):
+            return False
+        val = source.get(key)
+        if isinstance(val, dict):
+            return bool(val.get("completed", False))
+        return bool(val)
+
     def is_quarter_completed(self, qid):
-        """Returns True if the specified quarter is recorded as completed."""
-        now = time.time()
-        if not hasattr(self, '_completed_quarters') or (now - getattr(self, '_last_cq_time', 0.0) > 0.25):
-            from db.save_system import get_completed_quarters
-            student_id = getattr(self.main_menu, 'student_id', None)
-            self._completed_quarters = get_completed_quarters(student_id)
-            self._last_cq_time = now
-            self.completed_quarters = self._completed_quarters
-        return bool(self._completed_quarters.get(qid, {}).get("completed", False))
+        """Returns True if the specified quarter/term is recorded as fully completed."""
+        from db.save_system import load_student_progress, get_completed_quarters
+        student_id = getattr(self.main_menu, 'student_id', None)
+        save_data = load_student_progress(student_id) or {}
+        comp_summs = save_data.get("completed_summatives", {})
+        comp_qs = get_completed_quarters(student_id) or {}
+
+        # If legacy completed_quarters marks it completed, honor it (except quarter4 which requires empty missed_questions)
+        if qid != "quarter4" and self._is_dict_completed(comp_qs, qid):
+            return True
+
+        q_map = {"quarter1": 1, "quarter2": 2, "quarter3": 3, "quarter4": 4}
+        term_num = q_map.get(qid)
+        if term_num in (1, 2, 3):
+            from db.connect_db import db
+            available = [1]
+            if db:
+                available = db.get_available_summatives_for_term(term_num) or [1]
+            # Term is completed if all available uploaded summatives for this term are completed
+            all_done = all(self._is_dict_completed(comp_summs, f"t{term_num}_s{s}") for s in available)
+            return all_done
+        elif qid == "quarter4":
+            missed = save_data.get("missed_questions", [])
+            q4_done = self._is_dict_completed(comp_qs, "quarter4") or self._is_dict_completed(comp_summs, "remedial")
+            if len(missed) > 0:
+                return False  # Still has missed questions to remediate!
+            return bool(q4_done)
+
+        return bool(self._is_dict_completed(comp_qs, qid))
 
     def refresh_completed_quarters(self):
         from db.save_system import get_completed_quarters
@@ -1414,12 +1460,22 @@ class StageSelect:
             return True
         if qid == "quarter1":
             return True
-        elif qid == "quarter2":
-            return self.is_quarter_completed("quarter1")
+
+        from db.save_system import load_student_progress, get_completed_quarters
+        student_id = getattr(self.main_menu, 'student_id', None)
+        save_data = load_student_progress(student_id) or {}
+        comp_summs = save_data.get("completed_summatives", {})
+        comp_qs = get_completed_quarters(student_id) or {}
+
+        if qid == "quarter2":
+            t1_done = any(self._is_dict_completed(comp_summs, f"t1_s{s}") for s in range(1, 5))
+            return t1_done or self.is_quarter_completed("quarter1")
         elif qid == "quarter3":
-            return self.is_quarter_completed("quarter2")
+            t2_done = any(self._is_dict_completed(comp_summs, f"t2_s{s}") for s in range(1, 5))
+            return t2_done or self.is_quarter_completed("quarter2")
         elif qid == "quarter4":
-            return self.is_quarter_completed("quarter3")
+            t3_done = any(self._is_dict_completed(comp_summs, f"t3_s{s}") for s in range(1, 5))
+            return t3_done or self.is_quarter_completed("quarter3")
         return False
 
     # ============================================================
@@ -1452,27 +1508,27 @@ class StageSelect:
                 return False
 
             # Sequential Corridor Barriers:
-            # 1. South Corridor to Quarter 2 (Row >= 16 in cols 25-27)
+            # 1. South Corridor to Term 2 (Row >= 16 in cols 25-27)
             if col in (25, 26, 27) and row >= 16:
                 if not self.is_quarter_unlocked("quarter2"):
                     if self.locked_portal_banner_timer <= 0:
-                        self.locked_portal_banner_msg = "Complete Quarter 1 to unlock the path to Quarter 2!"
+                        self.locked_portal_banner_msg = "Complete Term 1 to unlock the path to Term 2!"
                         self.locked_portal_banner_timer = 2.5
                     return False
 
-            # 2. East Corridor to Quarter 3 (Col >= 28 in rows 12-14)
+            # 2. East Corridor to Term 3 (Col >= 28 in rows 12-14)
             if row in (12, 13, 14) and col >= 28:
                 if not self.is_quarter_unlocked("quarter3"):
                     if self.locked_portal_banner_timer <= 0:
-                        self.locked_portal_banner_msg = "Complete Quarter 2 to unlock the path to Quarter 3!"
+                        self.locked_portal_banner_msg = "Complete Term 2 to unlock the path to Term 3!"
                         self.locked_portal_banner_timer = 2.5
                     return False
 
-            # 3. North Corridor to Summative Assessment (Row <= 11 in cols 25-27)
+            # 3. North Corridor to Remedial Stage (Row <= 11 in cols 25-27)
             if col in (25, 26, 27) and row <= 11:
                 if not self.is_quarter_unlocked("quarter4"):
                     if self.locked_portal_banner_timer <= 0:
-                        self.locked_portal_banner_msg = "Complete Quarter 3 to unlock the path to the Summative Assessment!"
+                        self.locked_portal_banner_msg = "Complete Term 3 to unlock the path to the Remedial Stage!"
                         self.locked_portal_banner_timer = 2.5
                     return False
 
@@ -1501,7 +1557,7 @@ class StageSelect:
                 "barriers_lifted": getattr(self, 'barriers_lifted', False)
             }
 
-    def _preload_quarter_worker(self, qid):
+    def _preload_quarter_worker(self, qid, summative_num=1):
         """
         Pre-warms database questions & assessment IDs off-thread during the 3s portal transition.
         Avoids thread-unsafe SDL2 surface/font creation and dual-core CPU starvation on target hardware;
@@ -1513,37 +1569,34 @@ class StageSelect:
             if q_num is not None:
                 from db.connect_db import db
                 if db:
-                    db.get_questions(q_num)
-                    db.get_assessment_id(q_num)
+                    if q_num == 4:
+                        db.get_questions(4, summative="remedial")
+                        db.get_assessment_id(4, summative="remedial")
+                    else:
+                        db.get_questions(q_num, summative=summative_num)
+                        db.get_assessment_id(q_num, summative=summative_num)
         except Exception as e:
             print(f"[STAGE WARN] DB pre-warm exception for {qid}: {e}")
         finally:
             self.portal_loading_done = True
 
-    def enter_quarter(self, qid):
+    def enter_quarter(self, qid, summative_num=1):
         """Initiate centralized portal transition with 3-second black LOADING screen and background preload."""
         if getattr(self, 'portal_transition_active', False):
             return
 
-        if self.is_quarter_completed(qid):
-            print(f"[BLOCKED] {qid} is already completed! Player cannot re-enter.")
-            q_names = {
-                "quarter1": "Quarter 1",
-                "quarter2": "Quarter 2",
-                "quarter3": "Quarter 3",
-                "quarter4": "Summative Assessment"
-            }
-            q_title = q_names.get(qid, qid.capitalize())
+        if self.is_quarter_completed(qid) and not getattr(self, 'barriers_lifted', False) and not getattr(self, 'summative_modal_open', False):
+            names = {"quarter1": "Quarter 1", "quarter2": "Quarter 2", "quarter3": "Quarter 3", "quarter4": "Quarter 4"}
+            q_title = names.get(qid, qid.capitalize())
             self.locked_portal_banner_msg = f"{q_title} is already completed!"
-            self.locked_portal_banner_timer = 2.5
-            if hasattr(self.main_menu, 'audio_manager') and self.main_menu.audio_manager:
-                self.main_menu.audio_manager.play_sfx("deny")
+            self.locked_portal_banner_timer = 2.0
             return
 
         self.portal_transition_active = True
         self.portal_transition_timer = 0.0
         self.portal_transition_duration = 3.0  # 3 seconds as requested
         self.portal_transition_target = qid
+        self.portal_transition_summative_num = summative_num
         self.portal_loading_done = False
         self.portal_loaded_screen = None
         self.player_following_target = False  # Stop walking follow
@@ -1560,7 +1613,7 @@ class StageSelect:
 
         # Start asynchronous pre-load worker in a background thread to hide all loading delay
         import threading
-        threading.Thread(target=self._preload_quarter_worker, args=(qid,), daemon=True).start()
+        threading.Thread(target=self._preload_quarter_worker, args=(qid, summative_num), daemon=True).start()
 
         # Play transition sound effect
         if hasattr(self.main_menu, 'audio_manager'):
@@ -1571,6 +1624,7 @@ class StageSelect:
     def _finish_portal_transition(self):
         """Execute screen change to target quarter once warp transition completes."""
         qid = self.portal_transition_target
+        s_num = getattr(self, 'portal_transition_summative_num', 1)
         self.portal_transition_active = False
 
         self.save_ss_state()
@@ -1589,9 +1643,9 @@ class StageSelect:
                 self.main_menu.quarter1 = loaded_screen
             else:
                 map_name = random.choice(["map1.txt", "map2.txt", "map3.txt"])
-                print(f"[STAGE] Entering Quarter 1 - {map_name}")
+                print(f"[STAGE] Entering Term 1 S{s_num} - {map_name}")
                 from screens.quarter1 import Quarter1
-                self.main_menu.quarter1 = Quarter1(self.screen, self.main_menu, map_name)
+                self.main_menu.quarter1 = Quarter1(self.screen, self.main_menu, map_name, summative_num=s_num)
             if self.main_menu.quarter1:
                 self.main_menu.quarter1.update_gesture(
                     self.main_menu.cursor_pos,
@@ -1605,9 +1659,9 @@ class StageSelect:
                 self.main_menu.quarter2 = loaded_screen
             else:
                 map_name = random.choice(["map4.txt", "map5.txt", "map6.txt"])
-                print(f"[STAGE] Entering Quarter 2 - {map_name}")
+                print(f"[STAGE] Entering Term 2 S{s_num} - {map_name}")
                 from screens.quarter2 import Quarter2
-                self.main_menu.quarter2 = Quarter2(self.screen, self.main_menu, map_name)
+                self.main_menu.quarter2 = Quarter2(self.screen, self.main_menu, map_name, summative_num=s_num)
             if self.main_menu.quarter2:
                 self.main_menu.quarter2.update_gesture(
                     self.main_menu.cursor_pos,
@@ -1621,9 +1675,9 @@ class StageSelect:
                 self.main_menu.quarter3 = loaded_screen
             else:
                 map_name = random.choice(["map7.txt", "map8.txt", "map9.txt"])
-                print(f"[STAGE] Entering Quarter 3 - {map_name}")
+                print(f"[STAGE] Entering Term 3 S{s_num} - {map_name}")
                 from screens.quarter3 import Quarter3
-                self.main_menu.quarter3 = Quarter3(self.screen, self.main_menu, map_name)
+                self.main_menu.quarter3 = Quarter3(self.screen, self.main_menu, map_name, summative_num=s_num)
             if self.main_menu.quarter3:
                 self.main_menu.quarter3.update_gesture(
                     self.main_menu.cursor_pos,
@@ -1637,7 +1691,7 @@ class StageSelect:
                 self.main_menu.quarter4 = loaded_screen
             else:
                 map_name = random.choice(["map10.txt", "map11.txt", "map12.txt"])
-                print(f"[STAGE] Entering Quarter 4 - {map_name}")
+                print(f"[STAGE] Entering Remedial Stage - {map_name}")
                 from screens.quarter4 import Quarter4
                 self.main_menu.quarter4 = Quarter4(self.screen, self.main_menu, map_name)
             if self.main_menu.quarter4:
@@ -1651,10 +1705,13 @@ class StageSelect:
 
     def _init_portal_transition_fx(self, qid):
         """Initialize theme palettes, pre-composited LOADING text, pre-rendered HUD, and star particles."""
+        s_num = getattr(self, 'portal_transition_summative_num', 1)
+        ord_names = {1: "1st", 2: "2nd", 3: "3rd", 4: "4th"}
+        s_ord = ord_names.get(s_num, f"{s_num}th")
         palettes = {
             "quarter1": {
-                "name": "QUARTER 1",
-                "title": "2D SHAPES & GEOMETRY",
+                "name": f"TERM 1 ({s_ord.upper()} SUMMATIVE)",
+                "title": "GEOMETRY FOREST",
                 "realm": "2D Shapes & Composite Figures",
                 "primary": (34, 197, 94),
                 "secondary": (56, 189, 248),
@@ -1662,27 +1719,27 @@ class StageSelect:
                 "void": (6, 32, 20),
             },
             "quarter2": {
-                "name": "QUARTER 2",
-                "title": "ADDITION & SUBTRACTION",
-                "realm": "Money & Word Problems",
+                "name": f"TERM 2 ({s_ord.upper()} SUMMATIVE)",
+                "title": "BARANGAY KALYE",
+                "realm": "Money, Bayanihan & Word Problems",
                 "primary": (245, 158, 11),
                 "secondary": (239, 68, 68),
                 "accent": (253, 224, 71),
                 "void": (36, 15, 6),
             },
             "quarter3": {
-                "name": "QUARTER 3",
-                "title": "MULTIPLICATION & FRACTIONS",
-                "realm": "Equal Groups & Fractions",
+                "name": f"TERM 3 ({s_ord.upper()} SUMMATIVE)",
+                "title": "MONETARY DESERT",
+                "realm": "Trade Tablets & Currency",
                 "primary": (234, 179, 8),
                 "secondary": (249, 115, 22),
                 "accent": (254, 240, 138),
                 "void": (40, 24, 6),
             },
             "quarter4": {
-                "name": "SUMMATIVE ASSESSMENT",
-                "title": "",
-                "realm": "Comprehensive Evaluation",
+                "name": "REMEDIAL STAGE",
+                "title": "WATER TEMPLE",
+                "realm": "Targeted Concept Mastery",
                 "primary": (56, 189, 248),
                 "secondary": (168, 85, 247),
                 "accent": (216, 180, 254),
@@ -1842,6 +1899,269 @@ class StageSelect:
             s["dist"] += s["speed"] * dt
 
     # ============================================================
+    # SUMMATIVE SELECTION MODAL (Terms 1 - 3)
+    # ============================================================
+    def open_summative_modal(self, term_num):
+        """Open the Summative Selection Modal for Term 1, 2, or 3."""
+        if getattr(self, 'portal_transition_active', False):
+            return
+        self.summative_modal_active = True
+        self.summative_modal_term = term_num
+        self.summative_modal_cooldown = 0.4
+        self.summative_modal_hovered_slot = None
+        self._refresh_summative_modal_data()
+        if hasattr(self.main_menu, 'audio_manager') and self.main_menu.audio_manager:
+            self.main_menu.audio_manager.play_sfx("snap")
+
+    def _refresh_summative_modal_data(self):
+        term = self.summative_modal_term
+        from db.connect_db import db
+        available_summs = [1]
+        if db:
+            available_summs = db.get_available_summatives_for_term(term) or [1]
+
+        from db.save_system import load_student_progress
+        student_id = getattr(self.main_menu, 'student_id', None)
+        save_data = load_student_progress(student_id) or {}
+        comp_summs = save_data.get("completed_summatives", {})
+
+        ord_names = {1: "1st", 2: "2nd", 3: "3rd", 4: "4th"}
+        self.summative_modal_cards = []
+        barriers_lifted = getattr(self, 'barriers_lifted', False)
+
+        prev_completed = True
+        for s in range(1, 5):
+            slot_key = f"t{term}_s{s}"
+            is_available = (s in available_summs)
+            s_data = comp_summs.get(slot_key, {})
+            is_completed = bool(isinstance(s_data, dict) and s_data.get("completed", False))
+            score = int(s_data.get("score", 0)) if is_completed else 0
+            pct = float(s_data.get("percentage", 0.0)) if is_completed else 0.0
+            tot = int(s_data.get("total_questions", 10)) if is_completed else 10
+
+            # Gap-safe unlock:
+            if barriers_lifted:
+                is_unlocked = True
+            elif s == 1:
+                is_unlocked = True
+            else:
+                is_unlocked = prev_completed
+
+            self.summative_modal_cards.append({
+                "summative_num": s,
+                "slot_key": slot_key,
+                "title": f"{ord_names.get(s, str(s))} Summative",
+                "completed": is_completed,
+                "unlocked": is_unlocked,
+                "available_in_cloud": is_available,
+                "score": score,
+                "percentage": pct,
+                "total": tot,
+                "rect": None,
+            })
+
+            if is_available:
+                prev_completed = is_completed
+
+    def close_summative_modal(self):
+        self.summative_modal_active = False
+        self.summative_modal_hovered_slot = None
+        if hasattr(self.main_menu, 'audio_manager') and self.main_menu.audio_manager:
+            self.main_menu.audio_manager.play_sfx("click")
+
+    def handle_summative_modal_click(self, pos):
+        if not self.summative_modal_active:
+            return False
+        if self.summative_modal_cooldown > 0:
+            return True
+
+        # 1. Back button
+        if hasattr(self, '_summ_modal_back_rect') and self._summ_modal_back_rect and self._summ_modal_back_rect.collidepoint(pos):
+            self.close_summative_modal()
+            return True
+
+        # 2. Check cards
+        for card in self.summative_modal_cards:
+            rect = card.get("rect")
+            if rect and rect.collidepoint(pos):
+                s_num = card["summative_num"]
+                if card["unlocked"]:
+                    self.summative_modal_active = False
+                    term_q = f"quarter{self.summative_modal_term}"
+                    self.enter_quarter(term_q, summative_num=s_num)
+                else:
+                    ord_names = {1: "1st", 2: "2nd", 3: "3rd", 4: "4th"}
+                    prev_ord = ord_names.get(s_num - 1, "previous")
+                    self.locked_portal_banner_msg = f"Complete the {prev_ord} Summative Test first to unlock this test!"
+                    self.locked_portal_banner_timer = 2.5
+                    if hasattr(self.main_menu, 'audio_manager') and self.main_menu.audio_manager:
+                        self.main_menu.audio_manager.play_sfx("deny")
+                return True
+        return True
+
+    def draw_summative_modal(self):
+        """Render the Summative Selection Modal with memoized background for 60 FPS performance."""
+        now = pygame.time.get_ticks()
+        term = self.summative_modal_term
+        term_titles = {
+            1: ("TERM 1", "GEOMETRY FOREST", "2D Shapes & Composite Figures"),
+            2: ("TERM 2", "BARANGAY KALYE", "Money, Bayanihan & Word Problems"),
+            3: ("TERM 3", "MONETARY DESERT", "Trade Tablets & Currency"),
+        }
+        t_label, t_name, t_topic = term_titles.get(term, (f"TERM {term}", "SANCTUARY", "Math Quests"))
+
+        # 1. Dark semi-transparent overlay
+        if not hasattr(self, '_summ_modal_overlay') or self._summ_modal_overlay is None or self._summ_modal_overlay.get_size() != (self.width, self.height):
+            self._summ_modal_overlay = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
+            self._summ_modal_overlay.fill((0, 0, 0, 195))
+            if pygame.display.get_surface() is not None:
+                try:
+                    self._summ_modal_overlay = self._summ_modal_overlay.convert_alpha()
+                except Exception:
+                    pass
+        self.screen.blit(self._summ_modal_overlay, (0, 0))
+
+        # 2. Modal Frame
+        modal_w = min(1040, self.width - 60)
+        modal_h = min(490, self.height - 70)
+        modal_x = (self.width - modal_w) // 2
+        modal_y = (self.height - modal_h) // 2
+
+        modal_rect = pygame.Rect(modal_x, modal_y, modal_w, modal_h)
+        pygame.draw.rect(self.screen, (15, 23, 42), modal_rect, border_radius=18)
+        pygame.draw.rect(self.screen, (56, 189, 248), modal_rect, 2, border_radius=18)
+
+        # Inner header bar
+        hdr_rect = pygame.Rect(modal_x + 8, modal_y + 8, modal_w - 16, 72)
+        pygame.draw.rect(self.screen, (30, 41, 59), hdr_rect, border_radius=12)
+
+        # Header Title
+        title_txt = f"★ {t_label}: {t_name} — SELECT SUMMATIVE TEST ★"
+        t_surf = self.modal_title_font.render(title_txt, True, (251, 191, 36))
+        self.screen.blit(t_surf, t_surf.get_rect(center=(modal_x + modal_w // 2, modal_y + 32)))
+
+        # Subtitle
+        sub_txt = f"Realm: {t_topic} | Maximum 10 Questions per Summative slot"
+        sub_surf = self.modal_subtitle_font.render(sub_txt, True, (148, 163, 184))
+        self.screen.blit(sub_surf, sub_surf.get_rect(center=(modal_x + modal_w // 2, modal_y + 58)))
+
+        # 3. 4 Summative Cards side by side
+        card_gap = 16
+        card_w = (modal_w - 48 - (card_gap * 3)) // 4
+        card_h = 280
+        cards_y = modal_y + 96
+
+        for i, card in enumerate(self.summative_modal_cards):
+            c_x = modal_x + 24 + i * (card_w + card_gap)
+            c_rect = pygame.Rect(c_x, cards_y, card_w, card_h)
+            card["rect"] = c_rect
+
+            is_hov = c_rect.collidepoint(self.cursor_pos)
+            unlocked = card.get("unlocked", False)
+            completed = card.get("completed", False)
+            score = card.get("score", 0)
+            pct = card.get("percentage", 0.0)
+            tot = card.get("total", 10)
+
+            # Card background
+            if not unlocked:
+                card_bg = (23, 33, 53)
+                border_col = (71, 85, 105)
+                border_w = 1
+            elif completed:
+                card_bg = (16, 44, 38) if not is_hov else (20, 58, 48)
+                border_col = (34, 197, 94) if not is_hov else (74, 222, 128)
+                border_w = 2 if not is_hov else 3
+            else:
+                card_bg = (30, 41, 59) if not is_hov else (45, 60, 85)
+                border_col = (245, 158, 11) if not is_hov else (251, 191, 36)
+                border_w = 2 if not is_hov else 3
+
+            pygame.draw.rect(self.screen, card_bg, c_rect, border_radius=14)
+            pygame.draw.rect(self.screen, border_col, c_rect, border_w, border_radius=14)
+
+            # Status pill at top of card
+            pill_rect = pygame.Rect(c_x + 16, cards_y + 14, card_w - 32, 28)
+            if not unlocked:
+                pygame.draw.rect(self.screen, (30, 41, 59), pill_rect, border_radius=8)
+                pill_txt = self.modal_card_info_font.render("🔒 LOCKED", True, (148, 163, 184))
+            elif completed:
+                pygame.draw.rect(self.screen, (22, 101, 52), pill_rect, border_radius=8)
+                pill_txt = self.modal_card_info_font.render("★ CLEARED", True, (255, 255, 255))
+            else:
+                pulse = (math.sin(now * 0.007 + i) + 1) / 2
+                pill_bg = (180, 83, 9) if pulse > 0.5 else (146, 64, 14)
+                pygame.draw.rect(self.screen, pill_bg, pill_rect, border_radius=8)
+                pill_txt = self.modal_card_info_font.render("● AVAILABLE", True, (255, 255, 255))
+            self.screen.blit(pill_txt, pill_txt.get_rect(center=pill_rect.center))
+
+            # Summative Title
+            st_surf = self.modal_card_title_font.render(card["title"], True, (255, 255, 255) if unlocked else (100, 116, 139))
+            self.screen.blit(st_surf, st_surf.get_rect(center=(c_x + card_w // 2, cards_y + 68)))
+
+            # Capacity badge
+            cap_surf = self.modal_card_info_font.render("10 Questions Cap", True, (56, 189, 248) if unlocked else (71, 85, 105))
+            self.screen.blit(cap_surf, cap_surf.get_rect(center=(c_x + card_w // 2, cards_y + 92)))
+
+            # Middle Stats / Description Area
+            divider_y = cards_y + 114
+            pygame.draw.line(self.screen, border_col, (c_x + 16, divider_y), (c_x + card_w - 16, divider_y), 1)
+
+            if not unlocked:
+                s_idx = card["summative_num"]
+                prev_ord = {2: "1st", 3: "2nd", 4: "3rd"}.get(s_idx, "previous")
+                l_txt1 = self.modal_card_info_font.render("Pass the", True, (148, 163, 184))
+                l_txt2 = self.modal_card_title_font.render(f"{prev_ord} Summative", True, (245, 158, 11))
+                l_txt3 = self.modal_card_info_font.render("to unlock this quest!", True, (148, 163, 184))
+                self.screen.blit(l_txt1, l_txt1.get_rect(center=(c_x + card_w // 2, divider_y + 24)))
+                self.screen.blit(l_txt2, l_txt2.get_rect(center=(c_x + card_w // 2, divider_y + 46)))
+                self.screen.blit(l_txt3, l_txt3.get_rect(center=(c_x + card_w // 2, divider_y + 68)))
+            elif completed:
+                s_txt = self.modal_card_title_font.render(f"Best: {score}/{tot}", True, (74, 222, 128))
+                p_txt = self.modal_card_info_font.render(f"Accuracy: {pct:.0f}%", True, (203, 213, 225))
+                c_txt = self.modal_card_info_font.render("Mastered ★★★", True, (251, 191, 36))
+                self.screen.blit(s_txt, s_txt.get_rect(center=(c_x + card_w // 2, divider_y + 24)))
+                self.screen.blit(p_txt, p_txt.get_rect(center=(c_x + card_w // 2, divider_y + 48)))
+                self.screen.blit(c_txt, c_txt.get_rect(center=(c_x + card_w // 2, divider_y + 70)))
+            else:
+                r_txt1 = self.modal_card_info_font.render("Standard Curriculum", True, (203, 213, 225))
+                r_txt2 = self.modal_card_info_font.render("Ready for evaluation", True, (148, 163, 184))
+                r_txt3 = self.modal_card_info_font.render("Interactive Boss & Maze", True, (56, 189, 248))
+                self.screen.blit(r_txt1, r_txt1.get_rect(center=(c_x + card_w // 2, divider_y + 24)))
+                self.screen.blit(r_txt2, r_txt2.get_rect(center=(c_x + card_w // 2, divider_y + 48)))
+                self.screen.blit(r_txt3, r_txt3.get_rect(center=(c_x + card_w // 2, divider_y + 70)))
+
+            # Card Button at bottom
+            btn_rect = pygame.Rect(c_x + 16, cards_y + card_h - 52, card_w - 32, 38)
+            if not unlocked:
+                pygame.draw.rect(self.screen, (30, 41, 59), btn_rect, border_radius=8)
+                btn_txt = self.modal_btn_font.render("LOCKED 🔒", True, (100, 116, 139))
+            elif completed:
+                btn_bg = (34, 197, 94) if is_hov else (22, 101, 52)
+                pygame.draw.rect(self.screen, btn_bg, btn_rect, border_radius=8)
+                btn_txt = self.modal_btn_font.render("REPLAY TEST", True, (255, 255, 255))
+            else:
+                btn_bg = (245, 158, 11) if is_hov else (217, 119, 6)
+                pygame.draw.rect(self.screen, btn_bg, btn_rect, border_radius=8)
+                btn_txt = self.modal_btn_font.render("START TEST ▶", True, (15, 23, 42))
+            self.screen.blit(btn_txt, btn_txt.get_rect(center=btn_rect.center))
+
+        # 4. Bottom action bar: Back to hub button & Keyboard shortcuts
+        back_w, back_h = 240, 44
+        self._summ_modal_back_rect = pygame.Rect(modal_x + (modal_w - back_w) // 2, modal_y + modal_h - 56, back_w, back_h)
+        back_hov = self._summ_modal_back_rect.collidepoint(self.cursor_pos)
+        back_bg = (71, 85, 105) if back_hov else (51, 65, 85)
+        pygame.draw.rect(self.screen, back_bg, self._summ_modal_back_rect, border_radius=10)
+        pygame.draw.rect(self.screen, (148, 163, 184), self._summ_modal_back_rect, 1, border_radius=10)
+        b_surf = self.modal_btn_font.render("✕ BACK TO HUB", True, (255, 255, 255))
+        self.screen.blit(b_surf, b_surf.get_rect(center=self._summ_modal_back_rect.center))
+
+        # Tip at bottom
+        tip_txt = "Press [ESC] to Exit | Press [1-4] to Quick-Start | Ctrl+Shift+B Developer Unlock"
+        tip_surf = self.modal_card_info_font.render(tip_txt, True, (100, 116, 139))
+        self.screen.blit(tip_surf, (modal_x + 24, modal_y + modal_h - 44))
+
+    # ============================================================
     # CHECK PORTAL TELEPORT - Load Quarter1, Quarter2, Quarter3, or Quarter4
     # ============================================================
     def check_portal_teleport_on_hold(self):
@@ -1852,69 +2172,57 @@ class StageSelect:
                 break
 
         if current_portal and self.fist_closed and self.teleport_cooldown <= 0:
-            # Check if it's a left portal (goes to Quarter1)
+            # Check if it's a left portal (goes to Term 1)
             if current_portal.direction == 'left':
-                if self.is_quarter_completed('quarter1'):
-                    self.locked_portal_banner_msg = "Quarter 1 is already completed!"
+                if self.oldman_dialogue_state == 0 and not getattr(self, 'barriers_lifted', False):
+                    print("[LOCKED] Term 1 Portal Locked! Talk to the Old Man first.")
+                    self.locked_portal_banner_msg = "Talk to the Old Man first to unlock Term 1!"
                     self.locked_portal_banner_timer = 2.5
                     return False
-                if self.oldman_dialogue_state == 0:
-                    print("[LOCKED] Quarter 1 Portal Locked! Talk to the Old Man first.")
-                    self.locked_portal_banner_msg = "Talk to the Old Man first to unlock Quarter 1!"
-                    self.locked_portal_banner_timer = 2.5
-                    return False
-                self.enter_quarter("quarter1")
+                self.open_summative_modal(1)
                 return True
-            # Check if it's an up portal (goes to Quarter2)
+            # Check if it's an up portal (goes to Term 2)
             elif current_portal.direction == 'up':
-                if self.is_quarter_completed('quarter2'):
-                    self.locked_portal_banner_msg = "Quarter 2 is already completed!"
-                    self.locked_portal_banner_timer = 2.5
-                    return False
                 if not self.is_quarter_unlocked('quarter2'):
-                    print("[LOCKED] Quarter 2 Locked! Complete Quarter 1 first.")
-                    self.locked_portal_banner_msg = "Complete Quarter 1 to unlock Quarter 2!"
+                    print("[LOCKED] Term 2 Locked! Complete Term 1 first.")
+                    self.locked_portal_banner_msg = "Complete Term 1 to unlock Term 2!"
                     self.locked_portal_banner_timer = 2.5
                     return False
-                if self.knight_dialogue_state == 0:
-                    print("[LOCKED] Quarter 2 Portal Locked! Talk to the Knight first.")
-                    self.locked_portal_banner_msg = "Talk to the Knight first to unlock Quarter 2!"
+                if self.knight_dialogue_state == 0 and not getattr(self, 'barriers_lifted', False):
+                    print("[LOCKED] Term 2 Portal Locked! Talk to the Knight first.")
+                    self.locked_portal_banner_msg = "Talk to the Knight first to unlock Term 2!"
                     self.locked_portal_banner_timer = 2.5
                     return False
-                self.enter_quarter("quarter2")
+                self.open_summative_modal(2)
                 return True
-            # Check if it's a right portal (goes to Quarter3)
+            # Check if it's a right portal (goes to Term 3)
             elif current_portal.direction == 'right':
-                if self.is_quarter_completed('quarter3'):
-                    self.locked_portal_banner_msg = "Quarter 3 is already completed!"
-                    self.locked_portal_banner_timer = 2.5
-                    return False
                 if not self.is_quarter_unlocked('quarter3'):
-                    print("[LOCKED] Quarter 3 Locked! Complete Quarter 2 first.")
-                    self.locked_portal_banner_msg = "Complete Quarter 2 to unlock Quarter 3!"
+                    print("[LOCKED] Term 3 Locked! Complete Term 2 first.")
+                    self.locked_portal_banner_msg = "Complete Term 2 to unlock Term 3!"
                     self.locked_portal_banner_timer = 2.5
                     return False
-                if self.skeleton_dialogue_state == 0:
-                    print("[LOCKED] Quarter 3 Portal Locked! Talk to the Skeleton first.")
-                    self.locked_portal_banner_msg = "Talk to the Skeleton first to unlock Quarter 3!"
+                if self.skeleton_dialogue_state == 0 and not getattr(self, 'barriers_lifted', False):
+                    print("[LOCKED] Term 3 Portal Locked! Talk to the Skeleton first.")
+                    self.locked_portal_banner_msg = "Talk to the Skeleton first to unlock Term 3!"
                     self.locked_portal_banner_timer = 2.5
                     return False
-                self.enter_quarter("quarter3")
+                self.open_summative_modal(3)
                 return True
-            # Check if it's a down portal (goes to Quarter4 / Summative Assessment)
+            # Check if it's a down portal (goes to Remedial Stage)
             elif current_portal.direction == 'down':
                 if self.is_quarter_completed('quarter4'):
-                    self.locked_portal_banner_msg = "Summative Assessment is already completed!"
+                    self.locked_portal_banner_msg = "Remedial Stage is already completed!"
                     self.locked_portal_banner_timer = 2.5
                     return False
                 if not self.is_quarter_unlocked('quarter4'):
-                    print("[LOCKED] Summative Assessment Locked! Complete Quarter 3 first.")
-                    self.locked_portal_banner_msg = "Complete Quarter 3 to unlock Summative Assessment!"
+                    print("[LOCKED] Remedial Stage Locked! Complete Term 3 first.")
+                    self.locked_portal_banner_msg = "Complete Term 3 to unlock the Remedial Stage!"
                     self.locked_portal_banner_timer = 2.5
                     return False
-                if self.bromen_dialogue_state == 0:
-                    print("[LOCKED] Summative Assessment Portal Locked! Talk to Bromen first.")
-                    self.locked_portal_banner_msg = "Talk to Bromen first to unlock Summative Assessment!"
+                if self.bromen_dialogue_state == 0 and not getattr(self, 'barriers_lifted', False):
+                    print("[LOCKED] Remedial Stage Portal Locked! Talk to Bromen first.")
+                    self.locked_portal_banner_msg = "Talk to Bromen first to unlock the Remedial Stage!"
                     self.locked_portal_banner_timer = 2.5
                     return False
                 self.enter_quarter("quarter4")
@@ -2036,19 +2344,17 @@ class StageSelect:
             return True
 
         if self.player_following_target:
-            # Skip follow cutscene and enter immediately if not completed
-            if self.player_following_target == 'oldman':
-                if not self.is_quarter_completed("quarter1"):
-                    self.enter_quarter("quarter1")
-            elif self.player_following_target == 'knight':
-                if not self.is_quarter_completed("quarter2"):
-                    self.enter_quarter("quarter2")
-            elif self.player_following_target == 'skeleton':
-                if not self.is_quarter_completed("quarter3"):
-                    self.enter_quarter("quarter3")
-            elif self.player_following_target == 'bromen':
-                if not self.is_quarter_completed("quarter4"):
-                    self.enter_quarter("quarter4")
+            # Skip follow cutscene and enter immediately
+            target = self.player_following_target
+            self.player_following_target = None
+            if target == 'oldman':
+                self.open_summative_modal(1)
+            elif target == 'knight':
+                self.open_summative_modal(2)
+            elif target == 'skeleton':
+                self.open_summative_modal(3)
+            elif target == 'bromen':
+                self.enter_quarter("quarter4")
             return True
 
         # Check if active dialogue line is still typing: fast forward on first press
@@ -2171,6 +2477,11 @@ class StageSelect:
         if pos is None:
             pos = self.cursor_pos
         if getattr(self, 'portal_transition_active', False):
+            return
+
+        # Check Summative modal interaction
+        if getattr(self, 'summative_modal_active', False):
+            self.handle_summative_modal_click(pos)
             return
 
         # 0. Back button to Menu
@@ -2299,56 +2610,47 @@ class StageSelect:
         
         if clicked_portal and self.teleport_cooldown <= 0:
             if clicked_portal.direction == 'left':
-                if self.is_quarter_completed('quarter1'):
-                    self.locked_portal_banner_msg = "Quarter 1 is already completed!"
-                    self.locked_portal_banner_timer = 2.0
-                elif self.oldman_dialogue_state == 0 and not getattr(self, 'barriers_lifted', False):
-                    self.locked_portal_banner_msg = "Talk to the Old Man first to unlock Quarter 1!"
+                if self.oldman_dialogue_state == 0 and not getattr(self, 'barriers_lifted', False):
+                    self.locked_portal_banner_msg = "Talk to the Old Man first to unlock Term 1!"
                     self.locked_portal_banner_timer = 2.0
                     if self.npc_oldman_found:
                         self.click_dest = (self.npc_oldman_x + TILE_SIZE, self.npc_oldman_y)
                 else:
-                    self.enter_quarter("quarter1")
+                    self.open_summative_modal(1)
                 return
             elif clicked_portal.direction == 'up':
-                if self.is_quarter_completed('quarter2'):
-                    self.locked_portal_banner_msg = "Quarter 2 is already completed!"
-                    self.locked_portal_banner_timer = 2.0
-                elif not self.is_quarter_unlocked('quarter2'):
-                    self.locked_portal_banner_msg = "Complete Quarter 1 to unlock Quarter 2!"
+                if not self.is_quarter_unlocked('quarter2'):
+                    self.locked_portal_banner_msg = "Complete Term 1 to unlock Term 2!"
                     self.locked_portal_banner_timer = 2.0
                 elif self.knight_dialogue_state == 0 and not getattr(self, 'barriers_lifted', False):
-                    self.locked_portal_banner_msg = "Talk to the Knight first to unlock Quarter 2!"
+                    self.locked_portal_banner_msg = "Talk to the Knight first to unlock Term 2!"
                     self.locked_portal_banner_timer = 2.0
                     if self.npc_knight_found:
                         self.click_dest = (self.npc_knight_x, self.npc_knight_y - TILE_SIZE)
                 else:
-                    self.enter_quarter("quarter2")
+                    self.open_summative_modal(2)
                 return
             elif clicked_portal.direction == 'right':
-                if self.is_quarter_completed('quarter3'):
-                    self.locked_portal_banner_msg = "Quarter 3 is already completed!"
-                    self.locked_portal_banner_timer = 2.0
-                elif not self.is_quarter_unlocked('quarter3'):
-                    self.locked_portal_banner_msg = "Complete Quarter 2 to unlock Quarter 3!"
+                if not self.is_quarter_unlocked('quarter3'):
+                    self.locked_portal_banner_msg = "Complete Term 2 to unlock Term 3!"
                     self.locked_portal_banner_timer = 2.0
                 elif self.skeleton_dialogue_state == 0 and not getattr(self, 'barriers_lifted', False):
-                    self.locked_portal_banner_msg = "Talk to the Skeleton first to unlock Quarter 3!"
+                    self.locked_portal_banner_msg = "Talk to the Skeleton first to unlock Term 3!"
                     self.locked_portal_banner_timer = 2.0
                     if self.npc_skeleton_found:
                         self.click_dest = (self.npc_skeleton_x - TILE_SIZE, self.npc_skeleton_y)
                 else:
-                    self.enter_quarter("quarter3")
+                    self.open_summative_modal(3)
                 return
             elif clicked_portal.direction == 'down':
                 if self.is_quarter_completed('quarter4'):
-                    self.locked_portal_banner_msg = "Summative Assessment is already completed!"
+                    self.locked_portal_banner_msg = "Remedial Stage is already completed!"
                     self.locked_portal_banner_timer = 2.0
                 elif not self.is_quarter_unlocked('quarter4'):
-                    self.locked_portal_banner_msg = "Complete Quarter 3 to unlock Summative Assessment!"
+                    self.locked_portal_banner_msg = "Complete Term 3 to unlock the Remedial Stage!"
                     self.locked_portal_banner_timer = 2.0
                 elif self.bromen_dialogue_state == 0 and not getattr(self, 'barriers_lifted', False):
-                    self.locked_portal_banner_msg = "Talk to Bromen first to unlock Summative Assessment!"
+                    self.locked_portal_banner_msg = "Talk to Bromen first to unlock the Remedial Stage!"
                     self.locked_portal_banner_timer = 2.0
                     if self.npc_bromen_found:
                         self.click_dest = (self.npc_bromen_x, self.npc_bromen_y + TILE_SIZE)
@@ -2378,6 +2680,16 @@ class StageSelect:
             self._update_portal_transition(dt)
             if self.portal_transition_timer >= self.portal_transition_duration and (getattr(self, 'portal_loading_done', False) or self.portal_transition_timer >= 5.0):
                 self._finish_portal_transition()
+            return
+
+        # Check Summative Selection Modal
+        if getattr(self, 'summative_modal_active', False):
+            if self.summative_modal_cooldown > 0:
+                self.summative_modal_cooldown = max(0.0, self.summative_modal_cooldown - dt)
+            if self.hand_detected and self.current_gesture == "CLOSED_FIST" and self.fist_start_time > 0:
+                if (time.time() - self.fist_start_time) >= self.CLICK_HOLD_TIME:
+                    self.handle_summative_modal_click(self.cursor_pos)
+                    self.fist_start_time = time.time() + 0.3
             return
 
         # Update Grand Finale Confetti & Fanfare
@@ -2849,60 +3161,52 @@ class StageSelect:
                 port_rect = pygame.Rect(portal.get_world_x(), portal.get_world_y(), portal.get_width_pixels(), portal.get_height_pixels())
                 if port_rect.colliderect(p_rect) or portal.contains_position(self.player_x + TILE_SIZE // 2, self.player_y + TILE_SIZE // 2):
                     if portal.direction == 'left':
-                        if self.is_quarter_completed('quarter1'):
-                            if self.locked_portal_banner_timer <= 0:
-                                self.locked_portal_banner_msg = "Quarter 1 is already completed!"
-                                self.locked_portal_banner_timer = 2.0
-                        elif self.oldman_dialogue_state >= 2 or self.player_following_target == 'oldman':
-                            self.enter_quarter("quarter1")
+                        if self.oldman_dialogue_state >= 2 or self.player_following_target == 'oldman' or getattr(self, 'barriers_lifted', False):
+                            self.player_following_target = None
+                            self.open_summative_modal(1)
                             return
                         elif self.oldman_dialogue_state == 0 and self.locked_portal_banner_timer <= 0:
-                            self.locked_portal_banner_msg = "Talk to the Old Man first to unlock Quarter 1!"
+                            self.locked_portal_banner_msg = "Talk to the Old Man first to unlock Term 1!"
                             self.locked_portal_banner_timer = 2.0
                     elif portal.direction == 'right':
-                        if self.is_quarter_completed('quarter3'):
+                        if not self.is_quarter_unlocked('quarter3'):
                             if self.locked_portal_banner_timer <= 0:
-                                self.locked_portal_banner_msg = "Quarter 3 is already completed!"
+                                self.locked_portal_banner_msg = "Complete Term 2 to unlock Term 3!"
                                 self.locked_portal_banner_timer = 2.0
-                        elif not self.is_quarter_unlocked('quarter3'):
-                            if self.locked_portal_banner_timer <= 0:
-                                self.locked_portal_banner_msg = "Complete Quarter 2 to unlock Quarter 3!"
-                                self.locked_portal_banner_timer = 2.0
-                        elif self.skeleton_dialogue_state >= 2 or self.player_following_target == 'skeleton':
-                            self.enter_quarter("quarter3")
+                        elif self.skeleton_dialogue_state >= 2 or self.player_following_target == 'skeleton' or getattr(self, 'barriers_lifted', False):
+                            self.player_following_target = None
+                            self.open_summative_modal(3)
                             return
                         elif self.skeleton_dialogue_state == 0 and self.locked_portal_banner_timer <= 0:
-                            self.locked_portal_banner_msg = "Talk to the Skeleton first to unlock Quarter 3!"
+                            self.locked_portal_banner_msg = "Talk to the Skeleton first to unlock Term 3!"
                             self.locked_portal_banner_timer = 2.0
                     elif portal.direction == 'up':
-                        if self.is_quarter_completed('quarter2'):
+                        if not self.is_quarter_unlocked('quarter2'):
                             if self.locked_portal_banner_timer <= 0:
-                                self.locked_portal_banner_msg = "Quarter 2 is already completed!"
+                                self.locked_portal_banner_msg = "Complete Term 1 to unlock Term 2!"
                                 self.locked_portal_banner_timer = 2.0
-                        elif not self.is_quarter_unlocked('quarter2'):
-                            if self.locked_portal_banner_timer <= 0:
-                                self.locked_portal_banner_msg = "Complete Quarter 1 to unlock Quarter 2!"
-                                self.locked_portal_banner_timer = 2.0
-                        elif self.knight_dialogue_state >= 2 or self.player_following_target == 'knight':
-                            self.enter_quarter("quarter2")
+                        elif self.knight_dialogue_state >= 2 or self.player_following_target == 'knight' or getattr(self, 'barriers_lifted', False):
+                            self.player_following_target = None
+                            self.open_summative_modal(2)
                             return
                         elif self.knight_dialogue_state == 0 and self.locked_portal_banner_timer <= 0:
-                            self.locked_portal_banner_msg = "Talk to the Knight first to unlock Quarter 2!"
+                            self.locked_portal_banner_msg = "Talk to the Knight first to unlock Term 2!"
                             self.locked_portal_banner_timer = 2.0
                     elif portal.direction == 'down':
                         if self.is_quarter_completed('quarter4'):
                             if self.locked_portal_banner_timer <= 0:
-                                self.locked_portal_banner_msg = "Summative Assessment is already completed!"
+                                self.locked_portal_banner_msg = "Remedial Stage is already completed!"
                                 self.locked_portal_banner_timer = 2.0
                         elif not self.is_quarter_unlocked('quarter4'):
                             if self.locked_portal_banner_timer <= 0:
-                                self.locked_portal_banner_msg = "Complete Quarter 3 to unlock Summative Assessment!"
+                                self.locked_portal_banner_msg = "Complete Term 3 to unlock the Remedial Stage!"
                                 self.locked_portal_banner_timer = 2.0
-                        elif self.bromen_dialogue_state >= 2 or self.player_following_target == 'bromen':
+                        elif self.bromen_dialogue_state >= 2 or self.player_following_target == 'bromen' or getattr(self, 'barriers_lifted', False):
+                            self.player_following_target = None
                             self.enter_quarter("quarter4")
                             return
                         elif self.bromen_dialogue_state == 0 and self.locked_portal_banner_timer <= 0:
-                            self.locked_portal_banner_msg = "Talk to Bromen first to unlock Summative Assessment!"
+                            self.locked_portal_banner_msg = "Talk to Bromen first to unlock the Remedial Stage!"
                             self.locked_portal_banner_timer = 2.0
 
         # Update portal animations
@@ -2945,12 +3249,9 @@ class StageSelect:
                     self.player_dir = "left"
                     moved = True
                 else:
-                    if not self.is_quarter_completed("quarter1"):
-                        if not self.npc_oldman_found or self.oldman_dialogue_state >= 3:
-                            self.enter_quarter("quarter1")
-                            return
-                    else:
-                        self.player_following_target = None
+                    self.player_following_target = None
+                    self.open_summative_modal(1)
+                    return
 
         elif self.player_following_target == 'skeleton':
             # Follow Skeleton rightwards towards Right Portal (x=52*TILE_SIZE, y=13*TILE_SIZE)
@@ -2976,12 +3277,9 @@ class StageSelect:
                     self.player_dir = "right"
                     moved = True
                 else:
-                    if not self.is_quarter_completed("quarter3"):
-                        if not self.npc_skeleton_found or self.skeleton_dialogue_state >= 3:
-                            self.enter_quarter("quarter3")
-                            return
-                    else:
-                        self.player_following_target = None
+                    self.player_following_target = None
+                    self.open_summative_modal(3)
+                    return
 
         elif self.player_following_target == 'knight':
             # Follow Knight downwards towards Down Portal (x=25*TILE_SIZE, y=25*TILE_SIZE)
@@ -3007,12 +3305,9 @@ class StageSelect:
                     self.player_dir = "down"
                     moved = True
                 else:
-                    if not self.is_quarter_completed("quarter2"):
-                        if not self.npc_knight_found or self.knight_dialogue_state >= 3:
-                            self.enter_quarter("quarter2")
-                            return
-                    else:
-                        self.player_following_target = None
+                    self.player_following_target = None
+                    self.open_summative_modal(2)
+                    return
 
         elif self.player_following_target == 'bromen':
             # Follow Bromen upwards towards North Portal (x=25*TILE_SIZE, y=0)
@@ -3038,12 +3333,9 @@ class StageSelect:
                     self.player_dir = "up"
                     moved = True
                 else:
-                    if not self.is_quarter_completed("quarter4"):
-                        if not self.npc_bromen_found or self.bromen_dialogue_state >= 3:
-                            self.enter_quarter("quarter4")
-                            return
-                    else:
-                        self.player_following_target = None
+                    self.player_following_target = None
+                    self.enter_quarter("quarter4")
+                    return
 
         # Animate player while moving
         if moved:
@@ -3770,6 +4062,10 @@ class StageSelect:
         # Draw Dialogue Box
         self.draw_dialogue_box()
 
+        # Draw Summative Selection Modal
+        if getattr(self, 'summative_modal_active', False):
+            self.draw_summative_modal()
+
         # Draw Portal Warp Transition
         if self.portal_transition_active:
             self.draw_portal_transition()
@@ -3850,7 +4146,7 @@ class StageSelect:
             self.completed_quarters = completed
 
         # Draw Top HUD Stage Progress Tracker (Enlarged for Grade 2 with generous breathing room)
-        num_cleared = sum(1 for q in ['quarter1', 'quarter2', 'quarter3', 'quarter4'] if completed.get(q, {}).get("completed", False))
+        num_cleared = sum(1 for q in ['quarter1', 'quarter2', 'quarter3', 'quarter4'] if self._is_dict_completed(completed, q))
         hud_w, hud_h = 370, 42
         hud_x = (self.width - hud_w) // 2
         hud_y = 12
@@ -3981,8 +4277,8 @@ class StageSelect:
                 f"NPCs: {npc_text}",
                 f"Hand: {'YES' if self.hand_detected else 'NO'}",
                 f"Gesture: {self.current_gesture}",
-                f"Left Portal >> Quarter 1 | Up Portal >> Summative Assessment",
-                f"Right Portal >> Quarter 3 | Down Portal >> Quarter 2"
+                f"Left Portal >> Term 1 (Geometry) | Up Portal >> Term 2 (Kalye)",
+                f"Right Portal >> Term 3 (Monetary) | Down Portal >> Remedial Stage"
             ]
 
             y_offset = 95
@@ -4047,6 +4343,48 @@ class StageSelect:
         self.lol_camera.handle_event(event)
 
         if getattr(self, 'portal_transition_active', False):
+            return "handled"
+
+        if getattr(self, 'summative_modal_active', False):
+            if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                self.handle_summative_modal_click(event.pos)
+                return "handled"
+            elif event.type == pygame.MOUSEMOTION:
+                self.cursor_pos = event.pos
+                return "handled"
+            elif event.type == pygame.KEYDOWN:
+                if event.key in [pygame.K_ESCAPE, pygame.K_BACKSPACE]:
+                    self.close_summative_modal()
+                    return "handled"
+                elif event.key in [pygame.K_1, pygame.K_KP1]:
+                    if len(self.summative_modal_cards) >= 1:
+                        c = self.summative_modal_cards[0]
+                        if c.get("rect"):
+                            self.handle_summative_modal_click(c["rect"].center)
+                    return "handled"
+                elif event.key in [pygame.K_2, pygame.K_KP2]:
+                    if len(self.summative_modal_cards) >= 2:
+                        c = self.summative_modal_cards[1]
+                        if c.get("rect"):
+                            self.handle_summative_modal_click(c["rect"].center)
+                    return "handled"
+                elif event.key in [pygame.K_3, pygame.K_KP3]:
+                    if len(self.summative_modal_cards) >= 3:
+                        c = self.summative_modal_cards[2]
+                        if c.get("rect"):
+                            self.handle_summative_modal_click(c["rect"].center)
+                    return "handled"
+                elif event.key in [pygame.K_4, pygame.K_KP4]:
+                    if len(self.summative_modal_cards) >= 4:
+                        c = self.summative_modal_cards[3]
+                        if c.get("rect"):
+                            self.handle_summative_modal_click(c["rect"].center)
+                    return "handled"
+                elif (event.key in [pygame.K_u, pygame.K_F8, pygame.K_F9]
+                      or ((event.mod & (pygame.KMOD_CTRL | pygame.KMOD_SHIFT)) and event.key in [pygame.K_b, pygame.K_c])):
+                    self.barriers_lifted = not getattr(self, 'barriers_lifted', False)
+                    self._refresh_summative_modal_data()
+                    return "handled"
             return "handled"
 
         if self.grand_finale_active:
@@ -4124,33 +4462,45 @@ class StageSelect:
                         break
                 if current_portal and self.teleport_cooldown <= 0:
                     if current_portal.direction == 'left':
-                        if self.is_quarter_completed('quarter1'):
-                            self.locked_portal_banner_msg = "Quarter 1 is already completed!"
-                            self.locked_portal_banner_timer = 2.0
-                        elif self.oldman_dialogue_state >= 2 or getattr(self, 'barriers_lifted', False):
-                            self.enter_quarter("quarter1")
+                        if self.oldman_dialogue_state >= 2 or getattr(self, 'barriers_lifted', False):
+                            self.open_summative_modal(1)
                             return "quarter_entered"
+                        elif self.oldman_dialogue_state == 0:
+                            self.locked_portal_banner_msg = "Talk to the Old Man first to unlock Term 1!"
+                            self.locked_portal_banner_timer = 2.0
                     elif current_portal.direction == 'up':
-                        if self.is_quarter_completed('quarter2'):
-                            self.locked_portal_banner_msg = "Quarter 2 is already completed!"
+                        if not self.is_quarter_unlocked('quarter2'):
+                            self.locked_portal_banner_msg = "Complete Term 1 to unlock Term 2!"
                             self.locked_portal_banner_timer = 2.0
-                        elif (self.is_quarter_unlocked('quarter2') and self.knight_dialogue_state >= 2) or getattr(self, 'barriers_lifted', False):
-                            self.enter_quarter("quarter2")
+                        elif self.knight_dialogue_state >= 2 or getattr(self, 'barriers_lifted', False):
+                            self.open_summative_modal(2)
                             return "quarter_entered"
+                        elif self.knight_dialogue_state == 0:
+                            self.locked_portal_banner_msg = "Talk to the Knight first to unlock Term 2!"
+                            self.locked_portal_banner_timer = 2.0
                     elif current_portal.direction == 'right':
-                        if self.is_quarter_completed('quarter3'):
-                            self.locked_portal_banner_msg = "Quarter 3 is already completed!"
+                        if not self.is_quarter_unlocked('quarter3'):
+                            self.locked_portal_banner_msg = "Complete Term 2 to unlock Term 3!"
                             self.locked_portal_banner_timer = 2.0
-                        elif (self.is_quarter_unlocked('quarter3') and self.skeleton_dialogue_state >= 2) or getattr(self, 'barriers_lifted', False):
-                            self.enter_quarter("quarter3")
+                        elif self.skeleton_dialogue_state >= 2 or getattr(self, 'barriers_lifted', False):
+                            self.open_summative_modal(3)
                             return "quarter_entered"
+                        elif self.skeleton_dialogue_state == 0:
+                            self.locked_portal_banner_msg = "Talk to the Skeleton first to unlock Term 3!"
+                            self.locked_portal_banner_timer = 2.0
                     elif current_portal.direction == 'down':
                         if self.is_quarter_completed('quarter4'):
-                            self.locked_portal_banner_msg = "Summative Assessment is already completed!"
+                            self.locked_portal_banner_msg = "Remedial Stage is already completed!"
                             self.locked_portal_banner_timer = 2.0
-                        elif (self.is_quarter_unlocked('quarter4') and self.bromen_dialogue_state >= 2) or getattr(self, 'barriers_lifted', False):
+                        elif not self.is_quarter_unlocked('quarter4'):
+                            self.locked_portal_banner_msg = "Complete Term 3 to unlock the Remedial Stage!"
+                            self.locked_portal_banner_timer = 2.0
+                        elif self.bromen_dialogue_state >= 2 or getattr(self, 'barriers_lifted', False):
                             self.enter_quarter("quarter4")
                             return "quarter_entered"
+                        elif self.bromen_dialogue_state == 0:
+                            self.locked_portal_banner_msg = "Talk to Bromen first to unlock the Remedial Stage!"
+                            self.locked_portal_banner_timer = 2.0
 
             if event.key == pygame.K_ESCAPE:
                 return self.return_to_main_menu()

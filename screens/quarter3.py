@@ -54,11 +54,12 @@ PORTAL_SIZES = {
 
 
 class Quarter3:
-    def __init__(self, screen, main_menu, map_name):
+    def __init__(self, screen, main_menu, map_name, summative_num=1):
         self.screen = screen
         self.main_menu = main_menu
         self.width, self.height = screen.get_size()
         self.map_name = map_name  # 'map3.txt'
+        self.summative_num = summative_num
 
         # ============================================================
         # GESTURE SYSTEM - USE MAIN MENU'S DATA
@@ -923,7 +924,8 @@ class Quarter3:
         else:
             try:
                 if db:
-                    questions_result = db.get_questions(quarter=3, force_refresh=True)
+                    s_num = getattr(self, 'summative_num', 1)
+                    questions_result = db.get_questions(quarter=3, summative=s_num, force_refresh=True)
                     mapped_questions = map_cloud_questions(
                         questions_result,
                         default_hint="Examine the choices carefully and select the best answer below!",
@@ -1028,9 +1030,6 @@ class Quarter3:
         self.first_attempt_correct = {k: True for k in active_ids}
         self.station_attempts = {k: 0 for k in active_ids}
 
-    def cloud_sync_quarter3_questions(self, questions):
-        """Allows dynamic overriding/syncing of Quarter 3 questions from cloud or tests (up to 15)."""
-        return self.load_database_questions(questions_override=questions)
         if not hasattr(self, 'answered_stations') or self.answered_stations is None:
             self.answered_stations = set()
 
@@ -1052,6 +1051,10 @@ class Quarter3:
             self.quiz_station_index = active_ids[0]
             self.current_question_index = 0
             print(f"[CLOUD SYNC] Quarter 3 synced {active_count} cloud question(s) across {active_count} station(s).")
+
+    def cloud_sync_quarter3_questions(self, questions):
+        """Allows dynamic overriding/syncing of Quarter 3 questions from cloud or tests (up to 15)."""
+        return self.load_database_questions(questions_override=questions)
 
     def save_results_to_database(self):
         if getattr(self, '_results_saved_to_db', False):
@@ -1080,14 +1083,22 @@ class Quarter3:
             percentage = (correct_answers / float(total_questions)) * 100.0
             score = int(round(percentage))
 
-            assessment_id = db.get_assessment_id(quarter=3)
+            s_num = getattr(self, 'summative_num', 1)
+            assessment_id = db.get_assessment_id(quarter=3, summative=s_num)
             if assessment_id:
-                print(f"[LOG] Linked Quarter 3 result to Assessment ID: {assessment_id}")
+                print(f"[LOG] Linked Term 3 Summative {s_num} result to Assessment ID: {assessment_id}")
 
-            feedback_msg = f"Completed Quarter 3 (Math Explorations). Answered {correct_answers} of {total_questions} questions correctly on the first attempt."
+            from db.connect_db import _ORDINALS
+            s_ord = _ORDINALS.get(s_num, f"{s_num}th")
+            feedback_msg = f"Completed Term 3 - {s_ord} Summative (Monetary Desert). Answered {correct_answers} of {total_questions} questions correctly on the first attempt."
             sel_student = getattr(self.main_menu, 'selected_student', None) or {}
             grade_level = sel_student.get('level') or sel_student.get('gradeLevel') or sel_student.get('grade_level') or 'Grade 2'
             student_code = sel_student.get('student_id') or sel_student.get('studentId') or getattr(self.main_menu, 'student_id', None)
+            missed_ids = [
+                self.quiz_questions[int(k) - 1].get("id")
+                for k, v in self.first_attempt_correct.items()
+                if not v and str(k).isdigit() and 0 <= int(k) - 1 < len(self.quiz_questions) and self.quiz_questions[int(k) - 1].get("id")
+            ]
 
             success = db.save_game_result(
                 student_id=student_db_id,
@@ -1099,7 +1110,9 @@ class Quarter3:
                 grade_level=grade_level,
                 assessment_id=assessment_id,
                 quarter=3,
-                student_code=student_code
+                student_code=student_code,
+                summative=s_num,
+                missed_ids=missed_ids
             )
             if success:
                 print(f"Successfully saved Quarter 3 Game Result to Database for Student DB ID {student_db_id}!")
@@ -1897,8 +1910,14 @@ class Quarter3:
                     correct_answers = sum(1 for k, v in self.first_attempt_correct.items() if k <= total_questions and v)
                     percentage = (correct_answers / float(total_questions)) * 100.0 if total_questions > 0 else 100.0
                     score = int(round(percentage)) if total_questions > 0 else 100
+                    missed_ids = [
+                self.quiz_questions[int(k) - 1].get("id")
+                for k, v in self.first_attempt_correct.items()
+                if not v and str(k).isdigit() and 0 <= int(k) - 1 < len(self.quiz_questions) and self.quiz_questions[int(k) - 1].get("id")
+            ]
+                    s_num = getattr(self, 'summative_num', 1)
                     from db.save_system import mark_quarter_completed
-                    mark_quarter_completed(self.main_menu, "quarter3", score=score, percentage=percentage, total_questions=total_questions)
+                    mark_quarter_completed(self.main_menu, "quarter3", score=score, percentage=percentage, total_questions=total_questions, summative_num=s_num, missed_ids=missed_ids)
                     if getattr(self.main_menu, 'audio_manager', None):
                         self.main_menu.audio_manager.play_sfx("victory_fanfare")
                         self.main_menu.audio_manager.play_sfx("portal_warp")
@@ -1925,10 +1944,11 @@ class Quarter3:
 
     def restart_level(self):
         """Restarts the current Quarter 3 level."""
+        s_num = getattr(self, 'summative_num', 1)
         self.main_menu.quarter3 = None
         self.cleanup()
         from screens.quarter3 import Quarter3
-        self.main_menu.quarter3 = Quarter3(self.screen, self.main_menu, self.map_name)
+        self.main_menu.quarter3 = Quarter3(self.screen, self.main_menu, self.map_name, summative_num=s_num)
 
     def finish_and_return_to_hub(self):
         """Callback invoked by Victory Report Card to transition back to stage select."""
@@ -2460,8 +2480,14 @@ class Quarter3:
                 correct_answers = sum(1 for k, v in self.first_attempt_correct.items() if k <= total_questions and v)
                 percentage = (correct_answers / float(total_questions)) * 100.0 if total_questions > 0 else 100.0
                 score = int(round(percentage)) if total_questions > 0 else 100
+                missed_ids = [
+                self.quiz_questions[int(k) - 1].get("id")
+                for k, v in self.first_attempt_correct.items()
+                if not v and str(k).isdigit() and 0 <= int(k) - 1 < len(self.quiz_questions) and self.quiz_questions[int(k) - 1].get("id")
+            ]
+                s_num = getattr(self, 'summative_num', 1)
                 from db.save_system import mark_quarter_completed
-                mark_quarter_completed(self.main_menu, "quarter3", score=score, percentage=percentage, total_questions=total_questions)
+                mark_quarter_completed(self.main_menu, "quarter3", score=score, percentage=percentage, total_questions=total_questions, summative_num=s_num, missed_ids=missed_ids)
                 self.victory_card.show(total_questions=total_questions, correct_first_try=correct_answers, score=score)
             return
 
@@ -3367,7 +3393,10 @@ class Quarter3:
             
             # Header title in Gold
             title_font = get_font("Comic Sans MS", 13, bold=True)
-            title_surf = title_font.render("★ DESERT EXPEDITION OBJECTIVES", True, (255, 215, 0))
+            from db.connect_db import _ORDINALS
+            s_num = getattr(self, 'summative_num', 1)
+            s_ord = _ORDINALS.get(s_num, f"{s_num}th").upper()
+            title_surf = title_font.render(f"★ TERM 3 — {s_ord} SUMMATIVE", True, (255, 215, 0))
             self.screen.blit(title_surf, (box_x + 16, box_y + 8))
 
             # Progress badge pills on top right (with prominent Wrong indicator if wrong answers exist)

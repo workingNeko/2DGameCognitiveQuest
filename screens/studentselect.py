@@ -127,6 +127,19 @@ class StudentSelect:
         self.message_timer = 0
 
         # =====================================================
+        # IDENTITY CONFIRMATION MODAL ("Are you [Student Name]?")
+        # =====================================================
+        self.show_confirm_modal = False
+        self.confirm_student = None
+        self.confirm_modal_cooldown = 0.0
+        self.confirm_yes_rect = pygame.Rect(self.width // 2 - 230, self.height // 2 + 55, 210, 52)
+        self.confirm_no_rect = pygame.Rect(self.width // 2 + 20, self.height // 2 + 55, 210, 52)
+        self.require_identity_confirm = (
+            os.environ.get("SDL_VIDEODRIVER") != "dummy"
+            and os.environ.get("UNITTEST_MODE") != "1"
+        )
+
+        # =====================================================
         # LOAD STUDENTS
         # =====================================================
         self.load_students(force_refresh=False)
@@ -255,6 +268,24 @@ class StudentSelect:
 
     def trigger_click(self, pos):
         """Handle click at cursor position - called from main_menu or handle_event"""
+        # Identity Confirmation Modal intercepts clicks
+        if getattr(self, 'show_confirm_modal', False):
+            if time.time() < getattr(self, 'confirm_modal_cooldown', 0.0):
+                return None
+            if self.confirm_yes_rect and self.confirm_yes_rect.collidepoint(pos):
+                st = self.confirm_student
+                self.show_confirm_modal = False
+                self.confirm_student = None
+                self.select_student(st)
+                return "select"
+            elif self.confirm_no_rect and self.confirm_no_rect.collidepoint(pos):
+                if hasattr(self.main_menu, 'audio_manager') and self.main_menu.audio_manager:
+                    self.main_menu.audio_manager.play_sfx("click")
+                self.show_confirm_modal = False
+                self.confirm_student = None
+                return "cancel_confirm"
+            return None
+
         # Check cooldown to prevent multiple rapid clicks
         current_time = pygame.time.get_ticks() / 1000.0
         if current_time - self.last_click_time < self.click_cooldown:
@@ -362,9 +393,9 @@ class StudentSelect:
             item_rect = pygame.Rect(list_rect.x + 15, draw_y, list_rect.width - 45, self.item_height - 12)
             if item_rect.collidepoint(pos) or (draw_y - 4 <= pos[1] <= draw_y + self.item_height - 6 and list_rect.x <= pos[0] <= list_rect.right - 25):
                 self.selected_index = index
-                self.select_student(student)
-                print(f"[USER] Selected student: {student.get('first_name', '')} {student.get('last_name', '')}".strip())
-                return "select"
+                res = self.prompt_student_confirmation(student)
+                print(f"[USER] Clicked student card: {student.get('first_name', '')} {student.get('last_name', '')}".strip())
+                return res or "prompt_confirm"
 
         # 2. Secondary: Robust index calculation with smooth scroll offset
         if list_rect.x <= pos[0] <= list_rect.right - 25:
@@ -374,9 +405,9 @@ class StudentSelect:
             if 0 <= row_idx < len(display_list):
                 student = display_list[row_idx]
                 self.selected_index = row_idx
-                self.select_student(student)
-                print(f"[USER] Selected student (row calc): {student.get('first_name', '')} {student.get('last_name', '')}".strip())
-                return "select"
+                res = self.prompt_student_confirmation(student)
+                print(f"[USER] Clicked student card (row calc): {student.get('first_name', '')} {student.get('last_name', '')}".strip())
+                return res or "prompt_confirm"
 
         return None
 
@@ -488,13 +519,19 @@ class StudentSelect:
                         save_ts = save_data.get("timestamp")
                         is_stale = bool(reset_ts and save_ts is not None and float(save_ts) < reset_ts - 1.0)
                         if not is_stale:
-                            q_data = save_data.get("completed_quarters", {})
-                            for q_key, d in q_data.items():
-                                if isinstance(d, dict) and d.get("completed"):
-                                    qn = (db.normalize_quarter_number(q_key) or db.infer_quarter_from_text(q_key) or 1) if db else 1
-                                    local_q_scores[qn] = max(local_q_scores.get(qn, 0), int(d.get("score", 0)))
-                            s["progress"] = int((len(local_q_scores) / 4.0) * 100)
-                            s["score"] = sum(local_q_scores.values())
+                            summ_data = save_data.get("completed_summatives", {})
+                            if summ_data:
+                                comp_count = len([k for k, v in summ_data.items() if k != "remedial" and isinstance(v, dict) and v.get("completed")])
+                                s["progress"] = int((comp_count / 12.0) * 100)
+                                s["score"] = sum(int(v.get("score", 0)) for v in summ_data.values() if isinstance(v, dict))
+                            else:
+                                q_data = save_data.get("completed_quarters", {})
+                                for q_key, d in q_data.items():
+                                    if isinstance(d, dict) and d.get("completed"):
+                                        qn = (db.normalize_quarter_number(q_key) or db.infer_quarter_from_text(q_key) or 1) if db else 1
+                                        local_q_scores[qn] = max(local_q_scores.get(qn, 0), int(d.get("score", 0)))
+                                s["progress"] = int((len(local_q_scores) / 4.0) * 100)
+                                s["score"] = sum(local_q_scores.values())
                 s["_local_quarters"] = local_q_scores
         except Exception as e:
             print(f"Student progress sync error: {e}")
@@ -589,7 +626,10 @@ class StudentSelect:
                         pk_str = str(pk or "")
                         c_qs = by_student_pk.get(pk_str, {})
                         s["score"] = sum(c["score"] for c in c_qs.values())
-                        s["progress"] = int((len(c_qs) / 4.0) * 100)
+                        if res.get("summatives"):
+                            s["progress"] = int((len([k for k in res["summatives"] if k != "remedial"]) / 12.0) * 100)
+                        else:
+                            s["progress"] = int((len(c_qs) / 4.0) * 100)
                         s["_cloud_game_quarters"] = c_qs
                 else:
                     # Offline fallback: preserve local saved quarters
@@ -610,6 +650,78 @@ class StudentSelect:
                         break
         except Exception as e:
             print(f"[STUDENT CLOUD SYNC WARN] {e}")
+
+    # =========================================================
+    # IDENTITY CONFIRMATION MODAL ("Are you [Student Name]?")
+    # =========================================================
+    def prompt_student_confirmation(self, student):
+        """Opens the Kid-Friendly Identity Confirmation Modal."""
+        if not getattr(self, 'require_identity_confirm', True):
+            self.select_student(student)
+            return "select"
+        if hasattr(self.main_menu, 'audio_manager') and self.main_menu.audio_manager:
+            self.main_menu.audio_manager.play_sfx("click")
+        self.confirm_student = student
+        self.show_confirm_modal = True
+        self.confirm_modal_cooldown = time.time() + 0.35
+        card_w, card_h = 560, 270
+        card_x = (self.width - card_w) // 2
+        card_y = (self.height - card_h) // 2
+        self.confirm_yes_rect = pygame.Rect(card_x + 35, card_y + 180, 230, 56)
+        self.confirm_no_rect = pygame.Rect(card_x + 295, card_y + 180, 230, 56)
+        return "prompt_confirm"
+
+    def draw_confirm_modal(self):
+        """Draws the modal dialog confirming student identity with large, kid-friendly buttons."""
+        card_w, card_h = 560, 270
+        card_x = (self.width - card_w) // 2
+        card_y = (self.height - card_h) // 2
+        card_rect = pygame.Rect(card_x, card_y, card_w, card_h)
+
+        # 1. Dark semi-transparent backdrop
+        backdrop = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
+        backdrop.fill((0, 0, 0, 175))
+        self.screen.blit(backdrop, (0, 0))
+
+        # 2. Modal card
+        pygame.draw.rect(self.screen, (30, 41, 59), card_rect, border_radius=18)
+        pygame.draw.rect(self.screen, (255, 215, 0), card_rect, 3, border_radius=18)
+
+        # 3. Header
+        header_surf = self.filter_font.render("PROFILE CONFIRMATION", True, (250, 204, 21))
+        self.screen.blit(header_surf, header_surf.get_rect(center=(self.width // 2, card_y + 28)))
+
+        # 4. Student Name Question
+        st = self.confirm_student or {}
+        first_n = st.get("first_name", "")
+        last_n = st.get("last_name", "")
+        full_n = f"{first_n} {last_n}".strip() or "Student"
+        question_surf = self.font.render(f"Are you {full_n}?", True, (255, 255, 255))
+        self.screen.blit(question_surf, question_surf.get_rect(center=(self.width // 2, card_y + 75)))
+
+        # 5. Subtitle details
+        sid = st.get("student_id") or st.get("id") or "N/A"
+        level = st.get("level") or "Grade 2"
+        section = st.get("section") or "A"
+        sub_text = f"Student ID: {sid}   |   {level} (Section {section})"
+        sub_surf = self.small_font.render(sub_text, True, (186, 230, 253))
+        self.screen.blit(sub_surf, sub_surf.get_rect(center=(self.width // 2, card_y + 118)))
+
+        # 6. Yes Button [ ✓ YES, THAT'S ME! ]
+        yes_hover = self.is_cursor_active() and self.confirm_yes_rect.collidepoint(self.cursor_pos)
+        yes_col = (5, 150, 105) if yes_hover else (16, 185, 129)
+        pygame.draw.rect(self.screen, yes_col, self.confirm_yes_rect, border_radius=14)
+        pygame.draw.rect(self.screen, (255, 255, 255), self.confirm_yes_rect, 2, border_radius=14)
+        yes_txt = self.font.render("✓ YES, THAT'S ME!", True, (255, 255, 255))
+        self.screen.blit(yes_txt, yes_txt.get_rect(center=self.confirm_yes_rect.center))
+
+        # 7. No Button [ ✗ NO, GO BACK ]
+        no_hover = self.is_cursor_active() and self.confirm_no_rect.collidepoint(self.cursor_pos)
+        no_col = (220, 38, 38) if no_hover else (239, 68, 68)
+        pygame.draw.rect(self.screen, no_col, self.confirm_no_rect, border_radius=14)
+        pygame.draw.rect(self.screen, (255, 255, 255), self.confirm_no_rect, 2, border_radius=14)
+        no_txt = self.font.render("✗ NO, GO BACK", True, (255, 255, 255))
+        self.screen.blit(no_txt, no_txt.get_rect(center=self.confirm_no_rect.center))
 
     # =========================================================
     # SELECT STUDENT
@@ -962,10 +1074,38 @@ class StudentSelect:
             pygame.draw.rect(self.screen, (40, 40, 40), msg_rect.inflate(25, 12), border_radius=10)
             self.screen.blit(msg_surface, msg_rect)
 
+        # IDENTITY CONFIRMATION MODAL ("Are you [Student Name]?")
+        if getattr(self, 'show_confirm_modal', False):
+            self.draw_confirm_modal()
+
     # =========================================================
     # HANDLE EVENTS
     # =========================================================
     def handle_event(self, event):
+        # When Confirmation Modal is active, intercept all inputs
+        if getattr(self, 'show_confirm_modal', False):
+            if event.type == pygame.MOUSEMOTION:
+                self.cursor_pos = event.pos
+                return None
+            elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                self.cursor_pos = event.pos
+                return self.trigger_click(event.pos)
+            elif event.type == pygame.KEYDOWN:
+                if event.key in (pygame.K_RETURN, pygame.K_KP_ENTER, pygame.K_SPACE, pygame.K_y):
+                    st = self.confirm_student
+                    self.show_confirm_modal = False
+                    self.confirm_student = None
+                    if st:
+                        self.select_student(st)
+                    return "select"
+                elif event.key in (pygame.K_ESCAPE, pygame.K_n):
+                    if hasattr(self.main_menu, 'audio_manager') and self.main_menu.audio_manager:
+                        self.main_menu.audio_manager.play_sfx("click")
+                    self.show_confirm_modal = False
+                    self.confirm_student = None
+                    return "cancel_confirm"
+            return None
+
         list_rect = pygame.Rect(40, 120, self.width - 80, self.height - 200)
         display_list = self.get_display_students()
         total_content_h = len(display_list) * self.item_height + 20
@@ -1059,8 +1199,8 @@ class StudentSelect:
             # ENTER
             elif event.key in (pygame.K_RETURN, pygame.K_KP_ENTER):
                 if display_list and 0 <= self.selected_index < len(display_list):
-                    self.select_student(display_list[self.selected_index])
-                    return "select"
+                    res = self.prompt_student_confirmation(display_list[self.selected_index])
+                    return res or "prompt_confirm"
 
             # ESCAPE
             elif event.key == pygame.K_ESCAPE:

@@ -1314,14 +1314,38 @@ class Quarter4:
             mapped_questions = list(questions_override)
         else:
             try:
-                if db:
-                    questions_result = db.get_questions(quarter=4, force_refresh=True)
+                # 1. Inspect student save for missed questions across Terms 1-3
+                from db.save_system import load_student_progress
+                student_id = getattr(self.main_menu, 'student_id', None) or (
+                    self.main_menu.selected_student.get('student_id')
+                    if hasattr(self.main_menu, 'selected_student') and isinstance(self.main_menu.selected_student, dict)
+                    else None
+                )
+                student_data = load_student_progress(student_id)
+                missed_pool = student_data.get("missed_questions", []) if student_data else []
+
+                raw_missed_qs = []
+                if db and missed_pool:
+                    raw_missed_qs = db.get_questions_by_ids(missed_pool)
+
+                if raw_missed_qs:
+                    print(f"[REMEDIAL] Loaded {len(raw_missed_qs)} targeted missed question(s) from student save pool.")
                     mapped_questions = map_cloud_questions(
-                        questions_result,
-                        default_hint="Examine the choices carefully and select the best answer below!"
+                        raw_missed_qs,
+                        default_hint="Review this question carefully — you previously encountered it in your journey!",
+                        max_questions=10
                     )
+                else:
+                    # 2. Fallback to teacher-curated Remedial questions from cloud/cache
+                    if db:
+                        questions_result = db.get_questions(quarter=4, summative="remedial", force_refresh=True)
+                        mapped_questions = map_cloud_questions(
+                            questions_result,
+                            default_hint="Examine the choices carefully and select the best answer below!",
+                            max_questions=10
+                        )
             except Exception as e:
-                print(f"[WARN] Exception loading cloud questions for Quarter 4: {e}")
+                print(f"[WARN] Exception loading Remedial questions: {e}")
 
         # Strict error handler and ceiling: accepts up to 15 questions only for Summative Assessment
         from core.dynamic_quiz_manager import validate_and_clamp_questions
@@ -1475,11 +1499,16 @@ class Quarter4:
             percentage = (correct_answers / float(total_questions)) * 100.0
             score = int(round(percentage))
 
-            assessment_id = db.get_assessment_id(quarter=4)
+            remediated_ids = [
+                self.quiz_questions[int(k) - 1].get("id")
+                for k, v in self.first_attempt_correct.items()
+                if v and str(k).isdigit() and 0 <= int(k) - 1 < len(self.quiz_questions) and self.quiz_questions[int(k) - 1].get("id")
+            ]
+            assessment_id = db.get_assessment_id(quarter=4, summative="remedial")
             if assessment_id:
-                print(f"[LOG] Linked Quarter 4 result to Assessment ID: {assessment_id}")
+                print(f"[LOG] Linked Remedial Stage result to Assessment ID: {assessment_id}")
 
-            feedback_msg = f"Completed Summative Assessment (Water Temple). Answered {correct_answers} of {total_questions} questions correctly on first attempt."
+            feedback_msg = f"Completed Remedial Stage (Water Temple). Remediated {len(remediated_ids)} question(s) with {correct_answers} of {total_questions} questions answered correctly on first attempt."
             sel_student = getattr(self.main_menu, 'selected_student', None) or {}
             grade_level = sel_student.get('level') or sel_student.get('gradeLevel') or sel_student.get('grade_level') or 'Grade 2'
             student_code = sel_student.get('student_id') or sel_student.get('studentId') or getattr(self.main_menu, 'student_id', None)
@@ -1494,13 +1523,15 @@ class Quarter4:
                 grade_level=grade_level,
                 assessment_id=assessment_id,
                 quarter=4,
-                student_code=student_code
+                student_code=student_code,
+                summative="remedial",
+                remediated_ids=remediated_ids
             )
             if success:
-                print(f"[WIN] Successfully saved Quarter 4 Game Result to Database for Student DB ID {student_db_id}!")
+                print(f"[WIN] Successfully saved Remedial Game Result to Database for Student DB ID {student_db_id}!")
                 print(f"   Score: {score}/{total_questions} ({percentage:.1f}%)")
         except Exception as e:
-            print(f"[WARN] Error saving Quarter 4 game result: {e}")
+            print(f"[WARN] Error saving Remedial game result: {e}")
 
     # ============================================================
     # RETURN TO STAGE SELECT
@@ -1515,8 +1546,13 @@ class Quarter4:
                     correct_answers = sum(1 for k, v in self.first_attempt_correct.items() if k <= total_questions and v)
                     percentage = (correct_answers / float(total_questions)) * 100.0 if total_questions > 0 else 100.0
                     score = int(round(percentage)) if total_questions > 0 else 100
+                    remediated_ids = [
+                self.quiz_questions[int(k) - 1].get("id")
+                for k, v in self.first_attempt_correct.items()
+                if v and str(k).isdigit() and 0 <= int(k) - 1 < len(self.quiz_questions) and self.quiz_questions[int(k) - 1].get("id")
+            ]
                     from db.save_system import mark_quarter_completed
-                    mark_quarter_completed(self.main_menu, "quarter4", score=score, percentage=percentage, total_questions=total_questions)
+                    mark_quarter_completed(self.main_menu, "quarter4", score=score, percentage=percentage, total_questions=total_questions, summative_num="remedial", remediated_ids=remediated_ids)
                     if hasattr(self.main_menu, 'audio_manager'):
                         self.main_menu.audio_manager.play_sfx("victory_fanfare")
                         self.main_menu.audio_manager.play_sfx("portal_warp")
@@ -2089,8 +2125,13 @@ class Quarter4:
                 correct_answers = sum(1 for k, v in self.first_attempt_correct.items() if k <= total_questions and v)
                 percentage = (correct_answers / float(total_questions)) * 100.0 if total_questions > 0 else 100.0
                 score = int(round(percentage)) if total_questions > 0 else 100
+                remediated_ids = [
+                self.quiz_questions[int(k) - 1].get("id")
+                for k, v in self.first_attempt_correct.items()
+                if v and str(k).isdigit() and 0 <= int(k) - 1 < len(self.quiz_questions) and self.quiz_questions[int(k) - 1].get("id")
+            ]
                 from db.save_system import mark_quarter_completed
-                mark_quarter_completed(self.main_menu, "quarter4", score=score, percentage=percentage, total_questions=total_questions)
+                mark_quarter_completed(self.main_menu, "quarter4", score=score, percentage=percentage, total_questions=total_questions, summative_num="remedial", remediated_ids=remediated_ids)
                 self.victory_card.show(total_questions=total_questions, correct_first_try=correct_answers, score=score)
             return
 
@@ -3317,7 +3358,7 @@ class Quarter4:
             
             # Header title in Gold
             title_font = get_font("Comic Sans MS", 13, bold=True)
-            header_title = "★ TEMPLE AQUEDUCT & LOTUS RAFT" if getattr(self, 'is_map12', False) else "★ SUMMATIVE ASSESSMENT OBJECTIVES"
+            header_title = "★ REMEDIAL TRIAL & LOTUS RAFT" if getattr(self, 'is_map12', False) else "★ REMEDIAL STAGE OBJECTIVES"
             title_surf = title_font.render(header_title, True, (255, 215, 0))
             self.screen.blit(title_surf, (box_x + 16, box_y + 8))
 

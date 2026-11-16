@@ -9,22 +9,23 @@ Enables dynamic game adjustment when questions are added, updated, or removed in
 
 import math
 
-# Maximum questions that the game can handle per quarter and in the summative assessment (Strict upper ceiling: 15)
-MAX_QUESTIONS_PER_QUARTER = 15
+# Maximum questions that the game can handle per summative assessment / stage (Strict limit: 10 items)
+MAX_QUESTIONS_PER_STAGE = 10
+MAX_QUESTIONS_PER_QUARTER = MAX_QUESTIONS_PER_STAGE  # Backward-compatible alias
 
 
-def validate_and_clamp_questions(questions, quarter_num=None, max_allowed=MAX_QUESTIONS_PER_QUARTER):
+def validate_and_clamp_questions(questions, quarter_num=None, max_allowed=MAX_QUESTIONS_PER_STAGE):
     """
     Error handler and dynamic validator for cloud-supplied quiz questions.
-    - Enforces strict upper capacity limit: accepts up to `max_allowed` (15 questions max)
-      from Quarter 1 to Summative Assessment.
-    - If webapp provides > 15 questions, logs an explicit warning/error handler notice
-      and safely clamps to the first 15 questions.
+    - Enforces strict upper capacity limit: accepts up to `max_allowed` (10 questions max)
+      across all Term Summative slots and Remedial stage.
+    - If webapp provides > 10 questions, logs an explicit warning/error handler notice
+      and safely clamps to the first 10 questions.
     - Validates that each item is a valid dictionary with required question content.
     - Filters out malformed, None, or empty question entries to prevent runtime crashes.
     
     Returns:
-        list of validated question dicts, clamped to at most `max_allowed` (15).
+        list of validated question dicts, clamped to at most `max_allowed` (10).
     """
     if not questions or not isinstance(questions, (list, tuple)):
         return []
@@ -76,8 +77,8 @@ def allocate_dynamic_stations(
     Returns:
         dict or list: matching the input format with at most MAX_QUESTIONS_PER_QUARTER stations.
     """
-    # Enforce maximum 15 questions per quarter / summative assessment
-    needed_count = min(needed_count, MAX_QUESTIONS_PER_QUARTER)
+    # Enforce maximum 10 questions per stage (1 to 10 items)
+    needed_count = min(needed_count, MAX_QUESTIONS_PER_STAGE)
 
     was_list = isinstance(existing_stations, (list, tuple))
     res_stations = {}

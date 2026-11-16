@@ -27,6 +27,7 @@ def _detect_default_base_url():
     return "https://gamified-math-grading-system.vercel.app/api"
 
 BASE_URL = _detect_default_base_url()
+MAX_QUESTIONS_PER_STAGE = 10
 
 def _create_ssl_context():
     """Builds a resilient SSL context using certifi bundle, system store, or unverified fallback."""
@@ -152,6 +153,103 @@ def infer_quarter_from_text(text):
     return None
 
 
+_ORDINALS = {1: "1st", 2: "2nd", 3: "3rd", 4: "4th"}
+_REVERSE_ORDINALS = {
+    "1st": 1, "first": 1, "1": 1,
+    "2nd": 2, "second": 2, "2": 2,
+    "3rd": 3, "third": 3, "3": 3,
+    "4th": 4, "fourth": 4, "4": 4,
+}
+
+_CANONICAL_ASSESSMENT_SPECS = {
+    "t1_s1": {"term": 1, "summative": 1, "unit_code": "M2-T1-S1", "title": "Cognitive Maze - Term 1 (1st Summative)", "label": "Term 1 - 1st Summative"},
+    "t1_s2": {"term": 1, "summative": 2, "unit_code": "M2-T1-S2", "title": "Cognitive Maze - Term 1 (2nd Summative)", "label": "Term 1 - 2nd Summative"},
+    "t1_s3": {"term": 1, "summative": 3, "unit_code": "M2-T1-S3", "title": "Cognitive Maze - Term 1 (3rd Summative)", "label": "Term 1 - 3rd Summative"},
+    "t1_s4": {"term": 1, "summative": 4, "unit_code": "M2-T1-S4", "title": "Cognitive Maze - Term 1 (4th Summative)", "label": "Term 1 - 4th Summative"},
+    "t2_s1": {"term": 2, "summative": 1, "unit_code": "M2-T2-S1", "title": "Cognitive Maze - Term 2 (1st Summative)", "label": "Term 2 - 1st Summative"},
+    "t2_s2": {"term": 2, "summative": 2, "unit_code": "M2-T2-S2", "title": "Cognitive Maze - Term 2 (2nd Summative)", "label": "Term 2 - 2nd Summative"},
+    "t2_s3": {"term": 2, "summative": 3, "unit_code": "M2-T2-S3", "title": "Cognitive Maze - Term 2 (3rd Summative)", "label": "Term 2 - 3rd Summative"},
+    "t2_s4": {"term": 2, "summative": 4, "unit_code": "M2-T2-S4", "title": "Cognitive Maze - Term 2 (4th Summative)", "label": "Term 2 - 4th Summative"},
+    "t3_s1": {"term": 3, "summative": 1, "unit_code": "M2-T3-S1", "title": "Cognitive Maze - Term 3 (1st Summative)", "label": "Term 3 - 1st Summative"},
+    "t3_s2": {"term": 3, "summative": 2, "unit_code": "M2-T3-S2", "title": "Cognitive Maze - Term 3 (2nd Summative)", "label": "Term 3 - 2nd Summative"},
+    "t3_s3": {"term": 3, "summative": 3, "unit_code": "M2-T3-S3", "title": "Cognitive Maze - Term 3 (3rd Summative)", "label": "Term 3 - 3rd Summative"},
+    "t3_s4": {"term": 3, "summative": 4, "unit_code": "M2-T3-S4", "title": "Cognitive Maze - Term 3 (4th Summative)", "label": "Term 3 - 4th Summative"},
+    "remedial": {"term": 4, "summative": 1, "unit_code": "M2-REMED-U1", "title": "Cognitive Maze - Remedial Assessment", "label": "Remedial"},
+}
+
+
+def parse_slot_key(term_or_quarter, summative=None):
+    """Normalize input term/quarter and summative slot into (slot_key, slot_label, term_num, summative_num)."""
+    raw_s = str(term_or_quarter).strip().lower()
+    if raw_s in _CANONICAL_ASSESSMENT_SPECS:
+        spec = _CANONICAL_ASSESSMENT_SPECS[raw_s]
+        return raw_s, spec["label"], spec["term"], spec["summative"]
+
+    if raw_s in ("remedial", "remed", "quarter4", "quarter 4", "q4", "t4", "summative", "summative assessment", "4") or (isinstance(term_or_quarter, int) and term_or_quarter == 4):
+        return "remedial", "Remedial", 4, 1
+
+    t_num = normalize_quarter_number(term_or_quarter) or infer_quarter_from_text(term_or_quarter) or 1
+    if t_num == 4:
+        return "remedial", "Remedial", 4, 1
+
+    s_num = 1
+    if summative is not None:
+        if isinstance(summative, int) and 1 <= summative <= 4:
+            s_num = summative
+        else:
+            s_str = str(summative).strip().lower()
+            if s_str in ("remedial", "remed"):
+                return "remedial", "Remedial", 4, 1
+            m_num = re.search(r"(\d+)", s_str)
+            if m_num:
+                parsed_val = int(m_num.group(1))
+                if 1 <= parsed_val <= 4:
+                    s_num = parsed_val
+            elif s_str in _REVERSE_ORDINALS:
+                s_num = _REVERSE_ORDINALS[s_str]
+
+    slot_key = f"t{t_num}_s{s_num}"
+    if slot_key in _CANONICAL_ASSESSMENT_SPECS:
+        spec = _CANONICAL_ASSESSMENT_SPECS[slot_key]
+        return slot_key, spec["label"], t_num, s_num
+    return "t1_s1", "Term 1 - 1st Summative", 1, 1
+
+
+def infer_slot_from_text(text):
+    """Infer slot_key ('t1_s1'..'t3_s4', 'remedial') from text containing tags, unit codes, or titles."""
+    if not text:
+        return None
+    s = str(text)
+    m_tag = re.search(r"\[SLOT:([a-zA-Z0-9_]+)\]", s)
+    if m_tag:
+        raw_key = m_tag.group(1).lower()
+        if raw_key in _CANONICAL_ASSESSMENT_SPECS:
+            return raw_key
+
+    low = s.lower()
+    if "remedial" in low or "remed" in low or "m2-remed" in low:
+        return "remedial"
+
+    m_code = re.search(r"m2-t([1-3])-s([1-4])", low)
+    if m_code:
+        return f"t{m_code.group(1)}_s{m_code.group(2)}"
+
+    m_term_summ = re.search(r"(?:term|quarter|t)\s*([1-3]).*?(?:(1st|2nd|3rd|4th|\d+)\s*(?:summative|assessment)?)", low)
+    if m_term_summ:
+        t_val = int(m_term_summ.group(1))
+        s_raw = m_term_summ.group(2)
+        s_val = _REVERSE_ORDINALS.get(s_raw) or (int(s_raw) if s_raw.isdigit() and 1 <= int(s_raw) <= 4 else 1)
+        return f"t{t_val}_s{s_val}"
+
+    # Fallback to quarter inference
+    q = infer_quarter_from_text(text)
+    if q == 4:
+        return "remedial"
+    if q in (1, 2, 3):
+        return f"t{q}_s1"
+    return None
+
+
 def _unwrap_inline_dollar_math(match):
     inner = match.group(1)
     # Preserve genuine prose currency spans such as "$5 and Mary has $10"
@@ -209,9 +307,9 @@ def sanitize_cloud_math_text(text):
     return s
 
 
-def map_cloud_questions(raw_rows, default_hint="Examine the choices carefully and select the best answer below!", allow_ident=False, max_questions=15):
+def map_cloud_questions(raw_rows, default_hint="Examine the choices carefully and select the best answer below!", allow_ident=False, max_questions=MAX_QUESTIONS_PER_STAGE):
     """Normalize Vercel API question rows (or pre-mapped dicts) into in-game question dicts.
-    Caps questions to max_questions (default: 15 per quarter / summative assessment).
+    Caps questions to max_questions (strictly 10 per summative assessment slot).
     """
     if not raw_rows or not isinstance(raw_rows, list):
         return []
@@ -276,6 +374,7 @@ def map_cloud_questions(raw_rows, default_hint="Examine the choices carefully an
             if not ident_list and ans_clean:
                 ident_list = [ans_clean.lower()]
             mapped.append({
+                "id": q.get("id"),
                 "q_type": "identification",
                 "question": prompt,
                 "ident_answers": ident_list,
@@ -320,6 +419,7 @@ def map_cloud_questions(raw_rows, default_hint="Examine the choices carefully an
             _fmt_choice("D", opt_d),
         ]
         mapped.append({
+            "id": q.get("id"),
             "q_type": "multiple_choice",
             "question": prompt,
             "choices": choices,
@@ -344,6 +444,9 @@ class Database:
     sanitize_cloud_math_text = staticmethod(sanitize_cloud_math_text)
     normalize_quarter_number = staticmethod(normalize_quarter_number)
     infer_quarter_from_text = staticmethod(infer_quarter_from_text)
+    parse_slot_key = staticmethod(parse_slot_key)
+    infer_slot_from_text = staticmethod(infer_slot_from_text)
+    _CANONICAL_ASSESSMENT_SPECS = _CANONICAL_ASSESSMENT_SPECS
 
     _STAGE_ASSESSMENT_SPECS = {
         1: {"title": "Cognitive Maze - Quarter 1 Assessment", "quarter_label": "Quarter 1", "type": "quiz"},
@@ -580,7 +683,10 @@ class Database:
 
     def _post_student_profile_with_retry(self, recreate_payload, retries=3):
         post_url = f"{self._get_base_url()}/students"
-        post_data = json.dumps(recreate_payload).encode("utf-8")
+        payload_copy = dict(recreate_payload)
+        if not payload_copy.get("birthday"):
+            payload_copy["birthday"] = payload_copy.get("birthdate") or "2018-01-01"
+        post_data = json.dumps(payload_copy).encode("utf-8")
         last_err = None
         for attempt in range(retries):
             try:
@@ -689,6 +795,7 @@ class Database:
             "section": matched_student.get("section") or "A",
             "gender": matched_student.get("gender") or "Male",
             "avatarColor": matched_student.get("avatarColor") or "#f97316",
+            "birthday": matched_student.get("birthday") or matched_student.get("birthdate") or "2018-01-01",
         }
 
     def _cascade_reset_student_online(self, recreate_payload, replay_results=None, replay_grades=None):
@@ -831,6 +938,51 @@ class Database:
                 seen_ids.add(pk_str)
         return merged
 
+    def _purge_unregistered_local_saves(self, live_students):
+        """Purges any local JSON save files in db/saves/ whose studentId does not belong to the teacher's active roster."""
+        if not live_students or not isinstance(live_students, list):
+            return
+        valid_identifiers = set()
+        for st in live_students:
+            if not isinstance(st, dict):
+                continue
+            for k in ("id", "student_id", "studentId"):
+                v = st.get(k)
+                if v is not None:
+                    valid_identifiers.add(str(v).strip().lower())
+
+        saves_dir = self._saves_dir_path()
+        if not os.path.exists(saves_dir):
+            return
+
+        for fname in os.listdir(saves_dir):
+            if not fname.endswith(".json") or fname == "audio_settings.json":
+                continue
+            fpath = os.path.join(saves_dir, fname)
+            try:
+                with open(fpath, "r", encoding="utf-8") as f:
+                    sdata = json.load(f)
+                if not isinstance(sdata, dict):
+                    continue
+                sid_candidates = [
+                    sdata.get("student_db_id"),
+                    sdata.get("student_id"),
+                    sdata.get("id"),
+                    sdata.get("studentId"),
+                ]
+                sel = sdata.get("selected_student")
+                if isinstance(sel, dict):
+                    sid_candidates.extend([sel.get("id"), sel.get("studentId"), sel.get("student_id")])
+                matched = any(str(c).strip().lower() in valid_identifiers for c in sid_candidates if c is not None)
+                if not matched and valid_identifiers:
+                    print(f"[SECURITY PURGE] Removed unregistered local save file '{fname}' (student not in teacher's class roster).")
+                    try:
+                        os.remove(fpath)
+                    except Exception:
+                        pass
+            except Exception as e:
+                print(f"[SECURITY PURGE WARN] Could not inspect {fname}: {e}")
+
     def get_students(self, force_refresh=False):
         """Fetch students list from Vercel API, with short-TTL memory cache and local disk fallback."""
         if force_refresh:
@@ -854,6 +1006,7 @@ class Database:
                     data = json.loads(response.read().decode('utf-8'))
                     if isinstance(data, list):
                         data = self._merge_pending_restore_students(data)
+                        self._purge_unregistered_local_saves(data)
                         if len(data) > 0:
                             self._mem_set("students", "all", data)
                             try:
@@ -900,6 +1053,45 @@ class Database:
             return units
         return []
 
+    def _unit_matches_slot(self, unit, slot_key):
+        if not isinstance(unit, dict) or slot_key not in _CANONICAL_ASSESSMENT_SPECS:
+            return False
+        spec = _CANONICAL_ASSESSMENT_SPECS[slot_key]
+        code = str(unit.get("code") or "").upper().strip()
+        if code == spec["unit_code"]:
+            return True
+        q_field = str(unit.get("quarter") or "").strip().lower()
+        if q_field == spec["label"].lower():
+            return True
+        inferred = infer_slot_from_text(f"{unit.get('code', '')} {unit.get('title', '')} {unit.get('quarter', '')}")
+        if inferred == slot_key:
+            return True
+        if spec["summative"] == 1:
+            q_num = normalize_quarter_number(q_field) or infer_quarter_from_text(f"{unit.get('code', '')} {unit.get('title', '')}")
+            if q_num == spec["term"]:
+                return True
+        return False
+
+    def _slot_matches_question(self, q, slot_key, matching_unit_ids):
+        if not isinstance(q, dict) or slot_key not in _CANONICAL_ASSESSMENT_SPECS:
+            return False
+        spec = _CANONICAL_ASSESSMENT_SPECS[slot_key]
+        q_unit_id = q.get("unitId") or q.get("unit_id")
+        if q_unit_id in matching_unit_ids:
+            return True
+        q_raw = str(q.get("quarter") or "").strip()
+        if q_raw:
+            if q_raw.lower() == spec["label"].lower():
+                return True
+            inferred = infer_slot_from_text(q_raw)
+            if inferred == slot_key:
+                return True
+            if spec["summative"] == 1:
+                q_num = normalize_quarter_number(q_raw) or infer_quarter_from_text(q_raw)
+                if q_num == spec["term"]:
+                    return True
+        return False
+
     @staticmethod
     def _unit_matches_quarter(unit, quarter):
         if not isinstance(unit, dict):
@@ -910,71 +1102,79 @@ class Database:
         inferred = infer_quarter_from_text(f"{unit.get('code', '')} {unit.get('title', '')}")
         return inferred == quarter
 
-    def get_questions(self, quarter=1, force_refresh=False):
-        """Fetch questions for a specific quarter/summative stage from Vercel API, with local cache fallback.
+    def get_questions(self, quarter=1, summative=None, force_refresh=False):
+        """Fetch questions for a specific Term and Summative slot (or Remedial) from Vercel API, with local cache fallback.
         Always treats the cloud response (including 0 active questions -> []) as authoritative.
+        Caps each stage strictly to 10 questions.
         """
+        slot_key, slot_label, term_num, s_num = parse_slot_key(quarter, summative)
         if not force_refresh:
-            mem_q, hit = self._mem_get("questions", int(quarter), ttl=10.0)
+            mem_q, hit = self._mem_get("questions", slot_key, ttl=10.0)
             if hit and isinstance(mem_q, list):
                 return mem_q
 
         cache_dir = getattr(self, "cache_dir", os.path.join(self.data_dir, "cache"))
-        cache_file = os.path.join(cache_dir, f"questions_q{quarter}.json")
-        q_label = "Summative Assessment" if int(quarter) == 4 else f"Quarter {quarter}"
+        cache_file = os.path.join(cache_dir, f"questions_{slot_key}.json")
+        legacy_cache_file = os.path.join(cache_dir, f"questions_q{quarter}.json")
 
         if not self._is_offline_fast_fail():
             try:
-                # 1. Fetch units to find all matching unit_ids for the quarter
+                # 1. Fetch units to find all matching unit_ids for all slots
                 units = self._fetch_units_online(force_refresh=force_refresh)
-                matching_unit_ids = {
-                    unit.get("id")
-                    for unit in units
-                    if isinstance(unit, dict) and unit.get("id") is not None and self._unit_matches_quarter(unit, int(quarter))
-                }
-                print(f"[API INFO] Matching Unit IDs for {q_label}: {sorted(matching_unit_ids)}")
+                
+                # Build unit-id sets for all canonical slots
+                slot_unit_map = {}
+                for sk in _CANONICAL_ASSESSMENT_SPECS:
+                    slot_unit_map[sk] = {
+                        u.get("id")
+                        for u in units
+                        if isinstance(u, dict) and u.get("id") is not None and self._unit_matches_slot(u, sk)
+                    }
 
-                # 2. Fetch all questions and filter by normalized quarter field or unit_id
+                # 2. Fetch all questions and partition into the 13 slots
                 questions_url = f"{self._get_base_url()}/questions"
                 req_qs = urllib.request.Request(questions_url, headers=self._get_api_headers())
                 with _urlopen_resilient(req_qs, timeout=8) as resp:
                     self._mark_online(resp)
                     all_questions = json.loads(resp.read().decode('utf-8'))
 
-                filtered = []
+                slot_buckets = {sk: [] for sk in _CANONICAL_ASSESSMENT_SPECS}
                 if isinstance(all_questions, list):
                     for q in all_questions:
                         if not isinstance(q, dict):
                             continue
-                        q_unit_id = q.get("unitId") or q.get("unit_id")
-                        q_quarter_raw = q.get("quarter")
                         q_active = q.get("isActive") if q.get("isActive") is not None else q.get("is_active", True)
                         if not q_active:
                             continue
+                        for sk in _CANONICAL_ASSESSMENT_SPECS:
+                            if self._slot_matches_question(q, sk, slot_unit_map[sk]):
+                                if len(slot_buckets[sk]) < 10:
+                                    slot_buckets[sk].append(q)
 
-                        is_match = False
-                        if q_quarter_raw is not None and str(q_quarter_raw).strip():
-                            q_qnum = normalize_quarter_number(q_quarter_raw) or infer_quarter_from_text(q_quarter_raw)
-                            if q_qnum == int(quarter):
-                                is_match = True
-                        elif q_unit_id in matching_unit_ids:
-                            is_match = True
+                # Authoritatively sync disk & short-TTL memory cache for all slots
+                for sk, q_list in slot_buckets.items():
+                    self._mem_set("questions", sk, q_list)
+                    sk_file = os.path.join(cache_dir, f"questions_{sk}.json")
+                    try:
+                        self._atomic_write_json(sk_file, q_list)
+                    except Exception:
+                        pass
 
-                        if is_match:
-                            filtered.append(q)
-
-                # Authoritatively sync disk & short-TTL memory cache (including [] when 0 active questions)
-                self._mem_set("questions", int(quarter), filtered)
+                # Also populate legacy files questions_q1..q4 for backwards compatibility
                 try:
-                    self._atomic_write_json(cache_file, filtered)
+                    self._atomic_write_json(os.path.join(cache_dir, "questions_q1.json"), slot_buckets.get("t1_s1", []))
+                    self._atomic_write_json(os.path.join(cache_dir, "questions_q2.json"), slot_buckets.get("t2_s1", []))
+                    self._atomic_write_json(os.path.join(cache_dir, "questions_q3.json"), slot_buckets.get("t3_s1", []))
+                    self._atomic_write_json(os.path.join(cache_dir, "questions_q4.json"), slot_buckets.get("remedial", []))
                 except Exception:
                     pass
 
-                if len(filtered) > 0:
-                    print(f"[API SUCCESS] Found {len(filtered)} active questions matching {q_label}")
+                result_qs = slot_buckets.get(slot_key, [])
+                if len(result_qs) > 0:
+                    print(f"[API SUCCESS] Found {len(result_qs)} active questions matching {slot_label} ({slot_key})")
                 else:
-                    print(f"[API INFO] Cloud returned 0 active questions matching {q_label} (synced empty question set)")
-                return filtered
+                    print(f"[API INFO] Cloud returned 0 active questions matching {slot_label} ({slot_key})")
+                return result_qs
 
             except urllib.error.HTTPError as e:
                 if e.code in (429, 500, 502, 503, 504) or e.code >= 500:
@@ -984,19 +1184,96 @@ class Database:
                 self._mark_offline()
                 print(f"[API ERROR] Failed to fetch questions from Vercel: {e}")
 
-        # Offline fallback: read last cloud-synced cache if available (including empty list [])
+        # Offline fallback: read last cloud-synced cache for this slot
         with self._file_lock:
-            if os.path.exists(cache_file):
-                try:
-                    with open(cache_file, "r", encoding="utf-8") as f:
-                        cached_qs = json.load(f)
-                    if isinstance(cached_qs, list):
-                        print(f"[OFFLINE CACHE] Loaded {len(cached_qs)} cached cloud question(s) for {q_label}!")
-                        return cached_qs
-                except Exception:
-                    pass
+            for c_path in (cache_file, legacy_cache_file):
+                if os.path.exists(c_path):
+                    try:
+                        with open(c_path, "r", encoding="utf-8") as f:
+                            cached_qs = json.load(f)
+                        if isinstance(cached_qs, list):
+                            print(f"[OFFLINE CACHE] Loaded {len(cached_qs)} cached cloud question(s) for {slot_label}!")
+                            return cached_qs[:10]
+                    except Exception:
+                        pass
 
         return []
+
+    def get_questions_by_ids(self, question_ids):
+        """Looks up question objects matching the provided question IDs across all cached slots."""
+        if not question_ids:
+            return []
+        target_ids = {int(qid) if str(qid).isdigit() else str(qid) for qid in question_ids}
+        found = {}
+        cache_dir = getattr(self, "cache_dir", os.path.join(self.data_dir, "cache"))
+
+        # Check memory cache first
+        for sk in _CANONICAL_ASSESSMENT_SPECS:
+            mem_q, hit = self._mem_get("questions", sk, ttl=60.0)
+            if hit and isinstance(mem_q, list):
+                for q in mem_q:
+                    if isinstance(q, dict):
+                        qid = q.get("id")
+                        norm_qid = int(qid) if str(qid).isdigit() else str(qid)
+                        if norm_qid in target_ids and norm_qid not in found:
+                            found[norm_qid] = q
+
+        # Check disk cache for any remaining
+        if len(found) < len(target_ids) and os.path.exists(cache_dir):
+            for sk in _CANONICAL_ASSESSMENT_SPECS:
+                fpath = os.path.join(cache_dir, f"questions_{sk}.json")
+                if os.path.exists(fpath):
+                    try:
+                        with open(fpath, "r", encoding="utf-8") as f:
+                            disk_qs = json.load(f)
+                        if isinstance(disk_qs, list):
+                            for q in disk_qs:
+                                if isinstance(q, dict):
+                                    qid = q.get("id")
+                                    norm_qid = int(qid) if str(qid).isdigit() else str(qid)
+                                    if norm_qid in target_ids and norm_qid not in found:
+                                        found[norm_qid] = q
+                    except Exception:
+                        pass
+
+        # Also search fallback questions file if still missing
+        if len(found) < len(target_ids):
+            for legacy_f in [os.path.join(self.data_dir, "questions.json")]:
+                if os.path.exists(legacy_f):
+                    try:
+                        with open(legacy_f, "r", encoding="utf-8") as f:
+                            lqs = json.load(f)
+                        if isinstance(lqs, list):
+                            for q in lqs:
+                                if isinstance(q, dict):
+                                    qid = q.get("id")
+                                    norm_qid = int(qid) if str(qid).isdigit() else str(qid)
+                                    if norm_qid in target_ids and norm_qid not in found:
+                                        found[norm_qid] = q
+                    except Exception:
+                        pass
+
+        # Return in original order of question_ids up to 10
+        result = []
+        for qid in question_ids:
+            norm_qid = int(qid) if str(qid).isdigit() else str(qid)
+            if norm_qid in found:
+                result.append(found[norm_qid])
+                if len(result) >= 10:
+                    break
+        return result
+
+    def get_available_summatives_for_term(self, term):
+        """Returns sorted list of active summative numbers [1..4] for given term (1..3) that have questions."""
+        term_num = int(term)
+        available = []
+        for s in (1, 2, 3, 4):
+            qs = self.get_questions(quarter=term_num, summative=s)
+            if qs and len(qs) > 0:
+                available.append(s)
+        if not available:
+            return [1]
+        return available
 
     def _persist_assessment_cache_to_disk(self):
         try:
@@ -1006,42 +1283,38 @@ class Database:
         except Exception:
             pass
 
-    def _load_cached_assessment_id(self, quarter):
+    def _load_cached_assessment_id(self, slot_key):
         disk_map = self._read_json_file(self._assessments_cache_path(), {})
-        val = disk_map.get(str(quarter))
+        val = disk_map.get(str(slot_key))
         if isinstance(val, int):
             return val
         if isinstance(val, str) and val.isdigit():
             return int(val)
         return None
 
-    def _ensure_stage_assessment_online(self, quarter, units, assessments):
-        """Idempotently provision a dedicated 100-point Cognitive Maze assessment for `quarter` when missing."""
-        spec = self._STAGE_ASSESSMENT_SPECS.get(int(quarter))
+    def _ensure_stage_assessment_online(self, slot_key, units, assessments):
+        """Idempotently provision a dedicated 100-point Cognitive Maze assessment for `slot_key` when missing."""
+        spec = _CANONICAL_ASSESSMENT_SPECS.get(str(slot_key))
         if not spec or not isinstance(units, list) or len(units) == 0:
             return None
 
         with self._provision_lock:
-            # Find target unit ID for this quarter (or create Summative unit if missing)
+            # Find target unit ID for this slot (or create slot unit if missing)
             target_unit_id = None
             for u in units:
-                if isinstance(u, dict) and u.get("id") is not None and self._unit_matches_quarter(u, int(quarter)):
+                if isinstance(u, dict) and u.get("id") is not None and self._unit_matches_slot(u, slot_key):
                     target_unit_id = u["id"]
                     break
 
             if target_unit_id is None:
                 unit_payload = {
-                    "code": "M2-SUMM-U1" if int(quarter) == 4 else f"M2-Q{quarter}-U1",
-                    "title": (
-                        "Summative Assessment: Comprehensive Math Mastery"
-                        if int(quarter) == 4
-                        else f"Quarter {quarter}: Cognitive Maze Mathematics"
-                    ),
+                    "code": spec["unit_code"],
+                    "title": f"{spec['label']}: Cognitive Maze Mathematics",
                     "gradeLevel": "Grade 2",
-                    "quarter": spec["quarter_label"],
+                    "quarter": spec["label"],
                     "description": f"Educational mathematics unit for {spec['title']}.",
-                    "difficulty": int(quarter),
-                    "orderIndex": 10 + int(quarter),
+                    "difficulty": spec["term"],
+                    "orderIndex": 10 + spec["term"] * 4 + spec["summative"],
                 }
                 try:
                     u_req = urllib.request.Request(
@@ -1056,9 +1329,9 @@ class Database:
                         if isinstance(created_u, dict) and created_u.get("id") is not None:
                             target_unit_id = created_u["id"]
                             self.invalidate_memory_cache("units")
-                            print(f"[API PROVISION] Created curriculum unit #{target_unit_id} ({spec['quarter_label']}).")
+                            print(f"[API PROVISION] Created curriculum unit #{target_unit_id} ({spec['label']}).")
                 except Exception as ue:
-                    print(f"[API PROVISION WARN] Could not create unit for {spec['quarter_label']}: {ue}")
+                    print(f"[API PROVISION WARN] Could not create unit for {spec['label']}: {ue}")
                     return None
 
             if target_unit_id is None:
@@ -1067,7 +1340,7 @@ class Database:
             ass_payload = {
                 "title": spec["title"],
                 "unitId": target_unit_id,
-                "type": spec["type"],
+                "type": "test" if spec["term"] == 4 else "quiz",
                 "totalPoints": 100,
             }
             try:
@@ -1088,22 +1361,15 @@ class Database:
                 print(f"[API PROVISION WARN] Could not create assessment '{spec['title']}': {ae}")
         return None
 
-    def get_assessment_id(self, quarter=1, auto_provision=True):
-        """Fetch assessments and resolve the exact 100-point assessment ID for the given Quarter/Summative stage."""
-        q_int = int(quarter)
-        if q_int in self._assessment_cache:
-            return self._assessment_cache[q_int]
+    def get_assessment_id(self, quarter=1, summative=None, auto_provision=True):
+        """Fetch assessments and resolve the exact 100-point assessment ID for the given slot."""
+        slot_key, slot_label, term_num, s_num = parse_slot_key(quarter, summative)
+        if slot_key in self._assessment_cache:
+            return self._assessment_cache[slot_key]
 
-        cached_disk_id = self._load_cached_assessment_id(q_int)
+        cached_disk_id = self._load_cached_assessment_id(slot_key)
         if self._is_offline_fast_fail():
-            return cached_disk_id if cached_disk_id is not None else self._FALLBACK_ASSESSMENT_MAP.get(q_int, 1)
-
-        static_quarter_unit_map = {
-            1: {4, 5, 6, 7, 17},
-            2: {8, 9, 16},
-            3: {10, 11, 12},
-            4: {13, 14, 15},
-        }
+            return cached_disk_id if cached_disk_id is not None else self._FALLBACK_ASSESSMENT_MAP.get(term_num, 1)
 
         try:
             units = []
@@ -1112,12 +1378,12 @@ class Database:
             except Exception:
                 units = []
 
-            unit_to_quarter = {}
+            unit_to_slot = {}
             for u in units:
                 if isinstance(u, dict) and u.get("id") is not None:
-                    for cand_q in (1, 2, 3, 4):
-                        if self._unit_matches_quarter(u, cand_q):
-                            unit_to_quarter[u["id"]] = cand_q
+                    for sk in _CANONICAL_ASSESSMENT_SPECS:
+                        if self._unit_matches_slot(u, sk):
+                            unit_to_slot[u["id"]] = sk
                             break
 
             assessments, hit = self._mem_get("assessments", "all", ttl=12.0)
@@ -1131,43 +1397,41 @@ class Database:
                 else:
                     assessments = []
 
-            # Pass 1: Look for dedicated Cognitive Maze assessment for this quarter
+            target_spec = _CANONICAL_ASSESSMENT_SPECS.get(slot_key, {})
+            target_title = target_spec.get("title", "").lower()
+
+            # Pass 1: Look for dedicated Cognitive Maze assessment for this slot
             for ass in assessments:
                 if not isinstance(ass, dict) or ass.get("id") is None:
                     continue
-                title_str = str(ass.get("title", ""))
+                title_str = str(ass.get("title", "")).strip().lower()
                 u_id = ass.get("unitId") or ass.get("unit_id")
-                u_q = unit_to_quarter.get(u_id)
-                t_q = infer_quarter_from_text(title_str)
-                if "cognitive maze" in title_str.lower() and (u_q == q_int or t_q == q_int):
+                u_sk = unit_to_slot.get(u_id)
+                t_sk = infer_slot_from_text(title_str)
+                if (target_title and target_title in title_str) or ("cognitive maze" in title_str and (u_sk == slot_key or t_sk == slot_key)):
                     ass_id = ass["id"]
-                    self._assessment_cache[q_int] = ass_id
+                    self._assessment_cache[slot_key] = ass_id
                     self._persist_assessment_cache_to_disk()
                     return ass_id
 
             # Pass 2: Provision dedicated 100-pt Cognitive Maze assessment when connected to live curriculum DB
             if auto_provision and len(units) > 0:
-                provisioned_id = self._ensure_stage_assessment_online(q_int, units, assessments)
+                provisioned_id = self._ensure_stage_assessment_online(slot_key, units, assessments)
                 if provisioned_id is not None:
-                    self._assessment_cache[q_int] = provisioned_id
+                    self._assessment_cache[slot_key] = provisioned_id
                     self._persist_assessment_cache_to_disk()
                     return provisioned_id
 
-            # Pass 3: Match existing assessment by unit quarter or explicit quarter title (preferring 100-pt assessments)
+            # Pass 3: Match existing assessment by unit slot or explicit title
             matching_candidates = []
-            fallback_units = static_quarter_unit_map.get(q_int, {4})
             for ass in assessments:
                 if not isinstance(ass, dict) or ass.get("id") is None:
                     continue
                 u_id = ass.get("unitId") or ass.get("unit_id")
                 title_str = str(ass.get("title", ""))
-                u_q = unit_to_quarter.get(u_id)
-                t_q = infer_quarter_from_text(title_str)
-                matched = False
-                if u_q is not None:
-                    matched = (u_q == q_int)
-                elif t_q == q_int or (not unit_to_quarter and u_id in fallback_units):
-                    matched = True
+                u_sk = unit_to_slot.get(u_id)
+                t_sk = infer_slot_from_text(title_str)
+                matched = (u_sk == slot_key or t_sk == slot_key)
                 if matched:
                     pts = int(ass.get("totalPoints") or ass.get("total_points") or 0)
                     matching_candidates.append((1 if pts == 100 else 0, ass["id"]))
@@ -1175,11 +1439,18 @@ class Database:
             if matching_candidates:
                 matching_candidates.sort(key=lambda pair: pair[0], reverse=True)
                 ass_id = matching_candidates[0][1]
-                self._assessment_cache[q_int] = ass_id
+                self._assessment_cache[slot_key] = ass_id
                 self._persist_assessment_cache_to_disk()
                 return ass_id
 
-            return cached_disk_id if cached_disk_id is not None else self._FALLBACK_ASSESSMENT_MAP.get(q_int, 1)
+            return cached_disk_id if cached_disk_id is not None else self._FALLBACK_ASSESSMENT_MAP.get(term_num, 1)
+        except urllib.error.HTTPError as e:
+            print(f"[API ERROR] Failed to fetch assessment_id: {e}")
+            return cached_disk_id if cached_disk_id is not None else self._FALLBACK_ASSESSMENT_MAP.get(term_num, 1)
+        except Exception as e:
+            self._mark_offline()
+            print(f"[API ERROR] Failed to fetch assessment_id: {e}")
+            return cached_disk_id if cached_disk_id is not None else self._FALLBACK_ASSESSMENT_MAP.get(term_num, 1)
         except urllib.error.HTTPError as e:
             print(f"[API ERROR] Failed to fetch assessment_id: {e}")
             return cached_disk_id if cached_disk_id is not None else self._FALLBACK_ASSESSMENT_MAP.get(q_int, 1)
@@ -1225,7 +1496,13 @@ class Database:
                     continue
                 ex_q = existing.get("_quarter") or infer_quarter_from_text(existing.get("feedback"))
                 ex_aid = existing.get("assessmentId") or existing.get("assessment_id")
-                same_stage = (new_q is not None and ex_q == new_q) or (new_q is None and ex_aid == new_aid)
+                new_slot = payload.get("_slot") or infer_slot_from_text(payload.get("feedback"))
+                ex_slot = existing.get("_slot") or infer_slot_from_text(existing.get("feedback"))
+                same_stage = (
+                    (new_slot and ex_slot and new_slot == ex_slot)
+                    or (new_q is not None and ex_q == new_q and not (new_slot and ex_slot and new_slot != ex_slot))
+                    or (new_q is None and ex_aid == new_aid)
+                )
                 if same_stage:
                     ex_score = int(existing.get("score") or 0)
                     if new_score > ex_score:
@@ -1447,9 +1724,9 @@ class Database:
         title = str((grade_row or {}).get("assessmentTitle") or "").strip().lower()
         return fb.startswith("completed quarter") or fb.startswith("completed summative") or "cognitive maze" in title
 
-    def save_game_result(self, student_id, score, total_questions, correct_answers, percentage, feedback, grade_level, assessment_id=None, quarter=None, student_code=None):
+    def save_game_result(self, student_id, score, total_questions, correct_answers, percentage, feedback, grade_level, assessment_id=None, quarter=None, student_code=None, summative=None, missed_ids=None, remediated_ids=None):
         """Post game result to Vercel API with zero duplicate inflation, or queue offline if disconnected."""
-        if (os.environ.get("SDL_VIDEODRIVER") == "dummy" or os.environ.get("UNITTEST_MODE") == "1") and os.environ.get("LIVE_CLOUD_TEST") != "1":
+        if self._get_base_url() == BASE_URL and (os.environ.get("SDL_VIDEODRIVER") == "dummy" or os.environ.get("UNITTEST_MODE") == "1") and os.environ.get("LIVE_CLOUD_TEST") != "1":
             print(f"[TEST RUN] Headless test environment active (SDL_VIDEODRIVER=dummy). Skipping live cloud upload for student #{student_id}.")
             return True
 
@@ -1457,19 +1734,35 @@ class Database:
         if isinstance(student_id, str) and student_id.isdigit():
             numeric_student_id = int(student_id)
 
-        q_num = normalize_quarter_number(quarter) or infer_quarter_from_text(feedback)
+        if quarter is None and feedback:
+            inferred_key = infer_slot_from_text(feedback)
+            q_cand = inferred_key or infer_quarter_from_text(feedback)
+            slot_key, slot_label, term_num, s_num = parse_slot_key(q_cand, summative)
+        else:
+            slot_key, slot_label, term_num, s_num = parse_slot_key(quarter, summative)
+        q_num = term_num
         needs_ass_resolve = False
 
         if assessment_id is not None:
             ass_id = assessment_id
-            if self._is_offline_fast_fail() and q_num in (1, 2, 3, 4) and q_num not in self._assessment_cache:
-                needs_ass_resolve = True
-        elif q_num in (1, 2, 3, 4):
-            ass_id = self.get_assessment_id(quarter=q_num)
-            if self._is_offline_fast_fail() and q_num not in self._assessment_cache:
+            if self._is_offline_fast_fail() and slot_key not in self._assessment_cache:
                 needs_ass_resolve = True
         else:
-            ass_id = 1
+            ass_id = self.get_assessment_id(quarter=term_num, summative=s_num)
+            if self._is_offline_fast_fail() and slot_key not in self._assessment_cache:
+                needs_ass_resolve = True
+
+        augmented_feedback = str(feedback or "")
+        if f"[SLOT:{slot_key}]" not in augmented_feedback:
+            augmented_feedback = f"{augmented_feedback} [SLOT:{slot_key}]"
+        if missed_ids:
+            missed_tag = f"[MISSED:{','.join(str(m) for m in missed_ids)}]"
+            if "[MISSED:" not in augmented_feedback:
+                augmented_feedback = f"{augmented_feedback} {missed_tag}"
+        if remediated_ids:
+            remed_tag = f"[REMEDIATED:{','.join(str(r) for r in remediated_ids)}]"
+            if "[REMEDIATED:" not in augmented_feedback:
+                augmented_feedback = f"{augmented_feedback} {remed_tag}"
 
         clean_payload = {
             "studentId": numeric_student_id,
@@ -1485,12 +1778,12 @@ class Database:
             "correctAnswers": int(correct_answers),
             "correct_answers": int(correct_answers),
             "percentage": float(percentage),
-            "feedback": feedback,
+            "feedback": augmented_feedback.strip(),
         }
 
         offline_payload = dict(clean_payload)
-        if q_num in (1, 2, 3, 4):
-            offline_payload["_quarter"] = q_num
+        offline_payload["_slot"] = slot_key
+        offline_payload["_quarter"] = term_num
         if needs_ass_resolve:
             offline_payload["_needs_assessment_resolve"] = True
 
@@ -1516,9 +1809,11 @@ class Database:
                         continue
                     er_aid = er.get("assessmentId") or er.get("assessment_id")
                     er_q = infer_quarter_from_text(er.get("feedback"))
+                    er_slot = infer_slot_from_text(er.get("feedback"))
                     is_same_stage = (
-                        (q_num is not None and er_q == q_num)
-                        or (er_aid == ass_id and (q_num is None or er_q is None or er_q == q_num))
+                        (slot_key and er_slot and slot_key == er_slot)
+                        or (er_aid and ass_id and er_aid == ass_id)
+                        or (q_num is not None and er_q == q_num and not (slot_key and er_slot and slot_key != er_slot))
                     )
                     if is_same_stage:
                         student_stage_matches.append(er)
@@ -2025,6 +2320,7 @@ class Database:
                     "section": s.get("section") or "A",
                     "avatar_color": s.get("avatarColor") or "#6366f1",
                     "quarters": {1: None, 2: None, 3: None, 4: None},
+                    "summatives": {**{f"t{t}_s{s}": None for t in range(1, 4) for s in range(1, 5)}, "remedial": None},
                     "total_score": 0,
                     "total_correct": 0,
                     "total_questions": 0,
@@ -2058,6 +2354,7 @@ class Database:
                                 "section": sel.get("section") or "A",
                                 "avatar_color": sel.get("avatarColor") or "#38bdf8",
                                 "quarters": {1: None, 2: None, 3: None, 4: None},
+                                "summatives": {**{f"t{t}_s{s}": None for t in range(1, 4) for s in range(1, 5)}, "remedial": None},
                                 "total_score": 0,
                                 "total_correct": 0,
                                 "total_questions": 0,
@@ -2102,6 +2399,13 @@ class Database:
                                     continue
                             except Exception:
                                 pass
+
+                        comp_summs = sdata.get("completed_summatives", {})
+                        if isinstance(comp_summs, dict):
+                            for s_key, s_val in comp_summs.items():
+                                if isinstance(s_val, dict) and s_val.get("completed"):
+                                    norm_key, _, _, _ = parse_slot_key(s_key, s_val.get("summative"))
+                                    student_map[s_id]["summatives"][norm_key] = s_val
 
                         comp_qs = sdata.get("completed_quarters", {})
                         if isinstance(comp_qs, dict):
@@ -2205,6 +2509,19 @@ class Database:
                     "completed": True,
                 }
 
+            # Check for [SLOT:...] in feedback
+            fdbk = str(res.get("feedback") or "")
+            slot_match = re.search(r'\[SLOT:([^\]]+)\]', fdbk)
+            if slot_match:
+                s_key = slot_match.group(1).lower().strip()
+                if s_key in student_map[st_id]["summatives"]:
+                    student_map[st_id]["summatives"][s_key] = {
+                        "score": score,
+                        "percentage": pct,
+                        "total_questions": total,
+                        "completed": True,
+                    }
+
         # 4. Calculate aggregate totals
         leaderboard_list = []
         for s_id, s_info in student_map.items():
@@ -2223,6 +2540,12 @@ class Database:
                     if qd.get("completed", False) or qd.get("score", 0) > 0:
                         q_completed += 1
                     pcts.append(qd.get("percentage", 0.0))
+
+            s_completed = sum(1 for s_slot, s_val in s_info.get("summatives", {}).items() if s_val and s_val.get("completed"))
+            s_info["summatives_completed"] = s_completed
+            s_score = sum(s_val.get("score", 0) for s_slot, s_val in s_info.get("summatives", {}).items() if s_val)
+            if s_score > tot_score:
+                tot_score = s_score
 
             s_info["total_score"] = tot_score
             s_info["total_correct"] = tot_correct
