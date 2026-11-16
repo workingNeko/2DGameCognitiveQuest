@@ -498,6 +498,21 @@ class StageSelect:
         print(f"   Skeleton NPC found: {self.npc_skeleton_found}")
         print(f"   Knight NPC found: {self.npc_knight_found}")
 
+        # Tactical Radar Mini-Map
+        from core.minimap import MiniMap
+        self.minimap = MiniMap(
+            self.game_map,
+            walkable_tiles=self.WALKABLE_TILES,
+            tile_size=TILE_SIZE,
+            screen_width=self.width,
+            screen_height=self.height,
+            width=184,
+            height=120,
+            theme="sanctuary",
+            position="bottom_right",
+            margin_y=94,
+        )
+
         # ============================================================
         # AREA TITLE ANIMATION (test.py logic)
         # ============================================================
@@ -2468,6 +2483,21 @@ class StageSelect:
         self.camera_x = self.lol_camera.camera_x
         self.camera_y = self.lol_camera.camera_y
 
+        # Re-bake Tactical Radar Mini-Map
+        from core.minimap import MiniMap
+        self.minimap = MiniMap(
+            self.game_map,
+            walkable_tiles=self.WALKABLE_TILES,
+            tile_size=TILE_SIZE,
+            screen_width=self.width,
+            screen_height=self.height,
+            width=184,
+            height=120,
+            theme="sanctuary",
+            position="bottom_right",
+            margin_y=94,
+        )
+
         print(f"[OK] Switched to new map: {self.map_loader.current_map_name}")
 
     # ============================================================
@@ -2675,6 +2705,12 @@ class StageSelect:
         # 0. Back button to Menu
         if hasattr(self, 'back_button') and self.back_button.collidepoint(pos):
             return self.return_to_main_menu()
+
+        # Mini-map widget click / fist toggle
+        if hasattr(self, 'minimap') and self.minimap.handle_click(pos):
+            if hasattr(self.main_menu, 'audio_manager') and self.main_menu.audio_manager:
+                self.main_menu.audio_manager.play_sfx("click")
+            return "minimap_toggle"
 
         # Check Grand Finale modal interaction
         if self.grand_finale_active:
@@ -4420,6 +4456,41 @@ class StageSelect:
             hint_txt = hint_font.render("✌️ Peace: Main Menu", True, (148, 163, 184))
             self.screen.blit(hint_txt, (self.back_button.x + 8, self.back_button.y - 18))
 
+        # Tactical Radar Mini-Map (Bottom Right, above menu button)
+        if hasattr(self, 'minimap') and not self.is_dialogue_active() and not getattr(self, 'portal_transition_active', False):
+            markers = []
+            if hasattr(self, 'portals'):
+                for p in self.portals:
+                    markers.append({
+                        "x": p.get_center_x(),
+                        "y": p.get_center_y(),
+                        "type": "portal",
+                        "status": "unlocked",
+                    })
+            if getattr(self, 'npc_oldman_found', False):
+                markers.append({"x": self.npc_oldman_x + TILE_SIZE // 2, "y": self.npc_oldman_y + TILE_SIZE // 2, "type": "npc"})
+            if getattr(self, 'npc_bromen_found', False):
+                markers.append({"x": self.npc_bromen_x + TILE_SIZE // 2, "y": self.npc_bromen_y + TILE_SIZE // 2, "type": "npc"})
+            if getattr(self, 'npc_skeleton_found', False):
+                markers.append({"x": self.npc_skeleton_x + TILE_SIZE // 2, "y": self.npc_skeleton_y + TILE_SIZE // 2, "type": "npc"})
+            if getattr(self, 'npc_knight_found', False):
+                markers.append({"x": self.npc_knight_x + TILE_SIZE // 2, "y": self.npc_knight_y + TILE_SIZE // 2, "type": "npc"})
+
+            hold_pct = 0.0
+            fist_start = getattr(self, 'fist_start_time', 0) or (getattr(self.main_menu, 'fist_start_time', 0) if self.main_menu else 0)
+            if fist_start > 0:
+                hold_pct = min(1.0, max(0.0, (time.time() - fist_start) / getattr(self, 'CLICK_HOLD_TIME', 0.9)))
+
+            self.minimap.draw(
+                surface=self.screen,
+                player_pos=(self.player_x + TILE_SIZE // 2, self.player_y + TILE_SIZE // 2),
+                camera_pos=(self.camera_x, self.camera_y),
+                zoom=ZOOM,
+                markers=markers,
+                cursor_pos=self.cursor_pos,
+                hold_pct=hold_pct,
+            )
+
         # Info panel (toggled with 'I')
         if self.show_info:
             npc_status = []
@@ -4589,6 +4660,13 @@ class StageSelect:
                 self.cursor_pos = event.pos
 
         if event.type == pygame.KEYDOWN:
+            if event.key == pygame.K_m:
+                if hasattr(self, 'minimap'):
+                    self.minimap.toggle()
+                    if hasattr(self.main_menu, 'audio_manager') and self.main_menu.audio_manager:
+                        self.main_menu.audio_manager.play_sfx("click")
+                    return "minimap_toggle"
+
             # Shortcut: Unlock All Stages & Portals (U, Ctrl+U, Ctrl+Shift+U, F8, F9, Ctrl+Shift+B, Ctrl+B)
             mods = pygame.key.get_mods() if hasattr(pygame.key, 'get_mods') else 0
             event_mod = getattr(event, 'mod', 0)

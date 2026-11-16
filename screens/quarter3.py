@@ -673,6 +673,21 @@ class Quarter3:
         print(f"   Goal portal: {self.goal_portal_direction}")
         print(f"   Portals loaded: {len(self.portals)}")
 
+        # Tactical Radar Mini-Map
+        from core.minimap import MiniMap
+        self.minimap = MiniMap(
+            self.game_map,
+            walkable_tiles=self.WALKABLE_TILES,
+            tile_size=TILE_SIZE,
+            screen_width=self.width,
+            screen_height=self.height,
+            width=184,
+            height=120,
+            theme="desert",
+            position="bottom_right",
+            margin_y=18,
+        )
+
     # ============================================================
     # UI STATE MACHINE QUERIES & SYNCHRONIZATION
     # ============================================================
@@ -2222,6 +2237,12 @@ class Quarter3:
         if self.pause_menu.handle_click(pos):
             return
 
+        # Mini-map widget click / fist toggle
+        if hasattr(self, 'minimap') and self.minimap.handle_click(pos):
+            if hasattr(self.main_menu, 'audio_manager') and self.main_menu.audio_manager:
+                self.main_menu.audio_manager.play_sfx("click")
+            return "minimap_toggle"
+
         if self.state_machine.current_state == State.CognitivePuzzle:
             # Sun Temple Fraction Match Click Interactions
             if getattr(self, 'fraction_match_active', False) or getattr(self, 'fraction_bakery_active', False) or getattr(self, 'solar_array_puzzle_active', False) or getattr(self, 'guardian_skeleton_state', 0) == 3:
@@ -3509,6 +3530,52 @@ class Quarter3:
             obj2_surf = item_font.render(obj2, True, obj2_color)
             self.screen.blit(obj2_surf, (box_x + 16, box_y + 66))
 
+        # Draw Tactical Radar Mini-Map (Bottom Right)
+        modal_open = (
+            getattr(self, 'warp_out_active', False)
+            or (hasattr(self, 'victory_card') and self.victory_card.active)
+            or self.is_dialogue_active()
+            or getattr(self.pause_menu, 'is_paused', False)
+            or getattr(self, 'time_up_dialog_active', False)
+            or self.is_cognitive_puzzle_active()
+            or getattr(self, 'fraction_match_active', False)
+            or getattr(self, 'solar_array_puzzle_active', False)
+            or getattr(self, 'guardian_skeleton_state', 0) in [2, 3]
+        )
+        if hasattr(self, 'minimap') and not modal_open:
+            markers = []
+            if hasattr(self, 'quiz_stations'):
+                for num, pos in self.quiz_stations.items():
+                    cleared = num < self.quiz_station_index or getattr(self, 'quiz_state', 0) >= 6
+                    status = "completed" if cleared else ("active" if num == self.quiz_station_index else "upcoming")
+                    markers.append({
+                        "x": pos[0] * TILE_SIZE + TILE_SIZE // 2,
+                        "y": pos[1] * TILE_SIZE + TILE_SIZE // 2,
+                        "type": "station",
+                        "status": status,
+                    })
+
+            if hasattr(self, 'portals'):
+                is_cleared = getattr(self, 'quiz_state', 0) >= 6
+                for p in self.portals:
+                    markers.append({
+                        "x": p.get_center_x(),
+                        "y": p.get_center_y(),
+                        "type": "goal" if is_cleared else "portal",
+                        "status": "completed" if is_cleared else "active",
+                    })
+
+            hold_pct = (time.time() - self.fist_start_time) / self.CLICK_HOLD_TIME if getattr(self, 'fist_start_time', 0) > 0 else 0.0
+            self.minimap.draw(
+                surface=self.screen,
+                player_pos=(self.player_x + TILE_SIZE // 2, self.player_y + TILE_SIZE // 2),
+                camera_pos=(self.camera_x, self.camera_y),
+                zoom=ZOOM,
+                markers=markers,
+                cursor_pos=self.cursor_pos,
+                hold_pct=hold_pct,
+            )
+
         if self.show_info:
             npc_status = []
             if self.npc_oldman_found:
@@ -4540,6 +4607,12 @@ class Quarter3:
                 return "back"
             elif event.key == pygame.K_i:
                 self.show_info = not self.show_info
+            elif event.key == pygame.K_m and not is_typing:
+                if hasattr(self, 'minimap'):
+                    self.minimap.toggle()
+                    if hasattr(self.main_menu, 'audio_manager') and self.main_menu.audio_manager:
+                        self.main_menu.audio_manager.play_sfx("click")
+                    return "minimap_toggle"
 
             # Physical Keyboard Typing in Identification Question Mode (State 1)
             elif self.quiz_state == 1 and self.quiz_questions and 0 <= self.current_question_index < len(self.quiz_questions):

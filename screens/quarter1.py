@@ -257,6 +257,21 @@ class Quarter1:
         # ============================================================
         self.WALKABLE_TILES = {"G", "#", "1", "2", "3", "4", "5", "6", "7", "8", "P", "B", "r", "l", "u", "d"}
 
+        # Tactical Radar Mini-Map
+        from core.minimap import MiniMap
+        self.minimap = MiniMap(
+            self.game_map,
+            walkable_tiles=self.WALKABLE_TILES,
+            tile_size=TILE_SIZE,
+            screen_width=self.width,
+            screen_height=self.height,
+            width=184,
+            height=120,
+            theme="sanctuary",
+            position="bottom_right",
+            margin_y=18,
+        )
+
         # ============================================================
         # LOAD PLAYER SPRITES
         # ============================================================
@@ -2500,6 +2515,12 @@ class Quarter1:
         if self.pause_menu.handle_click(pos):
             return
 
+        # Mini-map widget click / fist toggle
+        if hasattr(self, 'minimap') and self.minimap.handle_click(pos):
+            if hasattr(self.main_menu, 'audio_manager') and self.main_menu.audio_manager:
+                self.main_menu.audio_manager.play_sfx("click")
+            return "minimap_toggle"
+
         if self.state_machine.is_cognitive_puzzle() or getattr(self, 'puzzle_active', False):
             box_w, box_h = 760, 480
             if self.map_name.lower() == 'map2.txt':
@@ -3755,6 +3776,63 @@ class Quarter1:
             hold_pct = (time.time() - self.fist_start_time) / self.CLICK_HOLD_TIME if self.fist_start_time > 0 else 0.0
             self.instruction_modal.draw(self.cursor_pos, hold_pct)
 
+        # Draw Tactical Radar Mini-Map (Bottom Right)
+        modal_open = (
+            getattr(self, 'warp_out_active', False)
+            or (hasattr(self, 'victory_card') and self.victory_card.active)
+            or (hasattr(self, 'instruction_modal') and self.instruction_modal.is_active())
+            or (hasattr(self, 'greeting_dialog') and self.greeting_dialog.is_active())
+            or getattr(self.pause_menu, 'is_paused', False)
+            or getattr(self, 'time_up_dialog_active', False)
+            or getattr(self, 'quiz_state', 0) in [1, 2, 3, 4, 5, 10, 11, 12, 13, 14, 20, 21, 22]
+            or self.state_machine.is_cognitive_puzzle()
+            or getattr(self, 'puzzle_active', False)
+        )
+        if hasattr(self, 'minimap') and not modal_open:
+            markers = []
+            if hasattr(self, 'shape_npcs') and self.shape_npcs:
+                for nid, npc in self.shape_npcs.items():
+                    answered = npc.get("answered", False) if isinstance(npc, dict) else False
+                    status = "completed" if answered else ("active" if nid == self.quiz_station_index else "upcoming")
+                    nx = npc.get("x", 0) if isinstance(npc, dict) else 0
+                    ny = npc.get("y", 0) if isinstance(npc, dict) else 0
+                    markers.append({
+                        "x": nx + TILE_SIZE // 2,
+                        "y": ny + TILE_SIZE // 2,
+                        "type": "station",
+                        "status": status,
+                    })
+            elif hasattr(self, 'quiz_stations'):
+                for num, pos in self.quiz_stations.items():
+                    status = "active" if num == self.quiz_station_index else ("completed" if num < self.quiz_station_index else "upcoming")
+                    markers.append({
+                        "x": pos[0] * TILE_SIZE + TILE_SIZE // 2,
+                        "y": pos[1] * TILE_SIZE + TILE_SIZE // 2,
+                        "type": "station",
+                        "status": status,
+                    })
+
+            if hasattr(self, 'portals'):
+                is_cleared = getattr(self, 'quiz_state', 0) == 6 or self.quiz_station_index > len(getattr(self, 'quiz_stations', {}))
+                for p in self.portals:
+                    markers.append({
+                        "x": p.get_center_x(),
+                        "y": p.get_center_y(),
+                        "type": "goal" if is_cleared else "portal",
+                        "status": "completed" if is_cleared else "active",
+                    })
+
+            hold_pct = (time.time() - self.fist_start_time) / self.CLICK_HOLD_TIME if getattr(self, 'fist_start_time', 0) > 0 else 0.0
+            self.minimap.draw(
+                surface=self.screen,
+                player_pos=(self.player_x + TILE_SIZE // 2, self.player_y + TILE_SIZE // 2),
+                camera_pos=(self.camera_x, self.camera_y),
+                zoom=ZOOM,
+                markers=markers,
+                cursor_pos=self.cursor_pos,
+                hold_pct=hold_pct,
+            )
+
     def draw_quiz_dialog(self):
         from core.npc_scripts import get_station_script
         student_name = "Student"
@@ -4986,6 +5064,12 @@ class Quarter1:
                 return "back"
             elif event.key == pygame.K_i:
                 self.show_info = not self.show_info
+            elif event.key == pygame.K_m:
+                if hasattr(self, 'minimap'):
+                    self.minimap.toggle()
+                    if hasattr(self.main_menu, 'audio_manager') and self.main_menu.audio_manager:
+                        self.main_menu.audio_manager.play_sfx("click")
+                    return "minimap_toggle"
             elif event.key in [pygame.K_SPACE, pygame.K_RETURN]:
                 if self.quiz_state in [3, 4]:
                     click_pos = self.out_of_tries_btn_rect.center if hasattr(self, 'out_of_tries_btn_rect') and self.out_of_tries_btn_rect else (self.width // 2, self.height // 2)

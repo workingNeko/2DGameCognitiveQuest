@@ -693,6 +693,21 @@ class Quarter2:
         print(f"   Goal portal: {self.goal_portal_direction}")
         print(f"   Portals loaded: {len(self.portals)}")
 
+        # Tactical Radar Mini-Map
+        from core.minimap import MiniMap
+        self.minimap = MiniMap(
+            self.game_map,
+            walkable_tiles=self.WALKABLE_TILES,
+            tile_size=TILE_SIZE,
+            screen_width=self.width,
+            screen_height=self.height,
+            width=184,
+            height=120,
+            theme="kalye",
+            position="bottom_right",
+            margin_y=18,
+        )
+
 
     # ============================================================
     # DATABASE INTEGRATION
@@ -2694,6 +2709,12 @@ class Quarter2:
 
         if self.pause_menu.handle_click(pos):
             return
+
+        # Mini-map widget click / fist toggle
+        if hasattr(self, 'minimap') and self.minimap.handle_click(pos):
+            if hasattr(self.main_menu, 'audio_manager') and self.main_menu.audio_manager:
+                self.main_menu.audio_manager.play_sfx("click")
+            return "minimap_toggle"
 
         if getattr(self, 'time_up_dialog_active', False):
             box_w, box_h = 700, 320
@@ -5256,6 +5277,40 @@ class Quarter2:
             obj_surf = item_font.render(obj_line, True, obj_col)
             self.screen.blit(obj_surf, (box_x + 16, box_y + 66))
 
+        # Draw Tactical Radar Mini-Map (Bottom Right)
+        if hasattr(self, 'minimap') and not getattr(self, 'warp_out_active', False) and not (hasattr(self, 'victory_card') and self.victory_card.active):
+            markers = []
+            if hasattr(self, 'quiz_stations'):
+                for num, pos in self.quiz_stations.items():
+                    cleared = num < self.quiz_station_index or self.station_npc_info.get(num, {}).get("cleared", False) or getattr(self, 'quiz_state', 0) >= 6
+                    status = "completed" if cleared else ("active" if num == self.quiz_station_index else "upcoming")
+                    markers.append({
+                        "x": pos[0] * TILE_SIZE + TILE_SIZE // 2,
+                        "y": pos[1] * TILE_SIZE + TILE_SIZE // 2,
+                        "type": "station",
+                        "status": status,
+                    })
+
+            if hasattr(self, 'portals'):
+                is_cleared = getattr(self, 'quiz_state', 0) >= 6
+                for p in self.portals:
+                    markers.append({
+                        "x": p.get_center_x(),
+                        "y": p.get_center_y(),
+                        "type": "goal" if is_cleared else "portal",
+                        "status": "completed" if is_cleared else "active",
+                    })
+
+            hold_pct = (time.time() - self.fist_start_time) / self.CLICK_HOLD_TIME if getattr(self, 'fist_start_time', 0) > 0 else 0.0
+            self.minimap.draw(
+                surface=self.screen,
+                player_pos=(self.player_x + TILE_SIZE // 2, self.player_y + TILE_SIZE // 2),
+                camera_pos=(self.camera_x, self.camera_y),
+                zoom=ZOOM,
+                markers=markers,
+                cursor_pos=self.cursor_pos,
+                hold_pct=hold_pct,
+            )
 
         if self.show_info:
             npc_status = [self.station_npc_info.get(i, {}).get("name", f"Station {i}") for i in sorted(self.station_npc_info.keys())]
@@ -5588,6 +5643,12 @@ class Quarter2:
                 return "back"
             elif event.key == pygame.K_i:
                 self.show_info = not self.show_info
+            elif event.key == pygame.K_m:
+                if hasattr(self, 'minimap'):
+                    self.minimap.toggle()
+                    if hasattr(self.main_menu, 'audio_manager') and self.main_menu.audio_manager:
+                        self.main_menu.audio_manager.play_sfx("click")
+                    return "minimap_toggle"
         elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
             self.cursor_pos = event.pos
             self.trigger_click(event.pos)
