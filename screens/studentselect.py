@@ -132,8 +132,13 @@ class StudentSelect:
         self.show_confirm_modal = False
         self.confirm_student = None
         self.confirm_modal_cooldown = 0.0
-        self.confirm_yes_rect = pygame.Rect(self.width // 2 - 230, self.height // 2 + 55, 210, 52)
-        self.confirm_no_rect = pygame.Rect(self.width // 2 + 20, self.height // 2 + 55, 210, 52)
+        self.confirm_card_rect = pygame.Rect(self.width // 2 - 330, self.height // 2 - 215, 660, 430)
+        self.confirm_close_rect = pygame.Rect(self.confirm_card_rect.right - 46, self.confirm_card_rect.y + 16, 32, 32)
+        btn_w = (660 - 90) // 2
+        btn_h = 56
+        btn_y = self.confirm_card_rect.bottom - 76
+        self.confirm_yes_rect = pygame.Rect(self.confirm_card_rect.x + 35, btn_y, btn_w, btn_h)
+        self.confirm_no_rect = pygame.Rect(self.confirm_card_rect.right - 35 - btn_w, btn_y, btn_w, btn_h)
         self.require_identity_confirm = (
             os.environ.get("SDL_VIDEODRIVER") != "dummy"
             and os.environ.get("UNITTEST_MODE") != "1"
@@ -279,6 +284,19 @@ class StudentSelect:
                 self.select_student(st)
                 return "select"
             elif self.confirm_no_rect and self.confirm_no_rect.collidepoint(pos):
+                if hasattr(self.main_menu, 'audio_manager') and self.main_menu.audio_manager:
+                    self.main_menu.audio_manager.play_sfx("click")
+                self.show_confirm_modal = False
+                self.confirm_student = None
+                return "cancel_confirm"
+            elif getattr(self, 'confirm_close_rect', None) and self.confirm_close_rect.collidepoint(pos):
+                if hasattr(self.main_menu, 'audio_manager') and self.main_menu.audio_manager:
+                    self.main_menu.audio_manager.play_sfx("click")
+                self.show_confirm_modal = False
+                self.confirm_student = None
+                return "cancel_confirm"
+            elif getattr(self, 'confirm_card_rect', None) and not self.confirm_card_rect.collidepoint(pos):
+                # Clicked outside modal on backdrop -> smoothly dismiss
                 if hasattr(self.main_menu, 'audio_manager') and self.main_menu.audio_manager:
                     self.main_menu.audio_manager.play_sfx("click")
                 self.show_confirm_modal = False
@@ -663,65 +681,234 @@ class StudentSelect:
             self.main_menu.audio_manager.play_sfx("click")
         self.confirm_student = student
         self.show_confirm_modal = True
-        self.confirm_modal_cooldown = time.time() + 0.35
-        card_w, card_h = 560, 270
+        self.confirm_modal_cooldown = time.time() + 0.25
+
+        card_w = min(680, max(520, self.width - 60))
+        card_h = min(460, max(380, self.height - 80))
         card_x = (self.width - card_w) // 2
         card_y = (self.height - card_h) // 2
-        self.confirm_yes_rect = pygame.Rect(card_x + 35, card_y + 180, 230, 56)
-        self.confirm_no_rect = pygame.Rect(card_x + 295, card_y + 180, 230, 56)
+        self.confirm_card_rect = pygame.Rect(card_x, card_y, card_w, card_h)
+        self.confirm_close_rect = pygame.Rect(card_x + card_w - 46, card_y + 16, 32, 32)
+
+        btn_w = (card_w - 90) // 2
+        btn_h = 60
+        btn_y = card_y + card_h - 86
+        self.confirm_yes_rect = pygame.Rect(card_x + 35, btn_y, btn_w, btn_h)
+        self.confirm_no_rect = pygame.Rect(card_x + card_w - 35 - btn_w, btn_y, btn_w, btn_h)
         return "prompt_confirm"
 
     def draw_confirm_modal(self):
-        """Draws the modal dialog confirming student identity with large, kid-friendly buttons."""
-        card_w, card_h = 560, 270
+        """Draws a kid-friendly, celebratory confirmation modal for Grade 2 learners."""
+        card_w = min(680, max(520, self.width - 60))
+        card_h = min(460, max(380, self.height - 80))
         card_x = (self.width - card_w) // 2
         card_y = (self.height - card_h) // 2
         card_rect = pygame.Rect(card_x, card_y, card_w, card_h)
+        self.confirm_card_rect = card_rect
 
-        # 1. Dark semi-transparent backdrop
-        backdrop = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
-        backdrop.fill((0, 0, 0, 175))
-        self.screen.blit(backdrop, (0, 0))
+        btn_w = (card_w - 90) // 2
+        btn_h = 60
+        btn_y = card_y + card_h - 86
+        self.confirm_yes_rect = pygame.Rect(card_x + 35, btn_y, btn_w, btn_h)
+        self.confirm_no_rect = pygame.Rect(card_x + card_w - 35 - btn_w, btn_y, btn_w, btn_h)
+        self.confirm_close_rect = pygame.Rect(card_x + card_w - 46, card_y + 16, 32, 32)
 
-        # 2. Modal card
-        pygame.draw.rect(self.screen, (30, 41, 59), card_rect, border_radius=18)
-        pygame.draw.rect(self.screen, (255, 215, 0), card_rect, 3, border_radius=18)
+        # 1. Dark semi-transparent backdrop (memoized for 60 FPS on target hardware APU)
+        if not hasattr(self, '_confirm_backdrop_surf') or self._confirm_backdrop_surf.get_size() != (self.width, self.height):
+            self._confirm_backdrop_surf = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
+            self._confirm_backdrop_surf.fill((10, 15, 30, 195))
+            if pygame.display.get_surface() is not None:
+                try:
+                    self._confirm_backdrop_surf = self._confirm_backdrop_surf.convert_alpha()
+                except Exception:
+                    pass
+        self.screen.blit(self._confirm_backdrop_surf, (0, 0))
 
-        # 3. Header
-        header_surf = self.filter_font.render("PROFILE CONFIRMATION", True, (250, 204, 21))
-        self.screen.blit(header_surf, header_surf.get_rect(center=(self.width // 2, card_y + 28)))
+        # 2. Outer Soft Drop Shadow
+        shadow_rect = card_rect.move(0, 8)
+        pygame.draw.rect(self.screen, (0, 0, 0, 70), shadow_rect, border_radius=24)
 
-        # 4. Student Name Question
+        # 3. Main Modal Card (Rich Cosmic Navy with Golden Glow Border)
+        pygame.draw.rect(self.screen, (15, 23, 42), card_rect, border_radius=24)
+        pygame.draw.rect(self.screen, (250, 204, 21), card_rect, 3, border_radius=24)
+
+        # 4. Top Header Bar
+        hdr_rect = pygame.Rect(card_x + 8, card_y + 8, card_w - 16, 48)
+        pygame.draw.rect(self.screen, (30, 41, 59), hdr_rect, border_radius=18)
+        from core.font_manager import get_font
+        from core.vector_icons import draw_vector_star
+        header_font = get_font("Comic Sans MS", 18, bold=True)
+        header_surf = header_font.render("PLAYER PROFILE CHECK-IN", True, (253, 224, 71))
+        header_text_rect = header_surf.get_rect(center=(self.width // 2, hdr_rect.centery))
+        self.screen.blit(header_surf, header_text_rect)
+        # Decorative golden vector stars beside the header
+        draw_vector_star(self.screen, header_text_rect.left - 18, hdr_rect.centery, radius=8, color=(253, 224, 71), outline_color=(255, 255, 255))
+        draw_vector_star(self.screen, header_text_rect.right + 18, hdr_rect.centery, radius=8, color=(253, 224, 71), outline_color=(255, 255, 255))
+
+        # Close button [✕]
+        close_hover = self.is_cursor_active() and self.confirm_close_rect.collidepoint(self.cursor_pos)
+        close_col = (225, 29, 72) if close_hover else (51, 65, 85)
+        pygame.draw.rect(self.screen, close_col, self.confirm_close_rect, border_radius=16)
+        pygame.draw.rect(self.screen, (255, 255, 255), self.confirm_close_rect, 2, border_radius=16)
+        close_font = get_font("Comic Sans MS", 16, bold=True)
+        close_txt = close_font.render("✕", True, (255, 255, 255))
+        self.screen.blit(close_txt, close_txt.get_rect(center=self.confirm_close_rect.center))
+
         st = self.confirm_student or {}
         first_n = st.get("first_name", "")
         last_n = st.get("last_name", "")
-        full_n = f"{first_n} {last_n}".strip() or "Student"
-        question_surf = self.font.render(f"Are you {full_n}?", True, (255, 255, 255))
-        self.screen.blit(question_surf, question_surf.get_rect(center=(self.width // 2, card_y + 75)))
+        full_n = f"{first_n} {last_n}".strip() or "Adventurer"
+        gender = str(st.get("gender", "")).lower()
 
-        # 5. Subtitle details
+        # 5. Circular Avatar Showcase (Center)
+        avatar_cx = self.width // 2
+        avatar_cy = card_y + 120
+        avatar_r = 40
+
+        # Determine avatar background color
+        raw_hex = st.get("avatarColor", "")
+        avatar_color = (59, 130, 246)  # Default royal blue
+        if gender in ["female", "f", "girl"]:
+            avatar_color = (236, 72, 153)  # Rose pink
+        if raw_hex and isinstance(raw_hex, str) and raw_hex.startswith("#") and len(raw_hex) == 7:
+            try:
+                avatar_color = (int(raw_hex[1:3], 16), int(raw_hex[3:5], 16), int(raw_hex[5:7], 16))
+            except ValueError:
+                pass
+
+        # Outer Golden Glow Ring & Avatar Disk
+        pygame.draw.circle(self.screen, (251, 191, 36), (avatar_cx, avatar_cy), avatar_r + 3)
+        pygame.draw.circle(self.screen, avatar_color, (avatar_cx, avatar_cy), avatar_r)
+
+        # Avatar Icon or Initial
+        icon_drawn = False
+        if gender in ["male", "m", "boy"] and self.boy_icon:
+            if not hasattr(self, '_modal_boy_icon') or self._modal_boy_icon is None:
+                self._modal_boy_icon = pygame.transform.scale(self.boy_icon, (50, 50))
+            self.screen.blit(self._modal_boy_icon, self._modal_boy_icon.get_rect(center=(avatar_cx, avatar_cy)))
+            icon_drawn = True
+        elif gender in ["female", "f", "girl"] and self.girl_icon:
+            if not hasattr(self, '_modal_girl_icon') or self._modal_girl_icon is None:
+                self._modal_girl_icon = pygame.transform.scale(self.girl_icon, (50, 50))
+            self.screen.blit(self._modal_girl_icon, self._modal_girl_icon.get_rect(center=(avatar_cx, avatar_cy)))
+            icon_drawn = True
+
+        if not icon_drawn:
+            initial = (first_n[:1] or "S").upper()
+            init_font = get_font("Comic Sans MS", 34, bold=True)
+            init_surf = init_font.render(initial, True, (255, 255, 255))
+            self.screen.blit(init_surf, init_surf.get_rect(center=(avatar_cx, avatar_cy)))
+
+        # 6. Student Name & Friendly Prompt
+        name_font = get_font("Comic Sans MS", 26, bold=True)
+        name_surf = name_font.render(full_n, True, (255, 255, 255))
+        if name_surf.get_width() > card_w - 80:
+            name_font = get_font("Comic Sans MS", 20, bold=True)
+            name_surf = name_font.render(full_n, True, (255, 255, 255))
+        self.screen.blit(name_surf, name_surf.get_rect(center=(avatar_cx, card_y + 185)))
+
+        prompt_font = get_font("Comic Sans MS", 15)
+        prompt_surf = prompt_font.render("Is this your adventurer profile?", True, (186, 230, 253))
+        self.screen.blit(prompt_surf, prompt_surf.get_rect(center=(avatar_cx, card_y + 218)))
+
+        # 7. Metadata Badge Pills Row (Grade, Section, ID, Score)
         sid = st.get("student_id") or st.get("id") or "N/A"
         level = st.get("level") or "Grade 2"
         section = st.get("section") or "A"
-        sub_text = f"Student ID: {sid}   |   {level} (Section {section})"
-        sub_surf = self.small_font.render(sub_text, True, (186, 230, 253))
-        self.screen.blit(sub_surf, sub_surf.get_rect(center=(self.width // 2, card_y + 118)))
+        score = st.get("score", 0)
 
-        # 6. Yes Button [ ✓ YES, THAT'S ME! ]
-        yes_hover = self.is_cursor_active() and self.confirm_yes_rect.collidepoint(self.cursor_pos)
-        yes_col = (5, 150, 105) if yes_hover else (16, 185, 129)
-        pygame.draw.rect(self.screen, yes_col, self.confirm_yes_rect, border_radius=14)
-        pygame.draw.rect(self.screen, (255, 255, 255), self.confirm_yes_rect, 2, border_radius=14)
-        yes_txt = self.font.render("✓ YES, THAT'S ME!", True, (255, 255, 255))
+        badge_font = get_font("Comic Sans MS", 13, bold=True)
+        pill_data = [
+            (f"{level}", (30, 58, 138), (96, 165, 250), False),
+            (f"Section {section}", (6, 78, 59), (52, 211, 153), False),
+            (f"ID: {sid}", (30, 41, 59), (148, 163, 184), False),
+        ]
+        if score > 0:
+            pill_data.append((f"{score} pts", (120, 53, 15), (251, 191, 36), True))
+
+        # Compute horizontal centering for all pills
+        surfs_and_rects = []
+        tot_pills_w = 0
+        pad_x = 14
+        pill_gap = 10
+        pill_h = 28
+        for p_txt, bg_col, bdr_col, is_star in pill_data:
+            txt_s = badge_font.render(p_txt, True, (255, 255, 255))
+            extra_star_w = 16 if is_star else 0
+            p_w = txt_s.get_width() + pad_x * 2 + extra_star_w
+            surfs_and_rects.append((p_txt, bg_col, bdr_col, txt_s, p_w, is_star))
+            tot_pills_w += p_w + pill_gap
+        tot_pills_w -= pill_gap
+
+        pills_start_x = avatar_cx - tot_pills_w // 2
+        pills_y = card_y + 252
+        for p_txt, bg_col, bdr_col, txt_s, p_w, is_star in surfs_and_rects:
+            p_rect = pygame.Rect(pills_start_x, pills_y, p_w, pill_h)
+            pygame.draw.rect(self.screen, bg_col, p_rect, border_radius=12)
+            pygame.draw.rect(self.screen, bdr_col, p_rect, 1, border_radius=12)
+            if is_star:
+                draw_vector_star(self.screen, p_rect.x + 14, p_rect.centery, radius=6, color=(251, 191, 36))
+                t_rect = txt_s.get_rect(midleft=(p_rect.x + 24, p_rect.centery))
+                self.screen.blit(txt_s, t_rect)
+            else:
+                self.screen.blit(txt_s, txt_s.get_rect(center=p_rect.center))
+            pills_start_x += p_w + pill_gap
+
+        # Check fist charging for hover animation & progress bars
+        cursor_active = self.is_cursor_active()
+        is_fist_charging = (
+            cursor_active
+            and self.current_gesture == "FIST"
+            and self.fist_start_time > 0
+            and not getattr(self, 'is_actively_scrolling', False)
+        )
+        hold_pct = 0.0
+        if is_fist_charging:
+            hold_pct = min(1.0, max(0.0, (time.time() - self.fist_start_time) / max(0.01, self.CLICK_HOLD_TIME)))
+
+        btn_font = get_font("Comic Sans MS", 18, bold=True)
+
+        # 8. YES Button [ ✓ YES, THAT'S ME! ]
+        yes_hover = cursor_active and self.confirm_yes_rect.collidepoint(self.cursor_pos)
+        yes_charging = yes_hover and is_fist_charging
+        yes_bg = (34, 197, 94) if yes_hover else (16, 185, 129)
+        yes_bdr = (255, 255, 255) if yes_hover else (110, 231, 183)
+        yes_bdr_w = 3 if yes_hover else 2
+
+        pygame.draw.rect(self.screen, yes_bg, self.confirm_yes_rect, border_radius=18)
+        yes_top = pygame.Rect(self.confirm_yes_rect.x + 3, self.confirm_yes_rect.y + 3, self.confirm_yes_rect.width - 6, (self.confirm_yes_rect.height // 2) - 2)
+        top_color = (74, 222, 128) if yes_hover else (52, 211, 153)
+        pygame.draw.rect(self.screen, top_color, yes_top, border_top_left_radius=15, border_top_right_radius=15)
+        pygame.draw.rect(self.screen, yes_bdr, self.confirm_yes_rect, yes_bdr_w, border_radius=18)
+
+        yes_txt = btn_font.render("✓ YES, THAT'S ME!", True, (255, 255, 255))
         self.screen.blit(yes_txt, yes_txt.get_rect(center=self.confirm_yes_rect.center))
 
-        # 7. No Button [ ✗ NO, GO BACK ]
-        no_hover = self.is_cursor_active() and self.confirm_no_rect.collidepoint(self.cursor_pos)
-        no_col = (220, 38, 38) if no_hover else (239, 68, 68)
-        pygame.draw.rect(self.screen, no_col, self.confirm_no_rect, border_radius=14)
-        pygame.draw.rect(self.screen, (255, 255, 255), self.confirm_no_rect, 2, border_radius=14)
-        no_txt = self.font.render("✗ NO, GO BACK", True, (255, 255, 255))
+        if yes_charging and hold_pct > 0.05:
+            c_w = int((self.confirm_yes_rect.width - 24) * hold_pct)
+            c_rect = pygame.Rect(self.confirm_yes_rect.x + 12, self.confirm_yes_rect.bottom - 8, c_w, 4)
+            pygame.draw.rect(self.screen, (253, 224, 71), c_rect, border_radius=2)
+
+        # 9. NO Button [ ✗ NO, GO BACK ]
+        no_hover = cursor_active and self.confirm_no_rect.collidepoint(self.cursor_pos)
+        no_charging = no_hover and is_fist_charging
+        no_bg = (225, 29, 72) if no_hover else (190, 18, 60)
+        no_bdr = (255, 255, 255) if no_hover else (253, 164, 175)
+        no_bdr_w = 3 if no_hover else 2
+
+        pygame.draw.rect(self.screen, no_bg, self.confirm_no_rect, border_radius=18)
+        no_top = pygame.Rect(self.confirm_no_rect.x + 3, self.confirm_no_rect.y + 3, self.confirm_no_rect.width - 6, (self.confirm_no_rect.height // 2) - 2)
+        no_top_color = (244, 63, 94) if no_hover else (225, 29, 72)
+        pygame.draw.rect(self.screen, no_top_color, no_top, border_top_left_radius=15, border_top_right_radius=15)
+        pygame.draw.rect(self.screen, no_bdr, self.confirm_no_rect, no_bdr_w, border_radius=18)
+
+        no_txt = btn_font.render("✗ NO, GO BACK", True, (255, 255, 255))
         self.screen.blit(no_txt, no_txt.get_rect(center=self.confirm_no_rect.center))
+
+        if no_charging and hold_pct > 0.05:
+            c_w = int((self.confirm_no_rect.width - 24) * hold_pct)
+            c_rect = pygame.Rect(self.confirm_no_rect.x + 12, self.confirm_no_rect.bottom - 8, c_w, 4)
+            pygame.draw.rect(self.screen, (253, 224, 71), c_rect, border_radius=2)
 
     # =========================================================
     # SELECT STUDENT
@@ -1098,7 +1285,7 @@ class StudentSelect:
                     if st:
                         self.select_student(st)
                     return "select"
-                elif event.key in (pygame.K_ESCAPE, pygame.K_n):
+                elif event.key in (pygame.K_ESCAPE, pygame.K_n, pygame.K_BACKSPACE):
                     if hasattr(self.main_menu, 'audio_manager') and self.main_menu.audio_manager:
                         self.main_menu.audio_manager.play_sfx("click")
                     self.show_confirm_modal = False
