@@ -385,7 +385,7 @@ MAP_INSTRUCTIONS_DATA = {
         "objectives": [
             "Master multi-step arithmetic word problems combining addition, subtraction, and currency exchange.",
             "Compare numerical expressions and evaluate trade balance inequalities.",
-            "Complete Term 3 mastery to unlock the underwater passage to the Remedial Stage: Water Temple."
+            "Complete Term 3 mastery to achieve Grand Champion Victory!"
         ],
         "steps": [
             {
@@ -402,7 +402,7 @@ MAP_INSTRUCTIONS_DATA = {
                 ]
             },
             {
-                "title": "3. Step Through the Master Portal to dive into the Remedial Stage!",
+                "title": "3. Step Through the Master Portal to complete your journey!",
                 "bullets": []
             }
         ]

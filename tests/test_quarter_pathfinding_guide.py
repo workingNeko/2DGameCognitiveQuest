@@ -197,20 +197,8 @@ class TestQuarterPathfindingGuide(unittest.TestCase):
         self.assertEqual((target[0], target[1]), (52, 12))
         self.assertTrue("Quarter 3" in target[2] or "Term 3" in target[2])
 
-        # Step 4: Quarter 3 completed -> Bromen (Q4 Guardian)
+        # Step 4: Quarter 3 completed -> Grand Champion Victory Sanctuary (Game proceeds without remedial)
         ss.completed["quarter3"] = True
-        target = guide.get_active_hierarchy_target()
-        self.assertEqual((target[0], target[1]), (25, 3))
-        self.assertIn("Bromen", target[2])
-
-        # Step 4b: Talked to Bromen -> Q4 Portal
-        ss.bromen_dialogue_state = 1
-        target = guide.get_active_hierarchy_target()
-        self.assertEqual((target[0], target[1]), (25, 0))
-        self.assertTrue("Quarter 4" in target[2] or "Summative Assessment" in target[2] or "Remedial" in target[2])
-
-        # Step 5: All completed -> Victory Sanctuary
-        ss.completed["quarter4"] = True
         target = guide.get_active_hierarchy_target()
         self.assertEqual((target[0], target[1]), (5, 12))
         self.assertIn("Sanctuary", target[2])

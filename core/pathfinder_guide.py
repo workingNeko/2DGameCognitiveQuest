@@ -198,18 +198,7 @@ class QuestPathfinderGuide:
                     p_pos = find_portal_coords('right') or (52, 12)
                     return (p_pos[0], p_pos[1], "Term 3: Monetary Desert", True)
 
-            # Quarter 4: North corridor (Bromen -> Down Portal)
-            elif not q4_done:
-                self.update_theme("water")
-                if getattr(self.q, 'bromen_dialogue_state', 0) == 0:
-                    tx = getattr(self.q, 'npc_bromen_tile_x', 25)
-                    ty = getattr(self.q, 'npc_bromen_tile_y', 3)
-                    return (tx, ty, "Bromen (Remedial Stage Guardian)", False)
-                else:
-                    p_pos = find_portal_coords('down') or (25, 0)
-                    return (p_pos[0], p_pos[1], "Remedial Stage", True)
-
-            # All Quarters Completed: Center Sanctuary
+            # All Quarters Completed: Center Sanctuary (Game proceeds without remedial)
             else:
                 self.update_theme("forest")
                 tx = getattr(self.q, 'npc_oldman_tile_x', 5)

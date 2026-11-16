@@ -303,7 +303,7 @@ class StageSelect:
         self.npc_oldman_anim_timer = 0
         self.player_block_timer = 0
         all_completed = (self.is_quarter_completed('quarter1') and self.is_quarter_completed('quarter2') and 
-                         self.is_quarter_completed('quarter3') and self.is_quarter_completed('quarter4'))
+                         self.is_quarter_completed('quarter3'))
         self.all_quarters_completed = all_completed
         student_name = "Student"
         if hasattr(self, 'main_menu') and self.main_menu and getattr(self.main_menu, 'selected_student', None):
@@ -330,7 +330,6 @@ class StageSelect:
                 ("Old Man", "You built bridges and solved geometric riddles in Term 1 (Geometry Forest)!"),
                 ("Old Man", "You united communities through fair trade and Bayanihan in Term 2 (Barangay Kalye)!"),
                 ("Old Man", "You unlocked ancient treasures in Term 3 (Monetary Desert)!"),
-                ("Old Man", "And you brought harmony to the depths of the Remedial Water Temple!"),
                 ("Old Man", "You have discovered the greatest truth of all:"),
                 ("Old Man", "Math is the ultimate magic, and with logic, courage, and perseverance, there is no problem in this world you cannot solve!"),
                 ("Old Man", "Congratulations on completing Cognitive Quest!")
@@ -371,7 +370,7 @@ class StageSelect:
         if self.is_quarter_completed('quarter3'):
             self.skeleton_dialogue_lines = [
                 ("Skeleton", f"Incredible wisdom across the sands, {student_name}! You have mastered Term 3 (Monetary Desert)!"),
-                ("Skeleton", "Head north along the corridor to meet Bromen at the Water Temple for the Remedial Stage!")
+                ("Skeleton", "Speak with the Old Man at the central sanctuary to celebrate your Grand Champion victory!")
             ]
         else:
             self.skeleton_dialogue_lines = [
@@ -443,6 +442,11 @@ class StageSelect:
                         break
                 if self.player_x != 0:
                     break
+
+        # Safety clamp: if spawned in blocked north corridor (row <= 11 in cols 25-27), reset to central plaza
+        if int(self.player_x // TILE_SIZE) in (25, 26, 27) and int(self.player_y // TILE_SIZE) <= 11:
+            self.player_x = 26 * TILE_SIZE
+            self.player_y = 13 * TILE_SIZE
 
         # Initialize NPC positions from map data
         self._init_npc_positions()
@@ -589,9 +593,9 @@ class StageSelect:
             },
             {
                 "tile_x": 26.5, "tile_y": 6.0,
-                "text": "^ Remedial Stage ^",
+                "text": "^ Remedial Stage (Closed) ^",
                 "rotation": 90,
-                "color": (255, 245, 150)
+                "color": (180, 180, 180)
             }
         ]
 
@@ -1524,13 +1528,12 @@ class StageSelect:
                         self.locked_portal_banner_timer = 2.5
                     return False
 
-            # 3. North Corridor to Remedial Stage (Row <= 11 in cols 25-27)
+            # 3. North Corridor to Remedial Stage (Row <= 11 in cols 25-27) - Permanently blocked
             if col in (25, 26, 27) and row <= 11:
-                if not self.is_quarter_unlocked("quarter4"):
-                    if self.locked_portal_banner_timer <= 0:
-                        self.locked_portal_banner_msg = "Complete Term 3 to unlock the path to the Remedial Stage!"
-                        self.locked_portal_banner_timer = 2.5
-                    return False
+                if self.locked_portal_banner_timer <= 0:
+                    self.locked_portal_banner_msg = "The path to the Remedial Stage is currently closed."
+                    self.locked_portal_banner_timer = 2.5
+                return False
 
             for npc_col, npc_row in npc_positions:
                 if col == npc_col and row == npc_row:
@@ -1585,9 +1588,9 @@ class StageSelect:
         if getattr(self, 'portal_transition_active', False):
             return
 
-        # Quarter 4 (Remedial Stage) is locked once cleared if there are no missed questions to remediate
-        if qid == "quarter4" and self.is_quarter_completed("quarter4") and not getattr(self, 'barriers_lifted', False):
-            self.locked_portal_banner_msg = "Remedial Stage is already completed!"
+        # Remedial Stage (quarter4) is disabled
+        if qid == "quarter4":
+            self.locked_portal_banner_msg = "The Remedial Stage is currently closed."
             self.locked_portal_banner_timer = 2.0
             return
 
@@ -2227,24 +2230,11 @@ class StageSelect:
                     return False
                 self.open_summative_modal(3)
                 return True
-            # Check if it's a down portal (goes to Remedial Stage)
+            # Check if it's a down portal (goes to Remedial Stage) - Disabled
             elif current_portal.direction == 'down':
-                if self.is_quarter_completed('quarter4'):
-                    self.locked_portal_banner_msg = "Remedial Stage is already completed!"
-                    self.locked_portal_banner_timer = 2.5
-                    return False
-                if not self.is_quarter_unlocked('quarter4'):
-                    print("[LOCKED] Remedial Stage Locked! Complete Term 3 first.")
-                    self.locked_portal_banner_msg = "Complete Term 3 to unlock the Remedial Stage!"
-                    self.locked_portal_banner_timer = 2.5
-                    return False
-                if self.bromen_dialogue_state == 0 and not getattr(self, 'barriers_lifted', False):
-                    print("[LOCKED] Remedial Stage Portal Locked! Talk to Bromen first.")
-                    self.locked_portal_banner_msg = "Talk to Bromen first to unlock the Remedial Stage!"
-                    self.locked_portal_banner_timer = 2.5
-                    return False
-                self.enter_quarter("quarter4")
-                return True
+                self.locked_portal_banner_msg = "The Remedial Stage is currently closed."
+                self.locked_portal_banner_timer = 2.5
+                return False
             # Regular portal teleport (to another portal on same map)
             other_portals = [p for p in self.portals if p != current_portal]
             if other_portals:
@@ -2661,19 +2651,8 @@ class StageSelect:
                     self.open_summative_modal(3)
                 return
             elif clicked_portal.direction == 'down':
-                if self.is_quarter_completed('quarter4'):
-                    self.locked_portal_banner_msg = "Remedial Stage is already completed!"
-                    self.locked_portal_banner_timer = 2.0
-                elif not self.is_quarter_unlocked('quarter4'):
-                    self.locked_portal_banner_msg = "Complete Term 3 to unlock the Remedial Stage!"
-                    self.locked_portal_banner_timer = 2.0
-                elif self.bromen_dialogue_state == 0 and not getattr(self, 'barriers_lifted', False):
-                    self.locked_portal_banner_msg = "Talk to Bromen first to unlock the Remedial Stage!"
-                    self.locked_portal_banner_timer = 2.0
-                    if self.npc_bromen_found:
-                        self.click_dest = (self.npc_bromen_x, self.npc_bromen_y + TILE_SIZE)
-                else:
-                    self.enter_quarter("quarter4")
+                self.locked_portal_banner_msg = "The Remedial Stage is currently closed."
+                self.locked_portal_banner_timer = 2.0
                 return
 
         # 3. Click-to-Move navigation on map ground
@@ -3211,20 +3190,8 @@ class StageSelect:
                             self.locked_portal_banner_msg = "Talk to the Knight first to unlock Term 2!"
                             self.locked_portal_banner_timer = 2.0
                     elif portal.direction == 'down':
-                        if self.is_quarter_completed('quarter4'):
-                            if self.locked_portal_banner_timer <= 0:
-                                self.locked_portal_banner_msg = "Remedial Stage is already completed!"
-                                self.locked_portal_banner_timer = 2.0
-                        elif not self.is_quarter_unlocked('quarter4'):
-                            if self.locked_portal_banner_timer <= 0:
-                                self.locked_portal_banner_msg = "Complete Term 3 to unlock the Remedial Stage!"
-                                self.locked_portal_banner_timer = 2.0
-                        elif self.bromen_dialogue_state >= 2 or self.player_following_target == 'bromen' or getattr(self, 'barriers_lifted', False):
-                            self.player_following_target = None
-                            self.enter_quarter("quarter4")
-                            return
-                        elif self.bromen_dialogue_state == 0 and self.locked_portal_banner_timer <= 0:
-                            self.locked_portal_banner_msg = "Talk to Bromen first to unlock the Remedial Stage!"
+                        if self.locked_portal_banner_timer <= 0:
+                            self.locked_portal_banner_msg = "The Remedial Stage is currently closed."
                             self.locked_portal_banner_timer = 2.0
 
         # Update portal animations
@@ -3598,15 +3565,14 @@ class StageSelect:
                 'pylon_axis': 'vertical'
             })
 
-        # Quarter 4 (North corridor): row 11, cols 25, 26, 27
-        if not self.is_quarter_unlocked('quarter4'):
-            barriers.append({
-                'world_x': 25 * TILE_SIZE,
-                'world_y': 11 * TILE_SIZE,
-                'width_tiles': 3,
-                'height_tiles': 1,
-                'pylon_axis': 'horizontal'
-            })
+        # Quarter 4 (North corridor): row 11, cols 25, 26, 27 - Permanently blocked
+        barriers.append({
+            'world_x': 25 * TILE_SIZE,
+            'world_y': 11 * TILE_SIZE,
+            'width_tiles': 3,
+            'height_tiles': 1,
+            'pylon_axis': 'horizontal'
+        })
 
         for b in barriers:
             bx = (b['world_x'] - self.camera_x) * ZOOM
@@ -4507,18 +4473,8 @@ class StageSelect:
                             self.locked_portal_banner_msg = "Talk to the Skeleton first to unlock Term 3!"
                             self.locked_portal_banner_timer = 2.0
                     elif current_portal.direction == 'down':
-                        if self.is_quarter_completed('quarter4'):
-                            self.locked_portal_banner_msg = "Remedial Stage is already completed!"
-                            self.locked_portal_banner_timer = 2.0
-                        elif not self.is_quarter_unlocked('quarter4'):
-                            self.locked_portal_banner_msg = "Complete Term 3 to unlock the Remedial Stage!"
-                            self.locked_portal_banner_timer = 2.0
-                        elif self.bromen_dialogue_state >= 2 or getattr(self, 'barriers_lifted', False):
-                            self.enter_quarter("quarter4")
-                            return "quarter_entered"
-                        elif self.bromen_dialogue_state == 0:
-                            self.locked_portal_banner_msg = "Talk to Bromen first to unlock the Remedial Stage!"
-                            self.locked_portal_banner_timer = 2.0
+                        self.locked_portal_banner_msg = "The Remedial Stage is currently closed."
+                        self.locked_portal_banner_timer = 2.0
 
             if event.key == pygame.K_ESCAPE:
                 return self.return_to_main_menu()
@@ -4557,15 +4513,14 @@ class StageSelect:
         title = t_font.render("QUEST COMPLETE: GRAND CHAMPION!", True, (255, 215, 0))
         self.screen.blit(title, title.get_rect(center=(card_x + card_w // 2, card_y + 38)))
 
-        sub = sub_font.render("Outstanding achievement! You have mastered all 4 Quarters of Cognitive Maze!", True, (226, 232, 240))
+        sub = sub_font.render("Outstanding achievement! You have mastered all 3 Terms of Cognitive Maze!", True, (226, 232, 240))
         self.screen.blit(sub, sub.get_rect(center=(card_x + card_w // 2, card_y + 70)))
 
-        # Summary rows for Q1-Q4
+        # Summary rows for Terms 1-3
         quarters_info = [
             ("quarter1", "Term 1: Geometry Forest", "Shapes & Composite Figures"),
             ("quarter2", "Term 2: Barangay Kalye", "Money & Word Problems"),
             ("quarter3", "Term 3: Monetary Desert", "Equal Groups & Fractions"),
-            ("quarter4", "Remedial Stage", "Targeted Quest & Review"),
         ]
 
         row_y = card_y + 98
@@ -4590,7 +4545,7 @@ class StageSelect:
             row_y += 66
 
         # Total Cumulative Mastery Summary
-        total_txt = row_font.render(f"Cumulative Score: {total_pts} / 400 pts   -   Rank: Cognitive Master (Master Tier)", True, (52, 211, 153))
+        total_txt = row_font.render(f"Cumulative Score: {total_pts} / 300 pts   -   Rank: Cognitive Master (Master Tier)", True, (52, 211, 153))
         self.screen.blit(total_txt, total_txt.get_rect(center=(card_x + card_w // 2, card_y + 398)))
 
         # Close / Celebrate Button
