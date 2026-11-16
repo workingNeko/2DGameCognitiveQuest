@@ -1950,7 +1950,11 @@ class StageSelect:
             is_completed = bool(isinstance(s_data, dict) and s_data.get("completed", False))
             score = int(s_data.get("score", 0)) if is_completed else 0
             pct = float(s_data.get("percentage", 0.0)) if is_completed else 0.0
-            tot = int(s_data.get("total_questions", 10)) if is_completed else 10
+
+            # Dynamically determine questions count for this assessment slot from database
+            slot_qs = db.get_questions(term, summative=s) if (db and is_available) else []
+            q_count = len(slot_qs) if slot_qs else (int(s_data.get("total_questions", 5)) if is_completed else 5)
+            tot = int(s_data.get("total_questions", q_count)) if is_completed else q_count
 
             # Gap-safe unlock:
             if barriers_lifted:
@@ -1967,6 +1971,7 @@ class StageSelect:
                 "completed": is_completed,
                 "unlocked": is_unlocked,
                 "available_in_cloud": is_available,
+                "q_count": q_count,
                 "score": score,
                 "percentage": pct,
                 "total": tot,
@@ -2257,7 +2262,8 @@ class StageSelect:
 
             # Capacity / PTS Badge
             cap_col = (56, 189, 248) if (unlocked and available) else (71, 85, 105)
-            cap_surf = self.modal_card_subtitle_font.render("10 Questions • 100 PTS", True, cap_col)
+            card_q_cnt = card.get("q_count", 5)
+            cap_surf = self.modal_card_subtitle_font.render(f"{card_q_cnt} Questions • 100 PTS", True, cap_col)
             self.screen.blit(cap_surf, cap_surf.get_rect(center=(emblem_cx, cards_y + 118)))
 
             # Divider line
@@ -2291,7 +2297,7 @@ class StageSelect:
                 draw_vector_star(self.screen, emblem_cx + 20, star_y, radius=6, color=(251, 191, 36), outline_color=(254, 240, 138))
             else:
                 r_txt1 = self.modal_card_info_font.render("Grade 2 Math Quest", True, (226, 232, 240))
-                r_txt2 = self.modal_card_info_font.render("10 Interactive Problems", True, (148, 163, 184))
+                r_txt2 = self.modal_card_info_font.render(f"{card_q_cnt} Interactive Problems", True, (148, 163, 184))
                 r_txt3 = self.modal_card_bold_font.render("Earn Up to 100 PTS ★", True, (251, 191, 36))
                 self.screen.blit(r_txt1, r_txt1.get_rect(center=(emblem_cx, divider_y + 20)))
                 self.screen.blit(r_txt2, r_txt2.get_rect(center=(emblem_cx, divider_y + 42)))

@@ -1076,20 +1076,24 @@ class Database:
         if not isinstance(q, dict) or slot_key not in _CANONICAL_ASSESSMENT_SPECS:
             return False
         spec = _CANONICAL_ASSESSMENT_SPECS[slot_key]
-        q_unit_id = q.get("unitId") or q.get("unit_id")
-        if q_unit_id in matching_unit_ids:
-            return True
         q_raw = str(q.get("quarter") or "").strip()
         if q_raw:
             if q_raw.lower() == spec["label"].lower():
                 return True
             inferred = infer_slot_from_text(q_raw)
-            if inferred == slot_key:
-                return True
-            if spec["summative"] == 1:
-                q_num = normalize_quarter_number(q_raw) or infer_quarter_from_text(q_raw)
-                if q_num == spec["term"]:
-                    return True
+            if inferred is not None:
+                return inferred == slot_key
+            q_num = normalize_quarter_number(q_raw) or infer_quarter_from_text(q_raw)
+            if q_num is not None:
+                return (q_num == spec["term"] and spec["summative"] == 1)
+            # If explicit quarter/slot tag was set on question but did not match this slot,
+            # do not loosely reassign it to another slot via unitId.
+            return False
+
+        # Only fall back to unitId if question has no explicit quarter or slot tag
+        q_unit_id = q.get("unitId") or q.get("unit_id")
+        if q_unit_id in matching_unit_ids:
+            return True
         return False
 
     @staticmethod
