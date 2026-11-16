@@ -26,6 +26,12 @@ from core.visual_effects import (
     build_composite_title_letters,
     draw_composite_title_wave,
 )
+from core.vector_icons import (
+    draw_vector_star,
+    draw_vector_arrow,
+    draw_vector_replay,
+    draw_vector_gem,
+)
 
 # ============================================================
 # SETTINGS
@@ -99,21 +105,27 @@ class StageSelect:
         self.portal_loaded_screen = None
         self.portal_loading_done = False
 
-        # Summative Selection Modal State (Term 1-3)
+        # Assessment Selection Modal State (Term 1-3)
         self.summative_modal_active = False
         self.summative_modal_term = 1
         self.summative_modal_cards = []
         self.summative_modal_cooldown = 0.0
         self.summative_modal_hovered_slot = None
         self._summ_modal_overlay = None
+        self._summ_modal_frame_rect = None
+        self._summ_modal_close_rect = None
         self._summ_modal_back_rect = None
 
         # Modal Fonts (Cached once at startup for 60 FPS APU rendering)
-        self.modal_title_font = pygame.font.SysFont(["Segoe UI", "Tahoma", "Calibri", "Arial"], 22, bold=True)
-        self.modal_subtitle_font = pygame.font.SysFont(["Segoe UI", "Tahoma", "Calibri", "Arial"], 14)
-        self.modal_card_title_font = pygame.font.SysFont(["Segoe UI", "Tahoma", "Calibri", "Arial"], 18, bold=True)
-        self.modal_card_info_font = pygame.font.SysFont(["Segoe UI", "Tahoma", "Calibri", "Arial"], 12)
-        self.modal_btn_font = pygame.font.SysFont(["Segoe UI", "Tahoma", "Calibri", "Arial"], 14, bold=True)
+        self.modal_title_font = get_font("Comic Sans MS", 22, bold=True)
+        self.modal_subtitle_font = get_font("Comic Sans MS", 14)
+        self.modal_realm_tag_font = get_font("Comic Sans MS", 12, bold=True)
+        self.modal_card_title_font = get_font("Comic Sans MS", 18, bold=True)
+        self.modal_card_subtitle_font = get_font("Comic Sans MS", 12)
+        self.modal_card_info_font = get_font("Comic Sans MS", 12)
+        self.modal_card_bold_font = get_font("Comic Sans MS", 13, bold=True)
+        self.modal_btn_font = get_font("Comic Sans MS", 14, bold=True)
+        self.modal_close_font = get_font("Comic Sans MS", 16, bold=True)
 
         # Typewriter Dialogue State
         self.dialogue_char_index = 0.0
@@ -1901,15 +1913,15 @@ class StageSelect:
             s["dist"] += s["speed"] * dt
 
     # ============================================================
-    # SUMMATIVE SELECTION MODAL (Terms 1 - 3)
+    # ASSESSMENT SELECTION MODAL (Terms 1 - 3)
     # ============================================================
     def open_summative_modal(self, term_num):
-        """Open the Summative Selection Modal for Term 1, 2, or 3."""
+        """Open the Assessment Selection Modal for Term 1, 2, or 3."""
         if getattr(self, 'portal_transition_active', False):
             return
         self.summative_modal_active = True
         self.summative_modal_term = term_num
-        self.summative_modal_cooldown = 0.4
+        self.summative_modal_cooldown = 0.25
         self.summative_modal_hovered_slot = None
         self._refresh_summative_modal_data()
         if hasattr(self.main_menu, 'audio_manager') and self.main_menu.audio_manager:
@@ -1927,7 +1939,6 @@ class StageSelect:
         save_data = load_student_progress(student_id) or {}
         comp_summs = save_data.get("completed_summatives", {})
 
-        ord_names = {1: "1st", 2: "2nd", 3: "3rd", 4: "4th"}
         self.summative_modal_cards = []
         barriers_lifted = getattr(self, 'barriers_lifted', False)
 
@@ -1952,7 +1963,7 @@ class StageSelect:
             self.summative_modal_cards.append({
                 "summative_num": s,
                 "slot_key": slot_key,
-                "title": f"{ord_names.get(s, str(s))} Summative",
+                "title": f"Assessment {s}",
                 "completed": is_completed,
                 "unlocked": is_unlocked,
                 "available_in_cloud": is_available,
@@ -1977,12 +1988,22 @@ class StageSelect:
         if self.summative_modal_cooldown > 0:
             return True
 
-        # 1. Back button
+        # 0. Close button (top right '✕')
+        if hasattr(self, '_summ_modal_close_rect') and self._summ_modal_close_rect and self._summ_modal_close_rect.collidepoint(pos):
+            self.close_summative_modal()
+            return True
+
+        # 1. Back button (bottom '✕ BACK TO PLAZA')
         if hasattr(self, '_summ_modal_back_rect') and self._summ_modal_back_rect and self._summ_modal_back_rect.collidepoint(pos):
             self.close_summative_modal()
             return True
 
-        # 2. Check cards
+        # 2. Backdrop click outside modal dialog smoothly dismisses
+        if hasattr(self, '_summ_modal_frame_rect') and self._summ_modal_frame_rect and not self._summ_modal_frame_rect.collidepoint(pos):
+            self.close_summative_modal()
+            return True
+
+        # 3. Check cards
         for card in self.summative_modal_cards:
             rect = card.get("rect")
             if rect and rect.collidepoint(pos):
@@ -1998,9 +2019,7 @@ class StageSelect:
                     term_q = f"quarter{self.summative_modal_term}"
                     self.enter_quarter(term_q, summative_num=s_num)
                 else:
-                    ord_names = {1: "1st", 2: "2nd", 3: "3rd", 4: "4th"}
-                    prev_ord = ord_names.get(s_num - 1, "previous")
-                    self.locked_portal_banner_msg = f"Complete the {prev_ord} Summative Test first to unlock this test!"
+                    self.locked_portal_banner_msg = f"Complete Assessment {s_num - 1} first to unlock this assessment!"
                     self.locked_portal_banner_timer = 2.5
                     if hasattr(self.main_menu, 'audio_manager') and self.main_menu.audio_manager:
                         self.main_menu.audio_manager.play_sfx("deny")
@@ -2008,20 +2027,48 @@ class StageSelect:
         return True
 
     def draw_summative_modal(self):
-        """Render the Summative Selection Modal with memoized background for 60 FPS performance."""
+        """Render the redesigned kid-friendly Assessment Selection Modal with 60 FPS APU memoization."""
         now = pygame.time.get_ticks()
         term = self.summative_modal_term
-        term_titles = {
-            1: ("TERM 1", "GEOMETRY FOREST", "2D Shapes & Composite Figures"),
-            2: ("TERM 2", "BARANGAY KALYE", "Money, Bayanihan & Word Problems"),
-            3: ("TERM 3", "MONETARY DESERT", "Trade Tablets & Currency"),
-        }
-        t_label, t_name, t_topic = term_titles.get(term, (f"TERM {term}", "SANCTUARY", "Math Quests"))
 
-        # 1. Dark semi-transparent overlay
+        term_themes = {
+            1: {
+                "label": "TERM 1",
+                "realm": "GEOMETRY FOREST",
+                "topic": "2D Shapes & Composite Figures",
+                "accent": (16, 185, 129),        # Emerald
+                "accent_light": (52, 211, 153),  # Mint
+                "header_bg": (6, 78, 59),        # Forest Green
+                "border": (52, 211, 153),
+                "badge_bg": (4, 120, 87),
+            },
+            2: {
+                "label": "TERM 2",
+                "realm": "BARANGAY KALYE",
+                "topic": "Philippine Money, Bayanihan & Word Problems",
+                "accent": (245, 158, 11),        # Amber
+                "accent_light": (251, 191, 36),  # Sun Gold
+                "header_bg": (120, 53, 15),      # Deep Amber
+                "border": (251, 191, 36),
+                "badge_bg": (180, 83, 9),
+            },
+            3: {
+                "label": "TERM 3",
+                "realm": "MONETARY DESERT",
+                "topic": "Ancient Trade Tablets & Currency",
+                "accent": (217, 119, 6),         # Desert Bronze
+                "accent_light": (56, 189, 248),  # Oasis Cyan
+                "header_bg": (67, 56, 202),      # Twilight Indigo
+                "border": (251, 191, 36),
+                "badge_bg": (79, 70, 229),
+            },
+        }
+        theme = term_themes.get(term, term_themes[1])
+
+        # 1. Dark semi-transparent overlay (memoized for 60 FPS APU budget)
         if not hasattr(self, '_summ_modal_overlay') or self._summ_modal_overlay is None or self._summ_modal_overlay.get_size() != (self.width, self.height):
             self._summ_modal_overlay = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
-            self._summ_modal_overlay.fill((0, 0, 0, 195))
+            self._summ_modal_overlay.fill((0, 0, 0, 205))
             if pygame.display.get_surface() is not None:
                 try:
                     self._summ_modal_overlay = self._summ_modal_overlay.convert_alpha()
@@ -2029,55 +2076,108 @@ class StageSelect:
                     pass
         self.screen.blit(self._summ_modal_overlay, (0, 0))
 
+        # Check fist charging for camera gesture controls
+        cursor_active = hasattr(self, 'cursor_pos') and self.cursor_pos is not None
+        is_fist_charging = (
+            cursor_active
+            and getattr(self, 'hand_detected', False)
+            and getattr(self, 'current_gesture', "") == "CLOSED_FIST"
+            and getattr(self, 'fist_start_time', 0) > 0
+        )
+        hold_pct = 0.0
+        if is_fist_charging:
+            hold_pct = min(1.0, max(0.0, (time.time() - self.fist_start_time) / max(0.01, getattr(self, 'CLICK_HOLD_TIME', 0.9))))
+
         # 2. Modal Frame
-        modal_w = min(1040, self.width - 60)
-        modal_h = min(490, self.height - 70)
+        modal_w = min(1080, max(680, self.width - 60))
+        modal_h = min(490, max(420, self.height - 60))
         modal_x = (self.width - modal_w) // 2
         modal_y = (self.height - modal_h) // 2
-
         modal_rect = pygame.Rect(modal_x, modal_y, modal_w, modal_h)
-        pygame.draw.rect(self.screen, (15, 23, 42), modal_rect, border_radius=18)
-        pygame.draw.rect(self.screen, (56, 189, 248), modal_rect, 2, border_radius=18)
+        self._summ_modal_frame_rect = modal_rect
 
-        # Inner header bar
-        hdr_rect = pygame.Rect(modal_x + 8, modal_y + 8, modal_w - 16, 72)
-        pygame.draw.rect(self.screen, (30, 41, 59), hdr_rect, border_radius=12)
+        # Deep Navy rounded body
+        pygame.draw.rect(self.screen, (15, 23, 42), modal_rect, border_radius=22)
+        # Glowing themed border
+        pygame.draw.rect(self.screen, theme["border"], modal_rect, 3, border_radius=22)
+        # Inner subtle bezel
+        inner_rect = modal_rect.inflate(-4, -4)
+        pygame.draw.rect(self.screen, (30, 41, 59), inner_rect, 1, border_radius=20)
 
-        # Header Title
-        title_txt = f"★ {t_label}: {t_name} — SELECT SUMMATIVE TEST ★"
+        # 3. Inner Header Bar
+        hdr_h = 74
+        hdr_rect = pygame.Rect(modal_x + 8, modal_y + 8, modal_w - 16, hdr_h)
+        pygame.draw.rect(self.screen, theme["header_bg"], hdr_rect, border_top_left_radius=16, border_top_right_radius=16, border_bottom_left_radius=10, border_bottom_right_radius=10)
+        # Top shine sheen line
+        pygame.draw.line(self.screen, theme["accent_light"], (hdr_rect.x + 16, hdr_rect.y + 2), (hdr_rect.right - 16, hdr_rect.y + 2), 2)
+
+        # Realm Tag Badge (Left)
+        tag_rect = pygame.Rect(modal_x + 24, modal_y + 18, 96, 26)
+        pygame.draw.rect(self.screen, theme["badge_bg"], tag_rect, border_radius=8)
+        pygame.draw.rect(self.screen, theme["accent_light"], tag_rect, 1, border_radius=8)
+        tag_surf = self.modal_realm_tag_font.render(theme["label"], True, (255, 255, 255))
+        self.screen.blit(tag_surf, tag_surf.get_rect(center=tag_rect.center))
+
+        # Header Title (Centered)
+        title_txt = f"{theme['realm']} : ASSESSMENT SELECTION"
         t_surf = self.modal_title_font.render(title_txt, True, (251, 191, 36))
-        self.screen.blit(t_surf, t_surf.get_rect(center=(modal_x + modal_w // 2, modal_y + 32)))
+        t_rect = t_surf.get_rect(center=(modal_x + modal_w // 2, modal_y + 28))
+        self.screen.blit(t_surf, t_rect)
 
-        # Subtitle
-        sub_txt = f"Realm: {t_topic} | Maximum 10 Questions per Summative slot"
-        sub_surf = self.modal_subtitle_font.render(sub_txt, True, (148, 163, 184))
-        self.screen.blit(sub_surf, sub_surf.get_rect(center=(modal_x + modal_w // 2, modal_y + 58)))
+        # Star emblems on sides of title
+        draw_vector_star(self.screen, t_rect.left - 20, t_rect.centery, radius=8, color=(251, 191, 36), outline_color=(255, 255, 255))
+        draw_vector_star(self.screen, t_rect.right + 20, t_rect.centery, radius=8, color=(251, 191, 36), outline_color=(255, 255, 255))
 
-        # 3. 4 Summative Cards side by side
-        card_gap = 16
+        # Header Subtitle (Centered)
+        sub_txt = f"Realm: {theme['topic']}  •  Choose your assessment quest!"
+        sub_surf = self.modal_subtitle_font.render(sub_txt, True, (226, 232, 240))
+        self.screen.blit(sub_surf, sub_surf.get_rect(center=(modal_x + modal_w // 2, modal_y + 56)))
+
+        # Close Button (Top Right '✕')
+        self._summ_modal_close_rect = pygame.Rect(modal_x + modal_w - 48, modal_y + 16, 32, 32)
+        close_hov = cursor_active and self._summ_modal_close_rect.collidepoint(self.cursor_pos)
+        close_bg = (225, 29, 72) if close_hov else (51, 65, 85)
+        close_bdr = (255, 255, 255) if close_hov else (148, 163, 184)
+        pygame.draw.rect(self.screen, close_bg, self._summ_modal_close_rect, border_radius=16)
+        pygame.draw.rect(self.screen, close_bdr, self._summ_modal_close_rect, 2 if close_hov else 1, border_radius=16)
+        c_txt = self.modal_close_font.render("✕", True, (255, 255, 255))
+        self.screen.blit(c_txt, c_txt.get_rect(center=self._summ_modal_close_rect.center))
+
+        if close_hov and is_fist_charging and hold_pct > 0.05:
+            arc_r = 14
+            pygame.draw.arc(self.screen, (253, 224, 71), pygame.Rect(self._summ_modal_close_rect.centerx - arc_r, self._summ_modal_close_rect.centery - arc_r, arc_r * 2, arc_r * 2), 0, math.pi * 2 * hold_pct, 3)
+
+        # 4. 4 Assessment Cards side by side
+        card_gap = 14
         card_w = (modal_w - 48 - (card_gap * 3)) // 4
-        card_h = 280
-        cards_y = modal_y + 96
+        cards_y = modal_y + 92
+        card_h = modal_h - 150
 
         for i, card in enumerate(self.summative_modal_cards):
             c_x = modal_x + 24 + i * (card_w + card_gap)
             c_rect = pygame.Rect(c_x, cards_y, card_w, card_h)
             card["rect"] = c_rect
 
-            is_hov = c_rect.collidepoint(self.cursor_pos)
+            is_hov = cursor_active and c_rect.collidepoint(self.cursor_pos)
             unlocked = card.get("unlocked", False)
             completed = card.get("completed", False)
+            available = card.get("available_in_cloud", True)
             score = card.get("score", 0)
             pct = card.get("percentage", 0.0)
             tot = card.get("total", 10)
+            s_num = card["summative_num"]
 
-            # Card background
-            if not unlocked:
+            # Card background & border
+            if not available:
+                card_bg = (20, 29, 47)
+                border_col = (51, 65, 85)
+                border_w = 1
+            elif not unlocked:
                 card_bg = (23, 33, 53)
                 border_col = (71, 85, 105)
                 border_w = 1
             elif completed:
-                card_bg = (16, 44, 38) if not is_hov else (20, 58, 48)
+                card_bg = (16, 44, 38) if not is_hov else (22, 58, 48)
                 border_col = (34, 197, 94) if not is_hov else (74, 222, 128)
                 border_w = 2 if not is_hov else 3
             else:
@@ -2085,102 +2185,176 @@ class StageSelect:
                 border_col = (245, 158, 11) if not is_hov else (251, 191, 36)
                 border_w = 2 if not is_hov else 3
 
-            pygame.draw.rect(self.screen, card_bg, c_rect, border_radius=14)
-            pygame.draw.rect(self.screen, border_col, c_rect, border_w, border_radius=14)
+            pygame.draw.rect(self.screen, card_bg, c_rect, border_radius=16)
+            pygame.draw.rect(self.screen, border_col, c_rect, border_w, border_radius=16)
 
-            # Status pill at top of card
-            pill_rect = pygame.Rect(c_x + 16, cards_y + 14, card_w - 32, 28)
-            if not card.get("available_in_cloud", True):
+            # Card Top Highlight Bevel for active cards
+            if unlocked and available:
+                c_top_sheen = pygame.Rect(c_rect.x + 3, c_rect.y + 3, c_rect.width - 6, 12)
+                sheen_col = (74, 222, 128) if completed else (251, 191, 36)
+                pygame.draw.line(self.screen, sheen_col, (c_top_sheen.x + 8, c_top_sheen.y), (c_top_sheen.right - 8, c_top_sheen.y), 1)
+
+            # Top Status Pill
+            pill_rect = pygame.Rect(c_x + 14, cards_y + 12, card_w - 28, 26)
+            if not available:
                 pygame.draw.rect(self.screen, (30, 41, 59), pill_rect, border_radius=8)
-                pill_txt = self.modal_card_info_font.render("NOT UPLOADED", True, (148, 163, 184))
+                pygame.draw.rect(self.screen, (51, 65, 85), pill_rect, 1, border_radius=8)
+                pill_txt = self.modal_card_info_font.render("AWAITING CLOUD", True, (148, 163, 184))
+                self.screen.blit(pill_txt, pill_txt.get_rect(center=pill_rect.center))
             elif not unlocked:
                 pygame.draw.rect(self.screen, (30, 41, 59), pill_rect, border_radius=8)
-                pill_txt = self.modal_card_info_font.render("🔒 LOCKED", True, (148, 163, 184))
+                pygame.draw.rect(self.screen, (71, 85, 105), pill_rect, 1, border_radius=8)
+                pill_txt = self.modal_card_info_font.render("LOCKED", True, (148, 163, 184))
+                self.screen.blit(pill_txt, pill_txt.get_rect(center=pill_rect.center))
             elif completed:
                 pygame.draw.rect(self.screen, (22, 101, 52), pill_rect, border_radius=8)
-                pill_txt = self.modal_card_info_font.render("★ CLEARED", True, (255, 255, 255))
+                pygame.draw.rect(self.screen, (74, 222, 128), pill_rect, 1, border_radius=8)
+                pill_txt = self.modal_card_info_font.render("MASTERED", True, (255, 255, 255))
+                pt_rect = pill_txt.get_rect(center=(pill_rect.centerx + 7, pill_rect.centery))
+                self.screen.blit(pill_txt, pt_rect)
+                draw_vector_star(self.screen, pt_rect.left - 10, pill_rect.centery, radius=5, color=(251, 191, 36), outline_color=(255, 255, 255))
             else:
                 pulse = (math.sin(now * 0.007 + i) + 1) / 2
                 pill_bg = (180, 83, 9) if pulse > 0.5 else (146, 64, 14)
                 pygame.draw.rect(self.screen, pill_bg, pill_rect, border_radius=8)
-                pill_txt = self.modal_card_info_font.render("● AVAILABLE", True, (255, 255, 255))
-            self.screen.blit(pill_txt, pill_txt.get_rect(center=pill_rect.center))
+                pygame.draw.rect(self.screen, (251, 191, 36), pill_rect, 1, border_radius=8)
+                pill_txt = self.modal_card_info_font.render("READY TO PLAY", True, (255, 255, 255))
+                self.screen.blit(pill_txt, pill_txt.get_rect(center=pill_rect.center))
 
-            # Summative Title
-            st_surf = self.modal_card_title_font.render(card["title"], True, (255, 255, 255) if (unlocked and card.get("available_in_cloud", True)) else (100, 116, 139))
-            self.screen.blit(st_surf, st_surf.get_rect(center=(c_x + card_w // 2, cards_y + 68)))
+            # Emblem Circle (Center Icon)
+            emblem_cx = c_x + card_w // 2
+            emblem_cy = cards_y + 64
+            emblem_r = 21
 
-            # Capacity badge
-            cap_surf = self.modal_card_info_font.render("10 Questions Cap", True, (56, 189, 248) if (unlocked and card.get("available_in_cloud", True)) else (71, 85, 105))
-            self.screen.blit(cap_surf, cap_surf.get_rect(center=(c_x + card_w // 2, cards_y + 92)))
+            if not available:
+                pygame.draw.circle(self.screen, (23, 33, 53), (emblem_cx, emblem_cy), emblem_r)
+                pygame.draw.circle(self.screen, (51, 65, 85), (emblem_cx, emblem_cy), emblem_r, 1)
+                q_surf = self.modal_card_title_font.render("?", True, (100, 116, 139))
+                self.screen.blit(q_surf, q_surf.get_rect(center=(emblem_cx, emblem_cy)))
+            elif not unlocked:
+                pygame.draw.circle(self.screen, (30, 41, 59), (emblem_cx, emblem_cy), emblem_r)
+                pygame.draw.circle(self.screen, (71, 85, 105), (emblem_cx, emblem_cy), emblem_r, 1)
+                # Native vector padlock icon
+                pygame.draw.arc(self.screen, (148, 163, 184), pygame.Rect(emblem_cx - 6, emblem_cy - 12, 12, 12), 0, math.pi, 2)
+                pygame.draw.line(self.screen, (148, 163, 184), (emblem_cx - 6, emblem_cy - 6), (emblem_cx - 6, emblem_cy - 2), 2)
+                pygame.draw.line(self.screen, (148, 163, 184), (emblem_cx + 6, emblem_cy - 6), (emblem_cx + 6, emblem_cy - 2), 2)
+                pygame.draw.rect(self.screen, (148, 163, 184), (emblem_cx - 8, emblem_cy - 2, 16, 12), border_radius=3)
+                pygame.draw.circle(self.screen, (30, 41, 59), (emblem_cx, emblem_cy + 3), 2)
+                pygame.draw.line(self.screen, (30, 41, 59), (emblem_cx, emblem_cy + 3), (emblem_cx, emblem_cy + 7), 2)
+            elif completed:
+                pygame.draw.circle(self.screen, (20, 83, 45), (emblem_cx, emblem_cy), emblem_r)
+                pygame.draw.circle(self.screen, (74, 222, 128), (emblem_cx, emblem_cy), emblem_r, 2)
+                draw_vector_star(self.screen, emblem_cx, emblem_cy, radius=12, color=(255, 215, 0), outline_color=(254, 240, 138))
+            else:
+                pygame.draw.circle(self.screen, (30, 58, 138), (emblem_cx, emblem_cy), emblem_r)
+                pygame.draw.circle(self.screen, (251, 191, 36), (emblem_cx, emblem_cy), emblem_r, 2)
+                draw_vector_arrow(self.screen, emblem_cx - 1, emblem_cy, size=13, direction="right", color=(251, 191, 36), line_width=3)
 
-            # Middle Stats / Description Area
-            divider_y = cards_y + 114
+            # Assessment Title
+            st_col = (255, 255, 255) if (unlocked and available) else (148, 163, 184)
+            st_surf = self.modal_card_title_font.render(card["title"], True, st_col)
+            self.screen.blit(st_surf, st_surf.get_rect(center=(emblem_cx, cards_y + 98)))
+
+            # Capacity / PTS Badge
+            cap_col = (56, 189, 248) if (unlocked and available) else (71, 85, 105)
+            cap_surf = self.modal_card_subtitle_font.render("10 Questions • 100 PTS", True, cap_col)
+            self.screen.blit(cap_surf, cap_surf.get_rect(center=(emblem_cx, cards_y + 118)))
+
+            # Divider line
+            divider_y = cards_y + 132
             pygame.draw.line(self.screen, border_col, (c_x + 16, divider_y), (c_x + card_w - 16, divider_y), 1)
 
-            if not card.get("available_in_cloud", True):
+            # Middle Stats / Description Area
+            if not available:
                 u_txt1 = self.modal_card_info_font.render("Awaiting Questions", True, (148, 163, 184))
                 u_txt2 = self.modal_card_info_font.render("Not yet uploaded in cloud", True, (100, 116, 139))
-                u_txt3 = self.modal_card_info_font.render("by teacher", True, (100, 116, 139))
-                self.screen.blit(u_txt1, u_txt1.get_rect(center=(c_x + card_w // 2, divider_y + 24)))
-                self.screen.blit(u_txt2, u_txt2.get_rect(center=(c_x + card_w // 2, divider_y + 48)))
-                self.screen.blit(u_txt3, u_txt3.get_rect(center=(c_x + card_w // 2, divider_y + 70)))
+                u_txt3 = self.modal_card_info_font.render("by teacher yet", True, (100, 116, 139))
+                self.screen.blit(u_txt1, u_txt1.get_rect(center=(emblem_cx, divider_y + 20)))
+                self.screen.blit(u_txt2, u_txt2.get_rect(center=(emblem_cx, divider_y + 42)))
+                self.screen.blit(u_txt3, u_txt3.get_rect(center=(emblem_cx, divider_y + 64)))
             elif not unlocked:
-                s_idx = card["summative_num"]
-                prev_ord = {2: "1st", 3: "2nd", 4: "3rd"}.get(s_idx, "previous")
-                l_txt1 = self.modal_card_info_font.render("Pass the", True, (148, 163, 184))
-                l_txt2 = self.modal_card_title_font.render(f"{prev_ord} Summative", True, (245, 158, 11))
+                l_txt1 = self.modal_card_info_font.render("Challenge Tier Locked", True, (148, 163, 184))
+                l_txt2 = self.modal_card_bold_font.render(f"Pass Assessment {s_num - 1}", True, (245, 158, 11))
                 l_txt3 = self.modal_card_info_font.render("to unlock this quest!", True, (148, 163, 184))
-                self.screen.blit(l_txt1, l_txt1.get_rect(center=(c_x + card_w // 2, divider_y + 24)))
-                self.screen.blit(l_txt2, l_txt2.get_rect(center=(c_x + card_w // 2, divider_y + 46)))
-                self.screen.blit(l_txt3, l_txt3.get_rect(center=(c_x + card_w // 2, divider_y + 68)))
+                self.screen.blit(l_txt1, l_txt1.get_rect(center=(emblem_cx, divider_y + 20)))
+                self.screen.blit(l_txt2, l_txt2.get_rect(center=(emblem_cx, divider_y + 42)))
+                self.screen.blit(l_txt3, l_txt3.get_rect(center=(emblem_cx, divider_y + 64)))
             elif completed:
-                s_txt = self.modal_card_title_font.render(f"Best: {score}/{tot}", True, (74, 222, 128))
-                p_txt = self.modal_card_info_font.render(f"Accuracy: {pct:.0f}%", True, (203, 213, 225))
-                c_txt = self.modal_card_info_font.render("Mastered ★★★", True, (251, 191, 36))
-                self.screen.blit(s_txt, s_txt.get_rect(center=(c_x + card_w // 2, divider_y + 24)))
-                self.screen.blit(p_txt, p_txt.get_rect(center=(c_x + card_w // 2, divider_y + 48)))
-                self.screen.blit(c_txt, c_txt.get_rect(center=(c_x + card_w // 2, divider_y + 70)))
+                s_txt = self.modal_card_bold_font.render(f"Best Score: {score}/{tot}", True, (74, 222, 128))
+                p_txt = self.modal_card_info_font.render(f"Accuracy: {pct:.0f}%", True, (226, 232, 240))
+                self.screen.blit(s_txt, s_txt.get_rect(center=(emblem_cx, divider_y + 18)))
+                self.screen.blit(p_txt, p_txt.get_rect(center=(emblem_cx, divider_y + 38)))
+                # 3 Gold Stars
+                star_y = divider_y + 60
+                draw_vector_star(self.screen, emblem_cx - 20, star_y, radius=6, color=(251, 191, 36), outline_color=(254, 240, 138))
+                draw_vector_star(self.screen, emblem_cx, star_y, radius=8, color=(251, 191, 36), outline_color=(255, 255, 255))
+                draw_vector_star(self.screen, emblem_cx + 20, star_y, radius=6, color=(251, 191, 36), outline_color=(254, 240, 138))
             else:
-                r_txt1 = self.modal_card_info_font.render("Standard Curriculum", True, (203, 213, 225))
-                r_txt2 = self.modal_card_info_font.render("Ready for evaluation", True, (148, 163, 184))
-                r_txt3 = self.modal_card_info_font.render("Interactive Boss & Maze", True, (56, 189, 248))
-                self.screen.blit(r_txt1, r_txt1.get_rect(center=(c_x + card_w // 2, divider_y + 24)))
-                self.screen.blit(r_txt2, r_txt2.get_rect(center=(c_x + card_w // 2, divider_y + 48)))
-                self.screen.blit(r_txt3, r_txt3.get_rect(center=(c_x + card_w // 2, divider_y + 70)))
+                r_txt1 = self.modal_card_info_font.render("Grade 2 Math Quest", True, (226, 232, 240))
+                r_txt2 = self.modal_card_info_font.render("10 Interactive Problems", True, (148, 163, 184))
+                r_txt3 = self.modal_card_bold_font.render("Earn Up to 100 PTS ★", True, (251, 191, 36))
+                self.screen.blit(r_txt1, r_txt1.get_rect(center=(emblem_cx, divider_y + 20)))
+                self.screen.blit(r_txt2, r_txt2.get_rect(center=(emblem_cx, divider_y + 42)))
+                self.screen.blit(r_txt3, r_txt3.get_rect(center=(emblem_cx, divider_y + 64)))
 
             # Card Button at bottom
-            btn_rect = pygame.Rect(c_x + 16, cards_y + card_h - 52, card_w - 32, 38)
-            if not card.get("available_in_cloud", True):
-                pygame.draw.rect(self.screen, (30, 41, 59), btn_rect, border_radius=8)
+            btn_rect = pygame.Rect(c_x + 14, cards_y + card_h - 48, card_w - 28, 38)
+            if not available:
+                pygame.draw.rect(self.screen, (30, 41, 59), btn_rect, border_radius=10)
+                pygame.draw.rect(self.screen, (51, 65, 85), btn_rect, 1, border_radius=10)
                 btn_txt = self.modal_btn_font.render("UNASSIGNED 🔒", True, (100, 116, 139))
             elif not unlocked:
-                pygame.draw.rect(self.screen, (30, 41, 59), btn_rect, border_radius=8)
+                pygame.draw.rect(self.screen, (30, 41, 59), btn_rect, border_radius=10)
+                pygame.draw.rect(self.screen, (71, 85, 105), btn_rect, 1, border_radius=10)
                 btn_txt = self.modal_btn_font.render("LOCKED 🔒", True, (100, 116, 139))
             elif completed:
                 btn_bg = (34, 197, 94) if is_hov else (22, 101, 52)
-                pygame.draw.rect(self.screen, btn_bg, btn_rect, border_radius=8)
-                btn_txt = self.modal_btn_font.render("REPLAY TEST", True, (255, 255, 255))
+                btn_bdr = (255, 255, 255) if is_hov else (74, 222, 128)
+                pygame.draw.rect(self.screen, btn_bg, btn_rect, border_radius=10)
+                pygame.draw.rect(self.screen, btn_bdr, btn_rect, 2 if is_hov else 1, border_radius=10)
+                btn_top = pygame.Rect(btn_rect.x + 2, btn_rect.y + 2, btn_rect.width - 4, btn_rect.height // 2)
+                pygame.draw.rect(self.screen, (74, 222, 128) if is_hov else (34, 197, 94), btn_top, border_top_left_radius=8, border_top_right_radius=8)
+                btn_txt = self.modal_btn_font.render("REPLAY QUEST ↺", True, (255, 255, 255))
             else:
                 btn_bg = (245, 158, 11) if is_hov else (217, 119, 6)
-                pygame.draw.rect(self.screen, btn_bg, btn_rect, border_radius=8)
-                btn_txt = self.modal_btn_font.render("START TEST ▶", True, (15, 23, 42))
+                btn_bdr = (255, 255, 255) if is_hov else (251, 191, 36)
+                pygame.draw.rect(self.screen, btn_bg, btn_rect, border_radius=10)
+                pygame.draw.rect(self.screen, btn_bdr, btn_rect, 2 if is_hov else 1, border_radius=10)
+                btn_top = pygame.Rect(btn_rect.x + 2, btn_rect.y + 2, btn_rect.width - 4, btn_rect.height // 2)
+                pygame.draw.rect(self.screen, (251, 191, 36) if is_hov else (245, 158, 11), btn_top, border_top_left_radius=8, border_top_right_radius=8)
+                btn_txt = self.modal_btn_font.render("START QUEST ▶", True, (15, 23, 42))
+
             self.screen.blit(btn_txt, btn_txt.get_rect(center=btn_rect.center))
 
-        # 4. Bottom action bar: Back to hub button & Keyboard shortcuts
-        back_w, back_h = 240, 44
-        self._summ_modal_back_rect = pygame.Rect(modal_x + (modal_w - back_w) // 2, modal_y + modal_h - 56, back_w, back_h)
-        back_hov = self._summ_modal_back_rect.collidepoint(self.cursor_pos)
+            # Fist Gesture Charging Progress Meter on Button
+            if is_hov and is_fist_charging and hold_pct > 0.05:
+                bar_w = int((btn_rect.width - 8) * hold_pct)
+                bar_rect = pygame.Rect(btn_rect.x + 4, btn_rect.bottom - 5, bar_w, 3)
+                pygame.draw.rect(self.screen, (253, 224, 71), bar_rect, border_radius=2)
+
+        # 5. Bottom Action Bar: Back to Plaza button & Keyboard hints
+        back_w, back_h = 240, 40
+        back_y = modal_y + modal_h - 52
+        self._summ_modal_back_rect = pygame.Rect(modal_x + (modal_w - back_w) // 2, back_y, back_w, back_h)
+        back_hov = cursor_active and self._summ_modal_back_rect.collidepoint(self.cursor_pos)
         back_bg = (71, 85, 105) if back_hov else (51, 65, 85)
-        pygame.draw.rect(self.screen, back_bg, self._summ_modal_back_rect, border_radius=10)
-        pygame.draw.rect(self.screen, (148, 163, 184), self._summ_modal_back_rect, 1, border_radius=10)
-        b_surf = self.modal_btn_font.render("✕ BACK TO HUB", True, (255, 255, 255))
+        back_bdr = (255, 255, 255) if back_hov else (148, 163, 184)
+        pygame.draw.rect(self.screen, back_bg, self._summ_modal_back_rect, border_radius=12)
+        pygame.draw.rect(self.screen, back_bdr, self._summ_modal_back_rect, 2 if back_hov else 1, border_radius=12)
+        b_surf = self.modal_btn_font.render("✕ BACK TO PLAZA", True, (255, 255, 255))
         self.screen.blit(b_surf, b_surf.get_rect(center=self._summ_modal_back_rect.center))
 
-        # Tip at bottom
-        tip_txt = "Press [ESC] to Exit | Press [1-4] to Quick-Start | Ctrl+Shift+B Developer Unlock"
-        tip_surf = self.modal_card_info_font.render(tip_txt, True, (100, 116, 139))
-        self.screen.blit(tip_surf, (modal_x + 24, modal_y + modal_h - 44))
+        if back_hov and is_fist_charging and hold_pct > 0.05:
+            bar_w = int((self._summ_modal_back_rect.width - 8) * hold_pct)
+            bar_rect = pygame.Rect(self._summ_modal_back_rect.x + 4, self._summ_modal_back_rect.bottom - 5, bar_w, 3)
+            pygame.draw.rect(self.screen, (253, 224, 71), bar_rect, border_radius=2)
+
+        # Left & Right non-overlapping navigation hints
+        hint_left = self.modal_card_info_font.render("[1 - 4] Quick-Start Quest", True, (148, 163, 184))
+        self.screen.blit(hint_left, (modal_x + 24, back_y + (back_h - hint_left.get_height()) // 2))
+
+        hint_right = self.modal_card_info_font.render("[ESC] Close  •  Click outside to dismiss", True, (148, 163, 184))
+        self.screen.blit(hint_right, hint_right.get_rect(right=modal_x + modal_w - 24, centery=back_y + back_h // 2))
 
     # ============================================================
     # CHECK PORTAL TELEPORT - Load Quarter1, Quarter2, Quarter3, or Quarter4
@@ -4363,6 +4537,21 @@ class StageSelect:
                         c = self.summative_modal_cards[3]
                         if c.get("rect"):
                             self.handle_summative_modal_click(c["rect"].center)
+                    return "handled"
+                elif event.key in [pygame.K_RETURN, pygame.K_SPACE]:
+                    # Activate hovered card, or first ready card
+                    clicked = False
+                    for c in self.summative_modal_cards:
+                        if c.get("rect") and c["rect"].collidepoint(self.cursor_pos):
+                            self.handle_summative_modal_click(c["rect"].center)
+                            clicked = True
+                            break
+                    if not clicked and hasattr(self, '_summ_modal_close_rect') and self._summ_modal_close_rect and self._summ_modal_close_rect.collidepoint(self.cursor_pos):
+                        self.close_summative_modal()
+                        clicked = True
+                    if not clicked and hasattr(self, '_summ_modal_back_rect') and self._summ_modal_back_rect and self._summ_modal_back_rect.collidepoint(self.cursor_pos):
+                        self.close_summative_modal()
+                        clicked = True
                     return "handled"
                 elif (event.key in [pygame.K_u, pygame.K_F8, pygame.K_F9]
                       or ((event.mod & (pygame.KMOD_CTRL | pygame.KMOD_SHIFT)) and event.key in [pygame.K_b, pygame.K_c])):
