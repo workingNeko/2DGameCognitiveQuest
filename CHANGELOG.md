@@ -4,6 +4,21 @@ All notable **Changes & Improvements** and **Bug Fixes** for each version of **C
 
 ---
 
+## [v2.5.0] — 2026-11-16
+### Changes & Improvements
+- **Zero-Allocation Tactical Radar Mini-Map**: Built and deployed a high-performance, hardware-accelerated tactical radar mini-map across the Hub World (Stage Select) and Quarters 1–4. Pre-bakes map layout into a hardware surface once on level load ($0.04\text{ms}$ draw time at 60 FPS), featuring camera viewport wireframe, pulsing player hero beacon, real-time question station beacons (active, completed, upcoming), key NPC pins, and exit portal indicators. Supports instant toggle between expanded radar card and minimized pill via `[M]` key or fist gesture/mouse click. Automatically suppresses during modal dialogs and quizzes to eliminate visual overlap.
+- **Redesigned Kid-Friendly Assessment Selection Window**: Completely redesigned the Summative Assessment selection window with playful, rounded golden card borders, animated hover glows, native vector iconography (stars, padlocks, checkmarks), large readable typography, and keyboard shortcuts (1–4, Space/Enter, Esc).
+- **Celebratory Student Confirmation Box**: Rebuilt the student sign-in confirmation modal with friendly Grade 2 card styling, star medals, avatar icon, and triumphant fanfare audio.
+- **Remedial Corridor Barricade & 3-Term Progression**: Disabled the remedial portal and cleanly blocked the northern corridor with authentic wooden barricades, allowing the game to naturally complete and celebrate 100% mastery across the 3 core Terms.
+- **Dynamic Summative Progress Denominator**: Updated progress tracking to dynamically compute mastery percentage based on active assigned cloud summatives.
+
+### Bug Fixes
+- **Strict Quarter Tag Partitioning**: Ensured questions partition strictly by explicit quarter tag, preventing Term 2 questions from leaking into Term 1 assessments.
+- **Replay Loop Prevention**: Allowed replaying completed terms without loop-locking portals.
+- **Question Number Clamping**: Safely clamps stages to teacher-assigned question counts without phantom stations.
+
+---
+
 ## [v2.0.1] — 2026-11-12
 ### Changes & Improvements
 - **Authentic NPC Randomization Across Stations (Quarters 2, 3 & Summative Assessment)**: Stations scaling up to 15 questions now dynamically randomize NPC guardians from authentic character rosters with no adjacent duplicates (Barrio Vendors in Quarter 2, Number Guardians in Quarter 3, and Water Guardians in Summative Assessment). Proximity greetings, dialogue scripts, portraits, and 8-frame animations resolve cleanly to the assigned guardian, while Quarter 1 retains its authentic original shape sequence.

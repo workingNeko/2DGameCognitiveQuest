@@ -1,7 +1,7 @@
 {
-  "version": "2.0.1",
-  "name": "Cognitive Maze v2.0.1 - Authentic NPC Randomization & Robust Cloud Sync",
-  "notes": "Version 2.0.1 — Authentic NPC Randomization & Resilience Update: Implements non-repetitive NPC randomization across stations up to 15 questions for Quarter 2, Quarter 3, and Summative Assessment while preserving Quarter 1's authentic original shape order; resolves ghost grade synchronization by thoroughly purging all student identifier aliases across local caches and cloud records; introduces non-blocking background cloud synchronization on student selection for zero UI stutter; adds safeguard to prevent headless automated test suites from writing dummy scores to live cloud database; ensures recorded completion dates persist reliably across quarters.",
-  "download_url": "https://github.com/workingNeko/2DGameCognitiveQuest/releases/tag/v2.0.1",
-  "date": "2026-11-12"
+  "version": "2.5.0",
+  "name": "Cognitive Maze v2.5.0 - Tactical Radar Mini-Map & Dynamic Quest Redesign",
+  "notes": "Version 2.5.0 — Major Feature Release: Introduces the zero-allocation Tactical Radar Mini-Map HUD across Hub World and Quarters 1-4 with aspect-ratio preservation, camera viewport wireframe, player beacon, and question station status tracking (toggleable with [M] or fist gesture); completely redesigned kid-friendly Assessment Selection modal with vector iconography and responsive controls; enhanced student confirmation modal with celebratory fanfare; dynamic assessment progress denominator calculation (100% mastery across 3 terms); blocks remedial corridor while keeping game progression seamless; hardened cloud roster synchronization and offline caching.",
+  "download_url": "https://github.com/workingNeko/2DGameCognitiveQuest/releases/tag/v2.5.0",
+  "date": "2026-11-16"
 }
