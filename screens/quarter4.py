@@ -3472,7 +3472,7 @@ class Quarter4:
                     if wrong_count > 0:
                         obj2 = f"Arrived ({correct_count} Correct, {wrong_count} Wrong)! Step into Portal to finish!"
                     else:
-                        obj2 = "Arrived! Step into the Portal to finish the Summative Assessment!"
+                        obj2 = "Arrived! Step into the Portal to finish the Remedial Stage!"
                     obj2_color = (34, 197, 94)
             else:
                 if tot_st == 0:
@@ -3496,7 +3496,7 @@ class Quarter4:
                     if wrong_count > 0:
                         obj2 = f"Double Doors Open ({correct_count} Correct, {wrong_count} Wrong)! Step into portal!"
                     else:
-                        obj2 = "Double Doors Open! Step into portal to finish Summative Assessment!"
+                        obj2 = "Double Doors Open! Step into portal to finish Remedial Stage!"
                     obj2_color = (34, 197, 94)
             obj2_surf = item_font.render(obj2, True, obj2_color)
             self.screen.blit(obj2_surf, (box_x + 16, box_y + 66))

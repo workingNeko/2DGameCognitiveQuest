@@ -571,25 +571,25 @@ class StageSelect:
         path_markings = [
             {
                 "tile_x": 17.5, "tile_y": 13.5,
-                "text": "<- Quarter 1: 2D Shapes & Geometry",
+                "text": "<- Term 1: Geometry Forest",
                 "rotation": 0,
                 "color": (255, 245, 150)
             },
             {
                 "tile_x": 26.5, "tile_y": 20.0,
-                "text": "v Quarter 2: Addition & Subtraction v",
+                "text": "v Term 2: Barangay Kalye v",
                 "rotation": -90,
                 "color": (255, 245, 150)
             },
             {
                 "tile_x": 35.5, "tile_y": 13.5,
-                "text": "Quarter 3: Multiplication & Fractions ->",
+                "text": "Term 3: Monetary Desert ->",
                 "rotation": 0,
                 "color": (255, 245, 150)
             },
             {
                 "tile_x": 26.5, "tile_y": 6.0,
-                "text": "^ Summative Assessment ^",
+                "text": "^ Remedial Stage ^",
                 "rotation": 90,
                 "color": (255, 245, 150)
             }
@@ -2547,7 +2547,7 @@ class StageSelect:
                 dist = math.hypot(self.player_x - self.npc_bromen_x, self.player_y - self.npc_bromen_y)
                 if dist < TILE_SIZE * 3.5:
                     if not self.is_quarter_unlocked('quarter4'):
-                        self.locked_portal_banner_msg = "Complete Quarter 3 to unlock Summative Assessment!"
+                        self.locked_portal_banner_msg = "Complete Term 3 to unlock the Remedial Stage!"
                         self.locked_portal_banner_timer = 2.0
                     else:
                         self.bromen_dialogue_state = 1
@@ -2818,7 +2818,7 @@ class StageSelect:
                 if dist < TILE_SIZE * 2.5:
                     if not self.is_quarter_unlocked('quarter4'):
                         if self.locked_portal_banner_timer <= 0:
-                            self.locked_portal_banner_msg = "Complete Quarter 3 to unlock Summative Assessment!"
+                            self.locked_portal_banner_msg = "Complete Term 3 to unlock the Remedial Stage!"
                             self.locked_portal_banner_timer = 2.0
                     else:
                         self.bromen_dialogue_state = 1
@@ -4544,10 +4544,10 @@ class StageSelect:
 
         # Summary rows for Q1-Q4
         quarters_info = [
-            ("quarter1", "Quarter 1: 2D Shapes & Geometry", "Shapes & Composite Figures"),
-            ("quarter2", "Quarter 2: Numbers, Addition & Subtraction", "Money & Word Problems"),
-            ("quarter3", "Quarter 3: Multiplication & Fractions", "Equal Groups & Fractions"),
-            ("quarter4", "Summative Assessment", "Comprehensive Evaluation"),
+            ("quarter1", "Term 1: Geometry Forest", "Shapes & Composite Figures"),
+            ("quarter2", "Term 2: Barangay Kalye", "Money & Word Problems"),
+            ("quarter3", "Term 3: Monetary Desert", "Equal Groups & Fractions"),
+            ("quarter4", "Remedial Stage", "Targeted Quest & Review"),
         ]
 
         row_y = card_y + 98

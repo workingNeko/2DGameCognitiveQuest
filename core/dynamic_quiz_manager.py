@@ -31,9 +31,9 @@ def validate_and_clamp_questions(questions, quarter_num=None, max_allowed=MAX_QU
         return []
 
     stage_name = (
-        f"Quarter {quarter_num}"
+        f"Term {quarter_num}"
         if quarter_num in (1, 2, 3)
-        else ("Summative Assessment" if quarter_num == 4 else f"Stage {quarter_num or 'Unknown'}")
+        else ("Remedial Stage" if quarter_num == 4 else f"Stage {quarter_num or 'Unknown'}")
     )
 
     # 1. Validate structure of each question entry

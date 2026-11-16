@@ -171,10 +171,10 @@ class QuestPathfinderGuide:
                 if getattr(self.q, 'oldman_dialogue_state', 0) == 0:
                     tx = getattr(self.q, 'npc_oldman_tile_x', 5)
                     ty = getattr(self.q, 'npc_oldman_tile_y', 12)
-                    return (tx, ty, "Old Man (Quarter 1 Guide)", False)
+                    return (tx, ty, "Old Man (Term 1 Guide)", False)
                 else:
                     p_pos = find_portal_coords('left') or (0, 12)
-                    return (p_pos[0], p_pos[1], "Quarter 1: Geometry Forest", True)
+                    return (p_pos[0], p_pos[1], "Term 1: Geometry Forest", True)
 
             # Quarter 2: South corridor (Knight -> Up Portal)
             elif not q2_done:
@@ -182,10 +182,10 @@ class QuestPathfinderGuide:
                 if getattr(self.q, 'knight_dialogue_state', 0) == 0:
                     tx = getattr(self.q, 'npc_knight_tile_x', 25)
                     ty = getattr(self.q, 'npc_knight_tile_y', 23)
-                    return (tx, ty, "Knight (Quarter 2 Guardian)", False)
+                    return (tx, ty, "Knight (Term 2 Guardian)", False)
                 else:
                     p_pos = find_portal_coords('up') or (25, 25)
-                    return (p_pos[0], p_pos[1], "Quarter 2: Barrio Fiesta", True)
+                    return (p_pos[0], p_pos[1], "Term 2: Barangay Kalye", True)
 
             # Quarter 3: East corridor (Skeleton -> Right Portal)
             elif not q3_done:
@@ -193,10 +193,10 @@ class QuestPathfinderGuide:
                 if getattr(self.q, 'skeleton_dialogue_state', 0) == 0:
                     tx = getattr(self.q, 'npc_skeleton_tile_x', 47)
                     ty = getattr(self.q, 'npc_skeleton_tile_y', 12)
-                    return (tx, ty, "Skeleton (Quarter 3 Guardian)", False)
+                    return (tx, ty, "Skeleton (Term 3 Guardian)", False)
                 else:
                     p_pos = find_portal_coords('right') or (52, 12)
-                    return (p_pos[0], p_pos[1], "Quarter 3: Monetary Desert", True)
+                    return (p_pos[0], p_pos[1], "Term 3: Monetary Desert", True)
 
             # Quarter 4: North corridor (Bromen -> Down Portal)
             elif not q4_done:
@@ -204,10 +204,10 @@ class QuestPathfinderGuide:
                 if getattr(self.q, 'bromen_dialogue_state', 0) == 0:
                     tx = getattr(self.q, 'npc_bromen_tile_x', 25)
                     ty = getattr(self.q, 'npc_bromen_tile_y', 3)
-                    return (tx, ty, "Bromen (Summative Assessment Guardian)", False)
+                    return (tx, ty, "Bromen (Remedial Stage Guardian)", False)
                 else:
                     p_pos = find_portal_coords('down') or (25, 0)
-                    return (p_pos[0], p_pos[1], "Summative Assessment", True)
+                    return (p_pos[0], p_pos[1], "Remedial Stage", True)
 
             # All Quarters Completed: Center Sanctuary
             else:

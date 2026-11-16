@@ -171,7 +171,7 @@ class TestQuarterPathfindingGuide(unittest.TestCase):
         ss.oldman_dialogue_state = 1
         target = guide.get_active_hierarchy_target()
         self.assertEqual((target[0], target[1]), (0, 12))
-        self.assertIn("Quarter 1", target[2])
+        self.assertTrue("Quarter 1" in target[2] or "Term 1" in target[2])
 
         # Step 2: Quarter 1 completed -> Knight (Q2 Guardian)
         ss.completed["quarter1"] = True
@@ -183,7 +183,7 @@ class TestQuarterPathfindingGuide(unittest.TestCase):
         ss.knight_dialogue_state = 1
         target = guide.get_active_hierarchy_target()
         self.assertEqual((target[0], target[1]), (25, 25))
-        self.assertIn("Quarter 2", target[2])
+        self.assertTrue("Quarter 2" in target[2] or "Term 2" in target[2])
 
         # Step 3: Quarter 2 completed -> Skeleton (Q3 Guardian)
         ss.completed["quarter2"] = True
@@ -195,7 +195,7 @@ class TestQuarterPathfindingGuide(unittest.TestCase):
         ss.skeleton_dialogue_state = 1
         target = guide.get_active_hierarchy_target()
         self.assertEqual((target[0], target[1]), (52, 12))
-        self.assertIn("Quarter 3", target[2])
+        self.assertTrue("Quarter 3" in target[2] or "Term 3" in target[2])
 
         # Step 4: Quarter 3 completed -> Bromen (Q4 Guardian)
         ss.completed["quarter3"] = True
@@ -207,7 +207,7 @@ class TestQuarterPathfindingGuide(unittest.TestCase):
         ss.bromen_dialogue_state = 1
         target = guide.get_active_hierarchy_target()
         self.assertEqual((target[0], target[1]), (25, 0))
-        self.assertTrue("Quarter 4" in target[2] or "Summative Assessment" in target[2])
+        self.assertTrue("Quarter 4" in target[2] or "Summative Assessment" in target[2] or "Remedial" in target[2])
 
         # Step 5: All completed -> Victory Sanctuary
         ss.completed["quarter4"] = True
