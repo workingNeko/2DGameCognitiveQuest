@@ -449,17 +449,15 @@ def mark_quarter_completed(main_menu, quarter_name, score=100, percentage=100.0,
     save_data["timestamp"] = time.time()
     save_data["last_recorded_date"] = now_str
     
-    # Calculate cumulative score and progress percentage (12 summatives)
+    # Calculate cumulative score and progress percentage dynamically
     comp_summs = save_data["completed_summatives"]
     if comp_summs:
-        comp_count = sum(1 for k, d in comp_summs.items() if k != "remedial" and isinstance(d, dict) and d.get("completed"))
-        cum_prog = int((comp_count / 12.0) * 100)
+        cum_prog = compute_student_progress(completed_summatives=comp_summs)
         cum_score = sum(int(d.get("score", 0)) for d in comp_summs.values() if isinstance(d, dict))
     else:
         comp_qs = save_data["completed_quarters"]
         cum_score = sum(d.get("score", 0) for d in comp_qs.values() if isinstance(d, dict))
-        comp_count = sum(1 for d in comp_qs.values() if isinstance(d, dict) and d.get("completed"))
-        cum_prog = int((comp_count / 4.0) * 100)
+        cum_prog = compute_student_progress(completed_quarters=comp_qs)
 
     # Sync selected_student in save data
     if "selected_student" in save_data and isinstance(save_data["selected_student"], dict):
@@ -507,8 +505,75 @@ def get_completed_summatives(student_id):
         return {}
     return save_data.get("completed_summatives", {})
 
+def get_required_assessment_slots():
+    """
+    Returns the list of active/required summative assessment slots across Terms 1, 2, 3
+    based on the assessments currently uploaded to the database.
+    Defaults to ['t1_s1', 't2_s1', 't3_s1'] if offline or no summatives found.
+    """
+    try:
+        from db.connect_db import db
+        if db:
+            slots = []
+            for t in (1, 2, 3):
+                avail = db.get_available_summatives_for_term(t) or [1]
+                for s in avail:
+                    slots.append(f"t{t}_s{s}")
+            if slots:
+                return slots
+    except Exception:
+        pass
+    return ["t1_s1", "t2_s1", "t3_s1"]
+
+def compute_student_progress(completed_summatives=None, completed_quarters=None):
+    """
+    Calculates 0-100% student progress dynamically based on available assessments.
+    Excludes remedial from the denominator (since remedial is an optional/support stage).
+    """
+    req_slots = get_required_assessment_slots()
+    denom = max(1, len(req_slots))
+
+    if completed_summatives:
+        if isinstance(completed_summatives, (list, tuple, set)):
+            comp_slots = set(completed_summatives)
+        elif isinstance(completed_summatives, dict):
+            comp_slots = {
+                k for k, v in completed_summatives.items()
+                if isinstance(v, dict) and v.get("completed")
+            }
+        else:
+            comp_slots = set()
+
+        comp_count = sum(1 for slot in req_slots if slot in comp_slots)
+        extra_count = sum(1 for k in comp_slots if k not in req_slots and k != "remedial")
+        total_comp = comp_count + extra_count
+        return min(100, int(round((total_comp / float(max(denom, total_comp))) * 100)))
+
+    elif completed_quarters:
+        if isinstance(completed_quarters, (list, tuple, set)):
+            comp_qs = set(completed_quarters)
+        elif isinstance(completed_quarters, dict):
+            comp_qs = {
+                k for k, v in completed_quarters.items()
+                if (isinstance(v, dict) and v.get("completed")) or (not isinstance(v, dict) and bool(v))
+            }
+        else:
+            comp_qs = set()
+
+        norm_qs = set()
+        for q in comp_qs:
+            if isinstance(q, int) and 1 <= q <= 3:
+                norm_qs.add(q)
+            elif str(q).startswith("quarter") and str(q)[7:].isdigit():
+                qn = int(str(q)[7:])
+                if 1 <= qn <= 3:
+                    norm_qs.add(qn)
+        return min(100, int(round((len(norm_qs) / 3.0) * 100)))
+
+    return 0
+
 def is_game_completed(student_id):
-    """Returns True if all 12 summatives (or legacy 4 Quarters) are completed."""
+    """Returns True if all required summatives across active terms (or active quarters 1-3) are completed."""
     student_id = _extract_student_id(student_id)
     if not student_id:
         return False
@@ -522,13 +587,12 @@ def is_game_completed(student_id):
         v = d.get(k)
         return bool(v.get("completed", False)) if isinstance(v, dict) else bool(v)
 
-    if summs:
-        req_slots = [f"t{t}_s{s}" for t in range(1, 4) for s in range(1, 5)]
-        if all(_entry_done(summs, slot) for slot in req_slots):
-            return True
+    req_slots = get_required_assessment_slots()
+    if summs and any(_entry_done(summs, s) for s in req_slots):
+        return all(_entry_done(summs, slot) for slot in req_slots)
     quarters = save_data.get("completed_quarters", {})
-    req = ["quarter1", "quarter2", "quarter3", "quarter4"]
-    return all(_entry_done(quarters, q) for q in req)
+    req_quarters = ["quarter1", "quarter2", "quarter3"]
+    return all(_entry_done(quarters, q) for q in req_quarters)
 
 def save_student_progress(main_menu, async_flush=False):
     if not main_menu or not getattr(main_menu, 'selected_student', None):
@@ -545,15 +609,13 @@ def save_student_progress(main_menu, async_flush=False):
     completed_summatives = copy.deepcopy(existing_save.get("completed_summatives", {}))
     missed_questions = copy.deepcopy(existing_save.get("missed_questions", []))
 
-    # Sync cumulative score and progress percentage across summatives
+    # Sync cumulative score and progress percentage dynamically
     if completed_summatives:
-        comp_count = sum(1 for k, d in completed_summatives.items() if k != "remedial" and isinstance(d, dict) and d.get("completed"))
-        cum_prog = int((comp_count / 12.0) * 100)
+        cum_prog = compute_student_progress(completed_summatives=completed_summatives)
         cum_score = sum(int(d.get("score", 0)) for d in completed_summatives.values() if isinstance(d, dict))
     else:
         cum_score = sum(d.get("score", 0) for d in completed_quarters.values() if isinstance(d, dict))
-        comp_count = sum(1 for d in completed_quarters.values() if isinstance(d, dict) and d.get("completed"))
-        cum_prog = int((comp_count / 4.0) * 100)
+        cum_prog = compute_student_progress(completed_quarters=completed_quarters)
     
     if getattr(main_menu, 'selected_student', None):
         main_menu.selected_student["score"] = cum_score
@@ -949,10 +1011,10 @@ def sync_student_with_cloud(student_id, student_db_id=None, main_menu=None, forc
             first_n = sel_obj.get("first_name") or "Student"
             if cloud_summatives:
                 cum_s = sum(c["score"] for c in cloud_summatives.values())
-                cum_p = int((len([k for k in cloud_summatives if k != "remedial"]) / 12.0) * 100)
+                cum_p = compute_student_progress(completed_summatives=cloud_summatives)
             else:
                 cum_s = sum(c["score"] for c in cloud_stages.values())
-                cum_p = int((len(cloud_stages) / 4.0) * 100)
+                cum_p = compute_student_progress(completed_quarters=cloud_stages)
             local_save = {
                 "student_id": target_sid,
                 "selected_student": {
@@ -1060,11 +1122,10 @@ def sync_student_with_cloud(student_id, student_db_id=None, main_menu=None, forc
         if updated or cloud_missed_ids or cloud_remediated_ids:
             if summ_dict:
                 new_score = sum(int(d.get("score", 0)) for d in summ_dict.values() if isinstance(d, dict))
-                comp_c = len([k for k, d in summ_dict.items() if k != "remedial" and isinstance(d, dict) and d.get("completed")])
-                new_prog = int((comp_c / 12.0) * 100)
+                new_prog = compute_student_progress(completed_summatives=summ_dict)
             else:
                 new_score = sum(int(d.get("score", 0)) for d in comp_dict.values() if isinstance(d, dict))
-                new_prog = int((len([d for d in comp_dict.values() if isinstance(d, dict) and d.get("completed")]) / 4.0) * 100)
+                new_prog = compute_student_progress(completed_quarters=comp_dict)
 
             local_save["completed_quarters"] = comp_dict
             local_save["completed_summatives"] = summ_dict

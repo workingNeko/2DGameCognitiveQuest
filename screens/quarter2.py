@@ -3066,8 +3066,14 @@ class Quarter2:
                 correct_answers = sum(1 for k, v in self.first_attempt_correct.items() if k <= total_questions and v)
                 percentage = (correct_answers / float(total_questions)) * 100.0 if total_questions > 0 else 100.0
                 score = int(round(percentage)) if total_questions > 0 else 100
+                s_num = getattr(self, 'summative_num', 1)
+                missed_ids = [
+                    self.quiz_questions[int(k) - 1].get("id")
+                    for k, v in self.first_attempt_correct.items()
+                    if not v and str(k).isdigit() and 0 <= int(k) - 1 < len(self.quiz_questions) and self.quiz_questions[int(k) - 1].get("id")
+                ]
                 from db.save_system import mark_quarter_completed
-                mark_quarter_completed(self.main_menu, "quarter2", score=score, percentage=percentage, total_questions=total_questions)
+                mark_quarter_completed(self.main_menu, "quarter2", score=score, percentage=percentage, total_questions=total_questions, summative_num=s_num, missed_ids=missed_ids)
                 self.victory_card.show(total_questions=total_questions, correct_first_try=correct_answers, score=score)
             return
 

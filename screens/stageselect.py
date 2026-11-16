@@ -2735,7 +2735,7 @@ class StageSelect:
                 dist = math.hypot(self.player_x - self.npc_bromen_x, self.player_y - self.npc_bromen_y)
                 if dist < TILE_SIZE * 3.5:
                     if not self.is_quarter_unlocked('quarter4'):
-                        self.locked_portal_banner_msg = "Complete Term 3 to unlock the Remedial Stage!"
+                        self.locked_portal_banner_msg = "The Remedial Stage is currently closed."
                         self.locked_portal_banner_timer = 2.0
                     else:
                         self.bromen_dialogue_state = 1
@@ -2995,7 +2995,7 @@ class StageSelect:
                 if dist < TILE_SIZE * 2.5:
                     if not self.is_quarter_unlocked('quarter4'):
                         if self.locked_portal_banner_timer <= 0:
-                            self.locked_portal_banner_msg = "Complete Term 3 to unlock the Remedial Stage!"
+                            self.locked_portal_banner_msg = "The Remedial Stage is currently closed."
                             self.locked_portal_banner_timer = 2.0
                     else:
                         self.bromen_dialogue_state = 1
@@ -4310,8 +4310,8 @@ class StageSelect:
             self.completed_quarters = completed
 
         # Draw Top HUD Stage Progress Tracker (Enlarged for Grade 2 with generous breathing room)
-        num_cleared = sum(1 for q in ['quarter1', 'quarter2', 'quarter3', 'quarter4'] if self._is_dict_completed(completed, q))
-        hud_w, hud_h = 370, 42
+        num_cleared = min(3, sum(1 for q in ['quarter1', 'quarter2', 'quarter3'] if self.is_quarter_completed(q)))
+        hud_w, hud_h = 350, 42
         hud_x = (self.width - hud_w) // 2
         hud_y = 12
         hud_rect = pygame.Rect(hud_x, hud_y, hud_w, hud_h)
@@ -4321,15 +4321,15 @@ class StageSelect:
         if getattr(self, '_cached_num_cleared', None) != num_cleared:
             self._cached_num_cleared = num_cleared
             hud_font = get_font("Comic Sans MS", 16, bold=True)
-            self._cached_t_surf = hud_font.render(f"Quarters Mastered: {num_cleared}/4", True, (241, 245, 249))
+            self._cached_t_surf = hud_font.render(f"Quarters Mastered: {num_cleared}/3", True, (241, 245, 249))
         self.screen.blit(self._cached_t_surf, (hud_x + 16, hud_y + 9))
 
-        # 4 Golden Stars / Gem Medals (Native Vector Iconography Engine - Enlarged for Grade 2)
+        # 3 Golden Stars / Gem Medals (Native Vector Iconography Engine - Enlarged for Grade 2)
         from core.vector_icons import draw_vector_star
         star_x = hud_x + 258
-        for i in range(4):
+        for i in range(3):
             is_on = i < num_cleared
-            cx = star_x + i * 24
+            cx = star_x + i * 26
             cy = hud_y + hud_h // 2
             if is_on:
                 draw_vector_star(self.screen, cx, cy, radius=8, color=(255, 215, 0), outline_color=(254, 240, 138))

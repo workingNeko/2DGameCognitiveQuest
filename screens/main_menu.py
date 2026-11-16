@@ -1715,14 +1715,12 @@ class MainMenu:
                 if save_data:
                     q_data = save_data.get("completed_quarters", {})
                     s_data = save_data.get("completed_summatives", {})
+                    from db.save_system import compute_student_progress
                     if s_data:
-                        req_slots = [f"t{t}_s{s}" for t in range(1, 4) for s in range(1, 5)]
-                        completed_count = sum(1 for slot in req_slots if isinstance(s_data.get(slot), dict) and s_data[slot].get("completed"))
-                        self.selected_student["progress"] = min(100, int(round((completed_count / 12.0) * 100)))
+                        self.selected_student["progress"] = compute_student_progress(completed_summatives=s_data)
                         self.selected_student["score"] = sum(d.get("score", 0) for s, d in s_data.items() if isinstance(d, dict))
                     else:
-                        completed_count = sum(1 for q, d in q_data.items() if isinstance(d, dict) and d.get("completed"))
-                        self.selected_student["progress"] = int((completed_count / 4.0) * 100)
+                        self.selected_student["progress"] = compute_student_progress(completed_quarters=q_data)
                         self.selected_student["score"] = sum(d.get("score", 0) for q, d in q_data.items() if isinstance(d, dict))
             except Exception:
                 pass

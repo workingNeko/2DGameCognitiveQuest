@@ -537,10 +537,10 @@ class StudentSelect:
                         save_ts = save_data.get("timestamp")
                         is_stale = bool(reset_ts and save_ts is not None and float(save_ts) < reset_ts - 1.0)
                         if not is_stale:
+                            from db.save_system import compute_student_progress
                             summ_data = save_data.get("completed_summatives", {})
                             if summ_data:
-                                comp_count = len([k for k, v in summ_data.items() if k != "remedial" and isinstance(v, dict) and v.get("completed")])
-                                s["progress"] = int((comp_count / 12.0) * 100)
+                                s["progress"] = compute_student_progress(completed_summatives=summ_data)
                                 s["score"] = sum(int(v.get("score", 0)) for v in summ_data.values() if isinstance(v, dict))
                             else:
                                 q_data = save_data.get("completed_quarters", {})
@@ -548,7 +548,7 @@ class StudentSelect:
                                     if isinstance(d, dict) and d.get("completed"):
                                         qn = (db.normalize_quarter_number(q_key) or db.infer_quarter_from_text(q_key) or 1) if db else 1
                                         local_q_scores[qn] = max(local_q_scores.get(qn, 0), int(d.get("score", 0)))
-                                s["progress"] = int((len(local_q_scores) / 4.0) * 100)
+                                s["progress"] = compute_student_progress(completed_quarters=local_q_scores)
                                 s["score"] = sum(local_q_scores.values())
                 s["_local_quarters"] = local_q_scores
         except Exception as e:
@@ -644,16 +644,18 @@ class StudentSelect:
                         pk_str = str(pk or "")
                         c_qs = by_student_pk.get(pk_str, {})
                         s["score"] = sum(c["score"] for c in c_qs.values())
+                        from db.save_system import compute_student_progress
                         if res.get("summatives"):
-                            s["progress"] = int((len([k for k in res["summatives"] if k != "remedial"]) / 12.0) * 100)
+                            s["progress"] = compute_student_progress(completed_summatives=res.get("summatives"))
                         else:
-                            s["progress"] = int((len(c_qs) / 4.0) * 100)
+                            s["progress"] = compute_student_progress(completed_quarters=c_qs)
                         s["_cloud_game_quarters"] = c_qs
                 else:
                     # Offline fallback: preserve local saved quarters
+                    from db.save_system import compute_student_progress
                     merged_scores = dict(s.get("_local_quarters") or {})
                     if merged_scores:
-                        s["progress"] = int((len(merged_scores) / 4.0) * 100)
+                        s["progress"] = compute_student_progress(completed_quarters=merged_scores)
                         s["score"] = sum(merged_scores.values())
 
             self.apply_filter_and_sort()
