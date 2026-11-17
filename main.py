@@ -81,8 +81,11 @@ if getattr(sys, "frozen", False):
             pass
 
     # Ensure writable user save and cache directories exist
-    os.makedirs(os.path.join(app_dir, "db", "saves"), exist_ok=True)
-    os.makedirs(os.path.join(app_dir, "db", "cache"), exist_ok=True)
+    try:
+        os.makedirs(os.path.join(app_dir, "db", "saves"), exist_ok=True)
+        os.makedirs(os.path.join(app_dir, "db", "cache"), exist_ok=True)
+    except Exception as e:
+        print(f"[WARN] Failed to create db directories in {app_dir}: {e}")
 
 if app_dir not in sys.path:
     sys.path.insert(0, app_dir)
@@ -157,18 +160,48 @@ def main():
     screen_width = display_info.current_w
     screen_height = display_info.current_h
 
-    # Set up fullscreen display with hardware double-buffering
-    screen = pygame.display.set_mode((screen_width, screen_height), pygame.FULLSCREEN | pygame.DOUBLEBUF)
+    # Robust multi-tiered display initialization to support various school monitors/GPUs
+    screen = None
+    flags_attempts = [
+        (pygame.FULLSCREEN | pygame.DOUBLEBUF, (screen_width, screen_height)),
+        (pygame.FULLSCREEN, (screen_width, screen_height)),
+        (pygame.NOFRAME, (screen_width, screen_height)),
+        (pygame.RESIZABLE, (1280, 720)),
+        (0, (1280, 720)),
+        (0, (1024, 768)),
+        (0, (800, 600)),
+    ]
+    for flags, (w, h) in flags_attempts:
+        if w <= 0 or h <= 0:
+            continue
+        try:
+            screen = pygame.display.set_mode((w, h), flags)
+            screen_width, screen_height = screen.get_size()
+            break
+        except Exception:
+            continue
+
+    if screen is None:
+        screen = pygame.display.set_mode((1280, 720))
+        screen_width, screen_height = 1280, 720
+
     pygame.display.set_caption("Cognitive Maze - Educational Games")
 
-    # Set application window icon
-    icon_path = os.path.join(app_dir, "assets", "images", "icon.png")
-    if os.path.exists(icon_path):
-        try:
-            icon_surf = pygame.image.load(icon_path)
-            pygame.display.set_icon(icon_surf)
-        except Exception:
-            pass
+    # Set application window icon (check app_dir, _internal, and paths)
+    from core.paths import get_asset_path
+    icon_candidates = [
+        os.path.join(app_dir, "assets", "images", "icon.png"),
+        get_asset_path("images", "icon.png"),
+        os.path.join(meipass_dir, "assets", "images", "icon.png"),
+    ]
+    for icon_path in icon_candidates:
+        if icon_path and os.path.exists(icon_path):
+            try:
+                icon_surf = pygame.image.load(icon_path)
+                pygame.display.set_icon(icon_surf)
+                break
+            except Exception:
+                pass
 
     # Set up clock for FPS
     clock = pygame.time.Clock()
@@ -253,4 +286,41 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+    try:
+        main()
+    except Exception as e:
+        import traceback
+        import tempfile
+        tb = traceback.format_exc()
+
+        # 1. Log crash to application directory if writable
+        try:
+            crash_log_path = os.path.join(app_dir, "crash_log.txt")
+            with open(crash_log_path, "w", encoding="utf-8") as f:
+                f.write(tb)
+        except Exception:
+            pass
+
+        # 2. Log crash to %TEMP% directory (guaranteed writable)
+        try:
+            temp_log_path = os.path.join(tempfile.gettempdir(), "cognitive_maze_crash.log")
+            with open(temp_log_path, "w", encoding="utf-8") as f:
+                f.write(tb)
+        except Exception:
+            pass
+
+        # 3. Native Windows graphical error dialog
+        if sys.platform == "win32":
+            try:
+                import ctypes
+                error_summary = str(e) if str(e) else type(e).__name__
+                dialog_msg = (
+                    f"Cognitive Maze encountered an unexpected error on startup:\n\n"
+                    f"{error_summary}\n\n"
+                    f"A crash log has been saved to:\n"
+                    f"{os.path.join(app_dir, 'crash_log.txt')}"
+                )
+                ctypes.windll.user32.MessageBoxW(0, dialog_msg, "Cognitive Maze - Startup Error", 0x10)
+            except Exception:
+                pass
+        sys.exit(1)
