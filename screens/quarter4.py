@@ -40,7 +40,7 @@ from db.save_system import save_student_progress
 # ============================================================
 TILE_SIZE = 32
 FPS = 60
-SPEED = 2.2
+SPEED = 2.5
 
 # Camera zoom settings - PERMANENT ZOOM
 ZOOM = 1.50  # Fixed zoom level
@@ -1394,6 +1394,11 @@ class Quarter4:
                 for dx in range(-2, 3):
                     for dy in range(-2, 3):
                         forbidden.add((bx + dx, by + dy))
+            if 'map11' in str(getattr(self, 'map_name', '')).lower():
+                # Enclosed sanctuary room behind sealed double doors at row 11 (cols 22-29, rows 11-15)
+                for fx in range(22, 30):
+                    for fy in range(11, 16):
+                        forbidden.add((fx, fy))
 
             walkables = set(self.WALKABLE_TILES) if hasattr(self, 'WALKABLE_TILES') else {"G", "#"}
             self.quiz_stations = allocate_dynamic_stations(
@@ -1567,7 +1572,7 @@ class Quarter4:
                 if v and str(k).isdigit() and 0 <= int(k) - 1 < len(self.quiz_questions) and self.quiz_questions[int(k) - 1].get("id")
             ]
                     from db.save_system import mark_quarter_completed
-                    mark_quarter_completed(self.main_menu, "quarter4", score=score, percentage=percentage, total_questions=total_questions, summative_num="remedial", remediated_ids=remediated_ids)
+                    mark_quarter_completed(self.main_menu, "quarter4", score=score, percentage=percentage, total_questions=total_questions, summative_num="remedial", remediated_ids=remediated_ids, correct_answers=correct_answers)
                     if hasattr(self.main_menu, 'audio_manager'):
                         self.main_menu.audio_manager.play_sfx("victory_fanfare")
                         self.main_menu.audio_manager.play_sfx("portal_warp")
@@ -1606,7 +1611,7 @@ class Quarter4:
     # ============================================================
     def check_portal_teleport_on_hold(self):
         if self.warp_out_active:
-            return False
+            return True
         # Allow portal check when waiting (state 0) or completed (state 6 or puzzle solved)
         if self.quiz_state not in [0, 6] and not getattr(self, 'key_puzzle_solved', False) and not getattr(self, 'addition_puzzle_solved', False):
             return False
@@ -1688,8 +1693,19 @@ class Quarter4:
         if self.pause_menu.handle_click(pos):
             return
 
-        # Mini-map widget click / fist toggle
-        if hasattr(self, 'minimap') and self.minimap.handle_click(pos):
+        # Mini-map widget click / fist toggle (strictly during exploration)
+        can_click_minimap = (
+            not (hasattr(self, 'victory_card') and self.victory_card.active)
+            and not getattr(self, 'key_puzzle_active', False)
+            and not getattr(self, 'emblem_puzzle_active', False)
+            and not getattr(self, 'addition_puzzle_active', False)
+            and not self.state_machine.is_cognitive_puzzle()
+            and self.quiz_state in [0, 6]
+            and getattr(self, 'bromen_dialogue_state', 0) == 0
+            and not getattr(self, 'time_up_dialog_active', False)
+            and not (getattr(self, 'instruction_modal', None) and self.instruction_modal.is_visible)
+        )
+        if can_click_minimap and hasattr(self, 'minimap') and self.minimap.handle_click(pos):
             if hasattr(self.main_menu, 'audio_manager') and self.main_menu.audio_manager:
                 self.main_menu.audio_manager.play_sfx("click")
             return "minimap_toggle"
@@ -1977,6 +1993,10 @@ class Quarter4:
                 else:
                     self.quiz_state = 6
                     self.bromen_dialogue_state = 0
+                    if hasattr(self.main_menu, 'audio_manager'):
+                        self.main_menu.audio_manager.play_sfx("portal_transition")
+                    self.warp_out_active = True
+                    self.warp_out_timer = self.warp_out_duration
                 self.sync_ui_state()
                 save_student_progress(self.main_menu)
                 print("[TUTORIAL] Quarter 4 evaluation completed!")
@@ -2152,7 +2172,7 @@ class Quarter4:
                 if v and str(k).isdigit() and 0 <= int(k) - 1 < len(self.quiz_questions) and self.quiz_questions[int(k) - 1].get("id")
             ]
                 from db.save_system import mark_quarter_completed
-                mark_quarter_completed(self.main_menu, "quarter4", score=score, percentage=percentage, total_questions=total_questions, summative_num="remedial", remediated_ids=remediated_ids)
+                mark_quarter_completed(self.main_menu, "quarter4", score=score, percentage=percentage, total_questions=total_questions, summative_num="remedial", remediated_ids=remediated_ids, correct_answers=correct_answers)
                 self.victory_card.show(total_questions=total_questions, correct_first_try=correct_answers, score=score)
             return
 
@@ -2350,12 +2370,16 @@ class Quarter4:
                     self.open_dungeon_doors()
                     self.save_quarter4_game_result()
                     self.sync_ui_state()
-                    print("[WIN] Lotus Raft docked at East Pier! Portal unlocked!")
+                    print("[WIN] Lotus Raft docked at East Pier! Entering Portal...")
                     if hasattr(self, 'sound_correct') and self.sound_correct:
                         try:
                             self.sound_correct.play()
                         except Exception:
                             pass
+                    if hasattr(self.main_menu, 'audio_manager'):
+                        self.main_menu.audio_manager.play_sfx("portal_transition")
+                    self.warp_out_active = True
+                    self.warp_out_timer = self.warp_out_duration
 
             # Update sailing animation and movement (Westward return if desired)
             elif self.raft_state == "sailing_west":
@@ -2532,7 +2556,7 @@ class Quarter4:
                     speed_boost=getattr(self, 'speed_boost_timer', 0) > 0,
                     terrain_color=(180, 205, 215)
                 )
-            if self.anim_timer >= (10 if getattr(self, 'speed_boost_timer', 0) > 0 else 16):
+            if self.anim_timer >= (8 if getattr(self, 'speed_boost_timer', 0) > 0 else 12):
                 self.anim_timer = 0
                 self.anim_frame = (self.anim_frame + 1) % 2
                 if hasattr(self.main_menu, 'audio_manager'):
@@ -3949,6 +3973,10 @@ class Quarter4:
                         self.raft_state = "ready_to_sail"
                     else:
                         self.quiz_state = 6
+                        if hasattr(self.main_menu, 'audio_manager'):
+                            self.main_menu.audio_manager.play_sfx("portal_transition")
+                        self.warp_out_active = True
+                        self.warp_out_timer = self.warp_out_duration
                     self.bromen_dialogue_state = 0
                     self.sync_ui_state()
                     save_student_progress(self.main_menu)

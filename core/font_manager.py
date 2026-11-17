@@ -12,7 +12,71 @@ import pygame
 _FONT_CACHE = {}
 _ORIG_SYSFONT = None
 _ORIG_FONT = None
+_ORIG_DRAW_RECT = None
+_ORIG_DRAW_CIRCLE = None
+_ORIG_DRAW_LINE = None
+_ORIG_DRAW_LINES = None
+_ORIG_DRAW_POLYGON = None
+_ORIG_DRAW_ELLIPSE = None
 _PATCHED = False
+
+
+def _safe_draw_rect(surface, color, rect, width=0, border_radius=0,
+                     border_top_left_radius=-1, border_top_right_radius=-1,
+                     border_bottom_left_radius=-1, border_bottom_right_radius=-1):
+    """
+    Transparently catches unsupported surface bit depth errors (e.g. on APU/fullscreen/dummy drivers)
+    when border_radius is supplied, smoothly falling back to standard rectangle drawing.
+    """
+    try:
+        return _ORIG_DRAW_RECT(surface, color, rect, width, border_radius,
+                               border_top_left_radius, border_top_right_radius,
+                               border_bottom_left_radius, border_bottom_right_radius)
+    except (ValueError, TypeError, pygame.error):
+        try:
+            return _ORIG_DRAW_RECT(surface, color, rect, width)
+        except Exception:
+            return None
+
+
+def _safe_draw_circle(surface, color, center, radius, width=0, *args, **kwargs):
+    """Safely catches surface bit depth or unmapped display errors during Alt+Tab."""
+    try:
+        return _ORIG_DRAW_CIRCLE(surface, color, center, radius, width, *args, **kwargs)
+    except (ValueError, TypeError, pygame.error):
+        return None
+
+
+def _safe_draw_line(surface, color, start_pos, end_pos, width=1):
+    """Safely catches surface bit depth or unmapped display errors during Alt+Tab."""
+    try:
+        return _ORIG_DRAW_LINE(surface, color, start_pos, end_pos, width)
+    except (ValueError, TypeError, pygame.error):
+        return None
+
+
+def _safe_draw_lines(surface, color, closed, points, width=1):
+    """Safely catches surface bit depth or unmapped display errors during Alt+Tab."""
+    try:
+        return _ORIG_DRAW_LINES(surface, color, closed, points, width)
+    except (ValueError, TypeError, pygame.error):
+        return None
+
+
+def _safe_draw_polygon(surface, color, points, width=0):
+    """Safely catches surface bit depth or unmapped display errors during Alt+Tab."""
+    try:
+        return _ORIG_DRAW_POLYGON(surface, color, points, width)
+    except (ValueError, TypeError, pygame.error):
+        return None
+
+
+def _safe_draw_ellipse(surface, color, rect, width=0):
+    """Safely catches surface bit depth or unmapped display errors during Alt+Tab."""
+    try:
+        return _ORIG_DRAW_ELLIPSE(surface, color, rect, width)
+    except (ValueError, TypeError, pygame.error):
+        return None
 
 
 GLYPH_REPLACEMENTS = {
@@ -512,10 +576,11 @@ def _cached_sysfont(name, size, bold=False, italic=False, *args, **kwargs):
 
 def install_font_cache():
     """
-    Transparently installs the caching wrapper and SafeFont onto pygame.font.
+    Transparently installs the caching wrapper and SafeFont onto pygame.font,
+    and installs the bit-depth safe wrapper for pygame.draw.rect.
     Safe to call multiple times.
     """
-    global _ORIG_SYSFONT, _PATCHED
+    global _ORIG_SYSFONT, _ORIG_DRAW_RECT, _ORIG_DRAW_CIRCLE, _ORIG_DRAW_LINE, _ORIG_DRAW_LINES, _ORIG_DRAW_POLYGON, _ORIG_DRAW_ELLIPSE, _PATCHED
     if _PATCHED:
         return
 
@@ -528,6 +593,26 @@ def install_font_cache():
     _ORIG_SYSFONT = pygame.font.SysFont
     pygame.font.SysFont = _cached_sysfont
     pygame.font.Font = SafeFont
+
+    if hasattr(pygame, 'draw'):
+        if hasattr(pygame.draw, 'rect') and _ORIG_DRAW_RECT is None:
+            _ORIG_DRAW_RECT = pygame.draw.rect
+            pygame.draw.rect = _safe_draw_rect
+        if hasattr(pygame.draw, 'circle') and _ORIG_DRAW_CIRCLE is None:
+            _ORIG_DRAW_CIRCLE = pygame.draw.circle
+            pygame.draw.circle = _safe_draw_circle
+        if hasattr(pygame.draw, 'line') and _ORIG_DRAW_LINE is None:
+            _ORIG_DRAW_LINE = pygame.draw.line
+            pygame.draw.line = _safe_draw_line
+        if hasattr(pygame.draw, 'lines') and _ORIG_DRAW_LINES is None:
+            _ORIG_DRAW_LINES = pygame.draw.lines
+            pygame.draw.lines = _safe_draw_lines
+        if hasattr(pygame.draw, 'polygon') and _ORIG_DRAW_POLYGON is None:
+            _ORIG_DRAW_POLYGON = pygame.draw.polygon
+            pygame.draw.polygon = _safe_draw_polygon
+        if hasattr(pygame.draw, 'ellipse') and _ORIG_DRAW_ELLIPSE is None:
+            _ORIG_DRAW_ELLIPSE = pygame.draw.ellipse
+            pygame.draw.ellipse = _safe_draw_ellipse
 
     _PATCHED = True
     print("[OPTIMIZATION] Global Pygame Font Caching & SafeFont System installed successfully.")

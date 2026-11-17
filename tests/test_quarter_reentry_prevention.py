@@ -24,10 +24,18 @@ class TestQuarterReentryPrevention(unittest.TestCase):
         }
         self.mock_main_menu.audio_manager = MagicMock()
 
+    @patch("db.save_system.load_student_progress")
     @patch("db.save_system.get_completed_quarters")
-    def test_completed_quarter1_cannot_be_reentered(self, mock_get_completed):
+    def test_completed_quarter1_cannot_be_reentered(self, mock_get_completed, mock_load_progress):
         mock_get_completed.return_value = {
             "quarter1": {"completed": True, "score": 100, "percentage": 100.0}
+        }
+        mock_load_progress.return_value = {
+            "completed_quarters": {"quarter1": {"completed": True, "score": 100, "percentage": 100.0}},
+            "completed_summatives": {
+                "t1_s1": {"completed": True, "score": 5},
+                "t1_s2": {"completed": True, "score": 5}
+            }
         }
         from screens.stageselect import StageSelect
         ss = StageSelect(self.screen, self.mock_main_menu)
@@ -57,10 +65,18 @@ class TestQuarterReentryPrevention(unittest.TestCase):
         ss.trigger_click((640, 360))
         self.assertFalse(ss.portal_transition_active)
 
+    @patch("db.save_system.load_student_progress")
     @patch("db.save_system.get_completed_quarters")
-    def test_unlocked_incomplete_quarter2_can_be_entered(self, mock_get_completed):
+    def test_unlocked_incomplete_quarter2_can_be_entered(self, mock_get_completed, mock_load_progress):
         mock_get_completed.return_value = {
             "quarter1": {"completed": True, "score": 100, "percentage": 100.0}
+        }
+        mock_load_progress.return_value = {
+            "completed_quarters": {"quarter1": {"completed": True, "score": 100, "percentage": 100.0}},
+            "completed_summatives": {
+                "t1_s1": {"completed": True, "score": 5},
+                "t1_s2": {"completed": True, "score": 5}
+            }
         }
         from screens.stageselect import StageSelect
         ss = StageSelect(self.screen, self.mock_main_menu)
@@ -74,13 +90,29 @@ class TestQuarterReentryPrevention(unittest.TestCase):
         self.assertTrue(ss.portal_transition_active, "Quarter 2 should be entered since it is unlocked and not yet completed")
         self.assertEqual(ss.portal_transition_target, "quarter2")
 
+    @patch("db.save_system.load_student_progress")
     @patch("db.save_system.get_completed_quarters")
-    def test_all_quarters_completed_blocks_all_reentries(self, mock_get_completed):
+    def test_all_quarters_completed_blocks_all_reentries(self, mock_get_completed, mock_load_progress):
         mock_get_completed.return_value = {
             "quarter1": {"completed": True, "score": 100, "percentage": 100.0},
             "quarter2": {"completed": True, "score": 100, "percentage": 100.0},
             "quarter3": {"completed": True, "score": 100, "percentage": 100.0},
             "quarter4": {"completed": True, "score": 120, "percentage": 100.0},
+        }
+        mock_load_progress.return_value = {
+            "completed_quarters": {
+                "quarter1": {"completed": True, "score": 100, "percentage": 100.0},
+                "quarter2": {"completed": True, "score": 100, "percentage": 100.0},
+                "quarter3": {"completed": True, "score": 100, "percentage": 100.0},
+                "quarter4": {"completed": True, "score": 120, "percentage": 100.0},
+            },
+            "completed_summatives": {
+                "t1_s1": {"completed": True}, "t1_s2": {"completed": True},
+                "t2_s1": {"completed": True}, "t2_s2": {"completed": True},
+                "t3_s1": {"completed": True}, "t3_s2": {"completed": True},
+                "remedial": {"completed": True}
+            },
+            "missed_questions": []
         }
         from screens.stageselect import StageSelect
         ss = StageSelect(self.screen, self.mock_main_menu)

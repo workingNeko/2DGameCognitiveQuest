@@ -1,7 +1,7 @@
 {
-  "version": "2.5.2",
-  "name": "Cognitive Maze v2.5.2 - Term Bridge Isolation Prevention & Multi-Assessment Progression",
-  "notes": "Version 2.5.2: Prevents question NPCs from spawning across unbuilt bridges in Term 1 and Term 3 (map8 aqueduct) via spatial bounds exclusion and connected-component flood-fill verification; enforces multi-assessment completion before unlocking subsequent terms; eliminates startup indentation issue and surface bit-depth anomalies while strictly maintaining 60 FPS performance on AMD A4-6300 dual-core target hardware.",
-  "download_url": "https://github.com/workingNeko/2DGameCognitiveQuest/releases/tag/v2.5.2",
+  "version": "2.5.3",
+  "name": "Cognitive Maze v2.5.3 - Alt+Tab Crash Prevention & Assessment Score Precision",
+  "notes": "Version 2.5.3: Resolves Alt+Tab crashes via borderless fullscreen display mode and exception boundaries; eliminates CPU burn when minimized via idle throttling; resets stuck key modifiers and gesture states on focus transitions; separates fractional answered items from 100-point scaled score in Assessment Selection modal; fixes sequential unlocking for teacher-added assessments; auto-enters portals upon final puzzle completion; character speed boosted to 2.5 while maintaining 60 FPS on AMD A4-6300 hardware.",
+  "download_url": "https://github.com/workingNeko/2DGameCognitiveQuest/releases/tag/v2.5.3",
   "date": "2026-11-17"
 }

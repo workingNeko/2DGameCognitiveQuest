@@ -2215,7 +2215,72 @@ class MainMenu:
                 self.audio_manager.play_sfx("success")
             self.update_manager.apply_update(on_before_exit=self._prepare_for_update_exit)
 
+    def set_screen(self, new_screen):
+        """Update display surface reference across all screens when window/display context is restored."""
+        if new_screen is None or new_screen is self.screen:
+            return
+        self.screen = new_screen
+        self.w, self.h = new_screen.get_size()
+        for attr in ('stage_select', 'quarter1', 'quarter2', 'quarter3', 'quarter4',
+                     'tutorial', 'settings', 'instructions', 'about', 'student_select',
+                     'leaderboard', 'game_mode_select'):
+            obj = getattr(self, attr, None)
+            if obj and hasattr(obj, 'screen'):
+                obj.screen = new_screen
+
+    def clear_input_states(self):
+        """Reset gesture hold counters, navigation targets, and input states when window loses focus (e.g. Alt+Tab)."""
+        self.fist_start_time = 0
+        self.peace_start_time = 0
+        self.mouse_active = False
+        self.current_gesture = "NO HAND"
+        if hasattr(self, 'stage_select') and self.stage_select:
+            self.stage_select.click_dest = None
+            self.stage_select.path = []
+            self.stage_select.fist_start_time = 0
+            self.stage_select.peace_start_time = 0
+            self.stage_select.moving = False
+            if hasattr(self.stage_select, 'lol_camera') and self.stage_select.lol_camera:
+                self.stage_select.lol_camera.is_middle_dragging = False
+        for q_attr in ('quarter1', 'quarter2', 'quarter3', 'quarter4', 'tutorial'):
+            q_screen = getattr(self, q_attr, None)
+            if q_screen:
+                if hasattr(q_screen, 'fist_start_time'):
+                    q_screen.fist_start_time = 0
+                if hasattr(q_screen, 'fist_closed'):
+                    q_screen.fist_closed = False
+                if hasattr(q_screen, 'click_dest'):
+                    q_screen.click_dest = None
+                if hasattr(q_screen, 'path'):
+                    q_screen.path = []
+                if hasattr(q_screen, 'moving'):
+                    q_screen.moving = False
+                if hasattr(q_screen, 'lol_camera') and q_screen.lol_camera:
+                    q_screen.lol_camera.is_middle_dragging = False
+
     def handle_event(self, event):
+        # Handle focus change events (Alt+Tab)
+        if event.type == pygame.ACTIVEEVENT:
+            if (getattr(event, 'state', 0) & 6) and event.gain == 0:
+                self.clear_input_states()
+                return
+            elif event.gain == 1:
+                pygame.key.set_mods(0)
+                return
+        elif hasattr(pygame, 'WINDOWFOCUSLOST') and event.type == pygame.WINDOWFOCUSLOST:
+            self.clear_input_states()
+            return
+        elif hasattr(pygame, 'WINDOWMINIMIZED') and event.type == pygame.WINDOWMINIMIZED:
+            self.clear_input_states()
+            return
+        elif hasattr(pygame, 'WINDOWFOCUSGAINED') and event.type == pygame.WINDOWFOCUSGAINED:
+            self.clear_input_states()
+            pygame.key.set_mods(0)
+            return
+        elif hasattr(pygame, 'WINDOWRESTORED') and event.type == pygame.WINDOWRESTORED:
+            self.clear_input_states()
+            pygame.key.set_mods(0)
+            return
         # Global audio & camera hotkeys (bypass when typing text input in active screens)
         if event.type == pygame.KEYDOWN:
             _typing_active = (

@@ -4,6 +4,22 @@ All notable **Changes & Improvements** and **Bug Fixes** for each version of **C
 
 ---
 
+## [v2.5.3] — 2026-11-17
+### Changes & Improvements
+- **Alt+Tab Focus Resilience & Borderless Fullscreen**: Re-engineered display initialization to prioritize borderless fullscreen (`pygame.NOFRAME` at native resolution), preventing exclusive Direct3D device resets and eliminating screen flicker during Alt+Tab.
+- **Low-Power Background Idle Throttling (AMD APU Optimization)**: Integrated window state tracking (`WINDOWMINIMIZED`, `WINDOWRESTORED`, `WINDOWFOCUSLOST`, `WINDOWFOCUSGAINED`, and `ACTIVEEVENT`) that pauses drawing and throttles frame execution to 15 FPS while minimized, reducing CPU usage to near 0% on target dual-core hardware (AMD A4-6300 APU).
+- **Automatic Portal Entry on Final Puzzle Completion**: After finishing the final puzzle in any quarter, the player character automatically walks into the exit portal, eliminating navigation confusion for Grade 2 students.
+- **Player Movement Speed Tuning**: Tuned base character movement speed to 2.5 across all quarters and hub exploration for smooth and responsive navigation.
+- **Dynamic Assessment Sequential Gating**: Updated assessment modal logic across all terms so newly added teacher assessments (Assessment 2, 3, 4) unlock strictly sequentially after completing prior assessments.
+
+### Bug Fixes
+- **Alt+Tab Crash Resolution**: Fixed `ValueError: unsupported surface bit depth (41) for drawing` by installing safe drawing wrappers for all primitives (`rect`, `circle`, `line`, `lines`, `polygon`, `ellipse`), wrapping render/flip calls in exception boundaries, and resynchronizing surface pointers via `set_screen()`.
+- **Key Modifier & Gesture State Reset**: Cleared hold timers, gesture states, click-to-move destinations, and middle-mouse camera dragging upon focus loss, resetting `KMOD_ALT` and modifier bits (`pygame.key.set_mods(0)`) to eliminate stuck movement keys.
+- **Assessment Selection Score Precision ("20/5" Fix)**: Separated the display of questions answered correctly (e.g. `1/5`) from the 100-point scaled score (e.g. `20 PTS`), eliminating misleading fractional score formatting.
+- **Star Tier Rating Normalization**: Dynamically mapped performance star badges to percentage mastery thresholds (3 stars for >= 80%, 2 stars for >= 60%, 1 star for < 60%).
+
+---
+
 ## [v2.5.2] — 2026-11-17
 ### Changes & Improvements
 - **Multi-Assessment Quarter Progression Gating**: Enforced that subsequent terms (Term 2, Term 3, Term 4) only unlock once the student has completed *all* available active summative assessments in the current term (e.g. both Assessment 1 & 2 in Term 1), accurately reflecting curriculum pacing and teacher lesson plans.

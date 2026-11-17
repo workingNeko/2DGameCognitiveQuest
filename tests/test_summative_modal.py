@@ -71,6 +71,39 @@ class TestSummativeModalAndProgression(unittest.TestCase):
             self.assertTrue(all(c["unlocked"] for c in stage_select.summative_modal_cards))
 
     @patch("db.save_system.load_student_progress")
+    def test_assessment_2_locked_before_assessment_1_completed(self, mock_load_progress):
+        from screens.stageselect import StageSelect
+        
+        # Fresh student: nothing completed
+        mock_load_progress.return_value = {
+            "completed_summatives": {},
+            "completed_quarters": {}
+        }
+
+        with patch.object(db, "get_available_summatives_for_term", return_value=[1, 2]):
+            stage_select = StageSelect(self.screen, self.main_menu)
+            stage_select.open_summative_modal(1)
+
+            card1 = stage_select.summative_modal_cards[0]
+            card2 = stage_select.summative_modal_cards[1]
+
+            # Assessment 1 is unlocked initially
+            self.assertTrue(card1["unlocked"])
+            self.assertFalse(card1["completed"])
+
+            # Assessment 2 is LOCKED until Assessment 1 is finished!
+            self.assertFalse(card2["unlocked"])
+            self.assertFalse(card2["completed"])
+
+            # Clicking locked Assessment 2 does NOT start quest and shows locked banner
+            stage_select.enter_quarter = MagicMock()
+            clicked = stage_select.handle_summative_modal_click(card2["rect"].center)
+            self.assertTrue(clicked)
+            self.assertTrue(stage_select.summative_modal_active)  # Modal stays open
+            self.assertIn("Complete Assessment 1 first", stage_select.locked_portal_banner_msg)
+            stage_select.enter_quarter.assert_not_called()
+
+    @patch("db.save_system.load_student_progress")
     def test_is_quarter_completed_dynamic_multi_summative(self, mock_load_progress):
         from screens.stageselect import StageSelect
 
@@ -84,10 +117,10 @@ class TestSummativeModalAndProgression(unittest.TestCase):
             stage_select = StageSelect(self.screen, self.main_menu)
             self.assertFalse(stage_select.is_quarter_completed("quarter1"))
             
-            # But Quarter 2 IS unlocked because at least 1 summative was mastered!
-            self.assertTrue(stage_select.is_quarter_unlocked("quarter2"))
+            # Quarter 2 requires ALL available summatives (both 1 and 2), so with only 1 finished it is locked:
+            self.assertFalse(stage_select.is_quarter_unlocked("quarter2"))
 
-            # When both 1st and 2nd are finished, Term 1 IS fully completed
+            # When both 1st and 2nd are finished, Term 1 IS fully completed and Quarter 2 unlocks
             mock_load_progress.return_value = {
                 "completed_summatives": {
                     "t1_s1": {"completed": True, "score": 10},
@@ -95,6 +128,55 @@ class TestSummativeModalAndProgression(unittest.TestCase):
                 }
             }
             self.assertTrue(stage_select.is_quarter_completed("quarter1"))
+            self.assertTrue(stage_select.is_quarter_unlocked("quarter2"))
+
+            # Test Term 2 multi-summative gating to Term 3
+            mock_load_progress.return_value = {
+                "completed_summatives": {
+                    "t1_s1": {"completed": True, "score": 10},
+                    "t1_s2": {"completed": True, "score": 10},
+                    "t2_s1": {"completed": True, "score": 10}
+                }
+            }
+            self.assertFalse(stage_select.is_quarter_completed("quarter2"))
+            self.assertFalse(stage_select.is_quarter_unlocked("quarter3"))
+
+            mock_load_progress.return_value = {
+                "completed_summatives": {
+                    "t1_s1": {"completed": True, "score": 10},
+                    "t1_s2": {"completed": True, "score": 10},
+                    "t2_s1": {"completed": True, "score": 10},
+                    "t2_s2": {"completed": True, "score": 10}
+                }
+            }
+            self.assertTrue(stage_select.is_quarter_completed("quarter2"))
+            self.assertTrue(stage_select.is_quarter_unlocked("quarter3"))
+
+            # Test Term 3 multi-summative gating to Term 4 (Remedial Stage)
+            mock_load_progress.return_value = {
+                "completed_summatives": {
+                    "t1_s1": {"completed": True, "score": 10},
+                    "t1_s2": {"completed": True, "score": 10},
+                    "t2_s1": {"completed": True, "score": 10},
+                    "t2_s2": {"completed": True, "score": 10},
+                    "t3_s1": {"completed": True, "score": 10}
+                }
+            }
+            self.assertFalse(stage_select.is_quarter_completed("quarter3"))
+            self.assertFalse(stage_select.is_quarter_unlocked("quarter4"))
+
+            mock_load_progress.return_value = {
+                "completed_summatives": {
+                    "t1_s1": {"completed": True, "score": 10},
+                    "t1_s2": {"completed": True, "score": 10},
+                    "t2_s1": {"completed": True, "score": 10},
+                    "t2_s2": {"completed": True, "score": 10},
+                    "t3_s1": {"completed": True, "score": 10},
+                    "t3_s2": {"completed": True, "score": 10}
+                }
+            }
+            self.assertTrue(stage_select.is_quarter_completed("quarter3"))
+            self.assertTrue(stage_select.is_quarter_unlocked("quarter4"))
 
     @patch("db.save_system.load_student_progress")
     def test_remedial_stage_re_entry_with_missed_questions(self, mock_load_progress):
@@ -145,6 +227,54 @@ class TestSummativeModalAndProgression(unittest.TestCase):
             self.assertEqual(lb.tabs[2]["label"], "TERM 2 (Kalye)")
             self.assertEqual(lb.tabs[3]["label"], "TERM 3 (Monetary)")
             self.assertEqual(lb.tabs[4]["label"], "REMEDIAL STAGE")
+
+    @patch("db.save_system.load_student_progress")
+    def test_assessment_modal_best_score_accuracy(self, mock_load_progress):
+        from screens.stageselect import StageSelect
+        from db.connect_db import db
+
+        # Scenario: Student took Assessment 1 (5 questions) and got 1 correct (20% -> 20 PTS)
+        # Previous bug displayed "20/5" because raw_score 20 was formatted directly over total questions 5.
+        mock_load_progress.return_value = {
+            "completed_summatives": {
+                "t1_s1": {
+                    "completed": True,
+                    "score": 20,
+                    "percentage": 20.0,
+                    "total_questions": 5
+                },
+                "t1_s2": {
+                    "completed": True,
+                    "score": 100,
+                    "percentage": 100.0,
+                    "total_questions": 5
+                }
+            }
+        }
+        with patch.object(db, "get_available_summatives_for_term", return_value=[1, 2]):
+            with patch.object(db, "get_questions", return_value=[{"id": i} for i in range(5)]):
+                stage_select = StageSelect(self.screen, self.main_menu)
+                stage_select.open_summative_modal(1)
+
+                card1 = stage_select.summative_modal_cards[0]
+                card2 = stage_select.summative_modal_cards[1]
+
+                # Card 1 (20% on 5 questions -> 1/5 correct, 20 PTS)
+                self.assertEqual(card1["score"], 1, "Card 1 score must be 1 (correct questions), NEVER 20")
+                self.assertEqual(card1["correct_answers"], 1)
+                self.assertEqual(card1["total"], 5)
+                self.assertEqual(card1["percentage"], 20.0)
+                self.assertEqual(card1["points"], 20)
+
+                # Card 2 (100% on 5 questions -> 5/5 correct, 100 PTS)
+                self.assertEqual(card2["score"], 5, "Card 2 score must be 5 (correct questions), NEVER 100")
+                self.assertEqual(card2["correct_answers"], 5)
+                self.assertEqual(card2["total"], 5)
+                self.assertEqual(card2["percentage"], 100.0)
+                self.assertEqual(card2["points"], 100)
+
+                # Render modal frame to ensure no drawing/formatting exceptions
+                stage_select.draw_summative_modal()
 
 
 if __name__ == "__main__":

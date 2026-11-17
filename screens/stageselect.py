@@ -38,7 +38,7 @@ from core.vector_icons import (
 # ============================================================
 TILE_SIZE = 32
 FPS = 60
-SPEED = 2.2
+SPEED = 2.5
 
 # Camera zoom settings - PERMANENT ZOOM
 ZOOM = 1.50  # Fixed zoom level
@@ -1454,20 +1454,17 @@ class StageSelect:
         comp_summs = save_data.get("completed_summatives", {})
         comp_qs = get_completed_quarters(student_id) or {}
 
-        # If legacy completed_quarters marks it completed, honor it (except quarter4 which requires empty missed_questions)
-        if qid != "quarter4" and self._is_dict_completed(comp_qs, qid):
-            return True
-
         q_map = {"quarter1": 1, "quarter2": 2, "quarter3": 3, "quarter4": 4}
         term_num = q_map.get(qid)
         if term_num in (1, 2, 3):
             from db.connect_db import db
-            available = [1]
+            available = [1, 2]
             if db:
                 try:
-                    available = db.get_available_summatives_for_term(term_num) or [1]
+                    db_summs = db.get_available_summatives_for_term(term_num) or [1, 2]
+                    available = sorted(list(set(db_summs) | {1, 2}))
                 except Exception:
-                    available = [1]
+                    available = [1, 2]
             # Term is completed only if ALL available uploaded summatives for this term are completed
             has_summ_records = any(f"t{term_num}_s{s}" in comp_summs for s in range(1, 5))
             if has_summ_records:
@@ -1541,7 +1538,6 @@ class StageSelect:
             if col in (25, 26, 27) and row >= 16:
                 if not self.is_quarter_unlocked("quarter2"):
                     if self.locked_portal_banner_timer <= 0:
-                        self.locked_portal_banner_msg = "Complete Term 1 to unlock the path to Term 2!"
                         self.locked_portal_banner_msg = "Complete all available Term 1 assessments to unlock the path to Term 2!"
                         self.locked_portal_banner_timer = 2.5
                     return False
@@ -1550,7 +1546,6 @@ class StageSelect:
             if row in (12, 13, 14) and col >= 28:
                 if not self.is_quarter_unlocked("quarter3"):
                     if self.locked_portal_banner_timer <= 0:
-                        self.locked_portal_banner_msg = "Complete Term 2 to unlock the path to Term 3!"
                         self.locked_portal_banner_msg = "Complete all available Term 2 assessments to unlock the path to Term 3!"
                         self.locked_portal_banner_timer = 2.5
                     return False
@@ -1613,6 +1608,14 @@ class StageSelect:
     def enter_quarter(self, qid, summative_num=1):
         """Initiate centralized portal transition with 3-second black LOADING screen and background preload."""
         if getattr(self, 'portal_transition_active', False):
+            return
+
+        # Prevent re-entry if quarter is already completed
+        if self.is_quarter_completed(qid):
+            q_names = {"quarter1": "Quarter 1", "quarter2": "Quarter 2", "quarter3": "Quarter 3", "quarter4": "Quarter 4"}
+            q_name = q_names.get(qid, qid.capitalize())
+            self.locked_portal_banner_msg = f"{q_name} is already completed!"
+            self.locked_portal_banner_timer = 2.0
             return
 
         # Remedial Stage (quarter4) is disabled
@@ -1936,7 +1939,10 @@ class StageSelect:
             return
         self.summative_modal_active = True
         self.summative_modal_term = term_num
-        self.summative_modal_cooldown = 0.25
+        self.summative_modal_cooldown = 0.05
+        self.teleport_cooldown = 2.0
+        self.click_dest = None
+        self.path = []
         self.summative_modal_hovered_slot = None
         self._refresh_summative_modal_data()
         if hasattr(self.main_menu, 'audio_manager') and self.main_menu.audio_manager:
@@ -1945,9 +1951,10 @@ class StageSelect:
     def _refresh_summative_modal_data(self):
         term = self.summative_modal_term
         from db.connect_db import db
-        available_summs = [1]
+        available_summs = [1, 2]
         if db:
-            available_summs = db.get_available_summatives_for_term(term) or [1]
+            db_summs = db.get_available_summatives_for_term(term) or [1, 2]
+            available_summs = sorted(list(set(db_summs) | {1, 2}))
 
         from db.save_system import load_student_progress
         student_id = getattr(self.main_menu, 'student_id', None)
@@ -1957,13 +1964,29 @@ class StageSelect:
         self.summative_modal_cards = []
         barriers_lifted = getattr(self, 'barriers_lifted', False)
 
+        # Precompute modal frame and button geometries for immediate collision detection
+        modal_w = min(1080, max(680, self.width - 60))
+        modal_h = min(490, max(420, self.height - 60))
+        modal_x = (self.width - modal_w) // 2
+        modal_y = (self.height - modal_h) // 2
+        self._summ_modal_frame_rect = pygame.Rect(modal_x, modal_y, modal_w, modal_h)
+        self._summ_modal_close_rect = pygame.Rect(modal_x + modal_w - 48, modal_y + 16, 32, 32)
+        back_w, back_h = 240, 40
+        back_y = modal_y + modal_h - 52
+        self._summ_modal_back_rect = pygame.Rect(modal_x + (modal_w - back_w) // 2, back_y, back_w, back_h)
+
+        card_gap = 14
+        card_w = (modal_w - 48 - (card_gap * 3)) // 4
+        cards_y = modal_y + 92
+        card_h = modal_h - 150
+
         prev_completed = True
         for s in range(1, 5):
             slot_key = f"t{term}_s{s}"
             is_available = (s in available_summs)
             s_data = comp_summs.get(slot_key, {})
             is_completed = bool(isinstance(s_data, dict) and s_data.get("completed", False))
-            score = int(s_data.get("score", 0)) if is_completed else 0
+            raw_score = int(s_data.get("score", 0)) if is_completed else 0
             pct = float(s_data.get("percentage", 0.0)) if is_completed else 0.0
 
             # Dynamically determine questions count for this assessment slot from database
@@ -1971,13 +1994,37 @@ class StageSelect:
             q_count = len(slot_qs) if slot_qs else (int(s_data.get("total_questions", 5)) if is_completed else 5)
             tot = int(s_data.get("total_questions", q_count)) if is_completed else q_count
 
-            # Gap-safe unlock:
-            if barriers_lifted:
-                is_unlocked = True
-            elif s == 1:
+            # Accurately compute correct answers count:
+            # 1. If explicit 'correct_answers' is stored in s_data, use it.
+            # 2. If raw_score <= tot, raw_score was already stored as the question count (e.g., 5/5, 9/10).
+            # 3. If raw_score > tot, raw_score is points/percentage on 100-pt scale (e.g. 20, 80, 100 PTS).
+            if is_completed:
+                if "correct_answers" in s_data and s_data["correct_answers"] is not None:
+                    correct_count = int(s_data["correct_answers"])
+                elif raw_score <= tot:
+                    correct_count = raw_score
+                elif tot > 0:
+                    effective_pct = pct if pct > 0 else float(raw_score)
+                    correct_count = int(round((effective_pct / 100.0) * tot))
+                else:
+                    correct_count = 0
+                correct_count = max(0, min(correct_count, tot))
+                points = raw_score if raw_score > tot else int(round(pct if pct > 0 else (correct_count / float(tot) * 100.0 if tot > 0 else 100.0)))
+            else:
+                correct_count = 0
+                points = 0
+
+            # Sequential assessment unlocking:
+            # Assessment 1 is unlocked initially; Assessments 2, 3, 4 unlock sequentially
+            # only after the preceding assessment is completed (or via cheat override).
+            if barriers_lifted or s == 1:
                 is_unlocked = True
             else:
                 is_unlocked = prev_completed
+
+            c_x = modal_x + 24 + (s - 1) * (card_w + card_gap)
+            c_rect = pygame.Rect(c_x, cards_y, card_w, card_h)
+            btn_rect = pygame.Rect(c_x + 14, cards_y + card_h - 48, card_w - 28, 38)
 
             self.summative_modal_cards.append({
                 "summative_num": s,
@@ -1987,26 +2034,43 @@ class StageSelect:
                 "unlocked": is_unlocked,
                 "available_in_cloud": is_available,
                 "q_count": q_count,
-                "score": score,
+                "score": correct_count,
+                "correct_answers": correct_count,
+                "raw_score": raw_score,
+                "points": points,
                 "percentage": pct,
                 "total": tot,
-                "rect": None,
+                "rect": c_rect,
+                "btn_rect": btn_rect,
             })
 
             if is_available:
                 prev_completed = is_completed
+            else:
+                prev_completed = False
 
     def close_summative_modal(self):
         self.summative_modal_active = False
         self.summative_modal_hovered_slot = None
+        self.teleport_cooldown = 2.0  # Prevent immediate portal re-triggering loop
+        self.click_dest = None
+        self.path = []
+
+        # Nudge player safely 1 tile away from portal toward plaza center so they exit trigger zone
+        term = getattr(self, 'summative_modal_term', 1)
+        if term == 1:    # Left portal
+            self.player_x = max(self.player_x, self.player_x + TILE_SIZE)
+        elif term == 2:  # Up portal
+            self.player_y = max(self.player_y, self.player_y + TILE_SIZE)
+        elif term == 3:  # Right portal
+            self.player_x = min(self.player_x, self.player_x - TILE_SIZE)
+
         if hasattr(self.main_menu, 'audio_manager') and self.main_menu.audio_manager:
             self.main_menu.audio_manager.play_sfx("click")
 
     def handle_summative_modal_click(self, pos):
         if not self.summative_modal_active:
             return False
-        if self.summative_modal_cooldown > 0:
-            return True
 
         # 0. Close button (top right '✕')
         if hasattr(self, '_summ_modal_close_rect') and self._summ_modal_close_rect and self._summ_modal_close_rect.collidepoint(pos):
@@ -2023,26 +2087,29 @@ class StageSelect:
             self.close_summative_modal()
             return True
 
-        # 3. Check cards
+        # 3. Check cards & buttons
         for card in self.summative_modal_cards:
             rect = card.get("rect")
-            if rect and rect.collidepoint(pos):
+            btn_rect = card.get("btn_rect")
+            if (rect and rect.collidepoint(pos)) or (btn_rect and btn_rect.collidepoint(pos)):
                 s_num = card["summative_num"]
-                if not card.get("available_in_cloud", True):
+                if not card.get("available_in_cloud", False):
                     self.locked_portal_banner_msg = f"No questions have been uploaded for {card['title']} yet!"
                     self.locked_portal_banner_timer = 2.5
                     if hasattr(self.main_menu, 'audio_manager') and self.main_menu.audio_manager:
                         self.main_menu.audio_manager.play_sfx("deny")
                     return True
-                if card["unlocked"]:
-                    self.summative_modal_active = False
-                    term_q = f"quarter{self.summative_modal_term}"
-                    self.enter_quarter(term_q, summative_num=s_num)
-                else:
-                    self.locked_portal_banner_msg = f"Complete Assessment {s_num - 1} first to unlock this assessment!"
+                if not card.get("unlocked", False):
+                    self.locked_portal_banner_msg = f"Complete Assessment {s_num - 1} first to unlock {card['title']}!"
                     self.locked_portal_banner_timer = 2.5
                     if hasattr(self.main_menu, 'audio_manager') and self.main_menu.audio_manager:
                         self.main_menu.audio_manager.play_sfx("deny")
+                    return True
+
+                self.summative_modal_active = False
+                self.teleport_cooldown = 2.0
+                term_q = f"quarter{self.summative_modal_term}"
+                self.enter_quarter(term_q, summative_num=s_num)
                 return True
         return True
 
@@ -2185,6 +2252,7 @@ class StageSelect:
             score = card.get("score", 0)
             pct = card.get("percentage", 0.0)
             tot = card.get("total", 10)
+            points = card.get("points", int(round(pct)))
             s_num = card["summative_num"]
 
             # Card background & border
@@ -2302,14 +2370,31 @@ class StageSelect:
                 self.screen.blit(l_txt3, l_txt3.get_rect(center=(emblem_cx, divider_y + 64)))
             elif completed:
                 s_txt = self.modal_card_bold_font.render(f"Best Score: {score}/{tot}", True, (74, 222, 128))
-                p_txt = self.modal_card_info_font.render(f"Accuracy: {pct:.0f}%", True, (226, 232, 240))
+                p_txt = self.modal_card_info_font.render(f"Accuracy: {pct:.0f}% ({points} PTS)", True, (226, 232, 240))
                 self.screen.blit(s_txt, s_txt.get_rect(center=(emblem_cx, divider_y + 18)))
                 self.screen.blit(p_txt, p_txt.get_rect(center=(emblem_cx, divider_y + 38)))
-                # 3 Gold Stars
+
+                # 3 Stars based on accuracy tier:
+                # 3 Stars: >= 80%
+                # 2 Stars: >= 60%
+                # 1 Star:  < 60%
+                if pct >= 80.0:
+                    star_count = 3
+                elif pct >= 60.0:
+                    star_count = 2
+                else:
+                    star_count = 1
+
                 star_y = divider_y + 60
-                draw_vector_star(self.screen, emblem_cx - 20, star_y, radius=6, color=(251, 191, 36), outline_color=(254, 240, 138))
-                draw_vector_star(self.screen, emblem_cx, star_y, radius=8, color=(251, 191, 36), outline_color=(255, 255, 255))
-                draw_vector_star(self.screen, emblem_cx + 20, star_y, radius=6, color=(251, 191, 36), outline_color=(254, 240, 138))
+                draw_vector_star(self.screen, emblem_cx - 20, star_y, radius=6, 
+                                 color=(251, 191, 36) if star_count >= 2 else (51, 65, 85), 
+                                 outline_color=(254, 240, 138) if star_count >= 2 else (71, 85, 105))
+                draw_vector_star(self.screen, emblem_cx, star_y, radius=8, 
+                                 color=(251, 191, 36) if star_count >= 1 else (51, 65, 85), 
+                                 outline_color=(255, 255, 255) if star_count >= 1 else (71, 85, 105))
+                draw_vector_star(self.screen, emblem_cx + 20, star_y, radius=6, 
+                                 color=(251, 191, 36) if star_count >= 3 else (51, 65, 85), 
+                                 outline_color=(254, 240, 138) if star_count >= 3 else (71, 85, 105))
             else:
                 r_txt1 = self.modal_card_info_font.render("Grade 2 Math Quest", True, (226, 232, 240))
                 r_txt2 = self.modal_card_info_font.render(f"{card_q_cnt} Interactive Problems", True, (148, 163, 184))
@@ -2320,6 +2405,7 @@ class StageSelect:
 
             # Card Button at bottom
             btn_rect = pygame.Rect(c_x + 14, cards_y + card_h - 48, card_w - 28, 38)
+            card["btn_rect"] = btn_rect
             if not available:
                 pygame.draw.rect(self.screen, (30, 41, 59), btn_rect, border_radius=10)
                 pygame.draw.rect(self.screen, (51, 65, 85), btn_rect, 1, border_radius=10)
@@ -2400,8 +2486,6 @@ class StageSelect:
             # Check if it's an up portal (goes to Term 2)
             elif current_portal.direction == 'up':
                 if not self.is_quarter_unlocked('quarter2'):
-                    print("[LOCKED] Term 2 Locked! Complete Term 1 first.")
-                    self.locked_portal_banner_msg = "Complete Term 1 to unlock Term 2!"
                     print("[LOCKED] Term 2 Locked! Complete all available Term 1 assessments first.")
                     self.locked_portal_banner_msg = "Complete all available Term 1 assessments to unlock Term 2!"
                     self.locked_portal_banner_timer = 2.5
@@ -2416,8 +2500,6 @@ class StageSelect:
             # Check if it's a right portal (goes to Term 3)
             elif current_portal.direction == 'right':
                 if not self.is_quarter_unlocked('quarter3'):
-                    print("[LOCKED] Term 3 Locked! Complete Term 2 first.")
-                    self.locked_portal_banner_msg = "Complete Term 2 to unlock Term 3!"
                     print("[LOCKED] Term 3 Locked! Complete all available Term 2 assessments first.")
                     self.locked_portal_banner_msg = "Complete all available Term 2 assessments to unlock Term 3!"
                     self.locked_portal_banner_timer = 2.5
@@ -2849,7 +2931,6 @@ class StageSelect:
                 return
             elif clicked_portal.direction == 'up':
                 if not self.is_quarter_unlocked('quarter2'):
-                    self.locked_portal_banner_msg = "Complete Term 1 to unlock Term 2!"
                     self.locked_portal_banner_msg = "Complete all available Term 1 assessments to unlock Term 2!"
                     self.locked_portal_banner_timer = 2.0
                 elif self.knight_dialogue_state == 0 and not self.is_quarter_completed('quarter2') and not getattr(self, 'barriers_lifted', False):
@@ -2862,7 +2943,6 @@ class StageSelect:
                 return
             elif clicked_portal.direction == 'right':
                 if not self.is_quarter_unlocked('quarter3'):
-                    self.locked_portal_banner_msg = "Complete Term 2 to unlock Term 3!"
                     self.locked_portal_banner_msg = "Complete all available Term 2 assessments to unlock Term 3!"
                     self.locked_portal_banner_timer = 2.0
                 elif self.skeleton_dialogue_state == 0 and not self.is_quarter_completed('quarter3') and not getattr(self, 'barriers_lifted', False):
@@ -3393,7 +3473,6 @@ class StageSelect:
                     elif portal.direction == 'right':
                         if not self.is_quarter_unlocked('quarter3'):
                             if self.locked_portal_banner_timer <= 0:
-                                self.locked_portal_banner_msg = "Complete Term 2 to unlock Term 3!"
                                 self.locked_portal_banner_msg = "Complete all available Term 2 assessments to unlock Term 3!"
                                 self.locked_portal_banner_timer = 2.0
                         elif self.skeleton_dialogue_state >= 2 or self.is_quarter_completed('quarter3') or self.player_following_target == 'skeleton' or getattr(self, 'barriers_lifted', False):
@@ -3406,7 +3485,6 @@ class StageSelect:
                     elif portal.direction == 'up':
                         if not self.is_quarter_unlocked('quarter2'):
                             if self.locked_portal_banner_timer <= 0:
-                                self.locked_portal_banner_msg = "Complete Term 1 to unlock Term 2!"
                                 self.locked_portal_banner_msg = "Complete all available Term 1 assessments to unlock Term 2!"
                                 self.locked_portal_banner_timer = 2.0
                         elif self.knight_dialogue_state >= 2 or self.is_quarter_completed('quarter2') or self.player_following_target == 'knight' or getattr(self, 'barriers_lifted', False):
@@ -3552,7 +3630,7 @@ class StageSelect:
         # Animate player while moving
         if moved:
             self.anim_timer += 1
-            if self.anim_timer >= 16:
+            if self.anim_timer >= 12:
                 self.anim_timer = 0
                 self.anim_frame = (self.anim_frame + 1) % 2
                 if hasattr(self.main_menu, 'audio_manager'):
@@ -3659,7 +3737,7 @@ class StageSelect:
                     speed_boost=getattr(self, 'speed_boost_active', False),
                     terrain_color=(190, 180, 150)
                 )
-            if self.anim_timer >= 16:
+            if self.anim_timer >= 12:
                 self.anim_timer = 0
                 self.anim_frame = (self.anim_frame + 1) % 2
                 if hasattr(self.main_menu, 'audio_manager'):
@@ -3771,6 +3849,8 @@ class StageSelect:
 
     def draw_corridor_barriers(self):
         """Renders simple static barricades across locked corridors (no animations)."""
+        if getattr(self, 'barriers_lifted', False):
+            return
         barriers = []
         # Quarter 2 (South corridor): row 16, cols 25, 26, 27
         if not self.is_quarter_unlocked('quarter2'):
@@ -4738,7 +4818,6 @@ class StageSelect:
                             self.locked_portal_banner_timer = 2.0
                     elif current_portal.direction == 'up':
                         if not self.is_quarter_unlocked('quarter2'):
-                            self.locked_portal_banner_msg = "Complete Term 1 to unlock Term 2!"
                             self.locked_portal_banner_msg = "Complete all available Term 1 assessments to unlock Term 2!"
                             self.locked_portal_banner_timer = 2.0
                         elif self.knight_dialogue_state >= 2 or self.is_quarter_completed('quarter2') or getattr(self, 'barriers_lifted', False):
@@ -4749,7 +4828,6 @@ class StageSelect:
                             self.locked_portal_banner_timer = 2.0
                     elif current_portal.direction == 'right':
                         if not self.is_quarter_unlocked('quarter3'):
-                            self.locked_portal_banner_msg = "Complete Term 2 to unlock Term 3!"
                             self.locked_portal_banner_msg = "Complete all available Term 2 assessments to unlock Term 3!"
                             self.locked_portal_banner_timer = 2.0
                         elif self.skeleton_dialogue_state >= 2 or self.is_quarter_completed('quarter3') or getattr(self, 'barriers_lifted', False):

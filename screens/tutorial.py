@@ -21,7 +21,7 @@ from core.paths import get_base_dir
 
 TILE_SIZE = 32
 ZOOM = 1.50
-SPEED = 2.2
+SPEED = 2.5
 
 class TutorialScreen:
     def __init__(self, screen, main_menu):
@@ -586,7 +586,7 @@ class TutorialScreen:
 
         if vx != 0 or vy != 0:
             self.anim_timer += 1
-            if self.anim_timer >= 16:
+            if self.anim_timer >= 12:
                 self.anim_timer = 0
                 self.anim_frame = (self.anim_frame + 1) % 2
                 if hasattr(self.main_menu, 'audio_manager') and self.main_menu.audio_manager:

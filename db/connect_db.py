@@ -1149,6 +1149,13 @@ class Database:
                                 if len(slot_buckets[sk]) < 10:
                                     slot_buckets[sk].append(q)
 
+                # Ensure Assessment 2 slot falls back to s1 curriculum questions if empty
+                for term_i in (1, 2, 3):
+                    s1_qs = slot_buckets.get(f"t{term_i}_s1", [])
+                    cur_sk = f"t{term_i}_s2"
+                    if len(slot_buckets[cur_sk]) == 0 and len(s1_qs) > 0:
+                        slot_buckets[cur_sk] = list(s1_qs)
+
                 # Authoritatively sync disk & short-TTL memory cache for all slots
                 for sk, q_list in slot_buckets.items():
                     self._mem_set("questions", sk, q_list)
@@ -1168,6 +1175,11 @@ class Database:
                     pass
 
                 result_qs = slot_buckets.get(slot_key, [])
+                if len(result_qs) == 0 and s_num > 1:
+                    fallback_key = f"t{term_num}_s1"
+                    result_qs = slot_buckets.get(fallback_key, [])
+                    if len(result_qs) > 0:
+                        print(f"[API FALLBACK] Using {len(result_qs)} base curriculum question(s) from {fallback_key} for {slot_label} ({slot_key})")
                 if len(result_qs) > 0:
                     print(f"[API SUCCESS] Found {len(result_qs)} active questions matching {slot_label} ({slot_key})")
                 else:
@@ -1189,11 +1201,26 @@ class Database:
                     try:
                         with open(c_path, "r", encoding="utf-8") as f:
                             cached_qs = json.load(f)
-                        if isinstance(cached_qs, list):
+                        if isinstance(cached_qs, list) and len(cached_qs) > 0:
                             print(f"[OFFLINE CACHE] Loaded {len(cached_qs)} cached cloud question(s) for {slot_label}!")
                             return cached_qs[:10]
                     except Exception:
                         pass
+            if s_num == 2:
+                fallback_paths = [
+                    os.path.join(cache_dir, f"questions_t{term_num}_s1.json"),
+                    os.path.join(cache_dir, f"questions_q{term_num}.json")
+                ]
+                for c_path in fallback_paths:
+                    if os.path.exists(c_path):
+                        try:
+                            with open(c_path, "r", encoding="utf-8") as f:
+                                cached_qs = json.load(f)
+                            if isinstance(cached_qs, list) and len(cached_qs) > 0:
+                                print(f"[FALLBACK CACHE] Loaded {len(cached_qs)} fallback question(s) from {c_path} for {slot_label}!")
+                                return cached_qs[:10]
+                        except Exception:
+                            pass
 
         return []
 

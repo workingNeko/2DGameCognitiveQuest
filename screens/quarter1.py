@@ -37,7 +37,7 @@ from db.save_system import save_student_progress
 # ============================================================
 TILE_SIZE = 32
 FPS = 60
-SPEED = 2.2
+SPEED = 2.5
 
 # Camera zoom settings - PERMANENT ZOOM
 ZOOM = 1.50  # Fixed zoom level
@@ -1765,7 +1765,7 @@ class Quarter1:
             ]
                 s_num = getattr(self, 'summative_num', 1)
                 from db.save_system import mark_quarter_completed
-                mark_quarter_completed(self.main_menu, "quarter1", score=score, percentage=percentage, total_questions=total_questions, summative_num=s_num, missed_ids=missed_ids)
+                mark_quarter_completed(self.main_menu, "quarter1", score=score, percentage=percentage, total_questions=total_questions, summative_num=s_num, missed_ids=missed_ids, correct_answers=correct_answers)
                 if hasattr(self.main_menu, 'audio_manager'):
                     self.main_menu.audio_manager.play_sfx("victory_fanfare")
                     self.main_menu.audio_manager.play_sfx("portal_warp")
@@ -2365,7 +2365,7 @@ class Quarter1:
     # ============================================================
     def check_portal_teleport_on_hold(self):
         if self.warp_out_active:
-            return False
+            return True
         if self.quiz_state != 0 and self.quiz_state != 6:
             return False
         current_portal = None
@@ -2532,8 +2532,16 @@ class Quarter1:
         if self.pause_menu.handle_click(pos):
             return
 
-        # Mini-map widget click / fist toggle
-        if hasattr(self, 'minimap') and self.minimap.handle_click(pos):
+        # Mini-map widget click / fist toggle (strictly during exploration)
+        can_click_minimap = (
+            not (hasattr(self, 'victory_card') and self.victory_card.active)
+            and not self.state_machine.is_cognitive_puzzle()
+            and not getattr(self, 'puzzle_active', False)
+            and self.quiz_state in [0, 6]
+            and not getattr(self, 'time_up_dialog_active', False)
+            and not (getattr(self, 'instruction_modal', None) and self.instruction_modal.is_visible)
+        )
+        if can_click_minimap and hasattr(self, 'minimap') and self.minimap.handle_click(pos):
             if hasattr(self.main_menu, 'audio_manager') and self.main_menu.audio_manager:
                 self.main_menu.audio_manager.play_sfx("click")
             return "minimap_toggle"
@@ -2786,6 +2794,12 @@ class Quarter1:
                 self.npc_oldman_found = False
                 print("[NPC] Old Man disappeared from Quarter 1")
                 save_student_progress(self.main_menu)
+                if not self.portals:
+                    self.spawn_portals()
+                if hasattr(self.main_menu, 'audio_manager'):
+                    self.main_menu.audio_manager.play_sfx("portal_transition")
+                self.warp_out_active = True
+                self.warp_out_timer = self.warp_out_duration
  
         # State 10: Old Man Warning Dialog OK Click
         elif self.quiz_state == 10:
@@ -2853,10 +2867,15 @@ class Quarter1:
             btn_rect = pygame.Rect(box_x + (box_w - 240) // 2, box_y + 240, 240, 50)
             if btn_rect.collidepoint(pos):
                 self.speed_boost_timer = 3.0
-                self.quiz_state = 0
+                self.quiz_state = 6
                 self.oldman_interaction_cooldown = 5.0  # 5 seconds to walk away
                 self.player_block_timer = 0.0
-                self.teleport_cooldown = 0.5  # Ready to enter portal promptly
+                if not self.portals:
+                    self.spawn_portals()
+                if hasattr(self.main_menu, 'audio_manager'):
+                    self.main_menu.audio_manager.play_sfx("portal_transition")
+                self.warp_out_active = True
+                self.warp_out_timer = self.warp_out_duration
 
         # State 20: Old Man map3 Warning Dialog OK Click
         elif self.quiz_state == 20:
@@ -2876,10 +2895,13 @@ class Quarter1:
             box_y = (self.height - box_h) // 2
             btn_rect = pygame.Rect(box_x + (box_w - 240) // 2, box_y + 225, 240, 50)
             if btn_rect.collidepoint(pos):
-                self.quiz_state = 0
-                self.spawn_portals()  # Spawn the portal now!
-                self.teleport_cooldown = self.TELEPORT_COOLDOWN_TIME  # Put teleport on cooldown
-                self.player_block_timer = 1.0  # briefly block movement to let them walk away
+                self.quiz_state = 6
+                if not self.portals:
+                    self.spawn_portals()  # Spawn the portal now!
+                if hasattr(self.main_menu, 'audio_manager'):
+                    self.main_menu.audio_manager.play_sfx("portal_transition")
+                self.warp_out_active = True
+                self.warp_out_timer = self.warp_out_duration
 
         # State 22: Old Man map3 Intro Dialog OK Click
         elif self.quiz_state == 22:
@@ -2976,7 +2998,7 @@ class Quarter1:
             ]
                 s_num = getattr(self, 'summative_num', 1)
                 from db.save_system import mark_quarter_completed
-                mark_quarter_completed(self.main_menu, "quarter1", score=score, percentage=percentage, total_questions=total_questions, summative_num=s_num, missed_ids=missed_ids)
+                mark_quarter_completed(self.main_menu, "quarter1", score=score, percentage=percentage, total_questions=total_questions, summative_num=s_num, missed_ids=missed_ids, correct_answers=correct_answers)
                 self.victory_card.show(total_questions=total_questions, correct_first_try=correct_answers, score=score)
             return
 
@@ -3233,7 +3255,7 @@ class Quarter1:
                     speed_boost=getattr(self, 'speed_boost_timer', 0) > 0,
                     terrain_color=(160, 210, 140)
                 )
-            if self.anim_timer >= (10 if getattr(self, 'speed_boost_timer', 0) > 0 else 16):
+            if self.anim_timer >= (8 if getattr(self, 'speed_boost_timer', 0) > 0 else 12):
                 self.anim_timer = 0
                 self.anim_frame = (self.anim_frame + 1) % 2
                 if hasattr(self.main_menu, 'audio_manager'):
@@ -5123,7 +5145,13 @@ class Quarter1:
                 if self.quiz_state in [3, 4]:
                     click_pos = self.out_of_tries_btn_rect.center if hasattr(self, 'out_of_tries_btn_rect') and self.out_of_tries_btn_rect else (self.width // 2, self.height // 2)
                     self.trigger_click(click_pos)
-                elif self.quiz_state in [1, 2, 5, 10, 11, 12, 13, 14, 20, 21, 22]:
+                elif self.quiz_state in [5, 10, 12, 13, 14, 20, 21, 22]:
+                    box_h = 360 if self.quiz_state == 5 else (320 if self.quiz_state == 14 else 300)
+                    box_y = (self.height - box_h) // 2
+                    btn_offset = 280 if self.quiz_state == 5 else (240 if self.quiz_state == 14 else 225)
+                    ok_pos = (self.width // 2, box_y + btn_offset + 25)
+                    self.trigger_click(ok_pos)
+                elif self.quiz_state in [1, 2, 11]:
                     self.trigger_click(self.cursor_pos)
                 elif self.quiz_state == 0:
                     if not self.check_portal_teleport_on_hold():

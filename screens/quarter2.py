@@ -46,7 +46,7 @@ except ImportError:
 # ============================================================
 TILE_SIZE = 32
 FPS = 60
-SPEED = 2.2
+SPEED = 2.5
 
 # Camera zoom settings - PERMANENT ZOOM
 ZOOM = 1.50  # Fixed zoom level
@@ -744,12 +744,16 @@ class Quarter2:
             if hasattr(self, 'player_x') and hasattr(self, 'player_y'):
                 forbidden.add((int(self.player_x // TILE_SIZE), int(self.player_y // TILE_SIZE)))
             if hasattr(self, 'npc_knight_tile_x') and hasattr(self, 'npc_knight_tile_y'):
-                forbidden.add((self.npc_knight_tile_x, self.npc_knight_tile_y))
+                for dx in range(-1, 2):
+                    for dy in range(-1, 2):
+                        forbidden.add((self.npc_knight_tile_x + dx, self.npc_knight_tile_y + dy))
             if hasattr(self, 'portals'):
                 for p in self.portals:
                     tx = getattr(p, 'tile_x', getattr(p, 'x', 0))
                     ty = getattr(p, 'tile_y', getattr(p, 'y', 0))
-                    forbidden.add((tx, ty))
+                    for dx in range(-1, 2):
+                        for dy in range(-1, 2):
+                            forbidden.add((tx + dx, ty + dy))
             self.quiz_stations = allocate_dynamic_stations(
                 self.game_map,
                 self.quiz_stations,
@@ -2520,7 +2524,7 @@ class Quarter2:
                 if not v and str(k).isdigit() and 0 <= int(k) - 1 < len(self.quiz_questions) and self.quiz_questions[int(k) - 1].get("id")
             ]
                     from db.save_system import mark_quarter_completed
-                    mark_quarter_completed(self.main_menu, "quarter2", score=score, percentage=percentage, total_questions=total_questions, summative_num=s_num, missed_ids=missed_ids)
+                    mark_quarter_completed(self.main_menu, "quarter2", score=score, percentage=percentage, total_questions=total_questions, summative_num=s_num, missed_ids=missed_ids, correct_answers=correct_answers)
                     if hasattr(self.main_menu, 'audio_manager'):
                         self.main_menu.audio_manager.play_sfx("victory_fanfare")
                         self.main_menu.audio_manager.play_sfx("portal_warp")
@@ -2557,7 +2561,7 @@ class Quarter2:
 
     def check_portal_teleport_on_hold(self):
         if self.warp_out_active:
-            return False
+            return True
         if self.quiz_state != 0 and self.quiz_state != 6:
             return False
         current_portal = None
@@ -2710,8 +2714,17 @@ class Quarter2:
         if self.pause_menu.handle_click(pos):
             return
 
-        # Mini-map widget click / fist toggle
-        if hasattr(self, 'minimap') and self.minimap.handle_click(pos):
+        # Mini-map widget click / fist toggle (strictly during exploration)
+        can_click_minimap = (
+            not (hasattr(self, 'victory_card') and self.victory_card.active)
+            and not getattr(self, 'currency_puzzle_active', False)
+            and not self.state_machine.is_cognitive_puzzle()
+            and self.quiz_state in [0, 6]
+            and getattr(self, 'guardian_knight_state', 0) not in [2, 3, 4]
+            and not getattr(self, 'time_up_dialog_active', False)
+            and not (getattr(self, 'instruction_modal', None) and self.instruction_modal.is_visible)
+        )
+        if can_click_minimap and hasattr(self, 'minimap') and self.minimap.handle_click(pos):
             if hasattr(self.main_menu, 'audio_manager') and self.main_menu.audio_manager:
                 self.main_menu.audio_manager.play_sfx("click")
             return "minimap_toggle"
@@ -3016,12 +3029,16 @@ class Quarter2:
                 self.guardian_knight_state = 5
                 self.save_results_to_database()
                 save_student_progress(self.main_menu)
-                self.banner_text = "GRAND FIESTA PORTAL UNLOCKED!"
-                self.banner_sub = "Head to the Exit Portal at the end of the street to complete Quarter 2!"
-                self.banner_timer = 999.0
+                self.banner_text = "GRAND FIESTA PORTAL UNLOCKED! Entering portal..."
+                self.banner_sub = "Quest completed! Returning through portal..."
+                self.banner_timer = 5.0
                 if self.success_sound:
                     self.success_sound.play()
-                print("* Grand Fiesta Exit Portal unlocked!")
+                if hasattr(self.main_menu, 'audio_manager'):
+                    self.main_menu.audio_manager.play_sfx("portal_transition")
+                self.warp_out_active = True
+                self.warp_out_timer = self.warp_out_duration
+                print("* Grand Fiesta Exit Portal auto-entered!")
 
         # Check Portal click or Click-to-Move when exploring the stage (State.Exploration only)
         if self.state_machine.allows_movement() and self.quiz_state in [0, 6] and not getattr(self, 'currency_puzzle_active', False):
@@ -3094,7 +3111,7 @@ class Quarter2:
                     if not v and str(k).isdigit() and 0 <= int(k) - 1 < len(self.quiz_questions) and self.quiz_questions[int(k) - 1].get("id")
                 ]
                 from db.save_system import mark_quarter_completed
-                mark_quarter_completed(self.main_menu, "quarter2", score=score, percentage=percentage, total_questions=total_questions, summative_num=s_num, missed_ids=missed_ids)
+                mark_quarter_completed(self.main_menu, "quarter2", score=score, percentage=percentage, total_questions=total_questions, summative_num=s_num, missed_ids=missed_ids, correct_answers=correct_answers)
                 self.victory_card.show(total_questions=total_questions, correct_first_try=correct_answers, score=score)
             return
 
@@ -4349,7 +4366,7 @@ class Quarter2:
                     speed_boost=getattr(self, 'speed_boost_timer', 0) > 0,
                     terrain_color=(200, 190, 170)
                 )
-            if self.anim_timer >= (10 if self.speed_boost_timer > 0 else 16):
+            if self.anim_timer >= (8 if self.speed_boost_timer > 0 else 12):
                 self.anim_timer = 0
                 self.anim_frame = (self.anim_frame + 1) % 2
                 if hasattr(self.main_menu, 'audio_manager'):
@@ -5381,10 +5398,12 @@ class Quarter2:
             self.guardian_knight_state = 5  # Unlocked portal
             self.quiz_state = 6  # Ready for exit portal
             self.banner_text = "CURRENCY TRIAL COMPLETED!"
-            self.banner_sub = "Head to the Grand Fiesta Exit Portal to complete Quarter 2!"
+            self.banner_sub = "Entering Grand Fiesta Exit Portal..."
             self.banner_timer = 5.0
             if hasattr(self.main_menu, 'audio_manager') and self.main_menu.audio_manager:
-                self.main_menu.audio_manager.play_sfx("victory_fanfare")
+                self.main_menu.audio_manager.play_sfx("portal_transition")
+            self.warp_out_active = True
+            self.warp_out_timer = self.warp_out_duration
         else:
             # Tier 1: Complete stalls 1-5, build Bahay Kubo, teleport player directly to Knight Guardian, and open dialog
             self.quiz_station_index = 6
@@ -5645,11 +5664,15 @@ class Quarter2:
                         self.guardian_knight_state = 5
                         self.save_results_to_database()
                         save_student_progress(self.main_menu)
-                        self.banner_text = "GRAND FIESTA PORTAL UNLOCKED!"
-                        self.banner_sub = "Head to the Exit Portal at the end of the street to complete Quarter 2!"
-                        self.banner_timer = 999.0
+                        self.banner_text = "GRAND FIESTA PORTAL UNLOCKED! Entering portal..."
+                        self.banner_sub = "Quest completed! Returning through portal..."
+                        self.banner_timer = 5.0
                         if self.success_sound:
                             self.success_sound.play()
+                        if hasattr(self.main_menu, 'audio_manager'):
+                            self.main_menu.audio_manager.play_sfx("portal_transition")
+                        self.warp_out_active = True
+                        self.warp_out_timer = self.warp_out_duration
                     return "handled"
                 if self.quiz_state == 0:
                     self.lol_camera.recenter()

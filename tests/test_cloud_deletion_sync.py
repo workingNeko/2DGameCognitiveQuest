@@ -61,7 +61,7 @@ class TestCloudDeletionSync(unittest.TestCase):
         self.assertTrue(res.get("synced"))
         self.assertEqual(res.get("action"), "updated")
         self.assertEqual(res.get("total_score"), 100)
-        self.assertIn(res.get("progress"), (8, 25, 33))
+        self.assertIn(res.get("progress"), (8, 17, 25, 33))
 
         # Verify local file was modified on disk
         updated = load_student_progress(self.test_sid)
@@ -69,7 +69,7 @@ class TestCloudDeletionSync(unittest.TestCase):
         self.assertNotIn("quarter2", updated["completed_quarters"])
         self.assertNotIn("quarter3", updated["completed_quarters"])
         self.assertEqual(updated["selected_student"]["score"], 100)
-        self.assertIn(updated["selected_student"]["progress"], (8, 25, 33))
+        self.assertIn(updated["selected_student"]["progress"], (8, 17, 25, 33))
 
     def test_sync_wipes_local_save_when_webapp_deletes_all_records(self):
         """When webapp deletes all records for a student, local save file should be purged."""

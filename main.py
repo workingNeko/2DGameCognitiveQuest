@@ -27,6 +27,7 @@ os.environ["NUMEXPR_NUM_THREADS"] = "1"
 os.environ["TF_NUM_INTEROP_THREADS"] = "1"
 os.environ["TF_NUM_INTRAOP_THREADS"] = "1"
 os.environ["SDL_RENDER_SCALE_QUALITY"] = "0"
+os.environ["SDL_VIDEO_WINDOW_POS"] = "0,0"
 
 try:
     import cv2
@@ -163,9 +164,10 @@ def main():
     # Robust multi-tiered display initialization to support various school monitors/GPUs
     screen = None
     flags_attempts = [
+        (pygame.NOFRAME, (screen_width, screen_height)),
+        (pygame.FULLSCREEN | pygame.SCALED, (screen_width, screen_height)),
         (pygame.FULLSCREEN | pygame.DOUBLEBUF, (screen_width, screen_height)),
         (pygame.FULLSCREEN, (screen_width, screen_height)),
-        (pygame.NOFRAME, (screen_width, screen_height)),
         (pygame.RESIZABLE, (1280, 720)),
         (0, (1280, 720)),
         (0, (1024, 768)),
@@ -227,6 +229,9 @@ def main():
 
     # Game loop
     running = True
+    is_minimized = False
+    is_active = True
+
     while running:
         # Handle events
         for event in pygame.event.get():
@@ -235,8 +240,70 @@ def main():
                 save_student_progress(main_menu)
                 flush_pending_async_saves()
                 running = False
+            elif event.type == getattr(pygame, 'WINDOWMINIMIZED', -999):
+                is_minimized = True
+                main_menu.clear_input_states()
+            elif event.type == getattr(pygame, 'WINDOWRESTORED', -999):
+                is_minimized = False
+                main_menu.clear_input_states()
+                pygame.key.set_mods(0)
+                cur_screen = pygame.display.get_surface()
+                if cur_screen is not None and cur_screen is not screen:
+                    screen = cur_screen
+                    if hasattr(main_menu, 'set_screen'):
+                        main_menu.set_screen(screen)
+                    else:
+                        main_menu.screen = screen
+                    screen_width, screen_height = screen.get_size()
+            elif event.type == getattr(pygame, 'WINDOWFOCUSLOST', -999):
+                is_active = False
+                main_menu.clear_input_states()
+            elif event.type == getattr(pygame, 'WINDOWFOCUSGAINED', -999):
+                is_active = True
+                main_menu.clear_input_states()
+                pygame.key.set_mods(0)
+                pygame.event.pump()
+                cur_screen = pygame.display.get_surface()
+                if cur_screen is not None and cur_screen is not screen:
+                    screen = cur_screen
+                    if hasattr(main_menu, 'set_screen'):
+                        main_menu.set_screen(screen)
+                    else:
+                        main_menu.screen = screen
+                    screen_width, screen_height = screen.get_size()
+            elif event.type == pygame.ACTIVEEVENT:
+                # event.state bitmask: 1=mouse focus, 2=input focus, 4=app active (minimized/restored)
+                if getattr(event, 'state', 0) & 4:
+                    is_minimized = (event.gain == 0)
+                    if event.gain == 0:
+                        main_menu.clear_input_states()
+                    else:
+                        pygame.key.set_mods(0)
+                        cur_screen = pygame.display.get_surface()
+                        if cur_screen is not None and cur_screen is not screen:
+                            screen = cur_screen
+                            if hasattr(main_menu, 'set_screen'):
+                                main_menu.set_screen(screen)
+                            else:
+                                main_menu.screen = screen
+                            screen_width, screen_height = screen.get_size()
+                if getattr(event, 'state', 0) & 2:
+                    is_active = (event.gain != 0)
+                    if event.gain == 0:
+                        main_menu.clear_input_states()
+                    else:
+                        pygame.key.set_mods(0)
+                        pygame.event.pump()
             elif event.type == pygame.KEYDOWN and event.key == pygame.K_f:
                 pygame.display.toggle_fullscreen()
+                cur_screen = pygame.display.get_surface()
+                if cur_screen is not None and cur_screen is not screen:
+                    screen = cur_screen
+                    if hasattr(main_menu, 'set_screen'):
+                        main_menu.set_screen(screen)
+                    else:
+                        main_menu.screen = screen
+                    screen_width, screen_height = screen.get_size()
             elif event.type == pygame.KEYDOWN and event.key in (pygame.K_F12, pygame.K_PRINT, pygame.K_F2):
                 from core.screenshot_manager import capture_screenshot
                 filepath, ok = capture_screenshot(screen)
@@ -258,18 +325,31 @@ def main():
             else:
                 main_menu.handle_event(event)
 
+        # Skip rendering when window is minimized or display surface inactive (conserve AMD APU & prevent surface loss crashes)
+        display_active = pygame.display.get_active()
+        if is_minimized or not display_active:
+            clock.tick(15)
+            continue
+
         # Update
-        main_menu.update()
+        try:
+            main_menu.update()
+        except Exception as e:
+            print(f"[WARN] Error during main_menu.update: {e}")
 
         # Draw
-        main_menu.draw()
+        try:
+            main_menu.draw()
 
-        # Render on-screen screenshot confirmation toast if active
-        if toast_until > pygame.time.get_ticks() and toast_panel_surf is not None:
-            screen.blit(toast_panel_surf, toast_panel_pos)
+            # Render on-screen screenshot confirmation toast if active
+            if toast_until > pygame.time.get_ticks() and toast_panel_surf is not None:
+                screen.blit(toast_panel_surf, toast_panel_pos)
 
-        # Update display
-        pygame.display.flip()
+            # Update display
+            pygame.display.flip()
+        except (pygame.error, ValueError, TypeError):
+            # Gracefully absorb transient display/surface bit-depth loss during Alt+Tab
+            pass
 
         # Control frame rate
         clock.tick(60)  # 60 FPS
