@@ -45,7 +45,7 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 
 [Files]
 Source: "dist\CognitiveMaze\*"; DestDir: "{app}"; Excludes: "db\saves\*,db\pending_sync.json,db\pending_student_restore.json,db\reset_records.json"; Flags: ignoreversion recursesubdirs createallsubdirs
-Source: "dist\CognitiveMaze\db\saves\audio_settings.json"; DestDir: "{app}\db\saves"; Flags: onlyifdoesntexist
+Source: "db\saves\audio_settings.json"; DestDir: "{app}\db\saves"; Flags: onlyifdoesntexist
 
 [Dirs]
 Name: "{app}\db"; Permissions: users-full
