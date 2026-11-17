@@ -277,5 +277,80 @@ class TestSummativeModalAndProgression(unittest.TestCase):
                 stage_select.draw_summative_modal()
 
 
+class TestCloudDrivenModalAccuracy(unittest.TestCase):
+    def test_empty_term2_assessment2_stays_locked_and_completes_term2(self):
+        """If the web app only has Term 2 Assessment 1 questions, Assessment 2 must stay unavailable/locked
+        even after Assessment 1 is completed, and Term 2 counts as completed."""
+        from unittest.mock import patch
+        import pygame
+        from screens.main_menu import MainMenu
+        from screens.stageselect import StageSelect
+        from db.connect_db import db
+
+        pygame.display.init()
+        screen = pygame.display.set_mode((1280, 720))
+        menu = MainMenu(screen, enable_camera=False)
+        menu.student_id = "TEST_T2_ACCURACY"
+
+        progress_t2_a1_done = {
+            "completed_summatives": {
+                "t1_s1": {"completed": True, "score": 5, "total_questions": 5, "percentage": 100.0},
+                "t1_s2": {"completed": True, "score": 10, "total_questions": 10, "percentage": 100.0},
+                "t2_s1": {"completed": True, "score": 4, "total_questions": 5, "percentage": 80.0},
+            }
+        }
+        q5 = [{"id": i, "prompt": f"Q{i}", "optionA": "1", "optionB": "2", "optionC": "3", "optionD": "4", "correctAnswer": "A"} for i in range(1, 6)]
+        q3 = [{"id": 100 + i, "prompt": f"A2 Q{i}", "optionA": "1", "optionB": "2", "optionC": "3", "optionD": "4", "correctAnswer": "B"} for i in range(1, 4)]
+
+        with patch("db.save_system.load_student_progress", return_value=progress_t2_a1_done), \
+             patch.object(db, "get_available_summatives_for_term", side_effect=lambda t, force_refresh=False: [1, 2] if t == 1 else [1]):
+            stage_select = StageSelect(screen, menu)
+
+            def fake_get_qs(quarter=1, summative=None, force_refresh=False):
+                if quarter == 2 and summative == 1:
+                    return q5
+                return []
+
+            with patch.object(db, "get_questions", side_effect=fake_get_qs):
+                stage_select.open_summative_modal(2)
+
+            cards = stage_select.summative_modal_cards
+            self.assertTrue(cards[0]["available_in_cloud"])
+            self.assertTrue(cards[0]["unlocked"])
+            self.assertEqual(cards[0]["q_count"], 5)
+
+            self.assertFalse(cards[1]["available_in_cloud"])
+            self.assertFalse(cards[1]["unlocked"])
+            self.assertEqual(cards[1]["q_count"], 0)
+
+            # Clicking unavailable Assessment 2 must refuse entry with banner message
+            stage_select.handle_summative_modal_click(cards[1]["btn_rect"].center)
+            self.assertTrue(stage_select.summative_modal_active)
+            self.assertIn("No questions have been uploaded", stage_select.locked_portal_banner_msg)
+
+            # Term 2 counts as completed since its only uploaded assessment (A1) is done
+            self.assertTrue(stage_select.is_quarter_completed("quarter2"))
+            stage_select.draw_summative_modal()
+
+        # Now teacher uploads 3 questions for Term 2 Assessment 2 on the web app
+        with patch("db.save_system.load_student_progress", return_value=progress_t2_a1_done), \
+             patch.object(db, "get_available_summatives_for_term", side_effect=lambda t, force_refresh=False: [1, 2] if t in (1, 2) else [1]):
+            def fake_get_qs_updated(quarter=1, summative=None, force_refresh=False):
+                if quarter == 2 and summative == 1:
+                    return q5
+                if quarter == 2 and summative == 2:
+                    return q3
+                return []
+
+            with patch.object(db, "get_questions", side_effect=fake_get_qs_updated):
+                stage_select.open_summative_modal(2)
+
+            cards = stage_select.summative_modal_cards
+            self.assertTrue(cards[1]["available_in_cloud"])
+            self.assertTrue(cards[1]["unlocked"])
+            self.assertEqual(cards[1]["q_count"], 3)
+            self.assertFalse(stage_select.is_quarter_completed("quarter2"))
+
+
 if __name__ == "__main__":
     unittest.main()

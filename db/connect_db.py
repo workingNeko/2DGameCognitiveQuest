@@ -234,7 +234,15 @@ def infer_slot_from_text(text):
     if m_code:
         return f"t{m_code.group(1)}_s{m_code.group(2)}"
 
-    m_term_summ = re.search(r"(?:term|quarter|t)\s*([1-3]).*?(?:(1st|2nd|3rd|4th|\d+)\s*(?:summative|assessment)?)", low)
+    m_short = re.search(r"\bt([1-3])[-_\s]?s([1-4])\b", low)
+    if m_short:
+        return f"t{m_short.group(1)}_s{m_short.group(2)}"
+
+    m_term_summ = (
+        re.search(r"\b(?:term|quarter|t)\s*([1-3])\b.*?\b(1st|2nd|3rd|4th)\b(?:\s*(?:summative|assessment)\b)?", low)
+        or re.search(r"\b(?:term|quarter|t)\s*([1-3])\b.*?\b([1-4])\s*(?:summative|assessment)\b", low)
+        or re.search(r"\b(?:term|quarter|t)\s*([1-3])\b.*?\b(?:summative|assessment)\s*#?\s*(1st|2nd|3rd|4th|[1-4])\b", low)
+    )
     if m_term_summ:
         t_val = int(m_term_summ.group(1))
         s_raw = m_term_summ.group(2)
@@ -1106,7 +1114,9 @@ class Database:
         Caps each stage strictly to 10 questions.
         """
         slot_key, slot_label, term_num, s_num = parse_slot_key(quarter, summative)
-        if not force_refresh:
+        if force_refresh:
+            self._offline_until = 0.0
+        else:
             mem_q, hit = self._mem_get("questions", slot_key, ttl=10.0)
             if hit and isinstance(mem_q, list):
                 return mem_q
@@ -1149,14 +1159,7 @@ class Database:
                                 if len(slot_buckets[sk]) < 10:
                                     slot_buckets[sk].append(q)
 
-                # Ensure Assessment 2 slot falls back to s1 curriculum questions if empty
-                for term_i in (1, 2, 3):
-                    s1_qs = slot_buckets.get(f"t{term_i}_s1", [])
-                    cur_sk = f"t{term_i}_s2"
-                    if len(slot_buckets[cur_sk]) == 0 and len(s1_qs) > 0:
-                        slot_buckets[cur_sk] = list(s1_qs)
-
-                # Authoritatively sync disk & short-TTL memory cache for all slots
+                # Authoritatively sync disk & short-TTL memory cache for all slots (including 0-question slots -> [])
                 for sk, q_list in slot_buckets.items():
                     self._mem_set("questions", sk, q_list)
                     sk_file = os.path.join(cache_dir, f"questions_{sk}.json")
@@ -1175,11 +1178,6 @@ class Database:
                     pass
 
                 result_qs = slot_buckets.get(slot_key, [])
-                if len(result_qs) == 0 and s_num > 1:
-                    fallback_key = f"t{term_num}_s1"
-                    result_qs = slot_buckets.get(fallback_key, [])
-                    if len(result_qs) > 0:
-                        print(f"[API FALLBACK] Using {len(result_qs)} base curriculum question(s) from {fallback_key} for {slot_label} ({slot_key})")
                 if len(result_qs) > 0:
                     print(f"[API SUCCESS] Found {len(result_qs)} active questions matching {slot_label} ({slot_key})")
                 else:
@@ -1194,33 +1192,28 @@ class Database:
                 self._mark_offline()
                 print(f"[API ERROR] Failed to fetch questions from Vercel: {e}")
 
-        # Offline fallback: read last cloud-synced cache for this slot
+        # Offline fallback: read last cloud-synced cache for this exact slot
         with self._file_lock:
-            for c_path in (cache_file, legacy_cache_file):
-                if os.path.exists(c_path):
-                    try:
-                        with open(c_path, "r", encoding="utf-8") as f:
-                            cached_qs = json.load(f)
-                        if isinstance(cached_qs, list) and len(cached_qs) > 0:
+            if os.path.exists(cache_file):
+                try:
+                    with open(cache_file, "r", encoding="utf-8") as f:
+                        cached_qs = json.load(f)
+                    if isinstance(cached_qs, list):
+                        if len(cached_qs) > 0:
                             print(f"[OFFLINE CACHE] Loaded {len(cached_qs)} cached cloud question(s) for {slot_label}!")
-                            return cached_qs[:10]
-                    except Exception:
-                        pass
-            if s_num == 2:
-                fallback_paths = [
-                    os.path.join(cache_dir, f"questions_t{term_num}_s1.json"),
-                    os.path.join(cache_dir, f"questions_q{term_num}.json")
-                ]
-                for c_path in fallback_paths:
-                    if os.path.exists(c_path):
-                        try:
-                            with open(c_path, "r", encoding="utf-8") as f:
-                                cached_qs = json.load(f)
-                            if isinstance(cached_qs, list) and len(cached_qs) > 0:
-                                print(f"[FALLBACK CACHE] Loaded {len(cached_qs)} fallback question(s) from {c_path} for {slot_label}!")
-                                return cached_qs[:10]
-                        except Exception:
-                            pass
+                        return cached_qs[:10]
+                except Exception:
+                    pass
+            if (s_num == 1 or slot_key == "remedial") and os.path.exists(legacy_cache_file):
+                try:
+                    with open(legacy_cache_file, "r", encoding="utf-8") as f:
+                        cached_qs = json.load(f)
+                    if isinstance(cached_qs, list):
+                        if len(cached_qs) > 0:
+                            print(f"[OFFLINE CACHE] Loaded {len(cached_qs)} legacy cached question(s) for {slot_label}!")
+                        return cached_qs[:10]
+                except Exception:
+                    pass
 
         return []
 
@@ -1244,10 +1237,12 @@ class Database:
                             found[norm_qid] = q
 
         # Check disk cache for any remaining
+        has_slot_caches = False
         if len(found) < len(target_ids) and os.path.exists(cache_dir):
             for sk in _CANONICAL_ASSESSMENT_SPECS:
                 fpath = os.path.join(cache_dir, f"questions_{sk}.json")
                 if os.path.exists(fpath):
+                    has_slot_caches = True
                     try:
                         with open(fpath, "r", encoding="utf-8") as f:
                             disk_qs = json.load(f)
@@ -1261,8 +1256,8 @@ class Database:
                     except Exception:
                         pass
 
-        # Also search fallback questions file if still missing
-        if len(found) < len(target_ids):
+        # Only fall back to legacy questions.json when no cloud slot caches have been synced yet
+        if len(found) < len(target_ids) and not has_slot_caches:
             for legacy_f in [os.path.join(self.data_dir, "questions.json")]:
                 if os.path.exists(legacy_f):
                     try:
@@ -1288,16 +1283,14 @@ class Database:
                     break
         return result
 
-    def get_available_summatives_for_term(self, term):
+    def get_available_summatives_for_term(self, term, force_refresh=False):
         """Returns sorted list of active summative numbers [1..4] for given term (1..3) that have questions."""
         term_num = int(term)
         available = []
         for s in (1, 2, 3, 4):
-            qs = self.get_questions(quarter=term_num, summative=s)
+            qs = self.get_questions(quarter=term_num, summative=s, force_refresh=(force_refresh and s == 1))
             if qs and len(qs) > 0:
                 available.append(s)
-        if not available:
-            return [1]
         return available
 
     def _persist_assessment_cache_to_disk(self):

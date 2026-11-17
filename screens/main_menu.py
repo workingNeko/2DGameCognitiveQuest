@@ -345,6 +345,14 @@ class MainMenu:
         from core.autosave_manager import AutosaveManager
         self.autosave_manager = AutosaveManager(self, interval_seconds=30.0)
 
+        # ==========================================
+        # DEVELOPER CHEATS & DEBUG SUITE
+        # ==========================================
+        from core.dev_cheats import DevCheatManager
+        self.dev_cheats = DevCheatManager.get_instance()
+        self.dev_superspeed = False
+        self.dev_noclip = False
+
     def _manual_cloud_probe(self):
         """Perform an immediate non-blocking health check and offline queue sync."""
         lock = getattr(self, '_cloud_probe_lock', None)
@@ -2281,6 +2289,11 @@ class MainMenu:
             self.clear_input_states()
             pygame.key.set_mods(0)
             return
+
+        # Developer Cheats & Debug Navigation Suite (F1-F8, Ctrl+S, Ctrl+N, Ctrl+W, Ctrl+P, Ctrl+A, U)
+        if hasattr(self, 'dev_cheats') and self.dev_cheats.handle_event(event, self):
+            return
+
         # Global audio & camera hotkeys (bypass when typing text input in active screens)
         if event.type == pygame.KEYDOWN:
             _typing_active = (
@@ -3043,6 +3056,10 @@ class MainMenu:
         # Draw autosave indicator badge (smooth fade overlay)
         if hasattr(self, 'autosave_manager') and self.autosave_manager:
             self.autosave_manager.draw(self.screen)
+
+        # Draw developer cheats HUD overlay & active toasts
+        if hasattr(self, 'dev_cheats') and self.dev_cheats:
+            self.dev_cheats.draw(self.screen, self)
 
         # CURSOR IS ALWAYS DRAWN LAST TO REMAIN AT THE TOPMOST Z-LAYER
         self.draw_cursor()

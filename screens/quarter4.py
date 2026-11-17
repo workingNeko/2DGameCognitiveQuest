@@ -1207,6 +1207,9 @@ class Quarter4:
     # COLLISION
     # ============================================================
     def can_move(self, nx, ny):
+        if getattr(self, 'dev_noclip', False) or (self.main_menu and getattr(self.main_menu, 'dev_noclip', False)):
+            return True
+
         # Check all 4 corners of the player's bounding box (with 4 pixels padding for smooth movement)
         padding = 4
         corners = [
@@ -1339,6 +1342,11 @@ class Quarter4:
                 student_data = load_student_progress(student_id)
                 missed_pool = student_data.get("missed_questions", []) if student_data else []
 
+                remedial_questions = []
+                if db:
+                    # Force-sync all cloud question slots so missed/remedial lookups reflect latest web app data
+                    remedial_questions = db.get_questions(quarter=4, summative="remedial", force_refresh=True)
+
                 raw_missed_qs = []
                 if db and missed_pool:
                     raw_missed_qs = db.get_questions_by_ids(missed_pool)
@@ -1353,9 +1361,8 @@ class Quarter4:
                 else:
                     # 2. Fallback to teacher-curated Remedial questions from cloud/cache
                     if db:
-                        questions_result = db.get_questions(quarter=4, summative="remedial", force_refresh=True)
                         mapped_questions = map_cloud_questions(
-                            questions_result,
+                            remedial_questions,
                             default_hint="Examine the choices carefully and select the best answer below!",
                             max_questions=10
                         )
@@ -2467,7 +2474,7 @@ class Quarter4:
             return
 
         vx, vy = 0, 0
-        current_speed = (SPEED * 1.5) if getattr(self, 'speed_boost_timer', 0) > 0 else SPEED
+        current_speed = 6.0 if getattr(self, 'dev_superspeed', False) or (self.main_menu and getattr(self.main_menu, 'dev_superspeed', False)) else ((SPEED * 1.5) if getattr(self, 'speed_boost_timer', 0) > 0 else SPEED)
 
         # 1. Keyboard Controls Fallback
         keys = pygame.key.get_pressed()

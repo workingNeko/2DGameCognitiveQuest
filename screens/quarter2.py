@@ -2468,6 +2468,9 @@ class Quarter2:
     # COLLISION
     # ============================================================
     def can_move(self, nx, ny):
+        if getattr(self, 'dev_noclip', False) or (self.main_menu and getattr(self.main_menu, 'dev_noclip', False)):
+            return True
+
         # Check all 4 corners of the player's bounding box (with 4 pixels padding for smooth movement)
         padding = 4
         corners = [
@@ -4255,7 +4258,7 @@ class Quarter2:
             self.click_dest = None
             return
 
-        current_speed = (SPEED * 1.5) if self.speed_boost_timer > 0 else SPEED
+        current_speed = 6.0 if getattr(self, 'dev_superspeed', False) or (self.main_menu and getattr(self.main_menu, 'dev_superspeed', False)) else ((SPEED * 1.5) if self.speed_boost_timer > 0 else SPEED)
         vx, vy = 0, 0
 
         # 1. Keyboard Controls Fallback

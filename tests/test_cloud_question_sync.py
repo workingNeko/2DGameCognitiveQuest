@@ -315,6 +315,110 @@ class TestCloudQuestionSync(unittest.TestCase):
             q4._run_save_quarter4_game_result()
             mock_db.save_game_result.assert_not_called()
 
+    # ------------------------------------------------------------------
+    # 9. Strict Web-App Slot Sync & No Phantom Assessment Fallback
+    # ------------------------------------------------------------------
+    def test_infer_slot_from_text_strict_curriculum_titles(self):
+        """Titles containing numbers like '2D Shapes' must not misclassify into Assessment 2."""
+        from db.connect_db import infer_slot_from_text
+        self.assertEqual(
+            infer_slot_from_text("Term 1: Numbers, Addition, Subtraction, & 2D Shapes"),
+            "t1_s1",
+        )
+        self.assertEqual(infer_slot_from_text("Term 2 - 2nd Summative"), "t2_s2")
+        self.assertEqual(infer_slot_from_text("Term 2 Assessment 2"), "t2_s2")
+        self.assertEqual(infer_slot_from_text("Quarter 3 3rd Assessment"), "t3_s3")
+        self.assertEqual(infer_slot_from_text("Remedial Intervention"), "remedial")
+
+    def test_empty_assessment_2_never_falls_back_to_assessment_1_online_or_offline(self):
+        """Empty summative slots on the web app must stay [] both online and offline,
+        and immediately reflect new questions uploaded on the web app upon refresh."""
+        import importlib
+        import json
+        import tempfile
+
+        connect_db_mod = importlib.import_module("db.connect_db")
+        tmp = tempfile.TemporaryDirectory()
+        try:
+            temp_db = Database(data_dir=tmp.name)
+            temp_db._offline_until = 0.0
+            cloud_units = [
+                {"id": 10, "code": "T1", "title": "Term 1: Numbers, Addition, Subtraction, & 2D Shapes", "quarter": 1},
+                {"id": 20, "code": "M2-T2-S1", "title": "Term 2 - 1st Summative", "quarter": 2},
+                {"id": 21, "code": "M2-T2-S2", "title": "Term 2 - 2nd Summative", "quarter": 2},
+            ]
+            cloud_questions = [
+                {"id": 101, "unitId": 10, "prompt": "What shape has 4 equal sides?", "optionA": "Square", "optionB": "Circle", "optionC": "Triangle", "optionD": "Star", "correctAnswer": "A", "isActive": True},
+                {"id": 201, "unitId": 20, "prompt": "Term 2 A1 Q1", "optionA": "1", "optionB": "2", "optionC": "3", "optionD": "4", "correctAnswer": "A", "isActive": True},
+                {"id": 202, "unitId": 20, "prompt": "Term 2 A1 Q2", "optionA": "1", "optionB": "2", "optionC": "3", "optionD": "4", "correctAnswer": "B", "isActive": True},
+            ]
+
+            def fake_urlopen(req, timeout=8):
+                url = getattr(req, "full_url", str(req))
+                resp = MagicMock()
+                resp.headers = {}
+                if "/units" in url:
+                    resp.read.return_value = json.dumps(cloud_units).encode("utf-8")
+                elif "/questions" in url:
+                    resp.read.return_value = json.dumps(cloud_questions).encode("utf-8")
+                else:
+                    resp.read.return_value = b"[]"
+                resp.__enter__ = lambda s: s
+                resp.__exit__ = lambda s, *a: None
+                return resp
+
+            with patch.object(connect_db_mod, "_urlopen_resilient", side_effect=fake_urlopen):
+                self.assertEqual(len(temp_db.get_questions(1, summative=1, force_refresh=True)), 1)
+                self.assertEqual(temp_db.get_questions(1, summative=2), [])
+                self.assertEqual(len(temp_db.get_questions(2, summative=1)), 2)
+                self.assertEqual(temp_db.get_questions(2, summative=2), [])
+                self.assertEqual(temp_db.get_available_summatives_for_term(2), [1])
+                self.assertEqual(temp_db.get_available_summatives_for_term(3), [])
+
+            # Offline check: cleared memory cache still returns [] for empty slot t2_s2
+            temp_db._mem_cache.clear()
+            with patch.object(connect_db_mod, "_urlopen_resilient", side_effect=OSError("offline")):
+                self.assertEqual(temp_db.get_questions(2, summative=2), [])
+                self.assertEqual(temp_db.get_available_summatives_for_term(2), [1])
+
+            # Teacher adds 2 questions to Term 2 - 2nd Summative on web app
+            cloud_questions.extend([
+                {"id": 211, "unitId": 21, "prompt": "Term 2 A2 Q1", "optionA": "5", "optionB": "6", "optionC": "7", "optionD": "8", "correctAnswer": "A", "isActive": True},
+                {"id": 212, "unitId": 21, "prompt": "Term 2 A2 Q2", "optionA": "9", "optionB": "10", "optionC": "11", "optionD": "12", "correctAnswer": "C", "isActive": True},
+            ])
+            with patch.object(connect_db_mod, "_urlopen_resilient", side_effect=fake_urlopen):
+                avail = temp_db.get_available_summatives_for_term(2, force_refresh=True)
+                self.assertEqual(avail, [1, 2])
+                t2_s2_qs = temp_db.get_questions(2, summative=2)
+                self.assertEqual([q["id"] for q in t2_s2_qs], [211, 212])
+        finally:
+            tmp.cleanup()
+
+    def test_remedial_refreshes_cloud_before_missed_id_lookup(self):
+        """Quarter 4 loads fresh cloud questions before resolving missed_questions IDs."""
+        call_order = []
+        mock_db = MagicMock()
+
+        def fake_get_qs(quarter=1, summative=None, force_refresh=False):
+            call_order.append(("get_questions", quarter, summative, force_refresh))
+            return []
+
+        def fake_get_by_ids(ids):
+            call_order.append(("get_questions_by_ids", list(ids)))
+            return [{"id": 201, "prompt": "Fresh Q", "optionA": "1", "optionB": "2", "optionC": "3", "optionD": "4", "correctAnswer": "A"}]
+
+        mock_db.get_questions.side_effect = fake_get_qs
+        mock_db.get_questions_by_ids.side_effect = fake_get_by_ids
+
+        with patch("screens.quarter4.db", mock_db), \
+             patch("db.save_system.load_student_progress", return_value={"missed_questions": [201]}):
+            q4 = Quarter4(screen, self.mock_menu, map_name="map10.txt")
+
+        self.assertGreaterEqual(len(call_order), 2)
+        self.assertEqual(call_order[0], ("get_questions", 4, "remedial", True))
+        self.assertEqual(call_order[1], ("get_questions_by_ids", [201]))
+        self.assertEqual(q4.active_station_count, 1)
+
 
 if __name__ == "__main__":
     unittest.main()

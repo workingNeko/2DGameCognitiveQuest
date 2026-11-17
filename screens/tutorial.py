@@ -505,7 +505,7 @@ class TutorialScreen:
 
     def update_player_movement(self):
         vx, vy = 0, 0
-        current_speed = SPEED
+        current_speed = 6.0 if getattr(self, 'dev_superspeed', False) or (self.main_menu and getattr(self.main_menu, 'dev_superspeed', False)) else SPEED
 
         # Check keyboard controls (development fallback)
         keys = pygame.key.get_pressed()
@@ -595,6 +595,9 @@ class TutorialScreen:
             self.anim_frame = 0
 
     def can_move(self, x, y):
+        if getattr(self, 'dev_noclip', False) or (self.main_menu and getattr(self.main_menu, 'dev_noclip', False)):
+            return True
+
         feet_rect = pygame.Rect(x + 6, y + 16, 20, 14)
         for r, row in enumerate(self.map_grid):
             for c, tile in enumerate(row):

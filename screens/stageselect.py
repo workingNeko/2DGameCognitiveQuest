@@ -1458,13 +1458,14 @@ class StageSelect:
         term_num = q_map.get(qid)
         if term_num in (1, 2, 3):
             from db.connect_db import db
-            available = [1, 2]
+            available = []
             if db:
                 try:
-                    db_summs = db.get_available_summatives_for_term(term_num) or [1, 2]
-                    available = sorted(list(set(db_summs) | {1, 2}))
+                    available = list(db.get_available_summatives_for_term(term_num) or [])
                 except Exception:
-                    available = [1, 2]
+                    available = []
+            if not available:
+                return False
             # Term is completed only if ALL available uploaded summatives for this term are completed
             has_summ_records = any(f"t{term_num}_s{s}" in comp_summs for s in range(1, 5))
             if has_summ_records:
@@ -1508,6 +1509,9 @@ class StageSelect:
     # COLLISION - MODIFIED to use npc_positions_data & Sequential Path Gating
     # ============================================================
     def can_move(self, nx, ny):
+        if getattr(self, 'dev_noclip', False) or (self.main_menu and getattr(self.main_menu, 'dev_noclip', False)):
+            return True
+
         padding = 4
         corners = [
             (nx + padding, ny + padding),
@@ -1951,10 +1955,12 @@ class StageSelect:
     def _refresh_summative_modal_data(self):
         term = self.summative_modal_term
         from db.connect_db import db
-        available_summs = [1, 2]
+        available_summs = []
         if db:
-            db_summs = db.get_available_summatives_for_term(term) or [1, 2]
-            available_summs = sorted(list(set(db_summs) | {1, 2}))
+            try:
+                available_summs = list(db.get_available_summatives_for_term(term, force_refresh=True) or [])
+            except TypeError:
+                available_summs = list(db.get_available_summatives_for_term(term) or [])
 
         from db.save_system import load_student_progress
         student_id = getattr(self.main_menu, 'student_id', None)
@@ -1989,10 +1995,14 @@ class StageSelect:
             raw_score = int(s_data.get("score", 0)) if is_completed else 0
             pct = float(s_data.get("percentage", 0.0)) if is_completed else 0.0
 
-            # Dynamically determine questions count for this assessment slot from database
+            # Dynamically determine questions count for this assessment slot strictly from web app database
             slot_qs = db.get_questions(term, summative=s) if (db and is_available) else []
-            q_count = len(slot_qs) if slot_qs else (int(s_data.get("total_questions", 5)) if is_completed else 5)
-            tot = int(s_data.get("total_questions", q_count)) if is_completed else q_count
+            if not is_available:
+                q_count = 0
+                tot = 0
+            else:
+                q_count = len(slot_qs) if slot_qs else (int(s_data.get("total_questions", 5)) if is_completed else 5)
+                tot = int(s_data.get("total_questions", q_count)) if is_completed else q_count
 
             # Accurately compute correct answers count:
             # 1. If explicit 'correct_answers' is stored in s_data, use it.
@@ -2015,9 +2025,12 @@ class StageSelect:
                 points = 0
 
             # Sequential assessment unlocking:
-            # Assessment 1 is unlocked initially; Assessments 2, 3, 4 unlock sequentially
-            # only after the preceding assessment is completed (or via cheat override).
-            if barriers_lifted or s == 1:
+            # An unavailable slot (0 cloud questions) stays locked unless developer barriers_lifted is active.
+            if barriers_lifted:
+                is_unlocked = True
+            elif not is_available:
+                is_unlocked = False
+            elif s == 1:
                 is_unlocked = True
             else:
                 is_unlocked = prev_completed
@@ -2345,8 +2358,13 @@ class StageSelect:
 
             # Capacity / PTS Badge
             cap_col = (56, 189, 248) if (unlocked and available) else (71, 85, 105)
-            card_q_cnt = card.get("q_count", 5)
-            cap_surf = self.modal_card_subtitle_font.render(f"{card_q_cnt} Questions • 100 PTS", True, cap_col)
+            card_q_cnt = card.get("q_count", 0)
+            if not available:
+                cap_text = "0 Questions • Not Uploaded"
+            else:
+                q_word = "Question" if card_q_cnt == 1 else "Questions"
+                cap_text = f"{card_q_cnt} {q_word} • 100 PTS"
+            cap_surf = self.modal_card_subtitle_font.render(cap_text, True, cap_col)
             self.screen.blit(cap_surf, cap_surf.get_rect(center=(emblem_cx, cards_y + 118)))
 
             # Divider line
@@ -3647,7 +3665,7 @@ class StageSelect:
             return
 
         vx, vy = 0, 0
-        current_speed = SPEED
+        current_speed = 6.0 if getattr(self, 'dev_superspeed', False) or (self.main_menu and getattr(self.main_menu, 'dev_superspeed', False)) else SPEED
 
         # 1. Keyboard Controls (Development & Accessibility Fallback)
         keys = pygame.key.get_pressed() if hasattr(pygame.key, 'get_pressed') else None

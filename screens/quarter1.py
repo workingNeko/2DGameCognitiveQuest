@@ -1456,6 +1456,9 @@ class Quarter1:
     # COLLISION
     # ============================================================
     def can_move(self, nx, ny):
+        if getattr(self, 'dev_noclip', False) or (self.main_menu and getattr(self.main_menu, 'dev_noclip', False)):
+            return True
+
         padding = 4
         corners = [
             (nx + padding, ny + padding),
@@ -3152,7 +3155,7 @@ class Quarter1:
             return
 
         vx, vy = 0, 0
-        current_speed = (SPEED * 1.5) if getattr(self, 'speed_boost_timer', 0) > 0 else SPEED
+        current_speed = 6.0 if getattr(self, 'dev_superspeed', False) or (self.main_menu and getattr(self.main_menu, 'dev_superspeed', False)) else ((SPEED * 1.5) if getattr(self, 'speed_boost_timer', 0) > 0 else SPEED)
 
         # 1. Keyboard Controls Fallback
         keys = pygame.key.get_pressed()

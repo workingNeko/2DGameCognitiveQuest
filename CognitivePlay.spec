@@ -47,6 +47,7 @@ hiddenimports = [
     'core.version',
     'core.autosave_manager',
     'core.minimap',
+    'core.dev_cheats',
     'ui',
     'ui.button',
     'db',

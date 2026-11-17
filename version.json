@@ -1,7 +1,7 @@
 {
   "version": "2.5.3",
-  "name": "Cognitive Maze v2.5.3 - Alt+Tab Crash Prevention & Assessment Score Precision",
-  "notes": "Version 2.5.3: Resolves Alt+Tab crashes via borderless fullscreen display mode and exception boundaries; eliminates CPU burn when minimized via idle throttling; resets stuck key modifiers and gesture states on focus transitions; separates fractional answered items from 100-point scaled score in Assessment Selection modal; fixes sequential unlocking for teacher-added assessments; auto-enters portals upon final puzzle completion; character speed boosted to 2.5 while maintaining 60 FPS on AMD A4-6300 hardware.",
+  "name": "Cognitive Maze v2.5.3 - Alt+Tab Crash Prevention, Cloud Sync Accuracy & Developer Cheats",
+  "notes": "Version 2.5.3: Resolves Alt+Tab crashes via borderless fullscreen display mode and exception boundaries; eliminates CPU burn when minimized via idle throttling; resets stuck key modifiers and gesture states on focus transitions; enforces strict web-app cloud question synchronization (locking empty assessment slots instead of falling back to Assessment 1, fixing unit title matching, and syncing Remedial lookups); adds F1-F8/Ctrl+S Developer Cheats HUD; separates fractional answered items from 100-point scaled score in Assessment Selection modal; auto-enters portals upon final puzzle completion; maintains 60 FPS on AMD A4-6300 hardware.",
   "download_url": "https://github.com/workingNeko/2DGameCognitiveQuest/releases/tag/v2.5.3",
-  "date": "2026-11-17"
+  "date": "2026-11-18"
 }
