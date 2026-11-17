@@ -4,6 +4,15 @@ All notable **Changes & Improvements** and **Bug Fixes** for each version of **C
 
 ---
 
+## [v2.5.1] — 2026-11-17
+### Changes & Improvements
+- **Enlarged Tactical Mini-Map Display (2.45× Area)**: Expanded radar widget container to $280 \times 180\text{ px}$ (with an active internal map display of $256 \times 96\text{ px}$), providing $+145\%$ more visible terrain area, enhanced pathway clarity, and enlarged minimized pill ($124 \times 32\text{ px}$).
+- **High-Visibility Question NPC Visual Badges**: Integrated high-contrast pre-rendered solid badges showing station numbers (`1` to `10`) for every question NPC across the map. Active stations feature pulsing golden aura rings, upcoming stations feature vibrant amber-orange badges that never camouflage into dark terrain, and cleared stations feature emerald green checkmark badges.
+- **Story & Mentor NPC Indicators**: Added rose-red exclamation mark (`!`) badges on the mini-map for all story and mentor NPCs (Old Man, Bromen, Skeleton Guardian, Knight Guardian).
+- **Zero-Allocation Cache Pipeline**: Pre-rendered all font glyphs into `_badge_cache` during level setup, guaranteeing zero heap allocations or GC stalls in the 60 FPS hot loop on low-spec dual-core hardware (AMD A4-6300 APU).
+
+---
+
 ## [v2.5.0] — 2026-11-16
 ### Changes & Improvements
 - **Zero-Allocation Tactical Radar Mini-Map**: Built and deployed a high-performance, hardware-accelerated tactical radar mini-map across the Hub World (Stage Select) and Quarters 1–4. Pre-bakes map layout into a hardware surface once on level load ($0.04\text{ms}$ draw time at 60 FPS), featuring camera viewport wireframe, pulsing player hero beacon, real-time question station beacons (active, completed, upcoming), key NPC pins, and exit portal indicators. Supports instant toggle between expanded radar card and minimized pill via `[M]` key or fist gesture/mouse click. Automatically suppresses during modal dialogs and quizzes to eliminate visual overlap.

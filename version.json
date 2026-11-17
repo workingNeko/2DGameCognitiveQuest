@@ -1,7 +1,7 @@
 {
-  "version": "2.5.0",
-  "name": "Cognitive Maze v2.5.0 - Tactical Radar Mini-Map & Dynamic Quest Redesign",
-  "notes": "Version 2.5.0 — Major Feature Release: Introduces the zero-allocation Tactical Radar Mini-Map HUD across Hub World and Quarters 1-4 with aspect-ratio preservation, camera viewport wireframe, player beacon, and question station status tracking (toggleable with [M] or fist gesture); completely redesigned kid-friendly Assessment Selection modal with vector iconography and responsive controls; enhanced student confirmation modal with celebratory fanfare; dynamic assessment progress denominator calculation (100% mastery across 3 terms); blocks remedial corridor while keeping game progression seamless; hardened cloud roster synchronization and offline caching.",
-  "download_url": "https://github.com/workingNeko/2DGameCognitiveQuest/releases/tag/v2.5.0",
-  "date": "2026-11-16"
+  "version": "2.5.1",
+  "name": "Cognitive Maze v2.5.1 - Enlarged Tactical Mini-Map & Question NPC Visual Badges",
+  "notes": "Version 2.5.1: Enlarges Tactical Radar Mini-Map display by 2.45x (280x180 px) with aspect-ratio preservation and enhanced clearance; introduces high-contrast pre-rendered solid badges showing station numbers (1-10) for all active and upcoming question NPCs, emerald checkmarks for cleared stations, and rose-red badges for mentor NPCs; completely eliminates terrain camouflage for upcoming question stations while preserving zero-allocation 60 FPS performance on AMD A4-6300 dual-core APU target hardware.",
+  "download_url": "https://github.com/workingNeko/2DGameCognitiveQuest/releases/tag/v2.5.1",
+  "date": "2026-11-17"
 }

@@ -681,8 +681,8 @@ class Quarter3:
             tile_size=TILE_SIZE,
             screen_width=self.width,
             screen_height=self.height,
-            width=184,
-            height=120,
+            width=280,
+            height=180,
             theme="desert",
             position="bottom_right",
             margin_y=18,
@@ -3553,7 +3553,24 @@ class Quarter3:
                         "y": pos[1] * TILE_SIZE + TILE_SIZE // 2,
                         "type": "station",
                         "status": status,
+                        "num": num,
+                        "label": str(num),
                     })
+
+            if getattr(self, 'npc_oldman_found', False):
+                markers.append({
+                    "x": self.npc_oldman_x + TILE_SIZE // 2,
+                    "y": self.npc_oldman_y + TILE_SIZE // 2,
+                    "type": "npc",
+                    "label": "!",
+                })
+            if getattr(self, 'npc_skeleton_found', False):
+                markers.append({
+                    "x": self.npc_skeleton_x + TILE_SIZE // 2,
+                    "y": self.npc_skeleton_y + TILE_SIZE // 2,
+                    "type": "npc",
+                    "label": "!",
+                })
 
             if hasattr(self, 'portals'):
                 is_cleared = getattr(self, 'quiz_state', 0) >= 6

@@ -27,8 +27,8 @@ class MiniMap:
         tile_size=32,
         screen_width=1280,
         screen_height=720,
-        width=184,
-        height=120,
+        width=280,
+        height=180,
         theme="sanctuary",
         position="bottom_right",
         margin_y=None,
@@ -57,9 +57,9 @@ class MiniMap:
         self._calc_positions()
 
         # Inner Map Display Geometry (Aspect-Ratio Preserving)
-        pad_x = 10
-        pad_top = 26
-        pad_bot = 8
+        pad_x = 12
+        pad_top = 28
+        pad_bot = 10
         avail_w = self.width - pad_x * 2
         avail_h = self.height - pad_top - pad_bot
 
@@ -79,6 +79,7 @@ class MiniMap:
         # Pre-bake Static Surfaces
         self._bake_base_map()
         self._bake_frame_surfaces()
+        self._init_badge_cache()
 
     def _calc_positions(self):
         """Calculates placement coordinates for the expanded card and minimized pill."""
@@ -100,8 +101,8 @@ class MiniMap:
         )
 
         # Minimized Pill Rect
-        self.pill_w = 110
-        self.pill_h = 28
+        self.pill_w = 124
+        self.pill_h = 32
         self.pill_x = self.screen_width - self.pill_w - margin_x
         self.pill_y = self.screen_height - self.pill_h - margin_y
         self.pill_rect = pygame.Rect(self.pill_x, self.pill_y, self.pill_w, self.pill_h)
@@ -169,17 +170,17 @@ class MiniMap:
         pygame.draw.rect(exp_surf, (251, 191, 36), (0, 0, self.width, self.height), 2, border_radius=12)
 
         # Header Banner Accent
-        hdr_rect = pygame.Rect(0, 0, self.width, 22)
+        hdr_rect = pygame.Rect(0, 0, self.width, 24)
         pygame.draw.rect(exp_surf, (30, 41, 59, 240), hdr_rect, border_top_left_radius=12, border_top_right_radius=12)
-        pygame.draw.line(exp_surf, (71, 85, 105), (0, 22), (self.width, 22), 1)
+        pygame.draw.line(exp_surf, (71, 85, 105), (0, 24), (self.width, 24), 1)
 
         # Header Title Text
-        font = get_font("Comic Sans MS", 12, bold=True)
+        font = get_font("Comic Sans MS", 13, bold=True)
         txt = font.render("RADAR MAP [M]", True, (241, 245, 249))
-        exp_surf.blit(txt, (10, 3))
+        exp_surf.blit(txt, (12, 3))
 
         # Header Minimize Icon [_]
-        pygame.draw.line(exp_surf, (148, 163, 184), (self.width - 22, 12), (self.width - 12, 12), 2)
+        pygame.draw.line(exp_surf, (148, 163, 184), (self.width - 24, 13), (self.width - 12, 13), 2)
 
         try:
             self._frame_surf = exp_surf.convert_alpha()
@@ -191,17 +192,100 @@ class MiniMap:
         pill_surf.fill((15, 23, 42, 230))
         pygame.draw.rect(pill_surf, (251, 191, 36), (0, 0, self.pill_w, self.pill_h), 2, border_radius=14)
 
-        font_sm = get_font("Comic Sans MS", 12, bold=True)
+        font_sm = get_font("Comic Sans MS", 13, bold=True)
         p_txt = font_sm.render("MAP [M]", True, (241, 245, 249))
-        pill_surf.blit(p_txt, ((self.pill_w - p_txt.get_width()) // 2 + 6, 5))
+        pill_surf.blit(p_txt, ((self.pill_w - p_txt.get_width()) // 2 + 6, 6))
 
         # Compass dot on pill
-        pygame.draw.circle(pill_surf, (56, 189, 248), (14, self.pill_h // 2), 4)
+        pygame.draw.circle(pill_surf, (56, 189, 248), (16, self.pill_h // 2), 5)
 
         try:
             self._pill_surf = pill_surf.convert_alpha()
         except Exception:
             self._pill_surf = pill_surf
+
+    def _init_badge_cache(self):
+        """
+        Pre-bakes high-contrast solid badge surfaces for minimap markers.
+        Avoids per-frame allocations and font rasterizations in the draw loop,
+        critical for the AMD A4-6300 dual-core target hardware budget.
+        """
+        self._badge_cache = {}
+        font_num = get_font("Arial", 10, bold=True)
+        font_npc = get_font("Arial", 11, bold=True)
+
+        # 1. Active Question Station Badges (Pulsing Gold backing with dark number)
+        for num in range(1, 16):
+            surf = pygame.Surface((18, 18), pygame.SRCALPHA)
+            pygame.draw.circle(surf, (15, 23, 42), (9, 9), 8)
+            pygame.draw.circle(surf, (250, 204, 21), (9, 9), 7)
+            txt = font_num.render(str(num), True, (15, 23, 42))
+            surf.blit(txt, ((18 - txt.get_width()) // 2, (18 - txt.get_height()) // 2))
+            try:
+                self._badge_cache[("active", str(num))] = surf.convert_alpha()
+            except Exception:
+                self._badge_cache[("active", str(num))] = surf
+
+        # Active default '?'
+        surf = pygame.Surface((18, 18), pygame.SRCALPHA)
+        pygame.draw.circle(surf, (15, 23, 42), (9, 9), 8)
+        pygame.draw.circle(surf, (250, 204, 21), (9, 9), 7)
+        txt = font_num.render("?", True, (15, 23, 42))
+        surf.blit(txt, ((18 - txt.get_width()) // 2, (18 - txt.get_height()) // 2))
+        try:
+            self._badge_cache[("active", "?")] = surf.convert_alpha()
+        except Exception:
+            self._badge_cache[("active", "?")] = surf
+
+        # 2. Upcoming Question Station Badges (Vibrant Amber/Orange backing with dark number)
+        for num in range(1, 16):
+            surf = pygame.Surface((18, 18), pygame.SRCALPHA)
+            pygame.draw.circle(surf, (15, 23, 42), (9, 9), 8)
+            pygame.draw.circle(surf, (251, 146, 60), (9, 9), 7)
+            txt = font_num.render(str(num), True, (15, 23, 42))
+            surf.blit(txt, ((18 - txt.get_width()) // 2, (18 - txt.get_height()) // 2))
+            try:
+                self._badge_cache[("upcoming", str(num))] = surf.convert_alpha()
+            except Exception:
+                self._badge_cache[("upcoming", str(num))] = surf
+
+        # Upcoming default '?'
+        surf = pygame.Surface((18, 18), pygame.SRCALPHA)
+        pygame.draw.circle(surf, (15, 23, 42), (9, 9), 8)
+        pygame.draw.circle(surf, (251, 146, 60), (9, 9), 7)
+        txt = font_num.render("?", True, (15, 23, 42))
+        surf.blit(txt, ((18 - txt.get_width()) // 2, (18 - txt.get_height()) // 2))
+        try:
+            self._badge_cache[("upcoming", "?")] = surf.convert_alpha()
+        except Exception:
+            self._badge_cache[("upcoming", "?")] = surf
+
+        # 3. Completed Station Badges (Emerald Green with crisp white checkmark vector)
+        surf = pygame.Surface((18, 18), pygame.SRCALPHA)
+        pygame.draw.circle(surf, (15, 23, 42), (9, 9), 8)
+        pygame.draw.circle(surf, (34, 197, 94), (9, 9), 7)
+        pygame.draw.lines(surf, (255, 255, 255), False, [(5, 9), (8, 12), (13, 6)], 2)
+        try:
+            comp_surf = surf.convert_alpha()
+        except Exception:
+            comp_surf = surf
+        self._badge_cache[("completed", "✓")] = comp_surf
+        self._badge_cache[("completed", "check")] = comp_surf
+        self._badge_cache[("completed", "")] = comp_surf
+
+        # 4. NPC / Mentor Story Badges (Rose Red with bold white '!')
+        surf = pygame.Surface((18, 18), pygame.SRCALPHA)
+        pygame.draw.circle(surf, (15, 23, 42), (9, 9), 8)
+        pygame.draw.circle(surf, (244, 63, 94), (9, 9), 7)
+        txt = font_npc.render("!", True, (255, 255, 255))
+        surf.blit(txt, ((18 - txt.get_width()) // 2, (18 - txt.get_height()) // 2))
+        try:
+            npc_surf = surf.convert_alpha()
+        except Exception:
+            npc_surf = surf
+        self._badge_cache[("npc", "!")] = npc_surf
+        self._badge_cache[("npc", "?")] = npc_surf
+        self._badge_cache[("npc", "")] = npc_surf
 
     def toggle(self):
         """Toggles mini-map between expanded radar and compact pill."""
@@ -321,9 +405,9 @@ class MiniMap:
 
                 if mtype == "goal":
                     # Exit Portal: Shining Star
-                    r = int(4 + pulse * 2)
+                    r = int(6 + pulse * 2.5)
                     pygame.draw.circle(surface, (56, 189, 248), (mx, my), r)
-                    pygame.draw.circle(surface, (255, 255, 255), (mx, my), 2)
+                    pygame.draw.circle(surface, (255, 255, 255), (mx, my), 3)
                 elif mtype == "portal":
                     # Wing portal
                     if status == "unlocked" or status == "completed":
@@ -332,34 +416,51 @@ class MiniMap:
                         p_col = (250, 204, 21)  # Pulsing Gold
                     else:
                         p_col = (100, 116, 139) # Locked Slate
-                    pygame.draw.circle(surface, p_col, (mx, my), 4)
+                    pygame.draw.circle(surface, p_col, (mx, my), 5)
                     pygame.draw.circle(surface, (255, 255, 255), (mx, my), 2)
                 elif mtype == "npc":
-                    # Central / Key NPC
-                    pygame.draw.circle(surface, (244, 63, 94), (mx, my), 3)
-                else:
-                    # Quiz Station (1-5)
-                    if status == "active":
-                        # Current Target: Radiant glowing beacon
-                        r_glow = int(4.5 + pulse * 2.0)
-                        pygame.draw.circle(surface, (250, 204, 21), (mx, my), r_glow)
-                        pygame.draw.circle(surface, (255, 255, 255), (mx, my), 2)
-                    elif status == "completed":
-                        # Cleared Station: Emerald green dot
-                        pygame.draw.circle(surface, (34, 197, 94), (mx, my), 3)
+                    # Story / Mentor NPC (Old Man, Bromen, Skeleton, Knight)
+                    badge = self._badge_cache.get(("npc", "!"))
+                    if badge:
+                        surface.blit(badge, (mx - 9, my - 9))
                     else:
-                        # Future Station: Muted slate dot
-                        pygame.draw.circle(surface, (100, 116, 139), (mx, my), 2)
+                        pygame.draw.circle(surface, (244, 63, 94), (mx, my), 6)
+                else:
+                    # Quiz / Question Station (1-10)
+                    label = str(m.get("label", m.get("num", "")))
+                    if status == "active":
+                        # Current Target: Radiant glowing beacon ring + solid gold numbered badge
+                        r_glow = int(10.0 + pulse * 3.5)
+                        pygame.draw.circle(surface, (250, 204, 21), (mx, my), r_glow, 1)
+                        badge = self._badge_cache.get(("active", label)) or self._badge_cache.get(("active", "?"))
+                        if badge:
+                            surface.blit(badge, (mx - 9, my - 9))
+                        else:
+                            pygame.draw.circle(surface, (250, 204, 21), (mx, my), 7)
+                    elif status == "completed":
+                        # Cleared Station: Emerald green badge with checkmark
+                        badge = self._badge_cache.get(("completed", "✓"))
+                        if badge:
+                            surface.blit(badge, (mx - 9, my - 9))
+                        else:
+                            pygame.draw.circle(surface, (34, 197, 94), (mx, my), 6)
+                    else:
+                        # Upcoming Station: Vibrant Amber/Orange numbered badge (Never invisible slate!)
+                        badge = self._badge_cache.get(("upcoming", label)) or self._badge_cache.get(("upcoming", "?"))
+                        if badge:
+                            surface.blit(badge, (mx - 9, my - 9))
+                        else:
+                            pygame.draw.circle(surface, (251, 146, 60), (mx, my), 6)
 
         # Draw Player Marker (Hero Beacon)
         if player_pos:
             px, py = self.world_to_map(player_pos[0], player_pos[1])
             # Radiant outer pulse aura
-            aura_r = int(5.5 + pulse * 2.5)
+            aura_r = int(7.0 + pulse * 3.0)
             pygame.draw.circle(surface, (56, 189, 248), (px, py), aura_r, 1)
             # Bright hero center dot
-            pygame.draw.circle(surface, (255, 255, 255), (px, py), 3)
-            pygame.draw.circle(surface, (2, 132, 199), (px, py), 2)
+            pygame.draw.circle(surface, (255, 255, 255), (px, py), 4)
+            pygame.draw.circle(surface, (2, 132, 199), (px, py), 3)
 
         # Fist charge feedback on minimap container if hovered
         if cursor_pos and self.container_rect.collidepoint(cursor_pos) and hold_pct > 0.05:

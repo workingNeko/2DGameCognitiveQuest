@@ -506,11 +506,11 @@ class StageSelect:
             tile_size=TILE_SIZE,
             screen_width=self.width,
             screen_height=self.height,
-            width=184,
-            height=120,
+            width=280,
+            height=180,
             theme="sanctuary",
             position="bottom_right",
-            margin_y=94,
+            margin_y=105,
         )
 
         # ============================================================
@@ -2491,11 +2491,11 @@ class StageSelect:
             tile_size=TILE_SIZE,
             screen_width=self.width,
             screen_height=self.height,
-            width=184,
-            height=120,
+            width=280,
+            height=180,
             theme="sanctuary",
             position="bottom_right",
-            margin_y=94,
+            margin_y=105,
         )
 
         print(f"[OK] Switched to new map: {self.map_loader.current_map_name}")
@@ -4468,13 +4468,13 @@ class StageSelect:
                         "status": "unlocked",
                     })
             if getattr(self, 'npc_oldman_found', False):
-                markers.append({"x": self.npc_oldman_x + TILE_SIZE // 2, "y": self.npc_oldman_y + TILE_SIZE // 2, "type": "npc"})
+                markers.append({"x": self.npc_oldman_x + TILE_SIZE // 2, "y": self.npc_oldman_y + TILE_SIZE // 2, "type": "npc", "label": "!"})
             if getattr(self, 'npc_bromen_found', False):
-                markers.append({"x": self.npc_bromen_x + TILE_SIZE // 2, "y": self.npc_bromen_y + TILE_SIZE // 2, "type": "npc"})
+                markers.append({"x": self.npc_bromen_x + TILE_SIZE // 2, "y": self.npc_bromen_y + TILE_SIZE // 2, "type": "npc", "label": "!"})
             if getattr(self, 'npc_skeleton_found', False):
-                markers.append({"x": self.npc_skeleton_x + TILE_SIZE // 2, "y": self.npc_skeleton_y + TILE_SIZE // 2, "type": "npc"})
+                markers.append({"x": self.npc_skeleton_x + TILE_SIZE // 2, "y": self.npc_skeleton_y + TILE_SIZE // 2, "type": "npc", "label": "!"})
             if getattr(self, 'npc_knight_found', False):
-                markers.append({"x": self.npc_knight_x + TILE_SIZE // 2, "y": self.npc_knight_y + TILE_SIZE // 2, "type": "npc"})
+                markers.append({"x": self.npc_knight_x + TILE_SIZE // 2, "y": self.npc_knight_y + TILE_SIZE // 2, "type": "npc", "label": "!"})
 
             hold_pct = 0.0
             fist_start = getattr(self, 'fist_start_time', 0) or (getattr(self.main_menu, 'fist_start_time', 0) if self.main_menu else 0)
