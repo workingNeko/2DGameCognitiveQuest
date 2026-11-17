@@ -4,6 +4,20 @@ All notable **Changes & Improvements** and **Bug Fixes** for each version of **C
 
 ---
 
+## [v2.5.2] — 2026-11-17
+### Changes & Improvements
+- **Multi-Assessment Quarter Progression Gating**: Enforced that subsequent terms (Term 2, Term 3, Term 4) only unlock once the student has completed *all* available active summative assessments in the current term (e.g. both Assessment 1 & 2 in Term 1), accurately reflecting curriculum pacing and teacher lesson plans.
+- **Dynamic Bridge Gating & Adaptive Construction**: Added adaptive bridge construction scaling supporting 1 to 15 questions in Quarter 3 (`Quarter3Maps/map8.txt`), guaranteeing that all aqueduct bridge segments cleanly materialize upon answering mainland challenges.
+- **Universal Island/Bridge Reachability Verification**: Integrated a BFS connected-component reachability verification inside `core/dynamic_quiz_manager.py` ensuring newly assigned dynamic question stations are always pathfindable from the initial player starting component.
+
+### Bug Fixes
+- **Term 1 & Term 3 Bridge Softlock Fix**: Added strict spatial exclusion bounds on `Quarter1Maps/map1.txt` (`x >= 36, y <= 8`) and `Quarter3Maps/map8.txt` (`x >= 40, y <= 14`) so question NPCs can never spawn across unbuilt bridges or on isolated islands.
+- **Startup Indentation Error Resolved**: Fixed an unexpected indentation syntax anomaly in `screens/stageselect.py` (`is_quarter_completed` / `is_quarter_unlocked`).
+- **Surface Bit-Depth Crash Prevention**: Fixed 4-tuple RGBA drawing crashes on 16/24-bit displays across all quarter screens by using cached `pygame.SRCALPHA` surfaces.
+- **Cloud Sync Thread Isolation**: Hardened background cloud sync workers against wiping local saves in headless test environments.
+
+---
+
 ## [v2.5.1] — 2026-11-17
 ### Changes & Improvements
 - **Enlarged Tactical Mini-Map Display (2.45× Area)**: Expanded radar widget container to $280 \times 180\text{ px}$ (with an active internal map display of $256 \times 96\text{ px}$), providing $+145\%$ more visible terrain area, enhanced pathway clarity, and enlarged minimized pill ($124 \times 32\text{ px}$).

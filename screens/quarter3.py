@@ -968,12 +968,34 @@ class Quarter3:
                     forbidden.add((tx, ty))
             if hasattr(self, 'bridge_tiles') and self.bridge_tiles:
                 forbidden.update(self.bridge_tiles)
+            if 'map8' in str(self.map_name).lower():
+                # Strictly forbid bridge and eastern sanctuary island (Skeleton Guardian & exit portal)
+                # so question NPCs can NEVER spawn across the unbuilt bridge
+                map_w = len(self.game_map[0]) if (self.game_map and len(self.game_map) > 0) else 50
+                map_h = len(self.game_map) if self.game_map else 20
+                for fx in range(40, map_w):
+                    for fy in range(0, min(15, map_h)):
+                        forbidden.add((fx, fy))
             self.quiz_stations = allocate_dynamic_stations(
                 self.game_map,
                 self.quiz_stations,
                 len(mapped_questions),
                 forbidden_tiles=forbidden
             )
+
+        # Failsafe: if any active station somehow exists across the bridge, ensure bridge is walkable
+        if hasattr(self, 'bridge_tiles') and self.bridge_tiles and 'map8' in str(self.map_name).lower():
+            has_isolated_station = any(
+                pos[0] >= 40 and pos[1] <= 14 
+                for pos in self.quiz_stations.values()
+            )
+            if has_isolated_station:
+                for bx, by in self.bridge_tiles:
+                    if 0 <= by < len(self.game_map) and 0 <= bx < len(self.game_map[by]):
+                        self.game_map[by] = self.game_map[by][:bx] + "B" + self.game_map[by][bx + 1:]
+                        self.render_map[by] = self.render_map[by][:bx] + "B" + self.render_map[by][bx + 1:]
+                self.built_bridge_count = len(self.bridge_tiles)
+                print("[BRIDGE FAILSAFE] Bridge built immediately because an active station was detected across the water.")
 
         sorted_ids = sorted(self.quiz_stations.keys())
         active_count = min(len(sorted_ids), len(mapped_questions))
@@ -1066,6 +1088,16 @@ class Quarter3:
             self.quiz_station_index = active_ids[0]
             self.current_question_index = 0
             print(f"[CLOUD SYNC] Quarter 3 synced {active_count} cloud question(s) across {active_count} station(s).")
+
+    def _is_all_stations_cleared(self):
+        """Returns True if all active cloud quiz stations for Quarter 3 have been completed."""
+        tot = getattr(self, 'active_station_count', len(getattr(self, 'quiz_questions', [])))
+        if tot <= 0:
+            return True
+        answered = getattr(self, 'answered_stations', None)
+        if answered is not None and len(answered) >= tot:
+            return True
+        return getattr(self, 'quiz_station_index', 0) > tot
 
     def cloud_sync_quarter3_questions(self, questions):
         """Allows dynamic overriding/syncing of Quarter 3 questions from cloud or tests (up to 15)."""
@@ -2172,6 +2204,8 @@ class Quarter3:
 
         if hasattr(self, 'bridge_tiles') and self.bridge_tiles and tot_st > 0:
             target_bridges = max(1, min(len(self.bridge_tiles), int(round(ans_count * len(self.bridge_tiles) / float(tot_st)))))
+            if ans_count >= tot_st:
+                target_bridges = len(self.bridge_tiles)
             if target_bridges > self.built_bridge_count:
                 last_bx, last_by = self.bridge_tiles[target_bridges - 1]
                 for b_idx in range(self.built_bridge_count, target_bridges):
@@ -2316,11 +2350,11 @@ class Quarter3:
                     self.main_menu.audio_manager.play_sfx("portal_transition")
                 return
             if getattr(self, 'guardian_skeleton_close_btn_rect', None) and self.guardian_skeleton_close_btn_rect.collidepoint(pos):
-                self.guardian_skeleton_state = 1 if self.quiz_station_index >= 6 else 0
+                self.guardian_skeleton_state = 1 if self._is_all_stations_cleared() else 0
                 self.guardian_skeleton_proximity_cooldown = 4.0
                 return
             if getattr(self, 'guardian_skeleton_x_btn_rect', None) and self.guardian_skeleton_x_btn_rect.collidepoint(pos):
-                self.guardian_skeleton_state = 1 if self.quiz_station_index >= 6 else 0
+                self.guardian_skeleton_state = 1 if self._is_all_stations_cleared() else 0
                 self.guardian_skeleton_proximity_cooldown = 4.0
                 return
 
@@ -2630,8 +2664,8 @@ class Quarter3:
             player_center_y = self.player_y + TILE_SIZE // 2
             dist_skel = math.hypot(player_center_x - skel_center_x, player_center_y - skel_center_y)
 
-            # Proximity prompt trigger when all 5 stations cleared
-            if self.guardian_skeleton_state == 1 and self.quiz_station_index >= 6:
+            # Proximity prompt trigger when all stations cleared
+            if self.guardian_skeleton_state == 1 and self._is_all_stations_cleared():
                 if getattr(self, 'guardian_skeleton_proximity_cooldown', 0) > 0:
                     self.guardian_skeleton_proximity_cooldown -= dt
                 elif dist_skel < TILE_SIZE * 3.2:
@@ -2642,7 +2676,7 @@ class Quarter3:
 
             # Smooth auto-dismiss if player walks far away while dialogue is open
             if self.guardian_skeleton_state == 2 and dist_skel > TILE_SIZE * 4.2:
-                self.guardian_skeleton_state = 1 if self.quiz_station_index >= 6 else 0
+                self.guardian_skeleton_state = 1 if self._is_all_stations_cleared() else 0
 
             # MediaPipe Closed Fist Hold on Skeleton Guardian to talk in free roam
             if self.quiz_state == 0 and self.guardian_skeleton_state in [0, 1] and not getattr(self, 'solar_array_puzzle_active', False):
@@ -3297,14 +3331,24 @@ class Quarter3:
                     pass
             self._char_status_bg_surf = bg_surf
 
+        if getattr(self, '_char_status_shadow_surf', None) is None or self._char_status_shadow_surf.get_size() != (card_w, card_h):
+            sh_surf = pygame.Surface((card_w, card_h), pygame.SRCALPHA)
+            pygame.draw.rect(sh_surf, (0, 0, 0, 110), (0, 0, card_w, card_h), border_radius=10)
+            if pygame.display.get_surface() is not None:
+                try:
+                    sh_surf = sh_surf.convert_alpha()
+                except Exception:
+                    pass
+            self._char_status_shadow_surf = sh_surf
+
         # Drop shadow for depth and separation from map tiles
-        pygame.draw.rect(self.screen, (0, 0, 0, 110), (card_x, card_y + 3, card_w, card_h), border_radius=10)
+        self.screen.blit(self._char_status_shadow_surf, (card_x, card_y + 3))
         self.screen.blit(self._char_status_bg_surf, (card_x, card_y))
 
         # Border: Gold while in progress, Emerald Green when all questions completed
         border_col = (34, 197, 94) if is_all_done else (251, 191, 36)
         pygame.draw.rect(self.screen, border_col, (card_x, card_y, card_w, card_h), 2, border_radius=10)
-        pygame.draw.rect(self.screen, (255, 255, 255, 25), (card_x + 2, card_y + 2, card_w - 4, card_h - 4), 1, border_radius=8)
+        pygame.draw.rect(self.screen, (51, 65, 85), (card_x + 2, card_y + 2, card_w - 4, card_h - 4), 1, border_radius=8)
 
         # Avatar circle badge
         av_cx, av_cy = card_x + 18, card_y + 17
@@ -3395,13 +3439,23 @@ class Quarter3:
                         pass
                 self._objectives_bg_surf = bg_surf
 
+            if getattr(self, '_objectives_shadow_surf', None) is None or self._objectives_shadow_surf.get_size() != (box_w, box_h):
+                sh_surf = pygame.Surface((box_w, box_h), pygame.SRCALPHA)
+                pygame.draw.rect(sh_surf, (0, 0, 0, 110), (0, 0, box_w, box_h), border_radius=12)
+                if pygame.display.get_surface() is not None:
+                    try:
+                        sh_surf = sh_surf.convert_alpha()
+                    except Exception:
+                        pass
+                self._objectives_shadow_surf = sh_surf
+
             # Drop shadow for depth and map separation
-            pygame.draw.rect(self.screen, (0, 0, 0, 110), (box_x, box_y + 3, box_w, box_h), border_radius=12)
+            self.screen.blit(self._objectives_shadow_surf, (box_x, box_y + 3))
             self.screen.blit(self._objectives_bg_surf, (box_x, box_y))
             
             tot_st = getattr(self, 'active_station_count', len(self.quiz_questions))
             answered_set = getattr(self, 'answered_stations', set())
-            q_count = len(answered_set) if answered_set else (tot_st if self.quiz_station_index >= 6 else min(self.current_question_index, tot_st))
+            q_count = len(answered_set) if answered_set else (tot_st if self._is_all_stations_cleared() else min(self.current_question_index, tot_st))
             fac = getattr(self, 'first_attempt_correct', {})
             correct_count = sum(1 for sid in range(1, tot_st + 1) if (sid < self.quiz_station_index or sid in answered_set or self.quiz_state >= 6) and fac.get(sid, True))
             wrong_count = sum(1 for sid in range(1, tot_st + 1) if (sid < self.quiz_station_index or sid in answered_set or self.quiz_state >= 6) and not fac.get(sid, True))
@@ -3410,7 +3464,7 @@ class Quarter3:
             # Border: Radiant Gold when in progress, Emerald Green when complete
             border_color = (34, 197, 94) if is_complete else (251, 191, 36)
             pygame.draw.rect(self.screen, border_color, (box_x, box_y, box_w, box_h), 2, border_radius=12)
-            pygame.draw.rect(self.screen, (255, 255, 255, 25), (box_x + 2, box_y + 2, box_w - 4, box_h - 4), 1, border_radius=10)
+            pygame.draw.rect(self.screen, (51, 65, 85), (box_x + 2, box_y + 2, box_w - 4, box_h - 4), 1, border_radius=10)
             
             # Header title in Gold
             title_font = get_font("Comic Sans MS", 13, bold=True)
@@ -3506,7 +3560,7 @@ class Quarter3:
                 obj2 = "Cloud Questions: None Assigned (0 in Cloud)"
                 obj2_color = (56, 189, 248)
             elif self.quiz_state < 6:
-                if self.quiz_station_index >= 6 or is_complete:
+                if self._is_all_stations_cleared() or is_complete:
                     if wrong_count > 0:
                         obj2 = f"All Questions Answered ({correct_count} Correct, {wrong_count} Wrong)! Visit Skeleton Guardian!"
                         obj2_color = (251, 146, 60)
@@ -4464,7 +4518,7 @@ class Quarter3:
                 self.close_fraction_match_modal()
                 return "handled"
             if getattr(self, 'guardian_skeleton_state', 0) == 2:
-                self.guardian_skeleton_state = 1 if self.quiz_station_index >= 6 else 0
+                self.guardian_skeleton_state = 1 if self._is_all_stations_cleared() else 0
                 self.guardian_skeleton_proximity_cooldown = 4.0
                 return "handled"
         # In-game pause menu (universal across all states)
@@ -4613,7 +4667,7 @@ class Quarter3:
                     self.trigger_click(click_pos)
                     return "handled"
                 if getattr(self, 'guardian_skeleton_state', 0) == 2:
-                    self.guardian_skeleton_state = 1 if self.quiz_station_index >= 6 else 0
+                    self.guardian_skeleton_state = 1 if self._is_all_stations_cleared() else 0
                     return "handled"
                 if getattr(self, 'fraction_match_active', False) or getattr(self, 'solar_array_puzzle_active', False):
                     self.close_fraction_match_modal()
@@ -5725,7 +5779,7 @@ class Quarter3:
         self.dragged_solar_piece = None
         self.selected_fraction_piece = None
         self.mouse_drag_active = False
-        self.guardian_skeleton_state = 1 if self.quiz_station_index >= 6 else 0
+        self.guardian_skeleton_state = 1 if self._is_all_stations_cleared() else 0
         self.guardian_skeleton_proximity_cooldown = 4.0
 
     def complete_fraction_match_trial(self):
@@ -5743,8 +5797,8 @@ class Quarter3:
         self.dragged_solar_piece = None
         self.selected_fraction_piece = None
         self.guardian_skeleton_state = 5
-        self.quiz_state = 6 if self.quiz_station_index >= 6 else 0
-        if self.quiz_station_index >= 6:
+        self.quiz_state = 6 if self._is_all_stations_cleared() else 0
+        if self._is_all_stations_cleared():
             self.clear_portal_overlapping_tiles()
             self.save_results_to_database()
         self.caravan_upgrade_banner_text = "SUN FRACTION MATCH SOLVED!"
@@ -6129,7 +6183,7 @@ class Quarter3:
                     "The ancient shadow seal is broken, and the Desert Sun Portal is active! "
                     "Step through the portal to complete your journey, or replay the Fraction Match anytime!")
             btn_label = "Replay Fraction Match >>"
-        elif self.quiz_station_index >= 6:
+        elif self._is_all_stations_cleared():
             tot_st = getattr(self, 'active_station_count', len(self.quiz_questions))
             greeting = f"Halt, victorious traveler {self.player_name}!"
             if tot_st == 0:

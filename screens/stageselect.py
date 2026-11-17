@@ -1464,10 +1464,16 @@ class StageSelect:
             from db.connect_db import db
             available = [1]
             if db:
-                available = db.get_available_summatives_for_term(term_num) or [1]
-            # Term is completed if all available uploaded summatives for this term are completed
-            all_done = all(self._is_dict_completed(comp_summs, f"t{term_num}_s{s}") for s in available)
-            return all_done
+                try:
+                    available = db.get_available_summatives_for_term(term_num) or [1]
+                except Exception:
+                    available = [1]
+            # Term is completed only if ALL available uploaded summatives for this term are completed
+            has_summ_records = any(f"t{term_num}_s{s}" in comp_summs for s in range(1, 5))
+            if has_summ_records:
+                return all(self._is_dict_completed(comp_summs, f"t{term_num}_s{s}") for s in available)
+            # Legacy fallback if no summative records exist in save file
+            return bool(self._is_dict_completed(comp_qs, qid))
         elif qid == "quarter4":
             missed = save_data.get("missed_questions", [])
             q4_done = self._is_dict_completed(comp_qs, "quarter4") or self._is_dict_completed(comp_summs, "remedial")
@@ -1485,28 +1491,20 @@ class StageSelect:
         self.completed_quarters = self._completed_quarters
 
     def is_quarter_unlocked(self, qid):
-        """Sequential gating: Q1 is open; Q2 requires Q1; Q3 requires Q2; Q4 requires Q3.
+        """Sequential gating: Q1 is open; Q2 requires ALL available Q1 assessments;
+        Q3 requires ALL available Q2 assessments; Q4 requires ALL available Q3 assessments.
         If barriers_lifted override is active (Ctrl+Shift+B), all quarter corridors and portals are unlocked."""
         if getattr(self, 'barriers_lifted', False):
             return True
         if qid == "quarter1":
             return True
 
-        from db.save_system import load_student_progress, get_completed_quarters
-        student_id = getattr(self.main_menu, 'student_id', None)
-        save_data = load_student_progress(student_id) or {}
-        comp_summs = save_data.get("completed_summatives", {})
-        comp_qs = get_completed_quarters(student_id) or {}
-
         if qid == "quarter2":
-            t1_done = any(self._is_dict_completed(comp_summs, f"t1_s{s}") for s in range(1, 5))
-            return t1_done or self.is_quarter_completed("quarter1")
+            return self.is_quarter_completed("quarter1")
         elif qid == "quarter3":
-            t2_done = any(self._is_dict_completed(comp_summs, f"t2_s{s}") for s in range(1, 5))
-            return t2_done or self.is_quarter_completed("quarter2")
+            return self.is_quarter_completed("quarter2")
         elif qid == "quarter4":
-            t3_done = any(self._is_dict_completed(comp_summs, f"t3_s{s}") for s in range(1, 5))
-            return t3_done or self.is_quarter_completed("quarter3")
+            return self.is_quarter_completed("quarter3")
         return False
 
     # ============================================================
@@ -1544,6 +1542,7 @@ class StageSelect:
                 if not self.is_quarter_unlocked("quarter2"):
                     if self.locked_portal_banner_timer <= 0:
                         self.locked_portal_banner_msg = "Complete Term 1 to unlock the path to Term 2!"
+                        self.locked_portal_banner_msg = "Complete all available Term 1 assessments to unlock the path to Term 2!"
                         self.locked_portal_banner_timer = 2.5
                     return False
 
@@ -1552,6 +1551,7 @@ class StageSelect:
                 if not self.is_quarter_unlocked("quarter3"):
                     if self.locked_portal_banner_timer <= 0:
                         self.locked_portal_banner_msg = "Complete Term 2 to unlock the path to Term 3!"
+                        self.locked_portal_banner_msg = "Complete all available Term 2 assessments to unlock the path to Term 3!"
                         self.locked_portal_banner_timer = 2.5
                     return False
 
@@ -2402,6 +2402,8 @@ class StageSelect:
                 if not self.is_quarter_unlocked('quarter2'):
                     print("[LOCKED] Term 2 Locked! Complete Term 1 first.")
                     self.locked_portal_banner_msg = "Complete Term 1 to unlock Term 2!"
+                    print("[LOCKED] Term 2 Locked! Complete all available Term 1 assessments first.")
+                    self.locked_portal_banner_msg = "Complete all available Term 1 assessments to unlock Term 2!"
                     self.locked_portal_banner_timer = 2.5
                     return False
                 if self.knight_dialogue_state == 0 and not self.is_quarter_completed('quarter2') and not getattr(self, 'barriers_lifted', False):
@@ -2416,6 +2418,8 @@ class StageSelect:
                 if not self.is_quarter_unlocked('quarter3'):
                     print("[LOCKED] Term 3 Locked! Complete Term 2 first.")
                     self.locked_portal_banner_msg = "Complete Term 2 to unlock Term 3!"
+                    print("[LOCKED] Term 3 Locked! Complete all available Term 2 assessments first.")
+                    self.locked_portal_banner_msg = "Complete all available Term 2 assessments to unlock Term 3!"
                     self.locked_portal_banner_timer = 2.5
                     return False
                 if self.skeleton_dialogue_state == 0 and not self.is_quarter_completed('quarter3') and not getattr(self, 'barriers_lifted', False):
@@ -2810,6 +2814,7 @@ class StageSelect:
                 if dist < TILE_SIZE * 3.5:
                     if not self.is_quarter_unlocked('quarter2'):
                         self.locked_portal_banner_msg = "Complete Quarter 1 to unlock Quarter 2!"
+                        self.locked_portal_banner_msg = "Complete all available Term 1 assessments to unlock Term 2!"
                         self.locked_portal_banner_timer = 2.0
                     else:
                         self.knight_dialogue_state = 1
@@ -2845,6 +2850,7 @@ class StageSelect:
             elif clicked_portal.direction == 'up':
                 if not self.is_quarter_unlocked('quarter2'):
                     self.locked_portal_banner_msg = "Complete Term 1 to unlock Term 2!"
+                    self.locked_portal_banner_msg = "Complete all available Term 1 assessments to unlock Term 2!"
                     self.locked_portal_banner_timer = 2.0
                 elif self.knight_dialogue_state == 0 and not self.is_quarter_completed('quarter2') and not getattr(self, 'barriers_lifted', False):
                     self.locked_portal_banner_msg = "Talk to the Knight first to unlock Term 2!"
@@ -2857,6 +2863,7 @@ class StageSelect:
             elif clicked_portal.direction == 'right':
                 if not self.is_quarter_unlocked('quarter3'):
                     self.locked_portal_banner_msg = "Complete Term 2 to unlock Term 3!"
+                    self.locked_portal_banner_msg = "Complete all available Term 2 assessments to unlock Term 3!"
                     self.locked_portal_banner_timer = 2.0
                 elif self.skeleton_dialogue_state == 0 and not self.is_quarter_completed('quarter3') and not getattr(self, 'barriers_lifted', False):
                     self.locked_portal_banner_msg = "Talk to the Skeleton first to unlock Term 3!"
@@ -3162,6 +3169,7 @@ class StageSelect:
                     if not self.is_quarter_unlocked('quarter3'):
                         if self.locked_portal_banner_timer <= 0:
                             self.locked_portal_banner_msg = "Complete Quarter 2 to unlock Quarter 3!"
+                            self.locked_portal_banner_msg = "Complete all available Term 2 assessments to unlock Term 3!"
                             self.locked_portal_banner_timer = 2.0
                     else:
                         self.skeleton_dialogue_state = 1
@@ -3240,6 +3248,7 @@ class StageSelect:
                     if not self.is_quarter_unlocked('quarter2'):
                         if self.locked_portal_banner_timer <= 0:
                             self.locked_portal_banner_msg = "Complete Quarter 1 to unlock Quarter 2!"
+                            self.locked_portal_banner_msg = "Complete all available Term 1 assessments to unlock Term 2!"
                             self.locked_portal_banner_timer = 2.0
                     else:
                         self.knight_dialogue_state = 1
@@ -3385,6 +3394,7 @@ class StageSelect:
                         if not self.is_quarter_unlocked('quarter3'):
                             if self.locked_portal_banner_timer <= 0:
                                 self.locked_portal_banner_msg = "Complete Term 2 to unlock Term 3!"
+                                self.locked_portal_banner_msg = "Complete all available Term 2 assessments to unlock Term 3!"
                                 self.locked_portal_banner_timer = 2.0
                         elif self.skeleton_dialogue_state >= 2 or self.is_quarter_completed('quarter3') or self.player_following_target == 'skeleton' or getattr(self, 'barriers_lifted', False):
                             self.player_following_target = None
@@ -3397,6 +3407,7 @@ class StageSelect:
                         if not self.is_quarter_unlocked('quarter2'):
                             if self.locked_portal_banner_timer <= 0:
                                 self.locked_portal_banner_msg = "Complete Term 1 to unlock Term 2!"
+                                self.locked_portal_banner_msg = "Complete all available Term 1 assessments to unlock Term 2!"
                                 self.locked_portal_banner_timer = 2.0
                         elif self.knight_dialogue_state >= 2 or self.is_quarter_completed('quarter2') or self.player_following_target == 'knight' or getattr(self, 'barriers_lifted', False):
                             self.player_following_target = None
@@ -4728,6 +4739,7 @@ class StageSelect:
                     elif current_portal.direction == 'up':
                         if not self.is_quarter_unlocked('quarter2'):
                             self.locked_portal_banner_msg = "Complete Term 1 to unlock Term 2!"
+                            self.locked_portal_banner_msg = "Complete all available Term 1 assessments to unlock Term 2!"
                             self.locked_portal_banner_timer = 2.0
                         elif self.knight_dialogue_state >= 2 or self.is_quarter_completed('quarter2') or getattr(self, 'barriers_lifted', False):
                             self.open_summative_modal(2)
@@ -4738,6 +4750,7 @@ class StageSelect:
                     elif current_portal.direction == 'right':
                         if not self.is_quarter_unlocked('quarter3'):
                             self.locked_portal_banner_msg = "Complete Term 2 to unlock Term 3!"
+                            self.locked_portal_banner_msg = "Complete all available Term 2 assessments to unlock Term 3!"
                             self.locked_portal_banner_timer = 2.0
                         elif self.skeleton_dialogue_state >= 2 or self.is_quarter_completed('quarter3') or getattr(self, 'barriers_lifted', False):
                             self.open_summative_modal(3)
@@ -4845,4 +4858,4 @@ class StageSelect:
         cv2.destroyAllWindows()
 
 
-StageSelectScreen = StageSelect
+StageSelectScreen = StageSelect

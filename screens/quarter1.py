@@ -866,6 +866,14 @@ class Quarter1:
                     tx = getattr(p, 'tile_x', getattr(p, 'x', 0))
                     ty = getattr(p, 'tile_y', getattr(p, 'y', 0))
                     forbidden.add((tx, ty))
+            if self.map_name.lower() == 'map1.txt':
+                # Strictly forbid bridge and eastern sanctuary island (Old Man & exit portal)
+                # so question NPCs can NEVER spawn across the unbuilt bridge
+                map_w = len(self.game_map[0]) if (self.game_map and len(self.game_map) > 0) else 54
+                map_h = len(self.game_map) if self.game_map else 20
+                for fx in range(36, map_w):
+                    for fy in range(0, min(9, map_h)):
+                        forbidden.add((fx, fy))
             self.quiz_stations = allocate_dynamic_stations(
                 self.game_map,
                 self.quiz_stations,
@@ -1545,11 +1553,20 @@ class Quarter1:
         if self.map_name.lower() != 'map1.txt':
             return
         tot = getattr(self, 'active_station_count', len(self.shape_npcs))
-        q_count = sum(1 for s in self.shape_npcs.values() if s['answered'])
+        q_count = sum(1 for s in self.shape_npcs.values() if s.get('answered', False))
         
+        # Safety fallback: if an NPC is ever placed across the river, bridge is immediately walkable
+        has_station_across = any(
+            s.get('tile_x', 0) >= 36 and s.get('tile_y', 0) <= 8
+            for s in self.shape_npcs.values()
+        )
+
         # Modify both self.game_map and self.render_map
         # Columns 37 to 46 in Row 3 and Row 4 (10 tiles scaled proportionally to 0..N cloud questions)
-        built_tiles = int(round((q_count / float(tot)) * 10)) if (tot > 0 and q_count < tot) else (10 if (tot <= 0 or q_count >= tot) else 0)
+        if has_station_across or tot <= 0 or q_count >= tot:
+            built_tiles = 10
+        else:
+            built_tiles = int(round((q_count / float(tot)) * 10))
         for r in [3, 4]:
             if r >= len(self.game_map):
                 continue
@@ -4572,14 +4589,24 @@ class Quarter1:
                     pass
             self._char_status_bg_surf = bg_surf
 
+        if getattr(self, '_char_status_shadow_surf', None) is None or self._char_status_shadow_surf.get_size() != (card_w, card_h):
+            sh_surf = pygame.Surface((card_w, card_h), pygame.SRCALPHA)
+            pygame.draw.rect(sh_surf, (0, 0, 0, 110), (0, 0, card_w, card_h), border_radius=10)
+            if pygame.display.get_surface() is not None:
+                try:
+                    sh_surf = sh_surf.convert_alpha()
+                except Exception:
+                    pass
+            self._char_status_shadow_surf = sh_surf
+
         # Drop shadow for depth and separation from map tiles
-        pygame.draw.rect(self.screen, (0, 0, 0, 110), (card_x, card_y + 3, card_w, card_h), border_radius=10)
+        self.screen.blit(self._char_status_shadow_surf, (card_x, card_y + 3))
         self.screen.blit(self._char_status_bg_surf, (card_x, card_y))
 
         # Border: Gold while in progress, Emerald Green when all questions completed
         border_col = (34, 197, 94) if is_all_done else (251, 191, 36)
         pygame.draw.rect(self.screen, border_col, (card_x, card_y, card_w, card_h), 2, border_radius=10)
-        pygame.draw.rect(self.screen, (255, 255, 255, 25), (card_x + 2, card_y + 2, card_w - 4, card_h - 4), 1, border_radius=8)
+        pygame.draw.rect(self.screen, (51, 65, 85), (card_x + 2, card_y + 2, card_w - 4, card_h - 4), 1, border_radius=8)
 
         # Avatar circle badge
         av_cx, av_cy = card_x + 18, card_y + 17
@@ -4661,8 +4688,18 @@ class Quarter1:
                         pass
                 self._objectives_bg_surf = bg_surf
 
+            if getattr(self, '_objectives_shadow_surf', None) is None or self._objectives_shadow_surf.get_size() != (box_w, box_h):
+                sh_surf = pygame.Surface((box_w, box_h), pygame.SRCALPHA)
+                pygame.draw.rect(sh_surf, (0, 0, 0, 110), (0, 0, box_w, box_h), border_radius=12)
+                if pygame.display.get_surface() is not None:
+                    try:
+                        sh_surf = sh_surf.convert_alpha()
+                    except Exception:
+                        pass
+                self._objectives_shadow_surf = sh_surf
+
             # Drop shadow for depth and map separation
-            pygame.draw.rect(self.screen, (0, 0, 0, 110), (box_x, box_y + 3, box_w, box_h), border_radius=12)
+            self.screen.blit(self._objectives_shadow_surf, (box_x, box_y + 3))
             self.screen.blit(self._objectives_bg_surf, (box_x, box_y))
             
             tot_st = getattr(self, 'active_station_count', len(self.shape_npcs))
@@ -4675,7 +4712,7 @@ class Quarter1:
             # Border: Radiant Gold when in progress, Emerald Green when complete
             border_color = (34, 197, 94) if is_complete else (251, 191, 36)
             pygame.draw.rect(self.screen, border_color, (box_x, box_y, box_w, box_h), 2, border_radius=12)
-            pygame.draw.rect(self.screen, (255, 255, 255, 25), (box_x + 2, box_y + 2, box_w - 4, box_h - 4), 1, border_radius=10)
+            pygame.draw.rect(self.screen, (51, 65, 85), (box_x + 2, box_y + 2, box_w - 4, box_h - 4), 1, border_radius=10)
             
             # Header title in Gold
             title_font = get_font("Comic Sans MS", 13, bold=True)

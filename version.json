@@ -1,7 +1,7 @@
 {
-  "version": "2.5.1",
-  "name": "Cognitive Maze v2.5.1 - Enlarged Tactical Mini-Map & Question NPC Visual Badges",
-  "notes": "Version 2.5.1: Enlarges Tactical Radar Mini-Map display by 2.45x (280x180 px) with aspect-ratio preservation and enhanced clearance; introduces high-contrast pre-rendered solid badges showing station numbers (1-10) for all active and upcoming question NPCs, emerald checkmarks for cleared stations, and rose-red badges for mentor NPCs; completely eliminates terrain camouflage for upcoming question stations while preserving zero-allocation 60 FPS performance on AMD A4-6300 dual-core APU target hardware.",
-  "download_url": "https://github.com/workingNeko/2DGameCognitiveQuest/releases/tag/v2.5.1",
+  "version": "2.5.2",
+  "name": "Cognitive Maze v2.5.2 - Term Bridge Isolation Prevention & Multi-Assessment Progression",
+  "notes": "Version 2.5.2: Prevents question NPCs from spawning across unbuilt bridges in Term 1 and Term 3 (map8 aqueduct) via spatial bounds exclusion and connected-component flood-fill verification; enforces multi-assessment completion before unlocking subsequent terms; eliminates startup indentation issue and surface bit-depth anomalies while strictly maintaining 60 FPS performance on AMD A4-6300 dual-core target hardware.",
+  "download_url": "https://github.com/workingNeko/2DGameCognitiveQuest/releases/tag/v2.5.2",
   "date": "2026-11-17"
 }

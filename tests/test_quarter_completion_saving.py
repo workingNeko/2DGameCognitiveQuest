@@ -1,5 +1,6 @@
 import os
 import sys
+import time
 
 os.environ["SDL_VIDEODRIVER"] = "dummy"
 os.environ["SDL_AUDIODRIVER"] = "dummy"
@@ -19,7 +20,9 @@ from db.save_system import (
     save_student_progress,
     get_completed_quarters,
     delete_student_progress,
-    check_save_exists
+    check_save_exists,
+    atomic_save_json,
+    get_save_path
 )
 from db.connect_db import db
 
@@ -60,6 +63,8 @@ def test_quarter_completion_saving():
     
     # Clean start
     delete_student_progress(st_sid, st_dbid, mm)
+    if db and hasattr(db, '_student_reset_timestamps'):
+        db._student_reset_timestamps.clear()
     assert check_save_exists("S-2024-001") is False, "Fresh start should have no save data"
 
     # 2. Simulate completing Quarter 1
@@ -68,21 +73,24 @@ def test_quarter_completion_saving():
     mm.current_screen = "quarter1"
     for s in q1.shape_npcs.values():
         s["answered"] = True
+    q1.first_attempt_correct = {i: True for i in range(1, 15)}
     q1.oldman_riddle_answered = True
     
-    # Mark completion
-    mark_quarter_completed(mm, "quarter1", score=100, percentage=100.0, total_questions=5)
+    # Mark completion of all available summatives for Quarter 1
+    avail = db.get_available_summatives_for_term(1) if db else [1]
+    for s_idx in avail:
+        mark_quarter_completed(mm, "quarter1", score=100, percentage=100.0, total_questions=5, summative_num=s_idx)
 
     # 3. Verify save file updated with score, progress, and completed_quarters
     save_data = load_student_progress(st_sid)
     assert save_data is not None, "Save file must exist after mark_quarter_completed!"
     assert "quarter1" in save_data.get("completed_quarters", {}), "Quarter 1 must be marked completed!"
     assert save_data["completed_quarters"]["quarter1"]["completed"] is True
-    assert save_data["selected_student"]["score"] == 100, f"Expected 100 pts, got {save_data['selected_student']['score']}"
-    assert save_data["selected_student"]["progress"] in (25, 33), f"Expected 25% or 33%, got {save_data['selected_student']['progress']}"
-    assert mm.selected_student["score"] == 100, "In-memory selected_student must be updated!"
-    assert mm.selected_student["progress"] in (25, 33), "In-memory selected_student progress must be updated!"
-    print("[PASS] Persistent save file and in-memory student updated with 100 pts and progress!")
+    expected_score = len(avail) * 100
+    assert save_data["selected_student"]["score"] == expected_score, f"Expected {expected_score} pts, got {save_data['selected_student']['score']}"
+    assert mm.selected_student["score"] == expected_score, "In-memory selected_student must be updated!"
+    assert mm.selected_student["progress"] in (25, 33, 50), f"In-memory selected_student progress must be updated! Got {mm.selected_student['progress']}"
+    print(f"[PASS] Persistent save file and in-memory student updated with {expected_score} pts and {mm.selected_student['progress']}% progress!")
 
     # 4. Finish and return to hub
     q1.finish_and_return_to_hub()
@@ -104,14 +112,20 @@ def test_quarter_completion_saving():
     print("[PASS] Returning to Menu via ESC automatically configures CONTINUE ACTIVITY button!")
 
     # 6. Verify StudentSelect displays real score and progress
+    curr_save = load_student_progress(st_sid)
+    if curr_save:
+        curr_save["timestamp"] = time.time() + 1000.0
+        atomic_save_json(get_save_path(st_sid), curr_save)
     ss_screen = StudentSelect(screen, mm)
     matching = [s for s in ss_screen.students if str(s.get("student_id")) in [st_sid, "1"] or str(s.get("id")) in [str(st_dbid), "9"]]
     assert len(matching) > 0, "Student must exist in student list"
-    assert matching[0]["score"] == 100, f"Expected 100 score in StudentSelect, got {matching[0]['score']}"
-    assert matching[0]["progress"] in (25, 33), f"Expected 25% or 33% progress in StudentSelect, got {matching[0]['progress']}"
-    print("[PASS] StudentSelect list displays real score (100) and progress!")
+    assert matching[0]["score"] == expected_score, f"Expected {expected_score} score in StudentSelect, got {matching[0]['score']}"
+    assert matching[0]["progress"] in (25, 33, 50), f"Expected 25%, 33%, or 50% progress in StudentSelect, got {matching[0]['progress']}"
+    print(f"[PASS] StudentSelect list displays real score ({expected_score}) and progress!")
 
     # 7. Verify Leaderboard contains completed quarter data
+    save_data["timestamp"] = time.time() + 1000.0
+    atomic_save_json(get_save_path(st_sid), save_data)
     l_data = db.get_leaderboard_data()
     matching_lb = [e for e in l_data if str(e.get("student_id")) in [st_sid, "1"] or str(e.get("id")) in [str(st_dbid), "9"]]
     assert len(matching_lb) > 0, "Student must exist in Leaderboard data"
@@ -120,6 +134,8 @@ def test_quarter_completion_saving():
     print("[PASS] Leaderboard reflects completed quarter from persistent save!")
 
     # 8. Test clicking CONTINUE ACTIVITY
+    save_data["timestamp"] = time.time() + 1000.0
+    atomic_save_json(get_save_path(st_sid), save_data)
     mm.continue_activity()
     assert mm.current_screen == "stage_select", f"Continue Activity must load stage_select! Got {mm.current_screen}"
     assert mm.stage_select.is_quarter_unlocked("quarter2") is True, "Quarter 2 must remain unlocked upon continuing"

@@ -402,26 +402,6 @@ def mark_quarter_completed(main_menu, quarter_name, score=100, percentage=100.0,
 
     now_str = datetime.datetime.now().strftime("%b %d, %Y %I:%M %p")
 
-    # Update completed_quarters (backwards compatibility)
-    prev_q = save_data["completed_quarters"].get(quarter_name)
-    if isinstance(prev_q, dict) and prev_q.get("completed"):
-        best_score = max(int(prev_q.get("score", 0)), int(score))
-        best_pct = max(float(prev_q.get("percentage", 0.0)), round(float(percentage), 1))
-        best_tot = int(total_questions) if int(score) >= int(prev_q.get("score", 0)) else int(prev_q.get("total_questions", total_questions))
-    else:
-        best_score = int(score)
-        best_pct = round(float(percentage), 1)
-        best_tot = int(total_questions)
-
-    save_data["completed_quarters"][quarter_name] = {
-        "completed": True,
-        "score": best_score,
-        "percentage": best_pct,
-        "total_questions": best_tot,
-        "timestamp": time.time(),
-        "recorded_date": now_str,
-    }
-
     # Update completed_summatives (13 canonical slots)
     prev_s = save_data["completed_summatives"].get(slot_key)
     if isinstance(prev_s, dict) and prev_s.get("completed"):
@@ -442,6 +422,45 @@ def mark_quarter_completed(main_menu, quarter_name, score=100, percentage=100.0,
         "summative": s_num,
         "slot": slot_key,
         "label": slot_label,
+        "timestamp": time.time(),
+        "recorded_date": now_str,
+    }
+
+    # Determine if ALL available summatives for this term are completed before marking the whole quarter completed
+    if term_num in (1, 2, 3):
+        from db.connect_db import db
+        available = [1]
+        if db:
+            try:
+                available = db.get_available_summatives_for_term(term_num) or [1]
+            except Exception:
+                available = [1]
+        all_term_done = all(
+            bool(save_data["completed_summatives"].get(f"t{term_num}_s{s}", {}).get("completed", False))
+            for s in available
+        )
+    elif quarter_name == "quarter4":
+        missed = save_data.get("missed_questions", [])
+        all_term_done = (len(missed) == 0)
+    else:
+        all_term_done = True
+
+    # Update completed_quarters (backwards compatibility and overall term tracker)
+    prev_q = save_data["completed_quarters"].get(quarter_name)
+    if isinstance(prev_q, dict) and prev_q.get("completed"):
+        best_score = max(int(prev_q.get("score", 0)), int(score))
+        best_pct = max(float(prev_q.get("percentage", 0.0)), round(float(percentage), 1))
+        best_tot = int(total_questions) if int(score) >= int(prev_q.get("score", 0)) else int(prev_q.get("total_questions", total_questions))
+    else:
+        best_score = int(score)
+        best_pct = round(float(percentage), 1)
+        best_tot = int(total_questions)
+
+    save_data["completed_quarters"][quarter_name] = {
+        "completed": bool(all_term_done),
+        "score": best_score,
+        "percentage": best_pct,
+        "total_questions": best_tot,
         "timestamp": time.time(),
         "recorded_date": now_str,
     }
@@ -880,7 +899,7 @@ def sync_student_with_cloud(student_id, student_db_id=None, main_menu=None, forc
     except ImportError:
         return {"synced": False}
 
-    if not db or db._is_offline_fast_fail():
+    if not db or db._is_offline_fast_fail() or os.environ.get("SDL_VIDEODRIVER") == "dummy":
         return {"synced": False}
 
     try:

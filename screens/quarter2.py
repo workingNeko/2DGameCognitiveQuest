@@ -5052,14 +5052,24 @@ class Quarter2:
                     pass
             self._char_status_bg_surf = bg_surf
 
+        if getattr(self, '_char_status_shadow_surf', None) is None or self._char_status_shadow_surf.get_size() != (card_w, card_h):
+            sh_surf = pygame.Surface((card_w, card_h), pygame.SRCALPHA)
+            pygame.draw.rect(sh_surf, (0, 0, 0, 110), (0, 0, card_w, card_h), border_radius=10)
+            if pygame.display.get_surface() is not None:
+                try:
+                    sh_surf = sh_surf.convert_alpha()
+                except Exception:
+                    pass
+            self._char_status_shadow_surf = sh_surf
+
         # Drop shadow for depth and separation from map tiles
-        pygame.draw.rect(self.screen, (0, 0, 0, 110), (card_x, card_y + 3, card_w, card_h), border_radius=10)
+        self.screen.blit(self._char_status_shadow_surf, (card_x, card_y + 3))
         self.screen.blit(self._char_status_bg_surf, (card_x, card_y))
 
         # Border: Gold while in progress, Emerald Green when all questions completed
         border_col = (34, 197, 94) if is_all_done else (251, 191, 36)
         pygame.draw.rect(self.screen, border_col, (card_x, card_y, card_w, card_h), 2, border_radius=10)
-        pygame.draw.rect(self.screen, (255, 255, 255, 25), (card_x + 2, card_y + 2, card_w - 4, card_h - 4), 1, border_radius=8)
+        pygame.draw.rect(self.screen, (51, 65, 85), (card_x + 2, card_y + 2, card_w - 4, card_h - 4), 1, border_radius=8)
 
         # Avatar circle badge
         av_cx, av_cy = card_x + 18, card_y + 17
@@ -5147,8 +5157,18 @@ class Quarter2:
                     except Exception:
                         pass
 
+            if getattr(self, '_hud_obj_shadow_surf', None) is None or self._hud_obj_shadow_surf.get_size() != (box_w, box_h):
+                sh_surf = pygame.Surface((box_w, box_h), pygame.SRCALPHA)
+                pygame.draw.rect(sh_surf, (0, 0, 0, 110), (0, 0, box_w, box_h), border_radius=12)
+                if pygame.display.get_surface() is not None:
+                    try:
+                        sh_surf = sh_surf.convert_alpha()
+                    except Exception:
+                        pass
+                self._hud_obj_shadow_surf = sh_surf
+
             # Drop shadow for depth and map separation
-            pygame.draw.rect(self.screen, (0, 0, 0, 110), (box_x, box_y + 3, box_w, box_h), border_radius=12)
+            self.screen.blit(self._hud_obj_shadow_surf, (box_x, box_y + 3))
             self.screen.blit(self._hud_obj_bg_surf, (box_x, box_y))
 
             tot_st = getattr(self, 'active_station_count', len(self.quiz_questions))
@@ -5161,7 +5181,7 @@ class Quarter2:
             # Border: Radiant Gold when in progress, Emerald Green when complete
             border_color = (34, 197, 94) if is_complete else (251, 191, 36)
             pygame.draw.rect(self.screen, border_color, (box_x, box_y, box_w, box_h), 2, border_radius=12)
-            pygame.draw.rect(self.screen, (255, 255, 255, 25), (box_x + 2, box_y + 2, box_w - 4, box_h - 4), 1, border_radius=10)
+            pygame.draw.rect(self.screen, (51, 65, 85), (box_x + 2, box_y + 2, box_w - 4, box_h - 4), 1, border_radius=10)
 
             # Header title in Gold
             title_font = self.get_ui_font(13, bold=True)

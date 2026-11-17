@@ -2131,11 +2131,27 @@ class Database:
         rev = {v: k for k, v in self._FALLBACK_ASSESSMENT_MAP.items()}
         disk_map = self._read_json_file(self._assessments_cache_path(), {})
         for q_str, a_id in disk_map.items():
-            if str(q_str).isdigit() and (isinstance(a_id, int) or str(a_id).isdigit()):
-                rev[int(a_id)] = int(q_str)
-        for q_int, a_id in self._assessment_cache.items():
-            if isinstance(a_id, int):
-                rev[a_id] = int(q_int)
+            if isinstance(a_id, int) or (isinstance(a_id, str) and a_id.isdigit()):
+                try:
+                    _, _, term_num, _ = parse_slot_key(str(q_str))
+                    rev[int(a_id)] = int(term_num)
+                except Exception:
+                    qn = self.normalize_quarter_number(q_str)
+                    if qn:
+                        rev[int(a_id)] = int(qn)
+                    elif str(q_str).isdigit():
+                        rev[int(a_id)] = int(q_str)
+        for q_key, a_id in self._assessment_cache.items():
+            if isinstance(a_id, int) or (isinstance(a_id, str) and a_id.isdigit()):
+                try:
+                    _, _, term_num, _ = parse_slot_key(str(q_key))
+                    rev[int(a_id)] = int(term_num)
+                except Exception:
+                    qn = self.normalize_quarter_number(q_key)
+                    if qn:
+                        rev[int(a_id)] = int(qn)
+                    elif str(q_key).isdigit():
+                        rev[int(a_id)] = int(q_key)
         return rev
 
     def _resolve_record_quarter(self, record, ass_to_q):

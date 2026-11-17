@@ -138,6 +138,26 @@ def allocate_dynamic_stations(
     if not candidates:
         return list(res_stations.values()) if was_list else res_stations
 
+    # Reachability validation: candidates must be reachable from existing stations/player
+    # to avoid placing stations across unbuilt bridges or on isolated islands.
+    initial_positions = [pos for pos in res_stations.values() if isinstance(pos, (tuple, list)) and len(pos) == 2]
+    if initial_positions:
+        import collections
+        reachable = set(initial_positions)
+        queue = collections.deque(initial_positions)
+        while queue:
+            cx, cy = queue.popleft()
+            for dx, dy in directions:
+                nx, ny = cx + dx, cy + dy
+                if 0 <= ny < rows and 0 <= nx < len(game_map[ny]):
+                    if (nx, ny) not in reachable and (nx, ny) not in forbidden_tiles:
+                        if game_map[ny][nx] in walkable_chars:
+                            reachable.add((nx, ny))
+                            queue.append((nx, ny))
+        reachable_candidates = [c for c in candidates if c in reachable]
+        if reachable_candidates:
+            candidates = reachable_candidates
+
     # 2. Assign extra stations using deterministic spatial dispersion
     num_to_add = needed_count - len(res_stations)
     existing_ids = sorted(res_stations.keys())

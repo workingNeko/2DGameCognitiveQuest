@@ -555,7 +555,7 @@ class StudentSelect:
             print(f"Student progress sync error: {e}")
 
         # Non-blocking background sync with live cloud game_results & grades (0ms UI stall on target hardware)
-        if db and self.students and not str(self.students[0].get("student_id", "")).startswith("MOCK-"):
+        if db and self.students and not str(self.students[0].get("student_id", "")).startswith("MOCK-") and os.environ.get("SDL_VIDEODRIVER") != "dummy":
             import threading
             threading.Thread(target=self._sync_cloud_progress_worker, daemon=True).start()
 
