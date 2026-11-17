@@ -466,6 +466,7 @@ class Database:
         self._mem_cache = {}
         self._file_lock = threading.RLock()
         self._sync_lock = threading.RLock()
+        self._is_syncing_offline = False
         self._restore_lock = threading.Lock()
         self._provision_lock = threading.Lock()
         self._offline_until = 0.0
@@ -903,12 +904,8 @@ class Database:
                 is_online = resp.status in [200, 204]
                 if is_online:
                     self._mark_online(resp)
-                    if has_pending_restore or pending_count > 0:
-                        if threading.current_thread() is threading.main_thread():
-                            threading.Thread(target=self.sync_offline_results, daemon=True).start()
-                        else:
-                            self.sync_offline_results()
-                            pending_count = self._count_pending_sync()
+                    if (has_pending_restore or pending_count > 0) and not getattr(self, '_is_syncing_offline', False):
+                        threading.Thread(target=self.sync_offline_results, daemon=True, name="CloudSyncThread").start()
                 return {
                     "online": is_online,
                     "pending_sync": pending_count,
@@ -1013,12 +1010,9 @@ class Database:
                                 self._atomic_write_json(cache_file, data)
                             except Exception:
                                 pass
-                        # If online and pending queue exists, flush safely
-                        if self._count_pending_sync() > 0:
-                            if threading.current_thread() is threading.main_thread():
-                                threading.Thread(target=self.sync_offline_results, daemon=True).start()
-                            else:
-                                self.sync_offline_results()
+                        # If online and pending queue exists, flush safely in background
+                        if self._count_pending_sync() > 0 and not getattr(self, '_is_syncing_offline', False):
+                            threading.Thread(target=self.sync_offline_results, daemon=True, name="CloudSyncThread").start()
                         return data
             except urllib.error.HTTPError as e:
                 if e.code in (429, 500, 502, 503, 504) or e.code >= 500:
@@ -1565,8 +1559,11 @@ class Database:
 
     def sync_offline_results(self):
         """Flush pending offline resets and game results to the live Vercel database in strict FIFO order."""
+        if getattr(self, '_is_syncing_offline', False):
+            return 0
         if not self._sync_lock.acquire(blocking=False):
             return 0
+        self._is_syncing_offline = True
         try:
             self._recover_pending_restores()
 
@@ -1684,6 +1681,7 @@ class Database:
 
             return synced_count
         finally:
+            self._is_syncing_offline = False
             self._sync_lock.release()
 
     def _resolve_updated_student_pk(self, numeric_student_id):
@@ -1798,7 +1796,7 @@ class Database:
 
         with self._sync_lock:
             # Flush any pending offline reset/results first so cloud state is completely up to date
-            if self._count_pending_sync() > 0 or os.path.exists(self._pending_restore_path()):
+            if not getattr(self, '_is_syncing_offline', False) and (self._count_pending_sync() > 0 or os.path.exists(self._pending_restore_path())):
                 self.sync_offline_results()
 
             # Check existing current-run game results to prevent duplicate point inflation on /achievements & /grades
@@ -1928,7 +1926,8 @@ class Database:
         has_restore_wal = False
         deleted_count = 0
 
-        with self._sync_lock:
+        acquired = self._sync_lock.acquire(timeout=3.0)
+        try:
             # 1. Locate student profile (live or cached) and run crash-safe online cascade reset
             try:
                 all_students = self.get_students() or []
@@ -2016,6 +2015,9 @@ class Database:
 
             self.invalidate_memory_cache("grades")
             self.invalidate_memory_cache("game_results")
+        finally:
+            if acquired:
+                self._sync_lock.release()
 
         return deleted_count
 

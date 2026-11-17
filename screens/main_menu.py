@@ -1226,6 +1226,7 @@ class MainMenu:
                 pygame.draw.rect(self.screen, (239, 68, 68), card_rect, 3, border_radius=12)
                 self.screen.blit(txt_surf, rect)
                 pygame.display.flip()
+                pygame.event.pump()
 
                 # Purge past progress in both game save files and live database
                 delete_student_progress(
@@ -1233,6 +1234,7 @@ class MainMenu:
                     student_db_id=getattr(self, 'student_db_id', None),
                     main_menu=self
                 )
+                pygame.event.pump()
                 self.popup_state = None
                 
                 # Refresh main menu buttons
@@ -1909,13 +1911,14 @@ class MainMenu:
             overlay.fill((0, 0, 0, 175))
             self.screen.blit(overlay, (0, 0))
             font = getattr(self, 'dialogue_font', self.button_font)
-            txt_surf = font.render("Syncing with Cloud & Starting Activity...", True, (255, 255, 255))
+            txt_surf = font.render("Starting Activity...", True, (255, 255, 255))
             rect = txt_surf.get_rect(center=(self.w // 2, self.h // 2))
             card_rect = rect.inflate(80, 40)
             pygame.draw.rect(self.screen, (15, 23, 42), card_rect, border_radius=12)
             pygame.draw.rect(self.screen, (56, 189, 248), card_rect, 3, border_radius=12)
             self.screen.blit(txt_surf, rect)
             pygame.display.flip()
+            pygame.event.pump()
         except Exception:
             pass
 
@@ -1925,6 +1928,7 @@ class MainMenu:
             student_db_id=getattr(self, 'student_db_id', None),
             main_menu=self
         )
+        pygame.event.pump()
         try:
             from db.connect_db import db
             if db:

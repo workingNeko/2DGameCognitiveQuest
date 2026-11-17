@@ -274,18 +274,29 @@ def delete_student_progress(student_id, student_db_id=None, main_menu=None):
                     except Exception as e:
                         print(f"[WARN] Error deleting save file {fpath}: {e}")
 
-    # Purge past records in the live database via db.connect_db
-    try:
-        from db.connect_db import db, parse_slot_key as module_parse_slot_key, infer_slot_from_text as module_infer_slot_from_text
-        effective_sid = student_id or (getattr(main_menu, 'student_id', None) if main_menu else None)
-        effective_db_id = student_db_id or (getattr(main_menu, 'student_db_id', None) if main_menu else None)
-        deleted_count = db.delete_student_records(
-            student_id=effective_sid,
-            student_db_id=effective_db_id
-        )
-        print(f"[DB RESET] Purged past database records ({deleted_count} deleted) for student {target_ids}")
-    except Exception as e:
-        print(f"[WARN] Could not purge database records: {e}")
+    # Purge past records in the live database via db.connect_db in background daemon thread
+    effective_sid = student_id or (getattr(main_menu, 'student_id', None) if main_menu else None)
+    effective_db_id = student_db_id or (getattr(main_menu, 'student_db_id', None) if main_menu else None)
+    target_ids_copy = list(target_ids)
+
+    def _async_cloud_purge(sid, db_id, t_ids):
+        try:
+            from db.connect_db import db
+            if db:
+                deleted_count = db.delete_student_records(
+                    student_id=sid,
+                    student_db_id=db_id
+                )
+                print(f"[DB RESET] Purged past database records ({deleted_count} deleted) for student {t_ids}")
+        except Exception as e:
+            print(f"[WARN] Could not purge database records: {e}")
+
+    threading.Thread(
+        target=_async_cloud_purge,
+        args=(effective_sid, effective_db_id, target_ids_copy),
+        daemon=True,
+        name="AsyncCloudPurge"
+    ).start()
 
     # Write a single canonical clean save file with 0 score and 0% progress (no duplicate numeric/code files)
     sel_obj = getattr(main_menu, 'selected_student', None) or {}
@@ -505,12 +516,42 @@ def get_completed_summatives(student_id):
         return {}
     return save_data.get("completed_summatives", {})
 
+_CACHED_REQUIRED_SLOTS = None
+_CACHED_REQUIRED_SLOTS_TIME = 0.0
+
 def get_required_assessment_slots():
     """
     Returns the list of active/required summative assessment slots across Terms 1, 2, 3
     based on the assessments currently uploaded to the database.
     Defaults to ['t1_s1', 't2_s1', 't3_s1'] if offline or no summatives found.
     """
+    global _CACHED_REQUIRED_SLOTS, _CACHED_REQUIRED_SLOTS_TIME
+    now = time.time()
+    if _CACHED_REQUIRED_SLOTS and (now - _CACHED_REQUIRED_SLOTS_TIME < 300.0):
+        return list(_CACHED_REQUIRED_SLOTS)
+
+    # Fast-check local cache files first to avoid blocking Pygame main thread
+    cache_dir = "db/cache"
+    if os.path.exists(cache_dir):
+        disk_slots = []
+        for t in (1, 2, 3):
+            for s in (1, 2, 3, 4):
+                slot = f"t{t}_s{s}"
+                fpath = os.path.join(cache_dir, f"questions_{slot}.json")
+                if os.path.exists(fpath):
+                    try:
+                        with open(fpath, "r", encoding="utf-8") as f:
+                            qs = json.load(f)
+                            if qs and len(qs) > 0:
+                                disk_slots.append(slot)
+                    except Exception:
+                        pass
+        if disk_slots:
+            _CACHED_REQUIRED_SLOTS = disk_slots
+            _CACHED_REQUIRED_SLOTS_TIME = now
+            return list(disk_slots)
+
+    # Fallback to db query
     try:
         from db.connect_db import db
         if db:
@@ -520,6 +561,8 @@ def get_required_assessment_slots():
                 for s in avail:
                     slots.append(f"t{t}_s{s}")
             if slots:
+                _CACHED_REQUIRED_SLOTS = slots
+                _CACHED_REQUIRED_SLOTS_TIME = now
                 return slots
     except Exception:
         pass
@@ -842,8 +885,11 @@ def sync_student_with_cloud(student_id, student_db_id=None, main_menu=None, forc
 
     try:
         # Flush pending offline sync items first so cloud has latest data before we compare
-        if db._count_pending_sync() > 0:
-            db.sync_offline_results()
+        if db._count_pending_sync() > 0 and not getattr(db, '_is_syncing_offline', False):
+            if threading.current_thread() is threading.main_thread():
+                threading.Thread(target=db.sync_offline_results, daemon=True, name="CloudSyncThread").start()
+            else:
+                db.sync_offline_results()
 
         cloud_results = db.get_game_results(filter_reset=True, force_refresh=force_cloud_refresh)
         if cloud_results is None or db._is_offline_fast_fail():

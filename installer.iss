@@ -44,8 +44,8 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: checkedonce
 
 [Files]
-Source: "dist\CognitiveMaze\*"; DestDir: "{app}"; Excludes: "db\saves\*"; Flags: ignoreversion recursesubdirs createallsubdirs
-Source: "dist\CognitiveMaze\db\saves\*"; DestDir: "{app}\db\saves"; Flags: onlyifdoesntexist recursesubdirs createallsubdirs
+Source: "dist\CognitiveMaze\*"; DestDir: "{app}"; Excludes: "db\saves\*,db\pending_sync.json,db\pending_student_restore.json,db\reset_records.json"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "dist\CognitiveMaze\db\saves\audio_settings.json"; DestDir: "{app}\db\saves"; Flags: onlyifdoesntexist
 
 [Dirs]
 Name: "{app}\db"; Permissions: users-full
